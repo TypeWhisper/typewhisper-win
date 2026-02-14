@@ -31,6 +31,7 @@ public partial class ProfilesViewModel : ObservableObject
     // Live window detection
     [ObservableProperty] private string _currentProcessName = "-";
     [ObservableProperty] private string _currentWindowTitle = "-";
+    [ObservableProperty] private string _currentUrl = "-";
     [ObservableProperty] private string _matchedProfileName = "Kein Profil";
     [ObservableProperty] private bool _hasMatchedProfile;
 
@@ -59,6 +60,7 @@ public partial class ProfilesViewModel : ObservableObject
 
         CurrentProcessName = processName ?? "-";
         CurrentWindowTitle = title ?? "-";
+        CurrentUrl = url ?? "-";
 
         var matched = _profiles.MatchProfile(processName, url);
         HasMatchedProfile = matched is not null;

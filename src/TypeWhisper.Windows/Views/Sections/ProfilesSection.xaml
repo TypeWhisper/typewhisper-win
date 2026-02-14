@@ -339,6 +339,10 @@
                                    TextTrimming="CharacterEllipsis">
                             <Run Text="Titel: "/><Run Text="{Binding Profiles.CurrentWindowTitle, Mode=OneWay}" Foreground="{StaticResource HintBrush}"/>
                         </TextBlock>
+                        <TextBlock FontSize="12" Foreground="{StaticResource LabelBrush}"
+                                   TextTrimming="CharacterEllipsis">
+                            <Run Text="URL: "/><Run Text="{Binding Profiles.CurrentUrl, Mode=OneWay}" Foreground="#88FFCC"/>
+                        </TextBlock>
                         <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="4">
                             <Border.Style>
                                 <Style TargetType="Border">

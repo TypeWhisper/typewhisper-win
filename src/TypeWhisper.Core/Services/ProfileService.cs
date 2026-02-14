@@ -100,16 +100,43 @@ public sealed class ProfileService : IProfileService
                     return profile;
             }
 
-            // Match by URL pattern
+            // Match by URL pattern (match against host/domain)
             if (url is not null && profile.UrlPatterns.Count > 0)
             {
-                if (profile.UrlPatterns.Any(pattern =>
-                    url.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                var host = ExtractHost(url);
+                if (host is not null && profile.UrlPatterns.Any(pattern =>
+                    MatchesUrlPattern(host, url, pattern)))
                     return profile;
             }
         }
 
         return null;
+    }
+
+    private static string? ExtractHost(string url)
+    {
+        try
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                return uri.Host;
+        }
+        catch { }
+        return null;
+    }
+
+    private static bool MatchesUrlPattern(string host, string url, string pattern)
+    {
+        // Wildcard: *.github.com matches any subdomain
+        if (pattern.StartsWith("*."))
+        {
+            var suffix = pattern[1..]; // ".github.com"
+            return host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                   || host.Equals(pattern[2..], StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Exact domain match: "x.com" matches "x.com" and "www.x.com"
+        return host.Equals(pattern, StringComparison.OrdinalIgnoreCase)
+               || host.EndsWith("." + pattern, StringComparison.OrdinalIgnoreCase);
     }
 
     private void SortCache()
