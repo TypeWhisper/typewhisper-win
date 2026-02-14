@@ -1,0 +1,70 @@
+<Window x:Class="TypeWhisper.Windows.Views.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TypeWhisper - Verlauf"
+        Width="800" Height="550"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize"
+        MinWidth="600" MinHeight="400">
+
+    <DockPanel Margin="12">
+        <!-- Top: Search + Stats -->
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                     Margin="0,0,8,0" Padding="4" ToolTip="Suche..."/>
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Foreground="Gray" Margin="0,0,12,0">
+                <Run Text="{Binding TotalRecords, Mode=OneWay}"/> Einträge,
+                <Run Text="{Binding TotalWords, Mode=OneWay}"/> Wörter
+            </TextBlock>
+            <Button Grid.Column="2" Content="Alle löschen" Command="{Binding ClearAllCommand}" Width="90"/>
+        </Grid>
+
+        <!-- Right: Detail panel -->
+        <Border DockPanel.Dock="Right" Width="280" Margin="8,0,0,0"
+                BorderBrush="#DDD" BorderThickness="1" CornerRadius="4" Padding="10">
+            <ScrollViewer>
+                <StackPanel DataContext="{Binding SelectedRecord}">
+                    <TextBlock Text="Details" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding Timestamp, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" Foreground="Gray"/>
+                    <TextBlock Text="{Binding AppName}" Foreground="Gray" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Language}" Foreground="Gray" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding DurationSeconds, StringFormat='{}{0:F1}s'}" Foreground="Gray" Margin="0,2,0,8"/>
+
+                    <TextBlock Text="Text:" FontWeight="SemiBold" Margin="0,4,0,4"/>
+                    <TextBox Text="{Binding FinalText, Mode=OneWay}" IsReadOnly="True"
+                             TextWrapping="Wrap" AcceptsReturn="True"
+                             MinHeight="80" MaxHeight="200"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Kopieren"
+                                Command="{Binding DataContext.CopyToClipboardCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Width="80" Margin="0,0,4,0"/>
+                        <Button Content="Löschen"
+                                Command="{Binding DataContext.DeleteRecordCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Width="80"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Center: List -->
+        <DataGrid ItemsSource="{Binding Records}"
+                  SelectedItem="{Binding SelectedRecord}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  SelectionMode="Single">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Zeit" Binding="{Binding Timestamp, StringFormat='{}{0:dd.MM HH:mm}'}" Width="90"/>
+                <DataGridTextColumn Header="Text" Binding="{Binding Preview}" Width="*"/>
+                <DataGridTextColumn Header="App" Binding="{Binding AppProcessName}" Width="100"/>
+                <DataGridTextColumn Header="Dauer" Binding="{Binding DurationSeconds, StringFormat='{}{0:F1}s'}" Width="55"/>
+                <DataGridTextColumn Header="Wörter" Binding="{Binding WordCount}" Width="55"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

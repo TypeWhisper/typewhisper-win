@@ -1,0 +1,56 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.DictionarySection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel Margin="24">
+        <TextBlock DockPanel.Dock="Top" Text="Wörterbuch" Style="{StaticResource SectionHeaderStyle}"/>
+
+        <!-- Add Entry Form -->
+        <Border DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding Dictionary.NewOriginal, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,4,0"/>
+                <TextBox Grid.Column="1" Text="{Binding Dictionary.NewReplacement, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,4,0"/>
+                <ComboBox Grid.Column="2" SelectedIndex="{Binding Dictionary.NewEntryType}" Width="110" Margin="0,0,4,0"
+                          Style="{StaticResource InputComboBoxStyle}" ItemContainerStyle="{StaticResource InputComboBoxItemStyle}">
+                    <ComboBoxItem Content="Korrektur"/>
+                    <ComboBoxItem Content="Begriff"/>
+                </ComboBox>
+                <Button Grid.Column="3" Content="Hinzufügen" Command="{Binding Dictionary.AddEntryCommand}"
+                        Style="{StaticResource PrimaryButtonStyle}" Padding="16,8"/>
+            </Grid>
+        </Border>
+
+        <!-- DataGrid -->
+        <DataGrid ItemsSource="{Binding Dictionary.Entries}"
+                  SelectedItem="{Binding Dictionary.SelectedEntry}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  Style="{StaticResource DarkDataGridStyle}"
+                  ColumnHeaderStyle="{StaticResource DarkDataGridColumnHeaderStyle}"
+                  CellStyle="{StaticResource DarkDataGridCellStyle}"
+                  RowStyle="{StaticResource DarkDataGridRowStyle}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Typ" Binding="{Binding EntryType}" Width="80"/>
+                <DataGridTextColumn Header="Original" Binding="{Binding Original}" Width="*"/>
+                <DataGridTextColumn Header="Ersetzung" Binding="{Binding Replacement}" Width="*"/>
+                <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding IsEnabled}" Width="50"/>
+                <DataGridTextColumn Header="Nutzung" Binding="{Binding UsageCount}" Width="60"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

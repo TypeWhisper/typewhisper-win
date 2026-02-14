@@ -1,0 +1,134 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.GeneralSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
+             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="500" Margin="24">
+            <TextBlock Text="Allgemein" Style="{StaticResource SectionHeaderStyle}"/>
+
+            <!-- Hotkey -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Hotkey" Style="{StaticResource LabelStyle}"/>
+                <controls:HotkeyRecorderControl
+                    Hotkey="{Binding Settings.PushToTalkHotkey}" AllowModifierOnly="True"
+                    Width="200" HorizontalAlignment="Left"/>
+                <TextBlock Text="Kurz drücken = Ein/Aus, gedruckt halten = Push-to-Talk"
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
+
+            <!-- Language -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Sprache" Style="{StaticResource LabelStyle}"/>
+                <ComboBox SelectedValue="{Binding Settings.Language}" SelectedValuePath="Tag"
+                          Style="{StaticResource InputComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource InputComboBoxItemStyle}"
+                          Width="280" HorizontalAlignment="Left">
+                    <ComboBoxItem Content="Auto (Automatisch erkennen)" Tag="auto"/>
+                    <ComboBoxItem Content="Deutsch" Tag="de"/>
+                    <ComboBoxItem Content="English" Tag="en"/>
+                    <ComboBoxItem Content="Français" Tag="fr"/>
+                    <ComboBoxItem Content="Español" Tag="es"/>
+                    <ComboBoxItem Content="Italiano" Tag="it"/>
+                    <ComboBoxItem Content="Português" Tag="pt"/>
+                    <ComboBoxItem Content="Nederlands" Tag="nl"/>
+                    <ComboBoxItem Content="Polski" Tag="pl"/>
+                    <ComboBoxItem Content="Čeština" Tag="cs"/>
+                    <ComboBoxItem Content="Svenska" Tag="sv"/>
+                    <ComboBoxItem Content="Dansk" Tag="da"/>
+                    <ComboBoxItem Content="Suomi" Tag="fi"/>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- Behavior -->
+            <TextBlock Text="Verhalten" Style="{StaticResource SectionHeaderStyle}"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Automatisch einfügen (Ctrl+V)" IsChecked="{Binding Settings.AutoPaste}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Whisper-Modus (AGC)" IsChecked="{Binding Settings.WhisperModeEnabled}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Sound-Feedback" IsChecked="{Binding Settings.SoundFeedbackEnabled}"/>
+            </StackPanel>
+
+            <!-- Translation -->
+            <TextBlock Text="Übersetzung" Style="{StaticResource SectionHeaderStyle}" Margin="0,16,0,16"/>
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Zielsprache" Style="{StaticResource LabelStyle}"/>
+                <ComboBox ItemsSource="{Binding Settings.TranslationTargetOptions}"
+                          SelectedValue="{Binding Settings.TranslationTargetLanguage}"
+                          SelectedValuePath="Code"
+                          IsTextSearchEnabled="True" TextSearch.TextPath="DisplayName"
+                          Style="{StaticResource InputComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource InputComboBoxItemStyle}"
+                          Width="280" HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Background="#2D5A8E" CornerRadius="3" Padding="5,1" MinWidth="28"
+                                        Margin="0,0,8,0" VerticalAlignment="Center"
+                                        Visibility="{Binding BadgeText, Converter={StaticResource NonEmptyToVisibility}}">
+                                    <TextBlock Text="{Binding BadgeText}" FontSize="10" FontWeight="Bold"
+                                               Foreground="White" HorizontalAlignment="Center"
+                                               FontFamily="Consolas"/>
+                                </Border>
+                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="Text wird nach der Transkription lokal übersetzt (~106 MB pro Sprachpaar)"
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
+
+            <!-- Overlay -->
+            <TextBlock Text="Overlay" Style="{StaticResource SectionHeaderStyle}" Margin="0,16,0,16"/>
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Position" Style="{StaticResource LabelStyle}"/>
+                <ComboBox SelectedIndex="{Binding Settings.OverlayPosition}"
+                          Style="{StaticResource InputComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource InputComboBoxItemStyle}"
+                          Width="200" HorizontalAlignment="Left">
+                    <ComboBoxItem Content="Oben"/>
+                    <ComboBoxItem Content="Unten"/>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- System -->
+            <TextBlock Text="System" Style="{StaticResource SectionHeaderStyle}"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Beim Systemstart automatisch starten" IsChecked="{Binding Settings.AutostartEnabled}"/>
+            </StackPanel>
+
+            <!-- API Server -->
+            <TextBlock Text="API-Server" Style="{StaticResource SectionHeaderStyle}" Margin="0,16,0,16"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="REST-API aktivieren" IsChecked="{Binding Settings.ApiServerEnabled}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Port" Style="{StaticResource LabelStyle}"/>
+                <TextBox Text="{Binding Settings.ApiServerPort}"
+                         Style="{StaticResource InputTextBoxStyle}"
+                         Width="100" HorizontalAlignment="Left"/>
+            </StackPanel>
+
+            <TextBlock Text="Einstellungen werden automatisch gespeichert."
+                       Style="{StaticResource HintStyle}" Margin="0,8,0,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

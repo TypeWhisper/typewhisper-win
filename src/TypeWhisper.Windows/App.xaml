@@ -1,0 +1,96 @@
+<Application x:Class="TypeWhisper.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Global font -->
+            <Style TargetType="Window">
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+                <Setter Property="FontSize" Value="13"/>
+            </Style>
+
+            <!-- Accent color -->
+            <SolidColorBrush x:Key="AccentBrush" Color="#5865F2"/>
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#4752C4"/>
+
+            <!-- Primary button style -->
+            <Style x:Key="PrimaryButton" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="16,8"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Card border style -->
+            <Style x:Key="Card" TargetType="Border">
+                <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="16"/>
+                <Setter Property="Background" Value="White"/>
+            </Style>
+
+            <!-- Hotkey Recorder -->
+            <Style TargetType="{x:Type controls:HotkeyRecorderControl}"
+                   xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls">
+                <Setter Property="MinWidth" Value="160"/>
+                <Setter Property="Height" Value="30"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type controls:HotkeyRecorderControl}">
+                            <Border x:Name="Border" BorderThickness="1" CornerRadius="4"
+                                    Padding="8,4" Background="White" BorderBrush="#CCC">
+                                <Grid>
+                                    <TextBlock x:Name="HotkeyText" Text="{TemplateBinding Hotkey}"
+                                               VerticalAlignment="Center" FontFamily="Segoe UI"
+                                               Foreground="#333"/>
+                                    <TextBlock x:Name="RecordingText" Text="Tastenkombination drücken..."
+                                               VerticalAlignment="Center" FontStyle="Italic"
+                                               Foreground="#999" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="EmptyText" Text="Klicken zum Belegen"
+                                               VerticalAlignment="Center" FontStyle="Italic"
+                                               Foreground="#BBB" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsRecording" Value="True">
+                                    <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                    <Setter TargetName="Border" Property="BorderThickness" Value="2"/>
+                                    <Setter TargetName="HotkeyText" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="RecordingText" Property="Visibility" Value="Visible"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Border" Property="BorderBrush" Value="#999"/>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding Hotkey, RelativeSource={RelativeSource Self}}" Value="">
+                                    <Setter TargetName="HotkeyText" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="EmptyText" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

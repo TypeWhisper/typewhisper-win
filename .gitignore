@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.DotSettings.user
+*.ncrunchproject
+*.ncrunchsolution
+BenchmarkDotNet.Artifacts/
+packages/
+TestResults/
+.idea/
+*.swp
+*~
+.DS_Store

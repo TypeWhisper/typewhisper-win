@@ -1,0 +1,46 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.AudioSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="500" Margin="24">
+            <TextBlock Text="Aufnahme" Style="{StaticResource SectionHeaderStyle}"/>
+
+            <!-- Microphone -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Mikrofon" Style="{StaticResource LabelStyle}"/>
+                <ComboBox ItemsSource="{Binding Settings.Microphones}"
+                          DisplayMemberPath="Name"
+                          SelectedValuePath="DeviceNumber"
+                          SelectedValue="{Binding Settings.SelectedMicrophoneDevice}"
+                          Style="{StaticResource InputComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource InputComboBoxItemStyle}"
+                          HorizontalAlignment="Stretch"/>
+                <Button Content="Aktualisieren" Command="{Binding Settings.RefreshMicrophonesCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        HorizontalAlignment="Left" Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- Silence Detection -->
+            <TextBlock Text="Stille-Erkennung" Style="{StaticResource SectionHeaderStyle}"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Automatisch stoppen bei Stille"
+                          IsChecked="{Binding Settings.SilenceAutoStopEnabled}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Sekunden" Style="{StaticResource LabelStyle}"/>
+                <TextBox Text="{Binding Settings.SilenceAutoStopSeconds}"
+                         Style="{StaticResource InputTextBoxStyle}"
+                         Width="100" HorizontalAlignment="Left"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

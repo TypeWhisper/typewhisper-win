@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Project Path="src/TypeWhisper.Windows/TypeWhisper.Windows.csproj" />
+  </Folder>
+</Solution>

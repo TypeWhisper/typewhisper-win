@@ -1,0 +1,51 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.SnippetsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel Margin="24">
+        <TextBlock DockPanel.Dock="Top" Text="Snippets" Style="{StaticResource SectionHeaderStyle}"/>
+        <TextBlock DockPanel.Dock="Top" Text="Platzhalter: {date}, {time}, {datetime}, {day}, {year}"
+                   Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
+
+        <!-- Add Snippet Form -->
+        <Border DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding Snippets.NewTrigger, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,4,0"/>
+                <TextBox Grid.Column="1" Text="{Binding Snippets.NewReplacement, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,4,0"/>
+                <Button Grid.Column="2" Content="Hinzufügen" Command="{Binding Snippets.AddSnippetCommand}"
+                        Style="{StaticResource PrimaryButtonStyle}" Padding="16,8"/>
+            </Grid>
+        </Border>
+
+        <!-- DataGrid -->
+        <DataGrid ItemsSource="{Binding Snippets.Snippets}"
+                  SelectedItem="{Binding Snippets.SelectedSnippet}"
+                  AutoGenerateColumns="False" IsReadOnly="True"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  Style="{StaticResource DarkDataGridStyle}"
+                  ColumnHeaderStyle="{StaticResource DarkDataGridColumnHeaderStyle}"
+                  CellStyle="{StaticResource DarkDataGridCellStyle}"
+                  RowStyle="{StaticResource DarkDataGridRowStyle}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Auslöser" Binding="{Binding Trigger}" Width="150"/>
+                <DataGridTextColumn Header="Ersetzung" Binding="{Binding Replacement}" Width="*"/>
+                <DataGridCheckBoxColumn Header="Aktiv" Binding="{Binding IsEnabled}" Width="50"/>
+                <DataGridTextColumn Header="Nutzung" Binding="{Binding UsageCount}" Width="60"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,171 @@
+<Window x:Class="TypeWhisper.Windows.Views.WelcomeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
+        Title="Willkommen bei TypeWhisper"
+        Width="520" Height="440"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:StepToVisibilityConverter x:Key="StepConverter"/>
+        <conv:LevelToWidthConverter x:Key="LevelToWidth"/>
+    </Window.Resources>
+
+    <DockPanel Margin="24">
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
+            <TextBlock Text="TypeWhisper" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Lokale Sprache-zu-Text Transkription" Foreground="Gray"
+                       HorizontalAlignment="Center" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Bottom: Navigation -->
+        <Grid DockPanel.Dock="Bottom" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Content="Zurück" Command="{Binding PreviousStepCommand}"
+                    Width="80" Padding="8,4"/>
+            <Button Grid.Column="2" Content="Überspringen" Command="{Binding SkipCommand}"
+                    Width="100" Padding="8,4" Margin="0,0,8,0" Foreground="Gray"/>
+            <Button Grid.Column="3" Content="Weiter" Command="{Binding NextStepCommand}"
+                    Width="80" Padding="8,4"/>
+        </Grid>
+
+        <!-- Steps indicator -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+            <Ellipse Width="10" Height="10" Margin="4">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="#CCC"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="0">
+                                <Setter Property="Fill" Value="#5865F2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
+            <Ellipse Width="10" Height="10" Margin="4">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="#CCC"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="1">
+                                <Setter Property="Fill" Value="#5865F2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
+            <Ellipse Width="10" Height="10" Margin="4">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="#CCC"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="2">
+                                <Setter Property="Fill" Value="#5865F2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
+            <Ellipse Width="10" Height="10" Margin="4">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="#CCC"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="3">
+                                <Setter Property="Fill" Value="#5865F2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
+        </StackPanel>
+
+        <!-- Content area (switch by step) -->
+        <Grid>
+            <!-- Step 0: Model selection -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=0}">
+                <TextBlock Text="1. Modell auswählen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="Wähle ein Whisper-Modell. 'Small' bietet die beste Balance aus Geschwindigkeit und Qualität."
+                           TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
+
+                <ComboBox SelectedValue="{Binding SelectedModelId}" SelectedValuePath="Tag"
+                          Width="300" HorizontalAlignment="Left" Margin="0,0,0,12">
+                    <ComboBoxItem Tag="tiny" Content="Tiny (~75 MB) - Schnellstes"/>
+                    <ComboBoxItem Tag="base" Content="Base (~142 MB)"/>
+                    <ComboBoxItem Tag="small" Content="Small (~466 MB) - Empfohlen" IsSelected="True"/>
+                    <ComboBoxItem Tag="medium" Content="Medium (~1.5 GB)"/>
+                    <ComboBoxItem Tag="large-v3-turbo" Content="Large v3 Turbo (~1.6 GB) - Bestes"/>
+                </ComboBox>
+
+                <Button Content="Herunterladen" Command="{Binding DownloadModelCommand}"
+                        Width="140" HorizontalAlignment="Left" Padding="12,6"/>
+                <ProgressBar Value="{Binding DownloadProgress}" Maximum="1" Height="6"
+                             Margin="0,8,0,4"
+                             Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="{Binding DownloadStatus}" Foreground="Gray" FontSize="11"/>
+            </StackPanel>
+
+            <!-- Step 1: Microphone test -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=1}">
+                <TextBlock Text="2. Mikrofon testen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="Sprich etwas und prüfe ob der Pegelbalken ausschlägt."
+                           TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
+
+                <Border Height="20" CornerRadius="4" Background="#EEE" Margin="0,0,0,8">
+                    <Border CornerRadius="4" Background="#44cc44" HorizontalAlignment="Left"
+                            Width="{Binding MicLevel, Converter={StaticResource LevelToWidth}}"/>
+                </Border>
+
+                <TextBlock Foreground="Green" FontWeight="SemiBold"
+                           Visibility="{Binding MicWorking, Converter={StaticResource BoolToVis}}">
+                    Mikrofon funktioniert!
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Step 2: Hotkey config -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=2}">
+                <TextBlock Text="3. Hotkeys konfigurieren" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="Konfiguriere die Tastenkombinationen für die Diktierfunktion."
+                           TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Toggle-Hotkey:" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ToggleHotkey}" Width="200" HorizontalAlignment="Left"/>
+
+                    <TextBlock Grid.Row="1" Text="Push-to-Talk:" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PushToTalkHotkey}" Width="200"
+                             HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Step 3: Done -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=3}"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="Alles eingerichtet!" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="TypeWhisper ist bereit. Drücke deinen Hotkey um zu diktieren."
+                           TextWrapping="Wrap" Foreground="Gray" HorizontalAlignment="Center" Margin="0,8,0,16"/>
+                <Button Content="Loslegen" Command="{Binding SkipCommand}"
+                        Width="120" HorizontalAlignment="Center" Padding="12,8" FontSize="14"/>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>
