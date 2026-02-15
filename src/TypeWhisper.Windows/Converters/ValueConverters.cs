@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.Converters;
 
@@ -71,6 +72,34 @@ public sealed class LevelToWidthConverter : IValueConverter
         var normalized = Math.Min(level * 3f, 1f);
         return normalized * maxWidth;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts seconds (double) to M:SS timer format.
+/// </summary>
+public sealed class SecondsToTimerConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var seconds = value is double d ? d : 0;
+        var ts = TimeSpan.FromSeconds(seconds);
+        return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts HotkeyMode? to a short label: TOG or PTT.
+/// </summary>
+public sealed class HotkeyModeLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is HotkeyMode mode ? mode == HotkeyMode.Toggle ? "TOG" : "PTT" : "";
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();

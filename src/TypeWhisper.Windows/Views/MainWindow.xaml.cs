@@ -50,9 +50,10 @@ public partial class MainWindow : Window
 
         Left = (workArea.Width - Width) / 2 + workArea.Left;
 
+        var height = double.IsNaN(Height) ? ActualHeight : Height;
         if (_settings.Current.OverlayPosition == OverlayPosition.Top)
             Top = workArea.Top + 20;
         else
-            Top = workArea.Bottom - Height - 20;
+            Top = workArea.Bottom - Math.Max(height, 60) - 20;
     }
 }
