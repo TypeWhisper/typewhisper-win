@@ -203,6 +203,43 @@
                                             </StackPanel>
                                         </StackPanel>
 
+                                        <!-- Correction Suggestions Banner -->
+                                        <Border CornerRadius="6" Padding="12,8" Margin="0,8,0,4"
+                                                Visibility="{Binding HasSuggestions, Converter={StaticResource BoolToVis}}">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="#3A2A1A"/>
+                                            </Border.Background>
+                                            <Border.BorderBrush>
+                                                <SolidColorBrush Color="#D4915B"/>
+                                            </Border.BorderBrush>
+                                            <Border.BorderThickness>1</Border.BorderThickness>
+                                            <StackPanel>
+                                                <TextBlock Foreground="#D4915B" FontSize="12" FontWeight="Medium"
+                                                           Margin="0,0,0,4">
+                                                    Korrekturen erkannt
+                                                </TextBlock>
+                                                <ItemsControl ItemsSource="{Binding CorrectionSuggestions}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Foreground="{StaticResource TextBrush}" FontSize="12" Margin="0,1,0,1">
+                                                                <Run Text="{Binding Original, Mode=OneWay}" Foreground="{StaticResource HintBrush}" TextDecorations="Strikethrough"/>
+                                                                <Run Text=" → "/>
+                                                                <Run Text="{Binding Replacement, Mode=OneWay}" FontWeight="Medium"/>
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <Button Content="Ins Wörterbuch" Command="{Binding AcceptSuggestionsCommand}"
+                                                            Style="{StaticResource PrimaryButtonStyle}"
+                                                            Padding="10,5" FontSize="12" Margin="0,0,6,0"/>
+                                                    <Button Content="Verwerfen" Command="{Binding DismissSuggestionsCommand}"
+                                                            Style="{StaticResource SecondaryButtonStyle}"
+                                                            Padding="10,5" FontSize="12"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
                                         <!-- Meta -->
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,4"
                                                     Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">

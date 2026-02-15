@@ -37,6 +37,9 @@ public record AppSettings
     public bool ApiServerEnabled { get; init; }
     public int ApiServerPort { get; init; } = 9876;
 
+    // Dictionary
+    public string[] EnabledPackIds { get; init; } = [];
+
     // Update
     public string? UpdateUrl { get; init; }
 

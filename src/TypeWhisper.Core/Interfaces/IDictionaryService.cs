@@ -11,8 +11,12 @@ public interface IDictionaryService
     void AddEntries(IEnumerable<DictionaryEntry> entries);
     void UpdateEntry(DictionaryEntry entry);
     void DeleteEntry(string id);
+    void DeleteEntries(IEnumerable<string> ids);
 
     string ApplyCorrections(string text);
     string? GetTermsForPrompt();
     void LearnCorrection(string original, string replacement);
+
+    void ActivatePack(TermPack pack);
+    void DeactivatePack(string packId);
 }

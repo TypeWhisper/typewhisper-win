@@ -89,6 +89,28 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    public void DeleteEntries(IEnumerable<string> ids)
+    {
+        var idList = ids.ToList();
+        if (idList.Count == 0) return;
+
+        using var conn = _db.GetConnection();
+        conn.Open();
+        using var tx = conn.BeginTransaction();
+        foreach (var id in idList)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM dictionary_entries WHERE id = @id";
+            cmd.Parameters.AddWithValue("@id", id);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+
+        var idSet = idList.ToHashSet();
+        _cache.RemoveAll(e => idSet.Contains(e.Id));
+        EntriesChanged?.Invoke();
+    }
+
     public string ApplyCorrections(string text)
     {
         EnsureCacheLoaded();
@@ -193,6 +215,43 @@ public sealed class DictionaryService : IDictionaryService
 
         var idx = _cache.FindIndex(e => e.Id == id);
         if (idx >= 0) _cache[idx] = _cache[idx] with { UsageCount = _cache[idx].UsageCount + 1 };
+    }
+
+    public void ActivatePack(TermPack pack)
+    {
+        EnsureCacheLoaded();
+
+        var existingOriginals = _cache
+            .Where(e => e.EntryType == DictionaryEntryType.Term)
+            .Select(e => e.Original)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var newEntries = pack.Terms
+            .Where(t => !existingOriginals.Contains(t))
+            .Select(t => new DictionaryEntry
+            {
+                Id = $"pack:{pack.Id}:{t}",
+                EntryType = DictionaryEntryType.Term,
+                Original = t
+            })
+            .ToList();
+
+        if (newEntries.Count > 0)
+            AddEntries(newEntries);
+    }
+
+    public void DeactivatePack(string packId)
+    {
+        EnsureCacheLoaded();
+
+        var prefix = $"pack:{packId}:";
+        var idsToDelete = _cache
+            .Where(e => e.Id.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(e => e.Id)
+            .ToList();
+
+        if (idsToDelete.Count > 0)
+            DeleteEntries(idsToDelete);
     }
 
     private void EnsureCacheLoaded()

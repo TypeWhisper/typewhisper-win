@@ -8,12 +8,15 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
 public partial class HistoryViewModel : ObservableObject
 {
     private readonly IHistoryService _history;
+    private readonly IDictionaryService _dictionary;
+    private bool _suppressRefresh;
 
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private string? _selectedAppFilter;
@@ -25,9 +28,10 @@ public partial class HistoryViewModel : ObservableObject
     public int TotalRecords => _history.TotalRecords;
     public int TotalWords => _history.TotalWords;
 
-    public HistoryViewModel(IHistoryService history)
+    public HistoryViewModel(IHistoryService history, IDictionaryService dictionary)
     {
         _history = history;
+        _dictionary = dictionary;
 
         GroupedEntries = CollectionViewSource.GetDefaultView(Entries);
         GroupedEntries.GroupDescriptions.Add(
@@ -38,6 +42,7 @@ public partial class HistoryViewModel : ObservableObject
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
+                if (_suppressRefresh) return;
                 RefreshRecords();
                 OnPropertyChanged(nameof(TotalRecords));
                 OnPropertyChanged(nameof(TotalWords));
@@ -140,8 +145,37 @@ public partial class HistoryViewModel : ObservableObject
     internal void DeleteEntry(HistoryEntryViewModel entry) =>
         _history.DeleteRecord(entry.Record.Id);
 
-    internal void SaveEdit(HistoryEntryViewModel entry, string newText) =>
-        _history.UpdateRecord(entry.Record.Id, newText);
+    internal void SaveEdit(HistoryEntryViewModel entry, string newText)
+    {
+        var originalText = entry.Record.FinalText;
+
+        // Suppress refresh so RecordsChanged doesn't rebuild entries and lose suggestions
+        _suppressRefresh = true;
+        try
+        {
+            _history.UpdateRecord(entry.Record.Id, newText);
+        }
+        finally
+        {
+            _suppressRefresh = false;
+        }
+
+        // Extract correction suggestions
+        var suggestions = TextDiffService.ExtractCorrections(originalText, newText);
+        if (suggestions.Count > 0)
+        {
+            entry.CorrectionSuggestions.Clear();
+            foreach (var s in suggestions)
+                entry.CorrectionSuggestions.Add(s);
+            entry.HasSuggestions = true;
+        }
+
+        OnPropertyChanged(nameof(TotalRecords));
+        OnPropertyChanged(nameof(TotalWords));
+    }
+
+    internal void LearnCorrection(CorrectionSuggestion suggestion) =>
+        _dictionary.LearnCorrection(suggestion.Original, suggestion.Replacement);
 }
 
 public partial class HistoryEntryViewModel : ObservableObject
@@ -153,6 +187,9 @@ public partial class HistoryEntryViewModel : ObservableObject
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private bool _isEditing;
     [ObservableProperty] private string _editText = "";
+    [ObservableProperty] private bool _hasSuggestions;
+
+    public ObservableCollection<CorrectionSuggestion> CorrectionSuggestions { get; } = [];
 
     public string DateGroup => ComputeDateGroup(Record.Timestamp);
     public string TimeLabel => Record.Timestamp.ToString("HH:mm");
@@ -169,7 +206,11 @@ public partial class HistoryEntryViewModel : ObservableObject
         if (value)
             _parent.CollapseAllExcept(this);
         else
+        {
             IsEditing = false;
+            HasSuggestions = false;
+            CorrectionSuggestions.Clear();
+        }
     }
 
     [RelayCommand]
@@ -199,6 +240,22 @@ public partial class HistoryEntryViewModel : ObservableObject
 
     [RelayCommand]
     private void Delete() => _parent.DeleteEntry(this);
+
+    [RelayCommand]
+    private void AcceptSuggestions()
+    {
+        foreach (var s in CorrectionSuggestions)
+            _parent.LearnCorrection(s);
+        HasSuggestions = false;
+        CorrectionSuggestions.Clear();
+    }
+
+    [RelayCommand]
+    private void DismissSuggestions()
+    {
+        HasSuggestions = false;
+        CorrectionSuggestions.Clear();
+    }
 
     private static string ComputeDateGroup(DateTime timestamp)
     {
