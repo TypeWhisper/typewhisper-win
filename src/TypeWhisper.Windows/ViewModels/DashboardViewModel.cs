@@ -1,19 +1,24 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core.Interfaces;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+public record ActivityDataPoint(DateTime Date, int WordCount);
+
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly IHistoryService _history;
 
-    [ObservableProperty] private int _totalRecords;
-    [ObservableProperty] private int _totalWords;
-    [ObservableProperty] private string _totalDuration = "0:00";
-    [ObservableProperty] private int _recordsToday;
-    [ObservableProperty] private int _recordsThisWeek;
-    [ObservableProperty] private string? _mostUsedLanguage;
-    [ObservableProperty] private string? _mostUsedApp;
+    [ObservableProperty] private bool _isMonthView;
+
+    [ObservableProperty] private int _wordsCount;
+    [ObservableProperty] private string _averageWpm = "0";
+    [ObservableProperty] private int _appsUsed;
+    [ObservableProperty] private string _timeSaved = "0m";
+
+    public ObservableCollection<ActivityDataPoint> ChartData { get; } = [];
+    [ObservableProperty] private int _chartMaxValue = 1;
 
     public DashboardViewModel(IHistoryService history)
     {
@@ -22,35 +27,59 @@ public partial class DashboardViewModel : ObservableObject
         Refresh();
     }
 
+    partial void OnIsMonthViewChanged(bool value) => Refresh();
+
     public void Refresh()
     {
-        var records = _history.Records;
+        var now = DateTime.UtcNow.Date;
+        int days = IsMonthView ? 30 : 7;
+        var cutoff = now.AddDays(-(days - 1));
 
-        TotalRecords = records.Count;
-        TotalWords = _history.TotalWords;
+        var records = _history.Records
+            .Where(r => r.Timestamp.Date >= cutoff)
+            .ToList();
 
-        var dur = TimeSpan.FromSeconds(_history.TotalDuration);
-        TotalDuration = dur.TotalHours >= 1
-            ? $"{(int)dur.TotalHours}:{dur.Minutes:D2}:{dur.Seconds:D2}"
-            : $"{dur.Minutes}:{dur.Seconds:D2}";
+        // Stat cards
+        WordsCount = records.Sum(r => r.WordCount);
 
-        var today = DateTime.UtcNow.Date;
-        RecordsToday = records.Count(r => r.Timestamp.Date == today);
+        var totalSeconds = records.Sum(r => r.DurationSeconds);
+        AverageWpm = totalSeconds > 0
+            ? ((int)Math.Round(WordsCount / (totalSeconds / 60.0))).ToString()
+            : "0";
 
-        var weekStart = today.AddDays(-(int)today.DayOfWeek + (int)DayOfWeek.Monday);
-        if (today.DayOfWeek == DayOfWeek.Sunday) weekStart = weekStart.AddDays(-7);
-        RecordsThisWeek = records.Count(r => r.Timestamp.Date >= weekStart);
-
-        MostUsedLanguage = records
-            .Where(r => r.Language is not null)
-            .GroupBy(r => r.Language!)
-            .OrderByDescending(g => g.Count())
-            .FirstOrDefault()?.Key;
-
-        MostUsedApp = records
+        AppsUsed = records
             .Where(r => r.AppProcessName is not null)
-            .GroupBy(r => r.AppProcessName!)
-            .OrderByDescending(g => g.Count())
-            .FirstOrDefault()?.Key;
+            .Select(r => r.AppProcessName!)
+            .Distinct()
+            .Count();
+
+        double typingMinutes = WordsCount / 45.0;
+        double speakingMinutes = totalSeconds / 60.0;
+        TimeSaved = FormatTimeSaved(typingMinutes - speakingMinutes);
+
+        // Chart: one bar per day
+        ChartData.Clear();
+        var grouped = records
+            .GroupBy(r => r.Timestamp.Date)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.WordCount));
+
+        int max = 0;
+        for (int i = 0; i < days; i++)
+        {
+            var date = cutoff.AddDays(i);
+            int wc = grouped.GetValueOrDefault(date);
+            if (wc > max) max = wc;
+            ChartData.Add(new ActivityDataPoint(date, wc));
+        }
+        ChartMaxValue = max > 0 ? max : 1;
+    }
+
+    static string FormatTimeSaved(double minutes)
+    {
+        if (minutes <= 0) return "0m";
+        int total = (int)Math.Round(minutes);
+        if (total < 60) return $"{total}m";
+        int h = total / 60, m = total % 60;
+        return m > 0 ? $"{h}h {m}m" : $"{h}h";
     }
 }

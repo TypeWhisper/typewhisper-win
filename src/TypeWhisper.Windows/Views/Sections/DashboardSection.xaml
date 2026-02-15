@@ -1,79 +1,133 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.DashboardSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <conv:BarHeightConverter x:Key="BarHeightConverter"/>
+            <conv:DayLabelConverter x:Key="DayLabelConverter"/>
+            <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="600" Margin="24">
-            <TextBlock Text="Nutzungsstatistiken" Style="{StaticResource SectionHeaderStyle}"/>
+        <StackPanel MaxWidth="700" Margin="24">
 
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- Header: Title + Period Toggle -->
+            <DockPanel Margin="0,0,0,20">
+                <TextBlock Text="Dashboard" Style="{StaticResource SectionHeaderStyle}"
+                           DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0"/>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
+                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <RadioButton Content="Woche" Style="{StaticResource TabRadioStyle}"
+                                 IsChecked="True" Checked="WeekChecked"/>
+                    <RadioButton Content="Monat" Style="{StaticResource TabRadioStyle}"
+                                 Checked="MonthChecked"/>
+                </StackPanel>
+            </DockPanel>
 
-                <Border Grid.Column="0" Grid.Row="0" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,8,8">
+            <!-- 4 Stat Cards -->
+            <UniformGrid Rows="1" Columns="4" Margin="0,0,0,24">
+                <Border Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.TotalRecords}" FontSize="28" FontWeight="Bold"
+                        <TextBlock Text="&#x270D;" FontSize="18" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding Dashboard.WordsCount}" FontSize="32" FontWeight="Bold"
                                    Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Transkriptionen" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Wörter" Foreground="{StaticResource HintBrush}"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="1" Grid.Row="0" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,8,8">
+                <Border Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.TotalWords}" FontSize="28" FontWeight="Bold"
+                        <TextBlock Text="&#x26A1;" FontSize="18" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding Dashboard.AverageWpm}" FontSize="32" FontWeight="Bold"
                                    Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Wörter" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="&#x00D8; WPM" Foreground="{StaticResource HintBrush}"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="2" Grid.Row="0" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,8">
+                <Border Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.TotalDuration}" FontSize="28" FontWeight="Bold"
+                        <TextBlock Text="&#x2B1A;" FontSize="18" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding Dashboard.AppsUsed}" FontSize="32" FontWeight="Bold"
                                    Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Dauer" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Apps" Foreground="{StaticResource HintBrush}"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Border>
+                <Border Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="8" Padding="16,20">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="&#x23F1;" FontSize="18" Foreground="{StaticResource AccentBrush}"
+                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding Dashboard.TimeSaved}" FontSize="32" FontWeight="Bold"
+                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Erspart" Foreground="{StaticResource HintBrush}"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
 
-                <Border Grid.Column="0" Grid.Row="1" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,8,8">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.RecordsToday}" FontSize="28" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Heute" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-                <Border Grid.Column="1" Grid.Row="1" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,8,8">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.RecordsThisWeek}" FontSize="28" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Diese Woche" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Grid.Row="1" Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,8">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{Binding Dashboard.MostUsedLanguage, TargetNullValue='-'}" FontSize="28" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Top-Sprache" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
+            <!-- Activity Header -->
+            <TextBlock Text="Aktivität" FontSize="16" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextBrush}" Margin="0,0,0,12"/>
+
+            <!-- Empty State -->
+            <TextBlock Text="Keine Aktivität in diesem Zeitraum."
+                       Foreground="{StaticResource HintBrush}" FontSize="14"
+                       HorizontalAlignment="Center" Margin="0,40,0,40"
+                       Visibility="{Binding Dashboard.WordsCount, Converter={StaticResource ZeroToVisibility}}"/>
+
+            <!-- Bar Chart -->
+            <Border Background="{StaticResource InputBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="16" MinHeight="220"
+                    Visibility="{Binding Dashboard.WordsCount, Converter={StaticResource ZeroToVisibility}, ConverterParameter=invert}">
+                <ItemsControl ItemsSource="{Binding Dashboard.ChartData}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="2,0">
+                                <TextBlock DockPanel.Dock="Bottom"
+                                           Text="{Binding Date, Converter={StaticResource DayLabelConverter}}"
+                                           Foreground="{StaticResource HintBrush}" FontSize="10"
+                                           HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                                <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
+                                        CornerRadius="3,3,0,0" Margin="3,0">
+                                    <Border.Background>
+                                        <SolidColorBrush Color="{StaticResource AccentColor}"/>
+                                    </Border.Background>
+                                    <Border.Height>
+                                        <MultiBinding Converter="{StaticResource BarHeightConverter}" ConverterParameter="160">
+                                            <Binding Path="WordCount"/>
+                                            <Binding Path="DataContext.Dashboard.ChartMaxValue"
+                                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        </MultiBinding>
+                                    </Border.Height>
+                                </Border>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -118,3 +118,54 @@ public sealed class TagSplitConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// Converts (WordCount, ChartMaxValue) → proportional bar height in pixels.
+/// ConverterParameter = max pixel height (default 160).
+/// </summary>
+public sealed class BarHeightConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length < 2) return 4.0;
+        int wordCount = values[0] is int wc ? wc : 0;
+        int maxValue = values[1] is int mv ? mv : 1;
+        double maxHeight = 160.0;
+        if (parameter is string s && double.TryParse(s, CultureInfo.InvariantCulture, out var mh))
+            maxHeight = mh;
+        if (maxValue <= 0) return 4.0;
+        return Math.Max(4.0, (double)wordCount / maxValue * maxHeight);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// DateTime → short day label like "7."
+/// </summary>
+public sealed class DayLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is DateTime dt ? $"{dt.Day}." : "";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// int 0 → Visible, non-zero → Collapsed.
+/// Pass ConverterParameter="invert" to reverse.
+/// </summary>
+public sealed class ZeroToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool isZero = value is int i && i == 0;
+        if (parameter is string s && s == "invert") isZero = !isZero;
+        return isZero ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
