@@ -6,8 +6,11 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +25,14 @@ jobs:
           $v = "${{ github.ref_name }}" -replace '^v',''
           echo "VERSION=$v" >> $env:GITHUB_OUTPUT
 
-      - run: dotnet restore
+      - run: dotnet restore -r ${{ matrix.rid }}
 
-      - run: dotnet build -c Release -p:Version=${{ steps.ver.outputs.VERSION }}
+      - run: dotnet build -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.ver.outputs.VERSION }} --no-restore
 
       - run: dotnet test -c Release --no-build
+        if: matrix.rid == 'win-x64'
 
-      - run: dotnet publish src/TypeWhisper.Windows -c Release --no-build -o publish
+      - run: dotnet publish src/TypeWhisper.Windows -c Release -r ${{ matrix.rid }} --no-build -o publish
 
       - run: dotnet tool install -g vpk
 
@@ -43,8 +47,30 @@ jobs:
             --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
             --outputDir releases
 
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          Get-ChildItem releases -File | ForEach-Object {
+            $newName = $_.BaseName + "-${{ matrix.rid }}" + $_.Extension
+            Rename-Item $_.FullName $newName
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: releases/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
       - uses: softprops/action-gh-release@v2
         with:
-          files: releases/*
+          files: artifacts/*
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
