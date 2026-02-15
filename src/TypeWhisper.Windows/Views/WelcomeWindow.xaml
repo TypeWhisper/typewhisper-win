@@ -95,16 +95,13 @@
             <!-- Step 0: Model selection -->
             <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=0}">
                 <TextBlock Text="1. Modell auswählen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                <TextBlock Text="Wähle ein Whisper-Modell. 'Small' bietet die beste Balance aus Geschwindigkeit und Qualität."
+                <TextBlock Text="Wähle ein Sprachmodell. Parakeet bietet die beste Sprachunterstützung, Canary zusätzlich Übersetzung."
                            TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
 
                 <ComboBox SelectedValue="{Binding SelectedModelId}" SelectedValuePath="Tag"
-                          Width="300" HorizontalAlignment="Left" Margin="0,0,0,12">
-                    <ComboBoxItem Tag="tiny" Content="Tiny (~75 MB) - Schnellstes"/>
-                    <ComboBoxItem Tag="base" Content="Base (~142 MB)"/>
-                    <ComboBoxItem Tag="small" Content="Small (~466 MB) - Empfohlen" IsSelected="True"/>
-                    <ComboBoxItem Tag="medium" Content="Medium (~1.5 GB)"/>
-                    <ComboBoxItem Tag="large-v3-turbo" Content="Large v3 Turbo (~1.6 GB) - Bestes"/>
+                          Width="360" HorizontalAlignment="Left" Margin="0,0,0,12">
+                    <ComboBoxItem Tag="parakeet-tdt-0.6b" Content="Parakeet TDT 0.6B (~670 MB) - Empfohlen" IsSelected="True"/>
+                    <ComboBoxItem Tag="canary-180m-flash" Content="Canary 180M Flash (~198 MB) - Mit Übersetzung"/>
                 </ComboBox>
 
                 <Button Content="Herunterladen" Command="{Binding DownloadModelCommand}"
