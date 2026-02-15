@@ -38,6 +38,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private VoiceActivityDetector? _vad;
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
+    private bool _disposed;
 
     [ObservableProperty] private DictationState _state = DictationState.Idle;
     [ObservableProperty] private float _audioLevel;
@@ -424,15 +425,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        _audioDucking.RestoreAudio();
-        _mediaPause.ResumeMedia();
-        _processingCts?.Cancel();
-        _processingCts?.Dispose();
-        _durationTimer?.Dispose();
-        _vad?.Dispose();
-        _vadLock.Dispose();
-        _audio.AudioLevelChanged -= OnAudioLevelChanged;
-        _audio.SamplesAvailable -= OnSamplesAvailable;
+        if (!_disposed)
+        {
+            _audioDucking.RestoreAudio();
+            _mediaPause.ResumeMedia();
+            _processingCts?.Cancel();
+            _processingCts?.Dispose();
+            _durationTimer?.Dispose();
+            _vad?.Dispose();
+            _vadLock.Dispose();
+            _audio.AudioLevelChanged -= OnAudioLevelChanged;
+            _audio.SamplesAvailable -= OnSamplesAvailable;
+            _disposed = true;
+        }
     }
 }
 

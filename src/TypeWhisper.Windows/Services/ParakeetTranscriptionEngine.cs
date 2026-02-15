@@ -27,6 +27,7 @@ public sealed class ParakeetTranscriptionEngine : ITranscriptionEngine, IDisposa
     private string? _modelDir;
     private string _canarySrcLang = "en";
     private string _canaryTgtLang = "en";
+    private bool _disposed;
 
     public bool IsModelLoaded
     {
@@ -234,6 +235,10 @@ public sealed class ParakeetTranscriptionEngine : ITranscriptionEngine, IDisposa
 
     public void Dispose()
     {
-        UnloadModel();
+        if (!_disposed)
+        {
+            UnloadModel();
+            _disposed = true;
+        }
     }
 }

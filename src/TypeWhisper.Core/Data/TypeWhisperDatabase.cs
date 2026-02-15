@@ -180,5 +180,6 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
             _connection?.Dispose();
             _disposed = true;
         }
+        GC.SuppressFinalize(this);
     }
 }

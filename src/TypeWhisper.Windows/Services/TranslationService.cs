@@ -15,6 +15,7 @@ public sealed class TranslationService : ITranslationService, IDisposable
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1);
     private readonly Dictionary<string, LoadedTranslationModel> _loadedModels = new();
     private readonly HashSet<string> _loadingModels = new();
+    private bool _disposed;
 
     public bool IsModelReady(string sourceLang, string targetLang) =>
         _loadedModels.ContainsKey(ModelKey(sourceLang, targetLang));
@@ -211,14 +212,18 @@ public sealed class TranslationService : ITranslationService, IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
-        _downloadSemaphore.Dispose();
-        foreach (var model in _loadedModels.Values)
+        if (!_disposed)
         {
-            model.Encoder.Dispose();
-            model.Decoder.Dispose();
+            _httpClient.Dispose();
+            _downloadSemaphore.Dispose();
+            foreach (var model in _loadedModels.Values)
+            {
+                model.Encoder.Dispose();
+                model.Decoder.Dispose();
+            }
+            _loadedModels.Clear();
+            _disposed = true;
         }
-        _loadedModels.Clear();
     }
 }
 

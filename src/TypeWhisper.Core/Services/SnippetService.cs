@@ -46,6 +46,7 @@ public sealed partial class SnippetService : ISnippetService
     public void AddSnippet(Snippet snippet)
     {
         var conn = _db.GetConnection();
+        conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             INSERT INTO snippets (id, trigger, replacement, case_sensitive, is_enabled, usage_count, tags, created_at)
@@ -68,6 +69,7 @@ public sealed partial class SnippetService : ISnippetService
     public void UpdateSnippet(Snippet snippet)
     {
         var conn = _db.GetConnection();
+        conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             UPDATE snippets
@@ -92,6 +94,7 @@ public sealed partial class SnippetService : ISnippetService
     public void DeleteSnippet(string id)
     {
         var conn = _db.GetConnection();
+        conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM snippets WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
@@ -191,6 +194,7 @@ public sealed partial class SnippetService : ISnippetService
     private void IncrementUsageCount(string id)
     {
         var conn = _db.GetConnection();
+        conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "UPDATE snippets SET usage_count = usage_count + 1 WHERE id = @id";
         cmd.Parameters.AddWithValue("@id", id);
@@ -205,6 +209,7 @@ public sealed partial class SnippetService : ISnippetService
         if (_cacheLoaded) return;
 
         var conn = _db.GetConnection();
+        conn.Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, trigger, replacement, case_sensitive, is_enabled, usage_count, tags, created_at

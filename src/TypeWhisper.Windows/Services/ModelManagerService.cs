@@ -14,6 +14,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
     private readonly HttpClient _httpClient = new();
+    private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -197,7 +198,11 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
-        _parakeetEngine.Dispose();
+        if (!_disposed)
+        {
+            _httpClient.Dispose();
+            _parakeetEngine.Dispose();
+            _disposed = true;
+        }
     }
 }
