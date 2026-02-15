@@ -182,7 +182,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         var samples = _audio.StopRecording();
         _audioDucking.RestoreAudio();
         _mediaPause.ResumeMedia();
-        _sound.PlayStopSound();
         RecordingSeconds = 0;
 
         // Flush remaining VAD segments
