@@ -261,7 +261,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             // Apply corrections and snippets
             var finalText = _dictionary.ApplyCorrections(rawText);
-            finalText = _snippets.ApplySnippets(finalText);
+            finalText = _snippets.ApplySnippets(finalText, () =>
+            {
+                var text = "";
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    text = System.Windows.Clipboard.GetText());
+                return text;
+            });
 
             // Translate if configured
             var translationTarget = _activeProfile?.TranslationTarget

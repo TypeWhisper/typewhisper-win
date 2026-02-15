@@ -104,3 +104,17 @@ public sealed class HotkeyModeLabelConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// Splits a comma-separated tags string into a string array for ItemsControl binding.
+/// </summary>
+public sealed class TagSplitConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is string s && !string.IsNullOrWhiteSpace(s)
+            ? s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : Array.Empty<string>();
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
