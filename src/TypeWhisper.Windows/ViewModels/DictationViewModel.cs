@@ -141,13 +141,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _vad = CreateVoiceActivityDetector();
         _audio.SamplesAvailable += OnSamplesAvailable;
 
+        _sound.PlayStartSound();
+
         if (_settings.Current.AudioDuckingEnabled)
             _audioDucking.DuckAudio(_settings.Current.AudioDuckingLevel);
         if (_settings.Current.PauseMediaDuringRecording)
             _mediaPause.PauseMedia();
 
         _audio.StartRecording();
-        _sound.PlayStartSound();
 
         State = DictationState.Recording;
         StatusText = "Aufnahme...";
@@ -179,9 +180,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audio.SamplesAvailable -= OnSamplesAvailable;
 
         var samples = _audio.StopRecording();
-        _sound.PlayStopSound();
         _audioDucking.RestoreAudio();
         _mediaPause.ResumeMedia();
+        _sound.PlayStopSound();
         RecordingSeconds = 0;
 
         // Flush remaining VAD segments
