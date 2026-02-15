@@ -25,14 +25,14 @@ jobs:
           $v = "${{ github.ref_name }}" -replace '^v',''
           echo "VERSION=$v" >> $env:GITHUB_OUTPUT
 
-      - run: dotnet restore -r ${{ matrix.rid }}
+      - run: dotnet restore
 
-      - run: dotnet build -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.ver.outputs.VERSION }} --no-restore
+      - run: dotnet build -c Release -p:Version=${{ steps.ver.outputs.VERSION }} --no-restore
 
       - run: dotnet test -c Release --no-build
         if: matrix.rid == 'win-x64'
 
-      - run: dotnet publish src/TypeWhisper.Windows -c Release -r ${{ matrix.rid }} --no-build -o publish
+      - run: dotnet publish src/TypeWhisper.Windows -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.ver.outputs.VERSION }} -o publish
 
       - run: dotnet tool install -g vpk
 
