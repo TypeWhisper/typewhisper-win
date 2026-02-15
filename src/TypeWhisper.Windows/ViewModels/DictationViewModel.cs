@@ -1,6 +1,8 @@
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SherpaOnnx;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
@@ -30,6 +32,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
 
+    // VAD for live transcription
+    private VoiceActivityDetector? _vad;
+    private readonly List<string> _partialSegments = [];
+    private readonly SemaphoreSlim _vadLock = new(1, 1);
+
     [ObservableProperty] private DictationState _state = DictationState.Idle;
     [ObservableProperty] private float _audioLevel;
     [ObservableProperty] private double _recordingSeconds;
@@ -37,6 +44,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _transcribedText = "";
     [ObservableProperty] private HotkeyMode? _currentHotkeyMode;
     [ObservableProperty] private bool _isOverlayVisible;
+    [ObservableProperty] private string? _activeProcessName;
+    [ObservableProperty] private string? _activeProfileName;
+    [ObservableProperty] private string _partialText = "";
 
     public DictationViewModel(
         ISettingsService settings,
@@ -111,7 +121,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         var url = _activeWindow.GetBrowserUrl();
         _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
 
+        ActiveProcessName = _capturedProcessName;
+        ActiveProfileName = _activeProfile?.Name;
+
         _audio.WhisperModeEnabled = EffectiveWhisperMode;
+
+        // Initialize VAD for live transcription
+        _partialSegments.Clear();
+        PartialText = "";
+        _vad?.Dispose();
+        _vad = CreateVoiceActivityDetector();
+        _audio.SamplesAvailable += OnSamplesAvailable;
+
         _audio.StartRecording();
         _sound.PlayStartSound();
 
@@ -127,6 +148,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _durationTimer.Elapsed += (_, _) =>
         {
             RecordingSeconds = _audio.RecordingDuration.TotalSeconds;
+            if (_hotkey.CurrentMode is { } mode && mode != CurrentHotkeyMode)
+                CurrentHotkeyMode = mode;
         };
         _durationTimer.Start();
     }
@@ -140,15 +163,29 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _durationTimer?.Dispose();
         _durationTimer = null;
 
+        _audio.SamplesAvailable -= OnSamplesAvailable;
+
         var samples = _audio.StopRecording();
         _sound.PlayStopSound();
         RecordingSeconds = 0;
+
+        // Flush remaining VAD segments
+        if (_vad is not null)
+        {
+            _vad.Flush();
+            await ProcessVadSegments();
+            _vad.Dispose();
+            _vad = null;
+        }
 
         if (samples is null || samples.Length < 1600) // < 100ms
         {
             State = DictationState.Idle;
             StatusText = "Zu kurz";
             IsOverlayVisible = false;
+            ActiveProcessName = null;
+            ActiveProfileName = null;
+            PartialText = "";
             _hotkey.ForceStop();
             return;
         }
@@ -166,20 +203,46 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         try
         {
-            var language = EffectiveLanguage == "auto" ? null : EffectiveLanguage;
-            var task = EffectiveTask;
+            // Use partial segments if available, otherwise transcribe full audio
+            string rawText;
+            string? detectedLanguage = null;
+            double audioDuration = samples.Length / 16000.0;
 
-            var result = await _modelManager.Engine.TranscribeAsync(samples, language, task, _processingCts.Token);
+            if (_partialSegments.Count > 0)
+            {
+                rawText = string.Join(" ", _partialSegments);
+            }
+            else
+            {
+                var language = EffectiveLanguage == "auto" ? null : EffectiveLanguage;
+                var task = EffectiveTask;
+                var result = await _modelManager.Engine.TranscribeAsync(samples, language, task, _processingCts.Token);
 
-            if (string.IsNullOrWhiteSpace(result.Text))
+                if (string.IsNullOrWhiteSpace(result.Text))
+                {
+                    State = DictationState.Idle;
+                    StatusText = "Keine Sprache erkannt";
+                    IsOverlayVisible = false;
+                    ActiveProcessName = null;
+                    ActiveProfileName = null;
+                    PartialText = "";
+                    return;
+                }
+
+                rawText = result.Text;
+                detectedLanguage = result.DetectedLanguage;
+            }
+
+            if (string.IsNullOrWhiteSpace(rawText))
             {
                 State = DictationState.Idle;
                 StatusText = "Keine Sprache erkannt";
                 IsOverlayVisible = false;
+                ActiveProcessName = null;
+                ActiveProfileName = null;
+                PartialText = "";
                 return;
             }
-
-            var rawText = result.Text;
 
             // Apply corrections and snippets
             var finalText = _dictionary.ApplyCorrections(rawText);
@@ -190,7 +253,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 ?? _settings.Current.TranslationTargetLanguage;
             if (!string.IsNullOrEmpty(translationTarget))
             {
-                var sourceLang = result.DetectedLanguage ?? language ?? "de";
+                var language = EffectiveLanguage == "auto" ? null : EffectiveLanguage;
+                var sourceLang = detectedLanguage ?? language ?? "de";
                 if (sourceLang != translationTarget)
                 {
                     StatusText = "Übersetze...";
@@ -216,9 +280,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 FinalText = finalText,
                 AppName = _capturedWindowTitle,
                 AppProcessName = _capturedProcessName,
-                DurationSeconds = result.Duration,
-                Language = result.DetectedLanguage,
-                EngineUsed = _modelManager.ActiveEngineType == EngineType.Parakeet ? "parakeet" : "whisper"
+                DurationSeconds = audioDuration,
+                Language = detectedLanguage,
+                EngineUsed = "parakeet"
             });
 
             _sound.PlaySuccessSound();
@@ -234,12 +298,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             State = DictationState.Idle;
             IsOverlayVisible = false;
             StatusText = "Bereit";
+            ActiveProcessName = null;
+            ActiveProfileName = null;
+            PartialText = "";
         }
         catch (OperationCanceledException)
         {
             State = DictationState.Idle;
             StatusText = "Abgebrochen";
             IsOverlayVisible = false;
+            ActiveProcessName = null;
+            ActiveProfileName = null;
+            PartialText = "";
         }
         catch (Exception ex)
         {
@@ -250,7 +320,73 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             State = DictationState.Idle;
             IsOverlayVisible = false;
             StatusText = "Bereit";
+            ActiveProcessName = null;
+            ActiveProfileName = null;
+            PartialText = "";
         }
+    }
+
+    private async void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs e)
+    {
+        if (_vad is null || State != DictationState.Recording) return;
+
+        if (!await _vadLock.WaitAsync(0)) return;
+        try
+        {
+            _vad.AcceptWaveform(e.Samples);
+            await ProcessVadSegments();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"VAD error: {ex.Message}");
+        }
+        finally
+        {
+            _vadLock.Release();
+        }
+    }
+
+    private async Task ProcessVadSegments()
+    {
+        if (_vad is null) return;
+
+        while (!_vad.IsEmpty())
+        {
+            var segment = _vad.Front();
+            _vad.Pop();
+
+            if (segment.Samples.Length < 1600) continue; // Skip very short segments
+
+            try
+            {
+                var result = await _modelManager.Engine.TranscribeAsync(segment.Samples);
+                if (!string.IsNullOrWhiteSpace(result.Text))
+                {
+                    _partialSegments.Add(result.Text);
+                    PartialText = string.Join(" ", _partialSegments);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Partial transcription error: {ex.Message}");
+            }
+        }
+    }
+
+    private static VoiceActivityDetector CreateVoiceActivityDetector()
+    {
+        var config = new VadModelConfig
+        {
+            SileroVad = new SileroVadModelConfig
+            {
+                Model = Path.Combine(AppContext.BaseDirectory, "Resources", "silero_vad.onnx"),
+                Threshold = 0.5f,
+                MinSilenceDuration = 0.5f,
+                MinSpeechDuration = 0.25f,
+            },
+            SampleRate = 16000,
+        };
+        return new VoiceActivityDetector(config, 60);
     }
 
     [RelayCommand]
@@ -269,7 +405,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _processingCts?.Cancel();
         _processingCts?.Dispose();
         _durationTimer?.Dispose();
+        _vad?.Dispose();
+        _vadLock.Dispose();
         _audio.AudioLevelChanged -= OnAudioLevelChanged;
+        _audio.SamplesAvailable -= OnSamplesAvailable;
     }
 }
 

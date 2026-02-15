@@ -27,6 +27,7 @@ public sealed class AudioRecordingService : IDisposable
     private int _lastKnownDeviceCount;
 
     public event EventHandler<AudioLevelEventArgs>? AudioLevelChanged;
+    public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
     public event EventHandler? DevicesChanged;
     public event EventHandler? DeviceLost;
 
@@ -157,6 +158,13 @@ public sealed class AudioRecordingService : IDisposable
         if (rms > _peakRmsLevel) _peakRmsLevel = rms;
 
         AudioLevelChanged?.Invoke(this, new AudioLevelEventArgs(peak, rms));
+
+        if (SamplesAvailable is not null && _sampleBuffer is not null)
+        {
+            var chunkSamples = new float[sampleCount];
+            _sampleBuffer.CopyTo(_sampleBuffer.Count - sampleCount, chunkSamples, 0, sampleCount);
+            SamplesAvailable.Invoke(this, new SamplesAvailableEventArgs(chunkSamples));
+        }
     }
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e) { }
@@ -260,3 +268,8 @@ public sealed class AudioRecordingService : IDisposable
 }
 
 public sealed record AudioLevelEventArgs(float PeakLevel, float RmsLevel);
+
+public sealed class SamplesAvailableEventArgs(float[] samples) : EventArgs
+{
+    public float[] Samples { get; } = samples;
+}
