@@ -15,7 +15,6 @@ public partial class App : Application
     private ServiceProvider? _serviceProvider;
     private TrayIconService? _trayIcon;
     private SettingsWindow? _settingsWindow;
-    private HistoryWindow? _historyWindow;
     private FileTranscriptionWindow? _fileTranscriptionWindow;
     private WelcomeWindow? _welcomeWindow;
 
@@ -74,7 +73,6 @@ public partial class App : Application
         _trayIcon = _serviceProvider.GetRequiredService<TrayIconService>();
         _trayIcon.Initialize();
         _trayIcon.ShowSettingsRequested += (_, _) => ShowSettingsWindow();
-        _trayIcon.ShowHistoryRequested += (_, _) => ShowHistoryWindow();
         _trayIcon.ShowFileTranscriptionRequested += (_, _) => ShowFileTranscriptionWindow();
         _trayIcon.ExitRequested += (_, _) => Shutdown();
 
@@ -149,19 +147,6 @@ public partial class App : Application
         _settingsWindow.Show();
     }
 
-    private void ShowHistoryWindow()
-    {
-        if (_historyWindow is { IsLoaded: true })
-        {
-            _historyWindow.Activate();
-            return;
-        }
-
-        _historyWindow = _serviceProvider!.GetRequiredService<HistoryWindow>();
-        _historyWindow.Closed += (_, _) => _historyWindow = null;
-        _historyWindow.Show();
-    }
-
     private void ShowFileTranscriptionWindow()
     {
         if (_fileTranscriptionWindow is { IsLoaded: true })
@@ -225,7 +210,6 @@ public partial class App : Application
         // Views
         services.AddSingleton<MainWindow>();
         services.AddTransient<SettingsWindow>();
-        services.AddTransient<HistoryWindow>();
         services.AddTransient<FileTranscriptionWindow>();
         services.AddTransient<WelcomeWindow>();
     }

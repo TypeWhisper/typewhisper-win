@@ -17,4 +17,7 @@ public interface IHistoryService
     int TotalRecords { get; }
     int TotalWords { get; }
     double TotalDuration { get; }
+
+    string ExportToText(IReadOnlyList<TranscriptionRecord> records);
+    string ExportToCsv(IReadOnlyList<TranscriptionRecord> records);
 }

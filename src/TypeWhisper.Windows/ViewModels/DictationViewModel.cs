@@ -282,6 +282,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 AppProcessName = _capturedProcessName,
                 DurationSeconds = audioDuration,
                 Language = detectedLanguage,
+                ProfileName = _activeProfile?.Name,
                 EngineUsed = "parakeet"
             });
 

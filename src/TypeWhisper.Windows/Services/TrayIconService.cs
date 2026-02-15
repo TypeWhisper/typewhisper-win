@@ -12,7 +12,6 @@ public sealed class TrayIconService : IDisposable
     private bool _disposed;
 
     public event EventHandler? ShowSettingsRequested;
-    public event EventHandler? ShowHistoryRequested;
     public event EventHandler? ShowFileTranscriptionRequested;
     public event EventHandler? ExitRequested;
 
@@ -50,9 +49,6 @@ public sealed class TrayIconService : IDisposable
         var settingsItem = new System.Windows.Controls.MenuItem { Header = "Einstellungen..." };
         settingsItem.Click += (_, _) => ShowSettingsRequested?.Invoke(this, EventArgs.Empty);
 
-        var historyItem = new System.Windows.Controls.MenuItem { Header = "Verlauf..." };
-        historyItem.Click += (_, _) => ShowHistoryRequested?.Invoke(this, EventArgs.Empty);
-
         var fileItem = new System.Windows.Controls.MenuItem { Header = "Datei transkribieren..." };
         fileItem.Click += (_, _) => ShowFileTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
@@ -62,7 +58,6 @@ public sealed class TrayIconService : IDisposable
         exitItem.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
         menu.Items.Add(settingsItem);
-        menu.Items.Add(historyItem);
         menu.Items.Add(fileItem);
         menu.Items.Add(separatorItem);
         menu.Items.Add(exitItem);

@@ -11,6 +11,7 @@ public sealed record TranscriptionRecord
     public string? AppUrl { get; init; }
     public double DurationSeconds { get; init; }
     public string? Language { get; init; }
+    public string? ProfileName { get; init; }
     public string EngineUsed { get; init; } = "whisper";
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using TypeWhisper.Core.Data;
@@ -40,8 +41,8 @@ public sealed class HistoryService : IHistoryService
         cmd.CommandText = """
             INSERT INTO transcription_history
             (id, timestamp, raw_text, final_text, app_name, app_process_name, app_url,
-             duration_seconds, language, engine_used, created_at)
-            VALUES (@id, @ts, @raw, @final, @app, @proc, @url, @dur, @lang, @engine, @created)
+             duration_seconds, language, engine_used, profile_name, created_at)
+            VALUES (@id, @ts, @raw, @final, @app, @proc, @url, @dur, @lang, @engine, @profile, @created)
             """;
         cmd.Parameters.AddWithValue("@id", record.Id);
         cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("o"));
@@ -53,6 +54,7 @@ public sealed class HistoryService : IHistoryService
         cmd.Parameters.AddWithValue("@dur", record.DurationSeconds);
         cmd.Parameters.AddWithValue("@lang", (object?)record.Language ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@engine", record.EngineUsed);
+        cmd.Parameters.AddWithValue("@profile", (object?)record.ProfileName ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@created", record.CreatedAt.ToString("o"));
         cmd.ExecuteNonQuery();
 
@@ -130,6 +132,39 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    public string ExportToText(IReadOnlyList<TranscriptionRecord> records)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("TypeWhisper — Transkriptions-Verlauf");
+        sb.AppendLine($"Exportiert: {DateTime.Now:dd.MM.yyyy HH:mm}");
+        sb.AppendLine($"Einträge: {records.Count}");
+        sb.AppendLine(new string('─', 60));
+        sb.AppendLine();
+
+        foreach (var r in records)
+        {
+            sb.AppendLine($"[{r.Timestamp:dd.MM.yyyy HH:mm}] {r.AppProcessName ?? "–"} ({r.DurationSeconds:F1}s)");
+            sb.AppendLine(r.FinalText);
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public string ExportToCsv(IReadOnlyList<TranscriptionRecord> records)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Zeitstempel,App,Text,Dauer (s),Wörter,Sprache");
+
+        foreach (var r in records)
+        {
+            var text = "\"" + r.FinalText.Replace("\"", "\"\"") + "\"";
+            sb.AppendLine($"{r.Timestamp:yyyy-MM-dd HH:mm:ss},{r.AppProcessName ?? ""},{text},{r.DurationSeconds:F1},{r.WordCount},{r.Language ?? ""}");
+        }
+
+        return sb.ToString();
+    }
+
     private void EnsureCacheLoaded()
     {
         if (_cacheLoaded) return;
@@ -139,7 +174,7 @@ public sealed class HistoryService : IHistoryService
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, timestamp, raw_text, final_text, app_name, app_process_name, app_url,
-                   duration_seconds, language, engine_used, created_at
+                   duration_seconds, language, engine_used, created_at, profile_name
             FROM transcription_history ORDER BY timestamp DESC
             """;
 
@@ -159,7 +194,8 @@ public sealed class HistoryService : IHistoryService
                 DurationSeconds = reader.GetDouble(7),
                 Language = reader.IsDBNull(8) ? null : reader.GetString(8),
                 EngineUsed = reader.GetString(9),
-                CreatedAt = DateTime.Parse(reader.GetString(10))
+                CreatedAt = DateTime.Parse(reader.GetString(10)),
+                ProfileName = reader.IsDBNull(11) ? null : reader.GetString(11)
             });
         }
         _cacheLoaded = true;

@@ -4,7 +4,7 @@ namespace TypeWhisper.Core.Data;
 
 public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly string _connectionString;
     private SqliteConnection? _connection;
@@ -49,6 +49,8 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
 
         if (version < 1)
             MigrateToVersion1(connection);
+        if (version < 2)
+            MigrateToVersion2(connection);
     }
 
     private static int GetSchemaVersion(SqliteConnection connection)
@@ -129,6 +131,12 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
         """);
 
         SetSchemaVersion(connection, 1);
+    }
+
+    private static void MigrateToVersion2(SqliteConnection connection)
+    {
+        Exec(connection, "ALTER TABLE transcription_history ADD COLUMN profile_name TEXT");
+        SetSchemaVersion(connection, 2);
     }
 
     private static void Exec(SqliteConnection connection, string sql)
