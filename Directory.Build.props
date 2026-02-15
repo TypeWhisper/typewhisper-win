@@ -1,5 +1,9 @@
 <Project>
   <PropertyGroup>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
+    <Company>TypeWhisper</Company>
+    <Product>TypeWhisper</Product>
+    <Copyright>Copyright © 2026 TypeWhisper</Copyright>
   </PropertyGroup>
 </Project>

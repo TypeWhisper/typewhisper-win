@@ -1,3 +1,4 @@
+using TypeWhisper.Core;
 using Velopack;
 using Velopack.Sources;
 
@@ -5,6 +6,7 @@ namespace TypeWhisper.Windows.Services;
 
 public sealed class UpdateService
 {
+    private readonly TrayIconService _trayIcon;
     private UpdateManager? _updateManager;
     private UpdateInfo? _pendingUpdate;
 
@@ -13,13 +15,17 @@ public sealed class UpdateService
 
     public event EventHandler? UpdateAvailable;
 
-    public void Initialize(string? updateUrl)
+    public UpdateService(TrayIconService trayIcon)
     {
-        if (string.IsNullOrEmpty(updateUrl)) return;
+        _trayIcon = trayIcon;
+    }
 
+    public void Initialize()
+    {
         try
         {
-            _updateManager = new UpdateManager(new SimpleWebSource(updateUrl));
+            _updateManager = new UpdateManager(
+                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, false));
         }
         catch
         {
@@ -35,7 +41,11 @@ public sealed class UpdateService
         {
             _pendingUpdate = await _updateManager.CheckForUpdatesAsync();
             if (_pendingUpdate is not null)
+            {
+                _trayIcon.ShowBalloon("Update verfügbar",
+                    $"Version {AvailableVersion} ist verfügbar. Klicken Sie hier zum Aktualisieren.");
                 UpdateAvailable?.Invoke(this, EventArgs.Empty);
+            }
         }
         catch
         {
@@ -47,7 +57,15 @@ public sealed class UpdateService
     {
         if (_updateManager is null || _pendingUpdate is null) return;
 
-        await _updateManager.DownloadUpdatesAsync(_pendingUpdate);
-        _updateManager.ApplyUpdatesAndRestart(_pendingUpdate);
+        try
+        {
+            await _updateManager.DownloadUpdatesAsync(_pendingUpdate);
+            _updateManager.ApplyUpdatesAndRestart(_pendingUpdate);
+        }
+        catch
+        {
+            _trayIcon.ShowBalloon("Update fehlgeschlagen",
+                "Das Update konnte nicht installiert werden. Bitte versuchen Sie es später erneut.");
+        }
     }
 }

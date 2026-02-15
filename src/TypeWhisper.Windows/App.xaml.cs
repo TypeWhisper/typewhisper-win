@@ -76,6 +76,15 @@ public partial class App : Application
         _trayIcon.ShowFileTranscriptionRequested += (_, _) => ShowFileTranscriptionWindow();
         _trayIcon.ExitRequested += (_, _) => Shutdown();
 
+        // Manual update check from tray menu
+        _trayIcon.UpdateCheckRequested += async (_, _) =>
+        {
+            var update = _serviceProvider!.GetRequiredService<UpdateService>();
+            await update.CheckForUpdatesAsync();
+            if (!update.IsUpdateAvailable)
+                _trayIcon.ShowBalloon("Kein Update", "Sie haben bereits die neueste Version.");
+        };
+
         // Create and show overlay window
         var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
         mainWindow.Show();
@@ -130,7 +139,7 @@ public partial class App : Application
 
         // Check for updates in background
         var updateService = _serviceProvider.GetRequiredService<UpdateService>();
-        updateService.Initialize(settings.Current.UpdateUrl);
+        updateService.Initialize();
         _ = updateService.CheckForUpdatesAsync();
     }
 

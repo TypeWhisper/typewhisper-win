@@ -13,6 +13,7 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? ShowSettingsRequested;
     public event EventHandler? ShowFileTranscriptionRequested;
+    public event EventHandler? UpdateCheckRequested;
     public event EventHandler? ExitRequested;
 
     public void Initialize()
@@ -52,6 +53,9 @@ public sealed class TrayIconService : IDisposable
         var fileItem = new System.Windows.Controls.MenuItem { Header = "Datei transkribieren..." };
         fileItem.Click += (_, _) => ShowFileTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
+        var updateItem = new System.Windows.Controls.MenuItem { Header = "Nach Updates suchen..." };
+        updateItem.Click += (_, _) => UpdateCheckRequested?.Invoke(this, EventArgs.Empty);
+
         var separatorItem = new System.Windows.Controls.Separator();
 
         var exitItem = new System.Windows.Controls.MenuItem { Header = "Beenden" };
@@ -59,6 +63,7 @@ public sealed class TrayIconService : IDisposable
 
         menu.Items.Add(settingsItem);
         menu.Items.Add(fileItem);
+        menu.Items.Add(updateItem);
         menu.Items.Add(separatorItem);
         menu.Items.Add(exitItem);
 

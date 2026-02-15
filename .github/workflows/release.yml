@@ -1,0 +1,50 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Extract version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}" -replace '^v',''
+          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
+
+      - run: dotnet restore
+
+      - run: dotnet build -c Release -p:Version=${{ steps.ver.outputs.VERSION }}
+
+      - run: dotnet test -c Release --no-build
+
+      - run: dotnet publish src/TypeWhisper.Windows -c Release --no-build -o publish
+
+      - run: dotnet tool install -g vpk
+
+      - name: Velopack Pack
+        shell: pwsh
+        run: |
+          vpk pack `
+            --packId TypeWhisper `
+            --packVersion ${{ steps.ver.outputs.VERSION }} `
+            --packDir publish `
+            --mainExe TypeWhisper.exe `
+            --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --outputDir releases
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: releases/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

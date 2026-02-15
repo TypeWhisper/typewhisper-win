@@ -40,9 +40,6 @@ public record AppSettings
     // Dictionary
     public string[] EnabledPackIds { get; init; } = [];
 
-    // Update
-    public string? UpdateUrl { get; init; }
-
     // Onboarding
     public bool HasCompletedOnboarding { get; init; }
 

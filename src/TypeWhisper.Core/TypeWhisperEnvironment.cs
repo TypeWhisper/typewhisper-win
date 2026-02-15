@@ -2,8 +2,7 @@ namespace TypeWhisper.Core;
 
 public static class TypeWhisperEnvironment
 {
-    public const string Channel = "stable";
-    public const string UpdateUrl = "https://download.typewhisper.com/stable";
+    public const string GithubRepoUrl = "https://github.com/TypeWhisper/typewhisper-win";
 
     private static readonly string _basePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
