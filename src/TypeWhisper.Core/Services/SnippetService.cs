@@ -118,7 +118,8 @@ public sealed partial class SnippetService : ISnippetService
 
             var expanded = ExpandPlaceholders(snippet.Replacement, clipboardProvider);
 
-            var pattern = Regex.Escape(snippet.Trigger);
+            // Consume optional trailing punctuation added by transcription engine
+            var pattern = Regex.Escape(snippet.Trigger) + @"[.!?]?";
             var options = snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
             text = Regex.Replace(text, pattern, expanded.Replace("$", "$$"), options);
 

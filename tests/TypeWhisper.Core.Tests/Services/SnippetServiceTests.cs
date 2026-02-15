@@ -218,6 +218,25 @@ public class SnippetServiceTests : IDisposable
         Assert.Equal("Mit freundlichen Grüßen\nMarco Mustermann\nTypeWhisper GmbH", result);
     }
 
+    [Theory]
+    [InlineData("mfg.", "Mit freundlichen Grüßen")]
+    [InlineData("mfg!", "Mit freundlichen Grüßen")]
+    [InlineData("mfg?", "Mit freundlichen Grüßen")]
+    [InlineData("mfg", "Mit freundlichen Grüßen")]
+    [InlineData("Sage mfg. bitte", "Sage Mit freundlichen Grüßen bitte")]
+    public void ApplySnippets_ConsumesTrailingPunctuation(string input, string expected)
+    {
+        _sut.AddSnippet(new Snippet
+        {
+            Id = "1",
+            Trigger = "mfg",
+            Replacement = "Mit freundlichen Grüßen"
+        });
+
+        var result = _sut.ApplySnippets(input);
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void UpdateSnippet_WithTags_PersistsChanges()
     {
