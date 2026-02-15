@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.IO;
 using System.Windows;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
@@ -26,8 +27,7 @@ public sealed class TrayIconService : IDisposable
         _trayIcon.ContextMenu = BuildContextMenu();
         _trayIcon.TrayLeftMouseUp += (_, _) => ShowSettingsRequested?.Invoke(this, EventArgs.Empty);
 
-        // Use a generated icon since we don't have an .ico file yet
-        _trayIcon.Icon = CreateDefaultIcon();
+        _trayIcon.Icon = LoadIcon();
 
         _trayIcon.ForceCreate();
     }
@@ -70,12 +70,20 @@ public sealed class TrayIconService : IDisposable
         return menu;
     }
 
-    private static Icon CreateDefaultIcon()
+    private static Icon LoadIcon()
     {
-        // Generate a simple 16x16 icon with "T" letter
+        var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Icons", "app.ico");
+        if (File.Exists(iconPath))
+            return new Icon(iconPath, 16, 16);
+
+        return CreateFallbackIcon();
+    }
+
+    private static Icon CreateFallbackIcon()
+    {
         using var bmp = new Bitmap(16, 16);
         using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.FromArgb(88, 101, 242)); // Blurple
+        g.Clear(Color.FromArgb(88, 101, 242));
         using var font = new Font("Segoe UI", 10f, System.Drawing.FontStyle.Bold);
         using var brush = new SolidBrush(Color.White);
         g.DrawString("T", font, brush, 1f, 0f);

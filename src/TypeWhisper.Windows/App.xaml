@@ -8,6 +8,7 @@
             <Style TargetType="Window">
                 <Setter Property="FontFamily" Value="Segoe UI"/>
                 <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Icon" Value="/Resources/Icons/app.ico"/>
             </Style>
 
             <!-- Accent color -->
