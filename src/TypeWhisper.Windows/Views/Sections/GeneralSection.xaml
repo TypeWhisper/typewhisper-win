@@ -16,13 +16,33 @@
         <StackPanel MaxWidth="500" Margin="24">
             <TextBlock Text="Allgemein" Style="{StaticResource SectionHeaderStyle}"/>
 
-            <!-- Hotkey -->
+            <!-- Hotkey (Hybrid) -->
             <StackPanel Margin="0,0,0,20">
-                <TextBlock Text="Hotkey" Style="{StaticResource LabelStyle}"/>
+                <TextBlock Text="Hotkey (Hybrid)" Style="{StaticResource LabelStyle}"/>
                 <controls:HotkeyRecorderControl
                     Hotkey="{Binding Settings.PushToTalkHotkey}" AllowModifierOnly="True"
                     Width="200" HorizontalAlignment="Left"/>
-                <TextBlock Text="Kurz drücken = Ein/Aus, gedruckt halten = Push-to-Talk"
+                <TextBlock Text="Kurz drücken = Ein/Aus, gedrückt halten = Push-to-Talk"
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
+
+            <!-- Toggle-Hotkey -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Toggle-Hotkey" Style="{StaticResource LabelStyle}"/>
+                <controls:HotkeyRecorderControl
+                    Hotkey="{Binding Settings.ToggleOnlyHotkey}" AllowModifierOnly="True"
+                    Width="200" HorizontalAlignment="Left"/>
+                <TextBlock Text="Drücken = Start, nochmal drücken = Stop"
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
+
+            <!-- Hold-Hotkey -->
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Text="Hold-Hotkey" Style="{StaticResource LabelStyle}"/>
+                <controls:HotkeyRecorderControl
+                    Hotkey="{Binding Settings.HoldOnlyHotkey}" AllowModifierOnly="True"
+                    Width="200" HorizontalAlignment="Left"/>
+                <TextBlock Text="Gedrückt halten = Aufnahme, loslassen = Stop"
                            Style="{StaticResource HintStyle}"/>
             </StackPanel>
 

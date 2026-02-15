@@ -4,6 +4,8 @@ public record AppSettings
 {
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
+    public string ToggleOnlyHotkey { get; init; } = "";
+    public string HoldOnlyHotkey { get; init; } = "";
     public string Language { get; init; } = "auto";
     public bool AutoPaste { get; init; } = true;
     public RecordingMode Mode { get; init; } = RecordingMode.Toggle;

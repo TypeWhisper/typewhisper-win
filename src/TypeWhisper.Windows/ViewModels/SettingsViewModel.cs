@@ -14,6 +14,8 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
+    [ObservableProperty] private string _toggleOnlyHotkey = "";
+    [ObservableProperty] private string _holdOnlyHotkey = "";
     [ObservableProperty] private string _language = "auto";
     [ObservableProperty] private bool _autoPaste = true;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
@@ -83,7 +85,9 @@ public partial class SettingsViewModel : ObservableObject
             SelectedMicrophoneDevice = SelectedMicrophoneDevice,
             TranslationTargetLanguage = TranslationTargetLanguage,
             ApiServerEnabled = ApiServerEnabled,
-            ApiServerPort = ApiServerPort
+            ApiServerPort = ApiServerPort,
+            ToggleOnlyHotkey = ToggleOnlyHotkey,
+            HoldOnlyHotkey = HoldOnlyHotkey
         };
         _settings.Save(updated);
         StartupService.SetEnabled(AutostartEnabled);
@@ -107,6 +111,8 @@ public partial class SettingsViewModel : ObservableObject
         TranslationTargetLanguage = s.TranslationTargetLanguage;
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
+        ToggleOnlyHotkey = s.ToggleOnlyHotkey;
+        HoldOnlyHotkey = s.HoldOnlyHotkey;
     }
 }
 

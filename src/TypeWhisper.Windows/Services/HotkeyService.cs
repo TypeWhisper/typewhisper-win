@@ -7,25 +7,23 @@ using TypeWhisper.Windows.Native;
 namespace TypeWhisper.Windows.Services;
 
 /// <summary>
-/// Manages hotkeys for dictation: Toggle mode (RegisterHotKey) and Push-to-Talk (low-level hook).
-/// Hybrid mode auto-detects: short press = toggle, long hold = push-to-talk.
+/// Manages three independent hotkeys for dictation:
+/// - Hybrid: short press = toggle, long hold = push-to-talk
+/// - Toggle-only: press to start, press again to stop
+/// - Hold-only: hold to record, release to stop
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
-    private const int HotkeyIdToggle = 9000;
     private const double PushToTalkThresholdMs = 600;
 
     private readonly ISettingsService _settings;
-    private readonly KeyboardHook _keyboardHook;
+    private readonly KeyboardHook _hybridHook;
+    private readonly KeyboardHook _toggleOnlyHook;
+    private readonly KeyboardHook _holdOnlyHook;
 
-    private HwndSource? _hwndSource;
-    private IntPtr _hwnd;
-    private bool _toggleRegistered;
     private bool _disposed;
-
-    private RecordingMode _activeMode;
     private DateTime _keyDownTime;
-    private bool _isActive; // currently recording
+    private bool _isActive;
 
     public event EventHandler? DictationStartRequested;
     public event EventHandler? DictationStopRequested;
@@ -35,18 +33,21 @@ public sealed class HotkeyService : IDisposable
     public HotkeyService(ISettingsService settings)
     {
         _settings = settings;
-        _keyboardHook = new KeyboardHook();
-        _keyboardHook.KeyDown += OnHookKeyDown;
-        _keyboardHook.KeyUp += OnHookKeyUp;
+
+        _hybridHook = new KeyboardHook();
+        _hybridHook.KeyDown += OnHybridKeyDown;
+        _hybridHook.KeyUp += OnHybridKeyUp;
+
+        _toggleOnlyHook = new KeyboardHook();
+        _toggleOnlyHook.KeyDown += OnToggleOnlyKeyDown;
+
+        _holdOnlyHook = new KeyboardHook();
+        _holdOnlyHook.KeyDown += OnHoldOnlyKeyDown;
+        _holdOnlyHook.KeyUp += OnHoldOnlyKeyUp;
     }
 
     public void Initialize(Window window)
     {
-        var helper = new WindowInteropHelper(window);
-        _hwnd = helper.EnsureHandle();
-        _hwndSource = HwndSource.FromHwnd(_hwnd);
-        _hwndSource?.AddHook(WndProc);
-
         ApplySettings();
         _settings.SettingsChanged += _ => Application.Current?.Dispatcher.Invoke(ApplySettings);
     }
@@ -54,62 +55,71 @@ public sealed class HotkeyService : IDisposable
     public void ApplySettings()
     {
         var s = _settings.Current;
-        _activeMode = RecordingMode.Hybrid;
 
-        // Unregister everything first
-        UnregisterAll();
+        StopAllHooks();
 
-        // Always use hybrid mode: short press = toggle, long hold = push-to-talk
-        var hotkey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey) ? s.PushToTalkHotkey : s.ToggleHotkey;
-        StartPushToTalkHook(hotkey);
-    }
-
-    private void RegisterToggleHotkey(string hotkeyString)
-    {
-        if (_hwnd == IntPtr.Zero) return;
-        if (!HotkeyParser.Parse(hotkeyString, out var modifiers, out var vk)) return;
-        if (vk == 0) return; // Toggle needs a non-modifier key
-
-        _toggleRegistered = NativeMethods.RegisterHotKey(
-            _hwnd, HotkeyIdToggle,
-            modifiers | NativeMethods.MOD_NOREPEAT, vk);
-    }
-
-    private void StartPushToTalkHook(string hotkeyString)
-    {
-        _keyboardHook.SetHotkey(hotkeyString);
-        _keyboardHook.Start();
-    }
-
-    private void UnregisterAll()
-    {
-        if (_toggleRegistered && _hwnd != IntPtr.Zero)
+        var hybridKey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey) ? s.PushToTalkHotkey : s.ToggleHotkey;
+        if (!string.IsNullOrWhiteSpace(hybridKey))
         {
-            NativeMethods.UnregisterHotKey(_hwnd, HotkeyIdToggle);
-            _toggleRegistered = false;
+            _hybridHook.SetHotkey(hybridKey);
+            _hybridHook.Start();
         }
 
-        _keyboardHook.Stop();
+        if (!string.IsNullOrWhiteSpace(s.ToggleOnlyHotkey))
+        {
+            _toggleOnlyHook.SetHotkey(s.ToggleOnlyHotkey);
+            _toggleOnlyHook.Start();
+        }
+
+        if (!string.IsNullOrWhiteSpace(s.HoldOnlyHotkey))
+        {
+            _holdOnlyHook.SetHotkey(s.HoldOnlyHotkey);
+            _holdOnlyHook.Start();
+        }
+    }
+
+    // --- Hybrid: short press = toggle, long hold = PTT ---
+
+    private void OnHybridKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled) return;
+
+        if (_isActive)
+        {
+            _isActive = false;
+            CurrentMode = null;
+            DictationStopRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _keyDownTime = DateTime.UtcNow;
+        _isActive = true;
+        CurrentMode = HotkeyMode.PushToTalk;
+        DictationStartRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnHybridKeyUp(object? sender, EventArgs e)
+    {
+        if (!_isActive) return;
+
+        var holdMs = (DateTime.UtcNow - _keyDownTime).TotalMilliseconds;
+        if (holdMs < PushToTalkThresholdMs)
+        {
+            CurrentMode = HotkeyMode.Toggle;
+            return;
+        }
+
         _isActive = false;
         CurrentMode = null;
+        DictationStopRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (msg == NativeMethods.WM_HOTKEY && !_disposed && IsEnabled)
-        {
-            var id = wParam.ToInt32();
-            if (id == HotkeyIdToggle)
-            {
-                handled = true;
-                HandleToggle();
-            }
-        }
-        return IntPtr.Zero;
-    }
+    // --- Toggle-only: press = start/stop ---
 
-    private void HandleToggle()
+    private void OnToggleOnlyKeyDown(object? sender, EventArgs e)
     {
+        if (!IsEnabled) return;
+
         if (_isActive)
         {
             _isActive = false;
@@ -124,44 +134,36 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
-    private void OnHookKeyDown(object? sender, EventArgs e)
+    // --- Hold-only: hold = record, release = stop ---
+
+    private void OnHoldOnlyKeyDown(object? sender, EventArgs e)
     {
         if (!IsEnabled) return;
+        if (_isActive) return;
 
-        if (_activeMode == RecordingMode.Hybrid && _isActive)
-        {
-            // Already recording in toggle mode → stop
-            _isActive = false;
-            CurrentMode = null;
-            DictationStopRequested?.Invoke(this, EventArgs.Empty);
-            return;
-        }
-
-        _keyDownTime = DateTime.UtcNow;
         _isActive = true;
-        CurrentMode = HotkeyMode.PushToTalk; // Assume PTT until release
+        CurrentMode = HotkeyMode.PushToTalk;
         DictationStartRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void OnHookKeyUp(object? sender, EventArgs e)
+    private void OnHoldOnlyKeyUp(object? sender, EventArgs e)
     {
         if (!_isActive) return;
 
-        if (_activeMode == RecordingMode.Hybrid)
-        {
-            var holdMs = (DateTime.UtcNow - _keyDownTime).TotalMilliseconds;
-            if (holdMs < PushToTalkThresholdMs)
-            {
-                // Short press → switch to toggle mode, keep recording
-                CurrentMode = HotkeyMode.Toggle;
-                return;
-            }
-        }
-
-        // PTT or Hybrid long-hold → stop
         _isActive = false;
         CurrentMode = null;
         DictationStopRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    // --- Common ---
+
+    private void StopAllHooks()
+    {
+        _hybridHook.Stop();
+        _toggleOnlyHook.Stop();
+        _holdOnlyHook.Stop();
+        _isActive = false;
+        CurrentMode = null;
     }
 
     public void ForceStop()
@@ -177,9 +179,10 @@ public sealed class HotkeyService : IDisposable
     {
         if (!_disposed)
         {
-            UnregisterAll();
-            _hwndSource?.RemoveHook(WndProc);
-            _keyboardHook.Dispose();
+            StopAllHooks();
+            _hybridHook.Dispose();
+            _toggleOnlyHook.Dispose();
+            _holdOnlyHook.Dispose();
             _disposed = true;
         }
     }
