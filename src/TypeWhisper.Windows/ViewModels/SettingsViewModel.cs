@@ -21,6 +21,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
     [ObservableProperty] private bool _whisperModeEnabled;
     [ObservableProperty] private bool _soundFeedbackEnabled = true;
+    [ObservableProperty] private bool _audioDuckingEnabled;
+    [ObservableProperty] private float _audioDuckingLevel = 0.2f;
+    [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _silenceAutoStopEnabled;
     [ObservableProperty] private int _silenceAutoStopSeconds = 10;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
@@ -87,7 +90,10 @@ public partial class SettingsViewModel : ObservableObject
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
             ToggleOnlyHotkey = ToggleOnlyHotkey,
-            HoldOnlyHotkey = HoldOnlyHotkey
+            HoldOnlyHotkey = HoldOnlyHotkey,
+            AudioDuckingEnabled = AudioDuckingEnabled,
+            AudioDuckingLevel = AudioDuckingLevel,
+            PauseMediaDuringRecording = PauseMediaDuringRecording
         };
         _settings.Save(updated);
         StartupService.SetEnabled(AutostartEnabled);
@@ -113,6 +119,9 @@ public partial class SettingsViewModel : ObservableObject
         ApiServerPort = s.ApiServerPort;
         ToggleOnlyHotkey = s.ToggleOnlyHotkey;
         HoldOnlyHotkey = s.HoldOnlyHotkey;
+        AudioDuckingEnabled = s.AudioDuckingEnabled;
+        AudioDuckingLevel = s.AudioDuckingLevel;
+        PauseMediaDuringRecording = s.PauseMediaDuringRecording;
     }
 }
 

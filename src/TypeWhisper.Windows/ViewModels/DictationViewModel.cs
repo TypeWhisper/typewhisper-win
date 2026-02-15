@@ -23,6 +23,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly ISnippetService _snippets;
     private readonly IProfileService _profiles;
     private readonly ITranslationService _translation;
+    private readonly IAudioDuckingService _audioDucking;
+    private readonly IMediaPauseService _mediaPause;
 
     private CancellationTokenSource? _processingCts;
     private System.Timers.Timer? _durationTimer;
@@ -60,7 +62,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         IDictionaryService dictionary,
         ISnippetService snippets,
         IProfileService profiles,
-        ITranslationService translation)
+        ITranslationService translation,
+        IAudioDuckingService audioDucking,
+        IMediaPauseService mediaPause)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -74,6 +78,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _snippets = snippets;
         _profiles = profiles;
         _translation = translation;
+        _audioDucking = audioDucking;
+        _mediaPause = mediaPause;
 
         _audio.AudioLevelChanged += OnAudioLevelChanged;
         _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(StartRecording);
@@ -86,6 +92,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"StopRecording error: {ex}");
+                _audioDucking.RestoreAudio();
+                _mediaPause.ResumeMedia();
                 State = DictationState.Idle;
                 StatusText = $"Fehler: {ex.Message}";
                 IsOverlayVisible = false;
@@ -133,6 +141,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _vad = CreateVoiceActivityDetector();
         _audio.SamplesAvailable += OnSamplesAvailable;
 
+        if (_settings.Current.AudioDuckingEnabled)
+            _audioDucking.DuckAudio(_settings.Current.AudioDuckingLevel);
+        if (_settings.Current.PauseMediaDuringRecording)
+            _mediaPause.PauseMedia();
+
         _audio.StartRecording();
         _sound.PlayStartSound();
 
@@ -167,6 +180,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         var samples = _audio.StopRecording();
         _sound.PlayStopSound();
+        _audioDucking.RestoreAudio();
+        _mediaPause.ResumeMedia();
         RecordingSeconds = 0;
 
         // Flush remaining VAD segments
@@ -403,6 +418,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _audioDucking.RestoreAudio();
+        _mediaPause.ResumeMedia();
         _processingCts?.Cancel();
         _processingCts?.Dispose();
         _durationTimer?.Dispose();

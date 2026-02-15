@@ -6,6 +6,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -40,6 +41,35 @@
                 <TextBox Text="{Binding Settings.SilenceAutoStopSeconds}"
                          Style="{StaticResource InputTextBoxStyle}"
                          Width="100" HorizontalAlignment="Left"/>
+            </StackPanel>
+
+            <!-- Audio Ducking -->
+            <TextBlock Text="Audio Ducking" Style="{StaticResource SectionHeaderStyle}"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Systemlautstärke während Aufnahme reduzieren"
+                          IsChecked="{Binding Settings.AudioDuckingEnabled}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,8"
+                        Visibility="{Binding Settings.AudioDuckingEnabled, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource LabelStyle}"
+                           Text="{Binding Settings.AudioDuckingLevel, StringFormat='Lautstärke: {0:P0}'}"/>
+                <Slider Minimum="0" Maximum="0.5"
+                        TickFrequency="0.05" IsSnapToTickEnabled="True"
+                        Value="{Binding Settings.AudioDuckingLevel}"
+                        HorizontalAlignment="Stretch"/>
+                <TextBlock Text="0% = stumm, 50% = halbe Lautstärke"
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
+
+            <!-- Media Pause -->
+            <TextBlock Text="Medienwiedergabe" Style="{StaticResource SectionHeaderStyle}"/>
+            <StackPanel Margin="0,0,0,8">
+                <CheckBox Style="{StaticResource InputCheckBoxStyle}"
+                          Content="Wiedergabe während Aufnahme pausieren"
+                          IsChecked="{Binding Settings.PauseMediaDuringRecording}"/>
+                <TextBlock Text="Pausiert laufende Player (Spotify, YouTube, etc.)"
+                           Style="{StaticResource HintStyle}"/>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

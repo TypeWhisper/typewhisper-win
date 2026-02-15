@@ -175,6 +175,8 @@ public partial class App : Application
         // Audio
         services.AddSingleton<AudioRecordingService>();
         services.AddSingleton<AudioFileService>();
+        services.AddSingleton<IAudioDuckingService, AudioDuckingService>();
+        services.AddSingleton<IMediaPauseService, MediaPauseService>();
 
         // Data services
         services.AddSingleton<IHistoryService, HistoryService>();
