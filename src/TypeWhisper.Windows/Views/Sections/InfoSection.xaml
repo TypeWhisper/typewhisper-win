@@ -15,7 +15,7 @@
         <TextBlock Text="Lokale Sprache-zu-Text Transkription"
                    Foreground="{StaticResource HintBrush}" FontSize="14"
                    HorizontalAlignment="Center" Margin="0,4,0,24"/>
-        <TextBlock Text="Powered by Parakeet &amp; Whisper (On-Device)"
+        <TextBlock Text="Powered by Parakeet (On-Device)"
                    Foreground="{StaticResource LabelBrush}"
                    HorizontalAlignment="Center"/>
         <TextBlock Text="Lizenz: GPL-3.0-or-later"
