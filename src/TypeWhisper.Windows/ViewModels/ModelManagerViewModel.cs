@@ -18,7 +18,6 @@ public partial class ModelManagerViewModel : ObservableObject
 
     public ObservableCollection<ModelItemViewModel> Models { get; } = [];
     public ObservableCollection<ModelItemViewModel> ParakeetModels { get; } = [];
-    public ObservableCollection<ModelItemViewModel> WhisperModels { get; } = [];
 
     public ModelManagerViewModel(ModelManagerService modelManager, ISettingsService settings)
     {
@@ -30,11 +29,7 @@ public partial class ModelManagerViewModel : ObservableObject
         {
             var item = new ModelItemViewModel(model, _modelManager);
             Models.Add(item);
-
-            if (model.Engine == EngineType.Parakeet)
-                ParakeetModels.Add(item);
-            else
-                WhisperModels.Add(item);
+            ParakeetModels.Add(item);
         }
 
         _modelManager.PropertyChanged += (_, args) =>
@@ -88,8 +83,6 @@ public partial class ModelItemViewModel : ObservableObject
     public string Name => _model.DisplayName;
     public string Size => _model.SizeDescription;
     public bool IsRecommended => _model.IsRecommended;
-    public EngineType EngineType => _model.Engine;
-    public string EngineLabel => _model.Engine == EngineType.Parakeet ? "Parakeet" : "Whisper";
 
     [ObservableProperty] private bool _isDownloaded;
     [ObservableProperty] private bool _isActive;

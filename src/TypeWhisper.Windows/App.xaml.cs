@@ -184,7 +184,6 @@ public partial class App : Application
             new SettingsService(TypeWhisperEnvironment.SettingsFilePath));
 
         // Engines
-        services.AddSingleton<WhisperTranscriptionEngine>();
         services.AddSingleton<ParakeetTranscriptionEngine>();
         services.AddSingleton<ModelManagerService>();
 

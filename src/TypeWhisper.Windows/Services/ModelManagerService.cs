@@ -10,7 +10,6 @@ namespace TypeWhisper.Windows.Services;
 
 public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
-    private readonly WhisperTranscriptionEngine _whisperEngine;
     private readonly ParakeetTranscriptionEngine _parakeetEngine;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
@@ -24,29 +23,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         private set { _activeModelId = value; OnPropertyChanged(); }
     }
 
-    public EngineType ActiveEngineType
-    {
-        get
-        {
-            var model = ActiveModelId is not null ? ModelInfo.GetById(ActiveModelId) : null;
-            return model?.Engine ?? EngineType.Whisper;
-        }
-    }
+    public ITranscriptionEngine Engine => _parakeetEngine;
 
-    public ITranscriptionEngine Engine
+    public ModelManagerService(ParakeetTranscriptionEngine parakeetEngine)
     {
-        get
-        {
-            var model = ActiveModelId is not null ? ModelInfo.GetById(ActiveModelId) : null;
-            if (model?.Engine == EngineType.Parakeet)
-                return _parakeetEngine;
-            return _whisperEngine;
-        }
-    }
-
-    public ModelManagerService(WhisperTranscriptionEngine whisperEngine, ParakeetTranscriptionEngine parakeetEngine)
-    {
-        _whisperEngine = whisperEngine;
         _parakeetEngine = parakeetEngine;
 
         foreach (var model in ModelInfo.AvailableModels)
@@ -97,11 +77,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         if (ActiveModelId is not null)
         {
-            _whisperEngine.UnloadModel();
             _parakeetEngine.UnloadModel();
-            SetStatus(ActiveModelId, IsDownloaded(ActiveModelId)
-                ? ModelStatus.NotDownloaded
-                : ModelStatus.NotDownloaded);
+            SetStatus(ActiveModelId, ModelStatus.NotDownloaded);
             ActiveModelId = null;
         }
     }
@@ -131,8 +108,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     private async Task LoadEngineAsync(ModelInfo model, CancellationToken cancellationToken)
     {
-        // Unload all engines and force native memory cleanup
-        _whisperEngine.UnloadModel();
+        // Unload engine and force native memory cleanup
         _parakeetEngine.UnloadModel();
         if (ActiveModelId is not null)
         {
@@ -145,16 +121,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         try
         {
             var dir = GetModelDirectory(model);
-
-            if (model.Engine == EngineType.Parakeet)
-            {
-                await _parakeetEngine.LoadModelAsync(dir, cancellationToken);
-            }
-            else
-            {
-                var filePath = Path.Combine(dir, model.Files[0].FileName);
-                await _whisperEngine.LoadModelAsync(filePath, cancellationToken);
-            }
+            await _parakeetEngine.LoadModelAsync(dir, cancellationToken);
 
             SetStatus(model.Id, ModelStatus.Ready);
             ActiveModelId = model.Id;
@@ -231,7 +198,6 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
-        _whisperEngine.Dispose();
         _parakeetEngine.Dispose();
     }
 }

@@ -122,7 +122,7 @@ public sealed class HttpApiService : IDisposable
             id = m.Id,
             name = m.DisplayName,
             size = m.SizeDescription,
-            engine = m.Engine.ToString().ToLowerInvariant(),
+            engine = "parakeet",
             downloaded = _modelManager.IsDownloaded(m.Id),
             active = _modelManager.ActiveModelId == m.Id
         });
