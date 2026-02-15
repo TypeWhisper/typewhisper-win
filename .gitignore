@@ -13,3 +13,5 @@ TestResults/
 *.swp
 *~
 .DS_Store
+.agents/
+.claude/
