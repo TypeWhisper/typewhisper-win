@@ -5,14 +5,19 @@ using System.Runtime.CompilerServices;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Cloud;
+using TypeWhisper.Windows.Services.Providers;
 
 namespace TypeWhisper.Windows.Services;
 
 public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
-    private readonly ParakeetTranscriptionEngine _parakeetEngine;
+    private readonly Dictionary<string, LocalProviderBase> _localProviders;
+    private readonly Dictionary<string, CloudProviderBase> _cloudProviders;
+    private readonly ISettingsService _settings;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
+    private string? _loadedLocalModelId;
     private readonly HttpClient _httpClient = new();
     private bool _disposed;
 
@@ -24,61 +29,156 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         private set { _activeModelId = value; OnPropertyChanged(); }
     }
 
-    public ITranscriptionEngine Engine => _parakeetEngine;
+    public IReadOnlyList<LocalProviderBase> LocalProviders => [.. _localProviders.Values];
+    public IReadOnlyList<CloudProviderBase> CloudProviders => [.. _cloudProviders.Values];
 
-    public ModelManagerService(ParakeetTranscriptionEngine parakeetEngine)
+    public ITranscriptionEngine Engine
     {
-        _parakeetEngine = parakeetEngine;
-
-        foreach (var model in ModelInfo.AvailableModels)
+        get
         {
-            _modelStatuses[model.Id] = ModelStatus.NotDownloaded;
+            if (_activeModelId is not null && CloudProvider.IsCloudModel(_activeModelId))
+            {
+                var (providerId, _) = CloudProvider.ParseCloudModelId(_activeModelId);
+                if (_cloudProviders.TryGetValue(providerId, out var cloud))
+                    return cloud;
+            }
+
+            if (_loadedLocalModelId is not null && _localProviders.TryGetValue(_loadedLocalModelId, out var local))
+                return local;
+
+            return _localProviders.Values.First();
         }
     }
 
-    public ModelStatus GetStatus(string modelId) =>
-        _modelStatuses.TryGetValue(modelId, out var status) ? status : ModelStatus.NotDownloaded;
+    public ModelManagerService(
+        IEnumerable<LocalProviderBase> localProviders,
+        IEnumerable<CloudProviderBase> cloudProviders,
+        ISettingsService settings)
+    {
+        _localProviders = localProviders.ToDictionary(p => p.Id);
+        _cloudProviders = cloudProviders.ToDictionary(p => p.Id);
+        _settings = settings;
+
+        foreach (var p in _localProviders.Values)
+            _modelStatuses[p.Id] = ModelStatus.NotDownloaded;
+
+        ConfigureProviderKeys();
+        settings.SettingsChanged += _ => ConfigureProviderKeys();
+    }
+
+    private void ConfigureProviderKeys()
+    {
+        foreach (var provider in _cloudProviders.Values)
+        {
+            var encrypted = GetEncryptedKey(provider.Id);
+            if (!string.IsNullOrEmpty(encrypted))
+            {
+                var key = ApiKeyProtection.Decrypt(encrypted);
+                if (!string.IsNullOrEmpty(key))
+                    provider.Configure(key);
+            }
+        }
+    }
+
+    private string? GetEncryptedKey(string providerId) => providerId switch
+    {
+        "groq" => _settings.Current.GroqApiKey,
+        "openai" => _settings.Current.OpenAiApiKey,
+        _ => null
+    };
+
+    public ModelStatus GetStatus(string modelId)
+    {
+        if (CloudProvider.IsCloudModel(modelId))
+        {
+            if (_activeModelId == modelId) return ModelStatus.Ready;
+            var (providerId, _) = CloudProvider.ParseCloudModelId(modelId);
+            var provider = _cloudProviders.GetValueOrDefault(providerId);
+            return provider is { IsConfigured: true } ? ModelStatus.Ready : ModelStatus.NotDownloaded;
+        }
+        return _modelStatuses.GetValueOrDefault(modelId, ModelStatus.NotDownloaded);
+    }
 
     public bool IsDownloaded(string modelId)
     {
-        var model = ModelInfo.GetById(modelId);
-        if (model is null) return false;
-
-        var dir = GetModelDirectory(model);
-        return model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName)));
+        if (CloudProvider.IsCloudModel(modelId)) return true;
+        return _localProviders.TryGetValue(modelId, out var provider) && provider.IsDownloaded;
     }
 
     public async Task DownloadAndLoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
-        var model = ModelInfo.GetById(modelId)
+        var provider = _localProviders.GetValueOrDefault(modelId)
             ?? throw new ArgumentException($"Unknown model: {modelId}");
 
-        // Download missing files
-        if (!IsDownloaded(modelId))
-        {
-            await DownloadModelFilesAsync(model, cancellationToken);
-        }
+        if (!provider.IsDownloaded)
+            await DownloadModelFilesAsync(provider, cancellationToken);
 
-        // Load
-        await LoadEngineAsync(model, cancellationToken);
+        await LoadModelAsync(modelId, cancellationToken);
     }
 
     public async Task LoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
-        var model = ModelInfo.GetById(modelId)
+        if (CloudProvider.IsCloudModel(modelId))
+        {
+            var (providerId, cloudModelId) = CloudProvider.ParseCloudModelId(modelId);
+            var provider = _cloudProviders.GetValueOrDefault(providerId)
+                ?? throw new ArgumentException($"Unknown provider: {providerId}");
+            if (!provider.IsConfigured)
+                throw new InvalidOperationException($"Kein API-Key für {provider.DisplayName}");
+            provider.SelectTranscriptionModel(cloudModelId);
+            ActiveModelId = modelId;
+            return;
+        }
+
+        var localProvider = _localProviders.GetValueOrDefault(modelId)
             ?? throw new ArgumentException($"Unknown model: {modelId}");
 
-        if (!IsDownloaded(modelId))
+        if (_loadedLocalModelId == modelId && localProvider.IsModelLoaded)
+        {
+            ActiveModelId = modelId;
+            SetStatus(modelId, ModelStatus.Ready);
+            return;
+        }
+
+        if (!localProvider.IsDownloaded)
             throw new FileNotFoundException($"Model files not found for: {modelId}");
 
-        await LoadEngineAsync(model, cancellationToken);
+        // Unload all local providers and force native memory cleanup
+        foreach (var p in _localProviders.Values)
+            p.UnloadModel();
+        _loadedLocalModelId = null;
+
+        if (ActiveModelId is not null)
+        {
+            ActiveModelId = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        SetStatus(modelId, ModelStatus.LoadingModel);
+        try
+        {
+            var dir = localProvider.GetModelDirectory();
+            await localProvider.LoadModelAsync(dir, cancellationToken);
+
+            SetStatus(modelId, ModelStatus.Ready);
+            _loadedLocalModelId = modelId;
+            ActiveModelId = modelId;
+        }
+        catch (Exception ex)
+        {
+            SetStatus(modelId, ModelStatus.Failed(ex.Message));
+            throw;
+        }
     }
 
     public void UnloadModel()
     {
         if (ActiveModelId is not null)
         {
-            _parakeetEngine.UnloadModel();
+            foreach (var p in _localProviders.Values)
+                p.UnloadModel();
+            _loadedLocalModelId = null;
             SetStatus(ActiveModelId, ModelStatus.NotDownloaded);
             ActiveModelId = null;
         }
@@ -89,60 +189,32 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (ActiveModelId == modelId)
             UnloadModel();
 
-        var model = ModelInfo.GetById(modelId);
-        if (model is null) return;
+        var provider = _localProviders.GetValueOrDefault(modelId);
+        if (provider is null) return;
 
-        var dir = GetModelDirectory(model);
-        foreach (var file in model.Files)
+        var dir = provider.GetModelDirectory();
+        foreach (var file in provider.Model.Files)
         {
             var path = Path.Combine(dir, file.FileName);
             if (File.Exists(path))
                 File.Delete(path);
         }
 
-        // Remove empty subdirectory
-        if (model.SubDirectory is not null && Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+        if (provider.Model.SubDirectory is not null && Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
             Directory.Delete(dir);
 
         SetStatus(modelId, ModelStatus.NotDownloaded);
     }
 
-    private async Task LoadEngineAsync(ModelInfo model, CancellationToken cancellationToken)
+    private async Task DownloadModelFilesAsync(LocalProviderBase provider, CancellationToken cancellationToken)
     {
-        // Unload engine and force native memory cleanup
-        _parakeetEngine.UnloadModel();
-        if (ActiveModelId is not null)
-        {
-            ActiveModelId = null;
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-        }
-
-        SetStatus(model.Id, ModelStatus.LoadingModel);
-        try
-        {
-            var dir = GetModelDirectory(model);
-            await _parakeetEngine.LoadModelAsync(dir, cancellationToken);
-
-            SetStatus(model.Id, ModelStatus.Ready);
-            ActiveModelId = model.Id;
-        }
-        catch (Exception ex)
-        {
-            SetStatus(model.Id, ModelStatus.Failed(ex.Message));
-            throw;
-        }
-    }
-
-    private async Task DownloadModelFilesAsync(ModelInfo model, CancellationToken cancellationToken)
-    {
-        var dir = GetModelDirectory(model);
+        var dir = provider.GetModelDirectory();
         Directory.CreateDirectory(dir);
 
-        var totalBytes = model.Files.Sum(f => (long)f.EstimatedSizeMB * 1024 * 1024);
+        var totalBytes = provider.Model.Files.Sum(f => (long)f.EstimatedSizeMB * 1024 * 1024);
         long cumulativeBytesRead = 0;
 
-        foreach (var file in model.Files)
+        foreach (var file in provider.Model.Files)
         {
             var filePath = Path.Combine(dir, file.FileName);
             if (File.Exists(filePath)) continue;
@@ -169,7 +241,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                     if ((now - lastReport).TotalMilliseconds > 250 && totalBytes > 0)
                     {
                         var progress = (double)(cumulativeBytesRead + fileBytesRead) / totalBytes;
-                        SetStatus(model.Id, ModelStatus.DownloadingModel(progress));
+                        SetStatus(provider.Id, ModelStatus.DownloadingModel(progress));
                         lastReport = now;
                     }
                 }
@@ -178,13 +250,6 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             File.Move(filePath + ".tmp", filePath, overwrite: true);
             cumulativeBytesRead += fileBytesRead;
         }
-    }
-
-    private static string GetModelDirectory(ModelInfo model)
-    {
-        if (model.SubDirectory is not null)
-            return Path.Combine(TypeWhisperEnvironment.ModelsPath, model.SubDirectory);
-        return TypeWhisperEnvironment.ModelsPath;
     }
 
     private void SetStatus(string modelId, ModelStatus status)
@@ -201,7 +266,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (!_disposed)
         {
             _httpClient.Dispose();
-            _parakeetEngine.Dispose();
+            foreach (var p in _localProviders.Values)
+                p.Dispose();
+            foreach (var p in _cloudProviders.Values)
+                p.Dispose();
             _disposed = true;
         }
     }

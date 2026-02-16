@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -11,6 +12,7 @@ public partial class ProfilesViewModel : ObservableObject
 {
     private readonly IProfileService _profiles;
     private readonly IActiveWindowService _activeWindow;
+    private readonly ISettingsService _settings;
     private readonly DispatcherTimer _windowTimer;
 
     [ObservableProperty] private Profile? _selectedProfile;
@@ -21,6 +23,7 @@ public partial class ProfilesViewModel : ObservableObject
     [ObservableProperty] private string? _editTask;
     [ObservableProperty] private string? _editTranslationTarget;
     [ObservableProperty] private bool? _editWhisperModeOverride;
+    [ObservableProperty] private string? _editTranscriptionModelOverride;
     [ObservableProperty] private int _editPriority;
     [ObservableProperty] private bool _editIsEnabled = true;
 
@@ -39,11 +42,23 @@ public partial class ProfilesViewModel : ObservableObject
     public ObservableCollection<string> ProcessNameChips { get; } = [];
     public ObservableCollection<string> UrlPatternChips { get; } = [];
     public ObservableCollection<Profile> Profiles { get; } = [];
+    public IReadOnlyList<ModelOption> AvailableModelOptions { get; }
 
-    public ProfilesViewModel(IProfileService profiles, IActiveWindowService activeWindow)
+    public ProfilesViewModel(IProfileService profiles, IActiveWindowService activeWindow, ISettingsService settings, ModelManagerService modelManager)
     {
         _profiles = profiles;
         _activeWindow = activeWindow;
+        _settings = settings;
+
+        // Build model options for profile override dropdown
+        var options = new List<ModelOption> { new(null, "Global (Standard)") };
+        foreach (var provider in modelManager.LocalProviders)
+            options.Add(new(provider.Id, provider.DisplayName));
+        foreach (var provider in modelManager.CloudProviders)
+            foreach (var model in provider.TranscriptionModels)
+                options.Add(new(CloudProvider.GetFullModelId(provider.Id, model.Id),
+                    $"{provider.DisplayName}: {model.DisplayName}"));
+        AvailableModelOptions = options;
         _profiles.ProfilesChanged += RefreshProfiles;
         RefreshProfiles();
 
@@ -81,6 +96,7 @@ public partial class ProfilesViewModel : ObservableObject
             EditTask = null;
             EditTranslationTarget = null;
             EditWhisperModeOverride = null;
+            EditTranscriptionModelOverride = null;
             EditPriority = 0;
             EditIsEnabled = true;
             return;
@@ -91,6 +107,7 @@ public partial class ProfilesViewModel : ObservableObject
         EditTask = value.SelectedTask;
         EditTranslationTarget = value.TranslationTarget;
         EditWhisperModeOverride = value.WhisperModeOverride;
+        EditTranscriptionModelOverride = value.TranscriptionModelOverride;
         EditPriority = value.Priority;
         EditIsEnabled = value.IsEnabled;
 
@@ -166,6 +183,7 @@ public partial class ProfilesViewModel : ObservableObject
             SelectedTask = string.IsNullOrWhiteSpace(EditTask) ? null : EditTask,
             TranslationTarget = string.IsNullOrWhiteSpace(EditTranslationTarget) ? null : EditTranslationTarget,
             WhisperModeOverride = EditWhisperModeOverride,
+            TranscriptionModelOverride = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride) ? null : EditTranscriptionModelOverride,
             Priority = EditPriority,
             IsEnabled = EditIsEnabled,
             UpdatedAt = DateTime.UtcNow
@@ -220,3 +238,5 @@ public partial class ProfilesViewModel : ObservableObject
         SelectedProfile = null;
     }
 }
+
+public sealed record ModelOption(string? Id, string DisplayName);

@@ -1,8 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -13,7 +16,7 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly AudioRecordingService _audio;
 
-    [ObservableProperty] private int _currentStep; // 0=Model, 1=Mic, 2=Hotkey, 3=Done
+    [ObservableProperty] private int _currentStep; // 0=Model, 1=Cloud, 2=Mic, 3=Hotkey, 4=Done
     [ObservableProperty] private bool _isDownloading;
     [ObservableProperty] private double _downloadProgress;
     [ObservableProperty] private string _downloadStatus = "";
@@ -23,7 +26,14 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private string _toggleHotkey;
     [ObservableProperty] private string _pushToTalkHotkey;
 
+    // Cloud provider properties
+    [ObservableProperty] private string _groqApiKey = "";
+    [ObservableProperty] private string _openAiApiKey = "";
+    [ObservableProperty] private string? _cloudTestResult;
+    [ObservableProperty] private bool _isTestingKey;
+
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+    public IReadOnlyList<CloudProviderBase> CloudProviders { get; }
     public event EventHandler? Completed;
 
     public WelcomeViewModel(
@@ -37,6 +47,11 @@ public partial class WelcomeViewModel : ObservableObject
 
         _toggleHotkey = settings.Current.ToggleHotkey;
         _pushToTalkHotkey = settings.Current.PushToTalkHotkey;
+        CloudProviders = [.. modelManager.CloudProviders];
+
+        // Load existing API keys if any
+        _groqApiKey = ApiKeyProtection.Decrypt(settings.Current.GroqApiKey ?? "");
+        _openAiApiKey = ApiKeyProtection.Decrypt(settings.Current.OpenAiApiKey ?? "");
 
         RefreshMicrophones();
     }
@@ -84,14 +99,66 @@ public partial class WelcomeViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task TestCloudKey(string providerId)
+    {
+        var apiKey = providerId switch
+        {
+            "groq" => GroqApiKey,
+            "openai" => OpenAiApiKey,
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            CloudTestResult = "Bitte zuerst einen API-Key eingeben";
+            return;
+        }
+
+        var provider = CloudProviders.FirstOrDefault(p => p.Id == providerId);
+        if (provider is null) return;
+
+        IsTestingKey = true;
+        CloudTestResult = "Teste...";
+        try
+        {
+            using var httpClient = new HttpClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{provider.BaseUrl}/v1/models");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            var response = await httpClient.SendAsync(request);
+
+            CloudTestResult = response.IsSuccessStatusCode
+                ? $"{provider.DisplayName}: API-Key gültig!"
+                : $"{provider.DisplayName}: Ungültiger Key (HTTP {(int)response.StatusCode})";
+        }
+        catch (Exception ex)
+        {
+            CloudTestResult = $"Verbindungsfehler: {ex.Message}";
+        }
+        finally
+        {
+            IsTestingKey = false;
+        }
+    }
+
+    public void SaveApiKey(string providerId, string password)
+    {
+        if (providerId == "groq")
+            GroqApiKey = password;
+        else if (providerId == "openai")
+            OpenAiApiKey = password;
+    }
+
+    [RelayCommand]
     private void NextStep()
     {
-        if (CurrentStep < 3)
+        if (CurrentStep < 4)
             CurrentStep++;
 
         if (CurrentStep == 1)
+            SaveCloudKeys();
+        else if (CurrentStep == 2)
             StartMicTest();
-        else if (CurrentStep == 3)
+        else if (CurrentStep == 4)
             Finish();
     }
 
@@ -100,7 +167,7 @@ public partial class WelcomeViewModel : ObservableObject
     {
         if (CurrentStep > 0)
         {
-            if (CurrentStep == 1)
+            if (CurrentStep == 2)
                 StopMicTest();
             CurrentStep--;
         }
@@ -110,6 +177,18 @@ public partial class WelcomeViewModel : ObservableObject
     private void Skip()
     {
         Finish();
+    }
+
+    private void SaveCloudKeys()
+    {
+        var groqEncrypted = string.IsNullOrWhiteSpace(GroqApiKey) ? null : ApiKeyProtection.Encrypt(GroqApiKey);
+        var openAiEncrypted = string.IsNullOrWhiteSpace(OpenAiApiKey) ? null : ApiKeyProtection.Encrypt(OpenAiApiKey);
+
+        _settings.Save(_settings.Current with
+        {
+            GroqApiKey = groqEncrypted,
+            OpenAiApiKey = openAiEncrypted
+        });
     }
 
     private void StartMicTest()
@@ -143,6 +222,7 @@ public partial class WelcomeViewModel : ObservableObject
     private void Finish()
     {
         StopMicTest();
+        SaveCloudKeys();
 
         // Save hotkey settings
         _settings.Save(_settings.Current with

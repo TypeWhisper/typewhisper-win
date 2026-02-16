@@ -4,7 +4,7 @@ namespace TypeWhisper.Core.Data;
 
 public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
 
     private readonly string _connectionString;
     private SqliteConnection? _connection;
@@ -53,6 +53,8 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
             MigrateToVersion2(connection);
         if (version < 3)
             MigrateToVersion3(connection);
+        if (version < 4)
+            MigrateToVersion4(connection);
     }
 
     private static int GetSchemaVersion(SqliteConnection connection)
@@ -163,6 +165,29 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
             Exec(connection, "ALTER TABLE snippets ADD COLUMN tags TEXT NOT NULL DEFAULT ''");
 
         SetSchemaVersion(connection, 3);
+    }
+
+    private static void MigrateToVersion4(SqliteConnection connection)
+    {
+        // Only add column if it doesn't exist (fresh DBs have it from V1 schema update)
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(profiles)";
+        using var reader = cmd.ExecuteReader();
+        var hasColumn = false;
+        while (reader.Read())
+        {
+            if (reader.GetString(1) == "transcription_model_override")
+            {
+                hasColumn = true;
+                break;
+            }
+        }
+        reader.Close();
+
+        if (!hasColumn)
+            Exec(connection, "ALTER TABLE profiles ADD COLUMN transcription_model_override TEXT");
+
+        SetSchemaVersion(connection, 4);
     }
 
     private static void Exec(SqliteConnection connection, string sql)

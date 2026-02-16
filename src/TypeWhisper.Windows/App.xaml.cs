@@ -4,7 +4,9 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Data;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Providers;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views;
 
@@ -177,9 +179,24 @@ public partial class App : Application
         services.AddSingleton<ISettingsService>(
             new SettingsService(TypeWhisperEnvironment.SettingsFilePath));
 
-        // Engines
-        services.AddSingleton<ParakeetTranscriptionEngine>();
-        services.AddSingleton<ModelManagerService>();
+        // Local providers
+        services.AddSingleton<ParakeetProvider>();
+        services.AddSingleton<CanaryProvider>();
+        services.AddSingleton<LocalProviderBase>(sp => sp.GetRequiredService<ParakeetProvider>());
+        services.AddSingleton<LocalProviderBase>(sp => sp.GetRequiredService<CanaryProvider>());
+
+        // Cloud providers
+        services.AddSingleton<GroqProvider>();
+        services.AddSingleton<OpenAiProvider>();
+        services.AddSingleton<CloudProviderBase>(sp => sp.GetRequiredService<GroqProvider>());
+        services.AddSingleton<CloudProviderBase>(sp => sp.GetRequiredService<OpenAiProvider>());
+
+        // Model manager (consumes all providers)
+        services.AddSingleton<ModelManagerService>(sp =>
+            new ModelManagerService(
+                sp.GetServices<LocalProviderBase>(),
+                sp.GetServices<CloudProviderBase>(),
+                sp.GetRequiredService<ISettingsService>()));
 
         // Audio
         services.AddSingleton<AudioRecordingService>();
@@ -193,8 +210,9 @@ public partial class App : Application
         services.AddSingleton<ISnippetService, SnippetService>();
         services.AddSingleton<IProfileService, ProfileService>();
 
-        // Translation
-        services.AddSingleton<ITranslationService, TranslationService>();
+        // Translation (consumes cloud providers for LLM translation)
+        services.AddSingleton<ITranslationService>(sp =>
+            new TranslationService(sp.GetServices<CloudProviderBase>().ToList()));
 
         // Services
         services.AddSingleton<HotkeyService>();

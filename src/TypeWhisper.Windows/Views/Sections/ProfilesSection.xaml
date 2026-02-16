@@ -304,6 +304,20 @@
                                Style="{StaticResource HintStyle}" Margin="26,4,0,0"/>
                 </StackPanel>
 
+                <!-- Transcription Model Override -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="Transkriptions-Modell" Style="{StaticResource LabelStyle}"/>
+                    <ComboBox ItemsSource="{Binding Profiles.AvailableModelOptions}"
+                              SelectedValue="{Binding Profiles.EditTranscriptionModelOverride}"
+                              SelectedValuePath="Id"
+                              DisplayMemberPath="DisplayName"
+                              Style="{StaticResource InputComboBoxStyle}"
+                              ItemContainerStyle="{StaticResource InputComboBoxItemStyle}"
+                              HorizontalAlignment="Stretch"/>
+                    <TextBlock Text="Überschreibt das globale Modell für dieses Profil (lokal oder Cloud)"
+                               Style="{StaticResource HintStyle}"/>
+                </StackPanel>
+
                 <!-- Priority -->
                 <StackPanel Margin="0,0,0,20">
                     <TextBlock Text="Priorität" Style="{StaticResource LabelStyle}"/>

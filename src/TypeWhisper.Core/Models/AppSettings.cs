@@ -15,6 +15,10 @@ public record AppSettings
     // Model
     public string? SelectedModelId { get; init; }
 
+    // Cloud Provider API Keys
+    public string? GroqApiKey { get; init; }
+    public string? OpenAiApiKey { get; init; }
+
     // Audio features
     public bool WhisperModeEnabled { get; init; }
     public bool AudioDuckingEnabled { get; init; }

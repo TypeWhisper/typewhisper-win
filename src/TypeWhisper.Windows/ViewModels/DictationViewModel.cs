@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using SherpaOnnx;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -83,7 +84,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _mediaPause = mediaPause;
 
         _audio.AudioLevelChanged += OnAudioLevelChanged;
-        _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(StartRecording);
+        _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () => await StartRecording());
         _hotkey.DictationStopRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             try
@@ -114,15 +115,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private bool EffectiveWhisperMode =>
         _activeProfile?.WhisperModeOverride ?? _settings.Current.WhisperModeEnabled;
 
+    private string? EffectiveModelId =>
+        _activeProfile?.TranscriptionModelOverride;
+
     [RelayCommand]
-    private void StartRecording()
+    private async Task StartRecording()
     {
         if (State != DictationState.Idle) return;
-        if (!_modelManager.Engine.IsModelLoaded)
-        {
-            StatusText = "Kein Modell geladen";
-            return;
-        }
 
         // Capture active window context at recording start
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
@@ -130,17 +129,44 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         var url = _activeWindow.GetBrowserUrl();
         _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
 
+        // Switch to profile model override if needed (cloud switch is instant)
+        var profileModel = EffectiveModelId;
+        if (profileModel is not null && profileModel != _modelManager.ActiveModelId)
+        {
+            try
+            {
+                await _modelManager.LoadModelAsync(profileModel);
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Modell-Fehler: {ex.Message}";
+                return;
+            }
+        }
+
+        if (!_modelManager.Engine.IsModelLoaded)
+        {
+            StatusText = "Kein Modell geladen";
+            return;
+        }
+
         ActiveProcessName = _capturedProcessName;
         ActiveProfileName = _activeProfile?.Name;
 
         _audio.WhisperModeEnabled = EffectiveWhisperMode;
 
-        // Initialize VAD for live transcription
+        // Initialize VAD for live transcription (only for local models — cloud API
+        // transcribes the full audio at once, VAD segments would be too slow/expensive)
         _partialSegments.Clear();
         PartialText = "";
         _vad?.Dispose();
-        _vad = CreateVoiceActivityDetector();
-        _audio.SamplesAvailable += OnSamplesAvailable;
+        _vad = null;
+        var useVad = _modelManager.ActiveModelId is null || !CloudProvider.IsCloudModel(_modelManager.ActiveModelId);
+        if (useVad)
+        {
+            _vad = CreateVoiceActivityDetector();
+            _audio.SamplesAvailable += OnSamplesAvailable;
+        }
 
         _sound.PlayStartSound();
 
@@ -293,7 +319,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var insertResult = await _textInsertion.InsertTextAsync(
                 finalText, _settings.Current.AutoPaste);
 
+            // Restore global model if profile override was active
+            var profileModel = EffectiveModelId;
+            if (profileModel is not null && profileModel != _settings.Current.SelectedModelId
+                && _settings.Current.SelectedModelId is not null)
+            {
+                await _modelManager.LoadModelAsync(_settings.Current.SelectedModelId);
+            }
+
             // Save to history
+            var engineUsed = _modelManager.ActiveModelId is not null && CloudProvider.IsCloudModel(_modelManager.ActiveModelId)
+                ? _modelManager.ActiveModelId
+                : "parakeet";
             _history.AddRecord(new TranscriptionRecord
             {
                 Id = Guid.NewGuid().ToString(),
@@ -305,7 +342,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 DurationSeconds = audioDuration,
                 Language = detectedLanguage,
                 ProfileName = _activeProfile?.Name,
-                EngineUsed = "parakeet"
+                EngineUsed = engineUsed
             });
 
             _sound.PlaySuccessSound();

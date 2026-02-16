@@ -117,15 +117,27 @@ public sealed class HttpApiService : IDisposable
 
     private (int, string) HandleModels()
     {
-        var models = ModelInfo.AvailableModels.Select(m => new
+        var localModels = _modelManager.LocalProviders.Select(p => new
         {
-            id = m.Id,
-            name = m.DisplayName,
-            size = m.SizeDescription,
-            engine = "parakeet",
-            downloaded = _modelManager.IsDownloaded(m.Id),
-            active = _modelManager.ActiveModelId == m.Id
+            id = p.Id,
+            name = p.DisplayName,
+            size = p.Model.SizeDescription,
+            engine = "local",
+            downloaded = _modelManager.IsDownloaded(p.Id),
+            active = _modelManager.ActiveModelId == p.Id
         });
+        var cloudModels = _modelManager.CloudProviders
+            .Where(p => p.IsConfigured)
+            .SelectMany(p => p.TranscriptionModels.Select(m => new
+            {
+                id = CloudProvider.GetFullModelId(p.Id, m.Id),
+                name = $"{p.DisplayName}: {m.DisplayName}",
+                size = "Cloud",
+                engine = p.Id,
+                downloaded = true,
+                active = _modelManager.ActiveModelId == CloudProvider.GetFullModelId(p.Id, m.Id)
+            }));
+        var models = localModels.Concat(cloudModels);
         return (200, JsonSerializer.Serialize(new { models }));
     }
 

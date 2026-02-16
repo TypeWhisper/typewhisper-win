@@ -37,9 +37,9 @@ public sealed class ProfileService : IProfileService
             INSERT INTO profiles
             (id, name, is_enabled, priority, process_names, url_patterns,
              input_language, translation_target, selected_task,
-             whisper_mode_override, created_at, updated_at)
+             whisper_mode_override, transcription_model_override, created_at, updated_at)
             VALUES (@id, @name, @enabled, @priority, @procs, @urls,
-                    @lang, @trans, @task, @whisper, @created, @updated)
+                    @lang, @trans, @task, @whisper, @model_override, @created, @updated)
             """;
         BindProfileParams(cmd, profile);
         cmd.ExecuteNonQuery();
@@ -61,7 +61,8 @@ public sealed class ProfileService : IProfileService
             SET name = @name, is_enabled = @enabled, priority = @priority,
                 process_names = @procs, url_patterns = @urls,
                 input_language = @lang, translation_target = @trans, selected_task = @task,
-                whisper_mode_override = @whisper, updated_at = @updated
+                whisper_mode_override = @whisper, transcription_model_override = @model_override,
+                updated_at = @updated
             WHERE id = @id
             """;
         BindProfileParams(cmd, updated);
@@ -156,6 +157,7 @@ public sealed class ProfileService : IProfileService
         cmd.Parameters.AddWithValue("@trans", (object?)p.TranslationTarget ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@task", (object?)p.SelectedTask ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@whisper", p.WhisperModeOverride.HasValue ? (p.WhisperModeOverride.Value ? 1 : 0) : DBNull.Value);
+        cmd.Parameters.AddWithValue("@model_override", (object?)p.TranscriptionModelOverride ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@created", p.CreatedAt.ToString("o"));
         cmd.Parameters.AddWithValue("@updated", p.UpdatedAt.ToString("o"));
     }
@@ -170,7 +172,8 @@ public sealed class ProfileService : IProfileService
         cmd.CommandText = """
             SELECT id, name, is_enabled, priority, process_names, url_patterns,
                    input_language, translation_target, selected_task,
-                   whisper_mode_override, created_at, updated_at
+                   whisper_mode_override, created_at, updated_at,
+                   transcription_model_override
             FROM profiles ORDER BY priority DESC
             """;
 
@@ -191,7 +194,8 @@ public sealed class ProfileService : IProfileService
                 SelectedTask = reader.IsDBNull(8) ? null : reader.GetString(8),
                 WhisperModeOverride = reader.IsDBNull(9) ? null : reader.GetInt32(9) != 0,
                 CreatedAt = DateTime.Parse(reader.GetString(10)),
-                UpdatedAt = DateTime.Parse(reader.GetString(11))
+                UpdatedAt = DateTime.Parse(reader.GetString(11)),
+                TranscriptionModelOverride = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
         _cacheLoaded = true;

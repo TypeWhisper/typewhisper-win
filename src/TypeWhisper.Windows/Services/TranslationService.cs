@@ -5,20 +5,32 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Core.Translation;
 
 namespace TypeWhisper.Windows.Services;
 
 public sealed class TranslationService : ITranslationService, IDisposable
 {
+    private readonly IReadOnlyList<CloudProviderBase> _cloudProviders;
     private readonly HttpClient _httpClient = new();
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1);
     private readonly Dictionary<string, LoadedTranslationModel> _loadedModels = new();
     private readonly HashSet<string> _loadingModels = new();
     private bool _disposed;
 
-    public bool IsModelReady(string sourceLang, string targetLang) =>
-        _loadedModels.ContainsKey(ModelKey(sourceLang, targetLang));
+    public TranslationService(IReadOnlyList<CloudProviderBase> cloudProviders)
+    {
+        _cloudProviders = cloudProviders;
+    }
+
+    public bool IsModelReady(string sourceLang, string targetLang)
+    {
+        // Cloud translation is always ready when a provider is configured
+        if (GetConfiguredTranslationProvider() is not null)
+            return true;
+        return _loadedModels.ContainsKey(ModelKey(sourceLang, targetLang));
+    }
 
     public bool IsModelLoading(string sourceLang, string targetLang) =>
         _loadingModels.Contains(ModelKey(sourceLang, targetLang));
@@ -28,6 +40,22 @@ public sealed class TranslationService : ITranslationService, IDisposable
         if (string.IsNullOrWhiteSpace(text)) return text;
         if (sourceLang == targetLang) return text;
 
+        // Prefer cloud LLM translation when available (faster, supports all language pairs)
+        var cloudProvider = GetConfiguredTranslationProvider();
+        if (cloudProvider is not null)
+        {
+            return await cloudProvider.TranslateAsync(text, sourceLang, targetLang, ct);
+        }
+
+        // Fallback: local ONNX Marian models
+        return await TranslateLocalAsync(text, sourceLang, targetLang, ct);
+    }
+
+    private CloudProviderBase? GetConfiguredTranslationProvider() =>
+        _cloudProviders.FirstOrDefault(p => p.SupportsTranslation);
+
+    private async Task<string> TranslateLocalAsync(string text, string sourceLang, string targetLang, CancellationToken ct)
+    {
         // Direct model available?
         var directModel = TranslationModelInfo.FindModel(sourceLang, targetLang);
         if (directModel is not null)
@@ -69,7 +97,6 @@ public sealed class TranslationService : ITranslationService, IDisposable
         await _downloadSemaphore.WaitAsync(ct);
         try
         {
-            // Double-check after acquiring semaphore
             if (_loadedModels.TryGetValue(key, out var existing))
                 return existing;
 
@@ -81,10 +108,8 @@ public sealed class TranslationService : ITranslationService, IDisposable
             var modelDir = Path.Combine(TypeWhisperEnvironment.ModelsPath, modelInfo.SubDirectory);
             Directory.CreateDirectory(modelDir);
 
-            // Download missing files
             await DownloadMissingFilesAsync(modelInfo, modelDir, ct);
 
-            // Load ONNX sessions and tokenizer
             var loaded = LoadModel(modelDir);
 
             _loadedModels[key] = loaded;
@@ -150,7 +175,6 @@ public sealed class TranslationService : ITranslationService, IDisposable
         var inputIds = model.Tokenizer.Encode(text);
         var seqLen = inputIds.Length;
 
-        // Encoder
         var inputIdsTensor = new DenseTensor<long>(inputIds.Select(i => (long)i).ToArray(), [1, seqLen]);
         var attentionMask = new DenseTensor<long>(Enumerable.Repeat(1L, seqLen).ToArray(), [1, seqLen]);
 
@@ -163,7 +187,6 @@ public sealed class TranslationService : ITranslationService, IDisposable
         var encoderHidden = encoderResults.First().Value as DenseTensor<float>
             ?? throw new InvalidOperationException("Encoder output is not a float tensor");
 
-        // Greedy decoding
         var maxTokens = Math.Min(model.Config.MaxLength, 200);
         var decodedIds = new List<int> { model.Config.DecoderStartTokenId };
 
@@ -184,7 +207,6 @@ public sealed class TranslationService : ITranslationService, IDisposable
             var logits = decoderResults.First().Value as DenseTensor<float>
                 ?? throw new InvalidOperationException("Decoder output is not a float tensor");
 
-            // Get logits for the last token position
             var vocabSize = logits.Dimensions[2];
             var lastTokenOffset = (decoderLen - 1) * vocabSize;
             var bestId = 0;
@@ -203,7 +225,6 @@ public sealed class TranslationService : ITranslationService, IDisposable
             decodedIds.Add(bestId);
         }
 
-        // Skip decoder_start_token_id for decoding
         return model.Tokenizer.Decode(decodedIds.ToArray().AsSpan(1));
     }
 

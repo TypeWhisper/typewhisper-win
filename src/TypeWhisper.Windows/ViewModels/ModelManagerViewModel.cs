@@ -1,8 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -16,8 +19,12 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
 
-    public ObservableCollection<ModelItemViewModel> Models { get; } = [];
-    public ObservableCollection<ModelItemViewModel> ParakeetModels { get; } = [];
+    // Cloud provider API keys
+    [ObservableProperty] private string _groqApiKey = "";
+    [ObservableProperty] private string _openAiApiKey = "";
+
+    public ObservableCollection<ModelItemViewModel> LocalModels { get; } = [];
+    public ObservableCollection<CloudProviderViewModel> CloudProviders { get; } = [];
 
     public ModelManagerViewModel(ModelManagerService modelManager, ISettingsService settings)
     {
@@ -25,22 +32,87 @@ public partial class ModelManagerViewModel : ObservableObject
         _settings = settings;
         _activeModelId = _modelManager.ActiveModelId;
 
-        foreach (var model in ModelInfo.AvailableModels)
+        // Build local model list from providers
+        foreach (var provider in _modelManager.LocalProviders)
         {
-            var item = new ModelItemViewModel(model, _modelManager);
-            Models.Add(item);
-            ParakeetModels.Add(item);
+            LocalModels.Add(new ModelItemViewModel(provider.Model, _modelManager));
+        }
+
+        // Load API keys from settings (decrypt)
+        _groqApiKey = ApiKeyProtection.Decrypt(_settings.Current.GroqApiKey ?? "");
+        _openAiApiKey = ApiKeyProtection.Decrypt(_settings.Current.OpenAiApiKey ?? "");
+
+        // Build cloud provider view models from providers
+        foreach (var provider in _modelManager.CloudProviders)
+        {
+            var hasKey = provider.IsConfigured;
+            var providerVm = new CloudProviderViewModel(
+                provider.Id, provider.DisplayName, hasKey,
+                provider.TranslationModel is not null);
+            foreach (var model in provider.TranscriptionModels)
+            {
+                var fullId = CloudProvider.GetFullModelId(provider.Id, model.Id);
+                providerVm.Models.Add(new CloudModelItemViewModel(
+                    fullId, model.DisplayName, hasKey,
+                    _modelManager.ActiveModelId == fullId,
+                    model.SupportsTranslation));
+            }
+            CloudProviders.Add(providerVm);
         }
 
         _modelManager.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ModelManagerService.ActiveModelId))
+            {
                 ActiveModelId = _modelManager.ActiveModelId;
+                RefreshAllCloudModels();
+            }
 
-            foreach (var m in Models)
+            foreach (var m in LocalModels)
                 m.RefreshStatus();
         };
     }
+
+    partial void OnGroqApiKeyChanged(string value)
+    {
+        var encrypted = string.IsNullOrWhiteSpace(value) ? null : ApiKeyProtection.Encrypt(value);
+        _settings.Save(_settings.Current with { GroqApiKey = encrypted });
+        RefreshProviderAvailability("groq", !string.IsNullOrWhiteSpace(value));
+    }
+
+    partial void OnOpenAiApiKeyChanged(string value)
+    {
+        var encrypted = string.IsNullOrWhiteSpace(value) ? null : ApiKeyProtection.Encrypt(value);
+        _settings.Save(_settings.Current with { OpenAiApiKey = encrypted });
+        RefreshProviderAvailability("openai", !string.IsNullOrWhiteSpace(value));
+    }
+
+    private void RefreshProviderAvailability(string providerId, bool hasKey)
+    {
+        foreach (var p in CloudProviders)
+        {
+            if (p.ProviderId == providerId)
+            {
+                p.HasApiKey = hasKey;
+                foreach (var m in p.Models)
+                    m.IsAvailable = hasKey;
+            }
+        }
+    }
+
+    private void RefreshAllCloudModels()
+    {
+        foreach (var p in CloudProviders)
+            foreach (var m in p.Models)
+                m.IsActive = _modelManager.ActiveModelId == m.FullId;
+    }
+
+    private string? GetApiKeyForProvider(string providerId) => providerId switch
+    {
+        "groq" => string.IsNullOrWhiteSpace(GroqApiKey) ? null : GroqApiKey,
+        "openai" => string.IsNullOrWhiteSpace(OpenAiApiKey) ? null : OpenAiApiKey,
+        _ => null
+    };
 
     [RelayCommand]
     private async Task DownloadAndLoadModel(string modelId)
@@ -51,8 +123,6 @@ public partial class ModelManagerViewModel : ObservableObject
         {
             await _modelManager.DownloadAndLoadModelAsync(modelId);
             ActiveModelId = modelId;
-
-            // Persist selection so the model auto-loads on next startup
             _settings.Save(_settings.Current with { SelectedModelId = modelId });
         }
         catch (Exception ex)
@@ -65,6 +135,68 @@ public partial class ModelManagerViewModel : ObservableObject
             IsBusy = false;
             BusyMessage = null;
         }
+    }
+
+    [RelayCommand]
+    private async Task SelectCloudModel(string fullModelId)
+    {
+        IsBusy = true;
+        BusyMessage = "Aktiviere Cloud-Modell...";
+        try
+        {
+            await _modelManager.LoadModelAsync(fullModelId);
+            ActiveModelId = fullModelId;
+            _settings.Save(_settings.Current with { SelectedModelId = fullModelId });
+        }
+        catch (Exception ex)
+        {
+            BusyMessage = $"Fehler: {ex.Message}";
+            await Task.Delay(2000);
+        }
+        finally
+        {
+            IsBusy = false;
+            BusyMessage = null;
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestApiKey(string providerId)
+    {
+        var provider = _modelManager.CloudProviders.FirstOrDefault(p => p.Id == providerId);
+        if (provider is null) return;
+
+        var apiKey = GetApiKeyForProvider(providerId);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            BusyMessage = "Bitte zuerst einen API-Key eingeben";
+            await Task.Delay(2000);
+            BusyMessage = null;
+            return;
+        }
+
+        IsBusy = true;
+        BusyMessage = $"{provider.DisplayName} API-Key wird getestet...";
+        try
+        {
+            using var httpClient = new HttpClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{provider.BaseUrl}/v1/models");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            var response = await httpClient.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+                BusyMessage = $"{provider.DisplayName}: API-Key gültig!";
+            else
+                BusyMessage = $"{provider.DisplayName}: Ungültiger API-Key (HTTP {(int)response.StatusCode})";
+        }
+        catch (Exception ex)
+        {
+            BusyMessage = $"Verbindungsfehler: {ex.Message}";
+        }
+
+        await Task.Delay(2500);
+        IsBusy = false;
+        BusyMessage = null;
     }
 
     [RelayCommand]
@@ -83,6 +215,8 @@ public partial class ModelItemViewModel : ObservableObject
     public string Name => _model.DisplayName;
     public string Size => _model.SizeDescription;
     public bool IsRecommended => _model.IsRecommended;
+    public int LanguageCount => _model.LanguageCount;
+    public bool SupportsTranslation => _model.SupportsTranslation;
 
     [ObservableProperty] private bool _isDownloaded;
     [ObservableProperty] private bool _isActive;
@@ -109,5 +243,42 @@ public partial class ModelItemViewModel : ObservableObject
             ModelStatusType.Error => $"Fehler: {status.ErrorMessage}",
             _ => IsDownloaded ? "Heruntergeladen" : ""
         };
+    }
+}
+
+public partial class CloudProviderViewModel : ObservableObject
+{
+    public string ProviderId { get; }
+    public string DisplayName { get; }
+    public bool HasLlmTranslation { get; }
+    public ObservableCollection<CloudModelItemViewModel> Models { get; } = [];
+
+    [ObservableProperty] private bool _hasApiKey;
+
+    public CloudProviderViewModel(string providerId, string displayName, bool hasApiKey, bool hasLlmTranslation)
+    {
+        ProviderId = providerId;
+        DisplayName = displayName;
+        _hasApiKey = hasApiKey;
+        HasLlmTranslation = hasLlmTranslation;
+    }
+}
+
+public partial class CloudModelItemViewModel : ObservableObject
+{
+    public string FullId { get; }
+    public string DisplayName { get; }
+    public bool SupportsWhisperTranslation { get; }
+
+    [ObservableProperty] private bool _isActive;
+    [ObservableProperty] private bool _isAvailable;
+
+    public CloudModelItemViewModel(string fullId, string displayName, bool isAvailable, bool isActive, bool supportsWhisperTranslation)
+    {
+        FullId = fullId;
+        DisplayName = displayName;
+        _isAvailable = isAvailable;
+        _isActive = isActive;
+        SupportsWhisperTranslation = supportsWhisperTranslation;
     }
 }

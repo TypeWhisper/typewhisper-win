@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
         Title="Willkommen bei TypeWhisper"
-        Width="520" Height="440"
+        Width="520" Height="480"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize">
 
@@ -17,7 +17,7 @@
         <!-- Header -->
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
             <TextBlock Text="TypeWhisper" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="Lokale Sprache-zu-Text Transkription" Foreground="Gray"
+            <TextBlock Text="Sprache-zu-Text Transkription" Foreground="Gray"
                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
         </StackPanel>
 
@@ -38,7 +38,7 @@
                     Width="80" Padding="8,4"/>
         </Grid>
 
-        <!-- Steps indicator -->
+        <!-- Steps indicator (5 steps) -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
             <Ellipse Width="10" Height="10" Margin="4">
                 <Ellipse.Style>
@@ -88,6 +88,18 @@
                     </Style>
                 </Ellipse.Style>
             </Ellipse>
+            <Ellipse Width="10" Height="10" Margin="4">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="#CCC"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="4">
+                                <Setter Property="Fill" Value="#5865F2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
         </StackPanel>
 
         <!-- Content area (switch by step) -->
@@ -95,7 +107,7 @@
             <!-- Step 0: Model selection -->
             <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=0}">
                 <TextBlock Text="1. Modell auswählen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                <TextBlock Text="Wähle ein Sprachmodell. Parakeet bietet die beste Sprachunterstützung, Canary zusätzlich Übersetzung."
+                <TextBlock Text="Wähle ein lokales Sprachmodell. Parakeet bietet die beste Sprachunterstützung, Canary zusätzlich Übersetzung."
                            TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
 
                 <ComboBox SelectedValue="{Binding SelectedModelId}" SelectedValuePath="Tag"
@@ -112,9 +124,47 @@
                 <TextBlock Text="{Binding DownloadStatus}" Foreground="Gray" FontSize="11"/>
             </StackPanel>
 
-            <!-- Step 1: Microphone test -->
+            <!-- Step 1: Cloud providers (optional) -->
             <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=1}">
-                <TextBlock Text="2. Mikrofon testen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="2. Cloud-Provider (optional)" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="Für Cloud-Transkription via Groq oder OpenAI. API-Keys bekommst du auf den jeweiligen Webseiten. Diesen Schritt kannst du überspringen."
+                           TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,16"/>
+
+                <!-- Groq -->
+                <TextBlock Text="Groq" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <PasswordBox Tag="groq" PasswordChanged="CloudApiKey_PasswordChanged"
+                                 Loaded="CloudApiKey_Loaded"
+                                 Padding="6,4" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Testen" Padding="12,4" Margin="8,0,0,0"
+                            Command="{Binding TestCloudKeyCommand}" CommandParameter="groq"/>
+                </Grid>
+
+                <!-- OpenAI -->
+                <TextBlock Text="OpenAI" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <PasswordBox Tag="openai" PasswordChanged="CloudApiKey_PasswordChanged"
+                                 Loaded="CloudApiKey_Loaded"
+                                 Padding="6,4" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Testen" Padding="12,4" Margin="8,0,0,0"
+                            Command="{Binding TestCloudKeyCommand}" CommandParameter="openai"/>
+                </Grid>
+
+                <TextBlock Text="{Binding CloudTestResult}" Foreground="Gray" FontSize="11"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Step 2: Microphone test -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=2}">
+                <TextBlock Text="3. Mikrofon testen" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
                 <TextBlock Text="Sprich etwas und prüfe ob der Pegelbalken ausschlägt."
                            TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
 
@@ -129,9 +179,9 @@
                 </TextBlock>
             </StackPanel>
 
-            <!-- Step 2: Hotkey config -->
-            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=2}">
-                <TextBlock Text="3. Hotkeys konfigurieren" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+            <!-- Step 3: Hotkey config -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=3}">
+                <TextBlock Text="4. Hotkeys konfigurieren" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
                 <TextBlock Text="Konfiguriere die Tastenkombinationen für die Diktierfunktion."
                            TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,12"/>
 
@@ -154,8 +204,8 @@
                 </Grid>
             </StackPanel>
 
-            <!-- Step 3: Done -->
-            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=3}"
+            <!-- Step 4: Done -->
+            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=4}"
                         VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="Alles eingerichtet!" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="TypeWhisper ist bereit. Drücke deinen Hotkey um zu diktieren."
