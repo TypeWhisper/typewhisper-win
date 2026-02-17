@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -27,8 +28,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly IAudioDuckingService _audioDucking;
     private readonly IMediaPauseService _mediaPause;
 
-    private CancellationTokenSource? _processingCts;
+    private CancellationTokenSource _consumerCts = new();
+    private Task? _consumerTask;
     private System.Timers.Timer? _durationTimer;
+    private bool _isRecording;
+    private int _pendingJobCount;
+
+    private readonly Channel<TranscriptionJob> _jobChannel =
+        Channel.CreateBounded<TranscriptionJob>(new BoundedChannelOptions(5)
+        { FullMode = BoundedChannelFullMode.Wait });
 
     // Captured at recording start for the current session
     private Profile? _activeProfile;
@@ -83,6 +91,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audioDucking = audioDucking;
         _mediaPause = mediaPause;
 
+        _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
+
         _audio.AudioLevelChanged += OnAudioLevelChanged;
         _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () => await StartRecording());
         _hotkey.DictationStopRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
@@ -94,11 +104,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"StopRecording error: {ex}");
+                _isRecording = false;
                 _audioDucking.RestoreAudio();
                 _mediaPause.ResumeMedia();
-                State = DictationState.Idle;
                 StatusText = $"Fehler: {ex.Message}";
-                IsOverlayVisible = false;
+                UpdateVisualState();
             }
         });
     }
@@ -121,7 +131,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task StartRecording()
     {
-        if (State != DictationState.Idle) return;
+        if (_isRecording) return;
+        _isRecording = true;
 
         // Capture active window context at recording start
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
@@ -140,6 +151,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             catch (Exception ex)
             {
                 StatusText = $"Modell-Fehler: {ex.Message}";
+                _isRecording = false;
                 return;
             }
         }
@@ -147,6 +159,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (!_modelManager.Engine.IsModelLoaded)
         {
             StatusText = "Kein Modell geladen";
+            _isRecording = false;
             return;
         }
 
@@ -198,7 +211,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task StopRecording()
     {
-        if (State != DictationState.Recording) return;
+        if (!_isRecording) return;
+        _isRecording = false;
 
         _durationTimer?.Stop();
         _durationTimer?.Dispose();
@@ -212,6 +226,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         RecordingSeconds = 0;
 
         // Flush remaining VAD segments
+        List<string> partialSnapshot;
         if (_vad is not null)
         {
             _vad.Flush();
@@ -219,55 +234,75 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _vad.Dispose();
             _vad = null;
         }
+        partialSnapshot = [.. _partialSegments];
 
         if (samples is null || samples.Length < 1600) // < 100ms
         {
-            State = DictationState.Idle;
+            UpdateVisualState();
             StatusText = "Zu kurz";
-            IsOverlayVisible = false;
-            ActiveProcessName = null;
-            ActiveProfileName = null;
             PartialText = "";
             _hotkey.ForceStop();
             return;
         }
 
-        await ProcessAndInsertAsync(samples);
+        // Snapshot all context and enqueue — returns immediately
+        var job = new TranscriptionJob(
+            samples,
+            partialSnapshot,
+            _activeProfile,
+            _capturedProcessName,
+            _capturedWindowTitle,
+            EffectiveLanguage,
+            EffectiveTask,
+            _modelManager.ActiveModelId);
+
+        Interlocked.Increment(ref _pendingJobCount);
+        await _jobChannel.Writer.WriteAsync(job);
+        UpdateVisualState();
     }
 
-    private async Task ProcessAndInsertAsync(float[] samples)
+    private async Task ProcessJobsAsync(CancellationToken ct)
     {
-        State = DictationState.Processing;
-        StatusText = "Verarbeite...";
+        await foreach (var job in _jobChannel.Reader.ReadAllAsync(ct))
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() => UpdateVisualState());
+            await ProcessSingleJobAsync(job, ct);
+            Interlocked.Decrement(ref _pendingJobCount);
+            await Application.Current.Dispatcher.InvokeAsync(() => UpdateVisualState());
+        }
+    }
 
-        _processingCts?.Cancel();
-        _processingCts = new CancellationTokenSource();
-
+    private async Task ProcessSingleJobAsync(TranscriptionJob job, CancellationToken ct)
+    {
         try
         {
-            // Use partial segments if available, otherwise transcribe full audio
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                State = DictationState.Processing;
+                StatusText = "Verarbeite...";
+            });
+
             string rawText;
             string? detectedLanguage = null;
-            double audioDuration = samples.Length / 16000.0;
+            double audioDuration = job.Samples.Length / 16000.0;
 
-            if (_partialSegments.Count > 0)
+            if (job.PartialSegments.Count > 0)
             {
-                rawText = string.Join(" ", _partialSegments);
+                rawText = string.Join(" ", job.PartialSegments);
             }
             else
             {
-                var language = EffectiveLanguage == "auto" ? null : EffectiveLanguage;
-                var task = EffectiveTask;
-                var result = await _modelManager.Engine.TranscribeAsync(samples, language, task, _processingCts.Token);
+                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+                var result = await _modelManager.Engine.TranscribeAsync(
+                    job.Samples, language, job.EffectiveTask, ct);
 
                 if (string.IsNullOrWhiteSpace(result.Text))
                 {
-                    State = DictationState.Idle;
-                    StatusText = "Keine Sprache erkannt";
-                    IsOverlayVisible = false;
-                    ActiveProcessName = null;
-                    ActiveProfileName = null;
-                    PartialText = "";
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        StatusText = "Keine Sprache erkannt";
+                        UpdateVisualState();
+                    });
                     return;
                 }
 
@@ -277,12 +312,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
-                State = DictationState.Idle;
-                StatusText = "Keine Sprache erkannt";
-                IsOverlayVisible = false;
-                ActiveProcessName = null;
-                ActiveProfileName = null;
-                PartialText = "";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    StatusText = "Keine Sprache erkannt";
+                    UpdateVisualState();
+                });
                 return;
             }
 
@@ -291,45 +325,46 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             finalText = _snippets.ApplySnippets(finalText, () =>
             {
                 var text = "";
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.Invoke(() =>
                     text = System.Windows.Clipboard.GetText());
                 return text;
             });
 
             // Translate if configured
-            var translationTarget = _activeProfile?.TranslationTarget
+            var translationTarget = job.ActiveProfile?.TranslationTarget
                 ?? _settings.Current.TranslationTargetLanguage;
             if (!string.IsNullOrEmpty(translationTarget))
             {
-                var language = EffectiveLanguage == "auto" ? null : EffectiveLanguage;
+                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
                 var sourceLang = detectedLanguage ?? language ?? "de";
                 if (sourceLang != translationTarget)
                 {
-                    StatusText = "Übersetze...";
-                    finalText = await _translation.TranslateAsync(finalText, sourceLang, translationTarget, _processingCts.Token);
+                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = "Übersetze...");
+                    finalText = await _translation.TranslateAsync(finalText, sourceLang, translationTarget, ct);
                 }
             }
 
-            TranscribedText = finalText;
-
-            // Insert text
-            State = DictationState.Inserting;
-            StatusText = "Einfügen...";
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                TranscribedText = finalText;
+                State = DictationState.Inserting;
+                StatusText = "Einfügen...";
+            });
 
             var insertResult = await _textInsertion.InsertTextAsync(
                 finalText, _settings.Current.AutoPaste);
 
             // Restore global model if profile override was active
-            var profileModel = EffectiveModelId;
-            if (profileModel is not null && profileModel != _settings.Current.SelectedModelId
+            if (job.ActiveModelIdAtCapture is not null
+                && job.ActiveModelIdAtCapture != _settings.Current.SelectedModelId
                 && _settings.Current.SelectedModelId is not null)
             {
                 await _modelManager.LoadModelAsync(_settings.Current.SelectedModelId);
             }
 
             // Save to history
-            var engineUsed = _modelManager.ActiveModelId is not null && CloudProvider.IsCloudModel(_modelManager.ActiveModelId)
-                ? _modelManager.ActiveModelId
+            var engineUsed = job.ActiveModelIdAtCapture is not null && CloudProvider.IsCloudModel(job.ActiveModelIdAtCapture)
+                ? job.ActiveModelIdAtCapture
                 : "parakeet";
             _history.AddRecord(new TranscriptionRecord
             {
@@ -337,49 +372,69 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 Timestamp = DateTime.UtcNow,
                 RawText = rawText,
                 FinalText = finalText,
-                AppName = _capturedWindowTitle,
-                AppProcessName = _capturedProcessName,
+                AppName = job.CapturedWindowTitle,
+                AppProcessName = job.CapturedProcessName,
                 DurationSeconds = audioDuration,
                 Language = detectedLanguage,
-                ProfileName = _activeProfile?.Name,
+                ProfileName = job.ActiveProfile?.Name,
                 EngineUsed = engineUsed
             });
 
             _sound.PlaySuccessSound();
-            StatusText = insertResult switch
+            await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                InsertionResult.Pasted => "Eingefügt",
-                InsertionResult.CopiedToClipboard => "In Zwischenablage",
-                _ => "Fertig"
-            };
+                StatusText = insertResult switch
+                {
+                    InsertionResult.Pasted => "Eingefügt",
+                    InsertionResult.CopiedToClipboard => "In Zwischenablage",
+                    _ => "Fertig"
+                };
+            });
 
-            // Brief display then hide
-            await Task.Delay(1500);
-            State = DictationState.Idle;
-            IsOverlayVisible = false;
-            StatusText = "Bereit";
-            ActiveProcessName = null;
-            ActiveProfileName = null;
-            PartialText = "";
+            // Delay only for the last job when not recording
+            if (_pendingJobCount <= 1 && !_isRecording)
+            {
+                await Task.Delay(1500, ct);
+            }
         }
         catch (OperationCanceledException)
         {
-            State = DictationState.Idle;
-            StatusText = "Abgebrochen";
-            IsOverlayVisible = false;
-            ActiveProcessName = null;
-            ActiveProfileName = null;
-            PartialText = "";
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                StatusText = "Abgebrochen";
+                UpdateVisualState();
+            });
         }
         catch (Exception ex)
         {
             _sound.PlayErrorSound();
-            State = DictationState.Error;
-            StatusText = $"Fehler: {ex.Message}";
-            await Task.Delay(3000);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                State = DictationState.Error;
+                StatusText = $"Fehler: {ex.Message}";
+            });
+            try { await Task.Delay(3000, ct); } catch (OperationCanceledException) { }
+            await Application.Current.Dispatcher.InvokeAsync(() => UpdateVisualState());
+        }
+    }
+
+    private void UpdateVisualState()
+    {
+        if (_isRecording)
+        {
+            State = DictationState.Recording;
+            IsOverlayVisible = true;
+        }
+        else if (_pendingJobCount > 0)
+        {
+            State = DictationState.Processing;
+            IsOverlayVisible = true;
+        }
+        else
+        {
             State = DictationState.Idle;
-            IsOverlayVisible = false;
             StatusText = "Bereit";
+            IsOverlayVisible = false;
             ActiveProcessName = null;
             ActiveProfileName = null;
             PartialText = "";
@@ -388,7 +443,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     private async void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs e)
     {
-        if (_vad is null || State != DictationState.Recording) return;
+        if (_vad is null || !_isRecording) return;
 
         if (!await _vadLock.WaitAsync(0)) return;
         try
@@ -452,7 +507,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CancelProcessing()
     {
-        _processingCts?.Cancel();
+        // Cancel current consumer, drain pending jobs
+        _consumerCts.Cancel();
+
+        while (_jobChannel.Reader.TryRead(out _))
+            Interlocked.Decrement(ref _pendingJobCount);
+
+        // Restart consumer with fresh CTS
+        _consumerCts = new CancellationTokenSource();
+        _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
+
+        UpdateVisualState();
     }
 
     private void OnAudioLevelChanged(object? sender, AudioLevelEventArgs e)
@@ -466,8 +531,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         {
             _audioDucking.RestoreAudio();
             _mediaPause.ResumeMedia();
-            _processingCts?.Cancel();
-            _processingCts?.Dispose();
+            _jobChannel.Writer.TryComplete();
+            _consumerCts.Cancel();
+            try { _consumerTask?.Wait(TimeSpan.FromSeconds(3)); } catch { /* shutting down */ }
+            _consumerCts.Dispose();
             _durationTimer?.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
@@ -476,6 +543,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _disposed = true;
         }
     }
+
+    private sealed record TranscriptionJob(
+        float[] Samples,
+        List<string> PartialSegments,
+        Profile? ActiveProfile,
+        string? CapturedProcessName,
+        string? CapturedWindowTitle,
+        string? EffectiveLanguage,
+        TranscriptionTask EffectiveTask,
+        string? ActiveModelIdAtCapture);
 }
 
 public enum DictationState
@@ -486,3 +563,4 @@ public enum DictationState
     Inserting,
     Error
 }
+
