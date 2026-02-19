@@ -1,8 +1,7 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.DictionarySection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:TypeWhisper.Windows.Converters"
-             xmlns:models="clr-namespace:TypeWhisper.Core.Models;assembly=TypeWhisper.Core">
+             xmlns:converters="clr-namespace:TypeWhisper.Windows.Converters">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -168,7 +167,7 @@
                     <!-- Entry Cards -->
                     <ItemsControl ItemsSource="{Binding Dictionary.FilteredEntries}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:DictionaryEntry}">
+                            <DataTemplate>
                                 <Border Background="{StaticResource InputBackgroundBrush}"
                                         BorderBrush="{StaticResource BorderBrush}"
                                         BorderThickness="1" CornerRadius="8"
