@@ -1,11 +1,15 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.InfoSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <conv:InvertBoolConverter x:Key="InvertBoolConverter"/>
+            <conv:InvertBoolToVisibilityConverter x:Key="InvertBoolToVisConverter"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -14,7 +18,35 @@
                    Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
         <TextBlock Text="Lokale Sprache-zu-Text Transkription"
                    Foreground="{StaticResource HintBrush}" FontSize="14"
-                   HorizontalAlignment="Center" Margin="0,4,0,24"/>
+                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+
+        <!-- Version -->
+        <TextBlock HorizontalAlignment="Center" Margin="0,4,0,24"
+                   Foreground="{StaticResource HintBrush}" FontSize="12">
+            <Run Text="Version"/>
+            <Run Text="{Binding CurrentAppVersion, Mode=OneWay}"/>
+        </TextBlock>
+
+        <!-- Update check -->
+        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,24">
+            <Button Content="Nach Updates suchen"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Command="{Binding CheckForUpdatesCommand}"
+                    IsEnabled="{Binding IsCheckingForUpdates, Converter={StaticResource InvertBoolConverter}}"
+                    HorizontalAlignment="Center"
+                    Visibility="{Binding IsUpdateAvailable, Converter={StaticResource InvertBoolToVisConverter}}"/>
+
+            <Button Content="Jetzt aktualisieren"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    Command="{Binding ApplyUpdateCommand}"
+                    HorizontalAlignment="Center"
+                    Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVis}}"/>
+
+            <TextBlock Text="{Binding UpdateStatusText}"
+                       Foreground="{StaticResource HintBrush}" FontSize="12"
+                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
+        </StackPanel>
+
         <TextBlock Text="Powered by Parakeet (On-Device)"
                    Foreground="{StaticResource LabelBrush}"
                    HorizontalAlignment="Center"/>

@@ -154,6 +154,30 @@ public sealed class DayLabelConverter : IValueConverter
 }
 
 /// <summary>
+/// Inverts a boolean value.
+/// </summary>
+public sealed class InvertBoolConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is bool b && !b;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is bool b && !b;
+}
+
+/// <summary>
+/// true → Collapsed, false → Visible (inverse of BooleanToVisibilityConverter).
+/// </summary>
+public sealed class InvertBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// int 0 → Visible, non-zero → Collapsed.
 /// Pass ConverterParameter="invert" to reverse.
 /// </summary>

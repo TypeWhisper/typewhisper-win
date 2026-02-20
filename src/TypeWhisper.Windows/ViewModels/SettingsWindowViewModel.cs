@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -17,8 +18,15 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public ProfilesViewModel Profiles { get; }
     public DashboardViewModel Dashboard { get; }
 
+    private readonly UpdateService _updateService;
+
     [ObservableProperty] private UserControl? _currentSection;
     [ObservableProperty] private string _currentSectionName = "Dashboard";
+    [ObservableProperty] private string _updateStatusText = "";
+    [ObservableProperty] private bool _isCheckingForUpdates;
+    [ObservableProperty] private bool _isUpdateAvailable;
+
+    public string CurrentAppVersion => _updateService.CurrentVersion;
 
     private readonly Dictionary<string, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<string, UserControl> _sectionCache = [];
@@ -30,7 +38,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         DictionaryViewModel dictionary,
         SnippetsViewModel snippets,
         ProfilesViewModel profiles,
-        DashboardViewModel dashboard)
+        DashboardViewModel dashboard,
+        UpdateService updateService)
     {
         Settings = settings;
         ModelManager = modelManager;
@@ -39,6 +48,35 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Snippets = snippets;
         Profiles = profiles;
         Dashboard = dashboard;
+        _updateService = updateService;
+    }
+
+    [RelayCommand]
+    private async Task CheckForUpdatesAsync()
+    {
+        IsCheckingForUpdates = true;
+        UpdateStatusText = "Suche nach Updates\u2026";
+
+        await _updateService.CheckForUpdatesAsync();
+
+        IsCheckingForUpdates = false;
+        if (_updateService.IsUpdateAvailable)
+        {
+            IsUpdateAvailable = true;
+            UpdateStatusText = $"Version {_updateService.AvailableVersion} verfügbar!";
+        }
+        else
+        {
+            UpdateStatusText = "Sie verwenden die neueste Version.";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyUpdateAsync()
+    {
+        UpdateStatusText = "Update wird heruntergeladen\u2026";
+        await _updateService.DownloadAndApplyAsync();
+        UpdateStatusText = "Update fehlgeschlagen. Bitte erneut versuchen.";
     }
 
     public void RegisterSection(string name, Func<UserControl> factory)

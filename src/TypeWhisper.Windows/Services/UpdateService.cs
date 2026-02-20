@@ -1,3 +1,4 @@
+using System.Reflection;
 using TypeWhisper.Core;
 using Velopack;
 using Velopack.Sources;
@@ -12,6 +13,27 @@ public sealed class UpdateService
 
     public bool IsUpdateAvailable => _pendingUpdate is not null;
     public string? AvailableVersion => _pendingUpdate?.TargetFullRelease?.Version?.ToString();
+
+    public string CurrentVersion
+    {
+        get
+        {
+            if (_updateManager is { IsInstalled: true, CurrentVersion: { } ver })
+                return ver.ToString();
+
+            var info = Assembly.GetEntryAssembly()
+                ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+
+            if (!string.IsNullOrEmpty(info))
+            {
+                var plus = info.IndexOf('+');
+                return plus > 0 ? info[..plus] : info;
+            }
+
+            return "dev";
+        }
+    }
 
     public event EventHandler? UpdateAvailable;
 
