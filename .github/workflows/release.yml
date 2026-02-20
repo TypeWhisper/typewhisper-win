@@ -45,15 +45,8 @@ jobs:
             --packDir publish `
             --mainExe TypeWhisper.exe `
             --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
+            --channel ${{ matrix.rid }} `
             --outputDir releases
-
-      - name: Rename artifacts
-        shell: pwsh
-        run: |
-          Get-ChildItem releases -File | ForEach-Object {
-            $newName = $_.BaseName + "-${{ matrix.rid }}" + $_.Extension
-            Rename-Item $_.FullName $newName
-          }
 
       - uses: actions/upload-artifact@v4
         with:

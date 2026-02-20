@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using TypeWhisper.Core;
 using Velopack;
 using Velopack.Sources;
@@ -46,8 +47,11 @@ public sealed class UpdateService
     {
         try
         {
+            var channel = RuntimeInformation.OSArchitecture == Architecture.Arm64
+                ? "win-arm64" : "win-x64";
             _updateManager = new UpdateManager(
-                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, false));
+                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, false),
+                new UpdateOptions { ExplicitChannel = channel });
         }
         catch
         {
