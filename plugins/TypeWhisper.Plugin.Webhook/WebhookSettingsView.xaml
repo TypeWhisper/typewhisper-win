@@ -1,0 +1,25 @@
+<UserControl x:Class="TypeWhisper.Plugin.Webhook.WebhookSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="0,4">
+        <TextBlock Text="Webhook URL" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBox x:Name="UrlBox" TextChanged="OnUrlChanged" />
+
+        <TextBlock Text="Secret (optional, for HMAC-SHA256 signature)" FontWeight="SemiBold" Margin="0,12,0,4" />
+        <PasswordBox x:Name="SecretBox" PasswordChanged="OnSecretChanged" />
+
+        <TextBlock Text="Event Filters" FontWeight="SemiBold" Margin="0,12,0,4" />
+        <CheckBox x:Name="RecordingStartedCheck" Content="Recording Started"
+                  Margin="0,2" Checked="OnFilterChanged" Unchecked="OnFilterChanged" />
+        <CheckBox x:Name="RecordingStoppedCheck" Content="Recording Stopped"
+                  Margin="0,2" Checked="OnFilterChanged" Unchecked="OnFilterChanged" />
+        <CheckBox x:Name="TranscriptionCompletedCheck" Content="Transcription Completed"
+                  Margin="0,2" Checked="OnFilterChanged" Unchecked="OnFilterChanged" />
+        <CheckBox x:Name="TranscriptionFailedCheck" Content="Transcription Failed"
+                  Margin="0,2" Checked="OnFilterChanged" Unchecked="OnFilterChanged" />
+        <CheckBox x:Name="TextInsertedCheck" Content="Text Inserted"
+                  Margin="0,2" Checked="OnFilterChanged" Unchecked="OnFilterChanged" />
+
+        <TextBlock x:Name="StatusText" Margin="0,8,0,0" FontSize="12" />
+    </StackPanel>
+</UserControl>
