@@ -6,7 +6,10 @@ using CommunityToolkit.Mvvm.Input;
 using SherpaOnnx;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -26,6 +29,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly ITranslationService _translation;
     private readonly IAudioDuckingService _audioDucking;
     private readonly IMediaPauseService _mediaPause;
+    private readonly PluginEventBus _eventBus;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -89,6 +93,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _translation = translation;
         _audioDucking = audioDucking;
         _mediaPause = mediaPause;
+        _eventBus = modelManager.PluginManager.EventBus;
 
         _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
 
@@ -188,6 +193,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _mediaPause.PauseMedia();
 
         _audio.StartRecording();
+        _eventBus.Publish(new RecordingStartedEvent());
 
         State = DictationState.Recording;
         StatusText = "Aufnahme...";
@@ -220,6 +226,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audio.SamplesAvailable -= OnSamplesAvailable;
 
         var samples = _audio.StopRecording();
+        _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = _audio.RecordingDuration.TotalSeconds });
         _audioDucking.RestoreAudio();
         _mediaPause.ResumeMedia();
         RecordingSeconds = 0;
@@ -319,6 +326,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            _eventBus.Publish(new TranscriptionCompletedEvent
+            {
+                Text = rawText,
+                DetectedLanguage = detectedLanguage,
+                DurationSeconds = audioDuration,
+                ModelId = job.ActiveModelIdAtCapture
+            });
+
             // Apply corrections and snippets
             var finalText = _dictionary.ApplyCorrections(rawText);
             finalText = _snippets.ApplySnippets(finalText, () =>
@@ -328,6 +343,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     text = System.Windows.Clipboard.GetText());
                 return text;
             });
+
+            // Post-processor pipeline
+            var postProcessors = _modelManager.PluginManager.PostProcessors;
+            if (postProcessors.Count > 0)
+            {
+                var context = new PostProcessingContext
+                {
+                    SourceLanguage = detectedLanguage ?? job.EffectiveLanguage,
+                    ActiveAppName = job.CapturedWindowTitle,
+                    ActiveAppProcessName = job.CapturedProcessName,
+                    ProfileName = job.ActiveProfile?.Name,
+                    AudioDurationSeconds = audioDuration
+                };
+                foreach (var processor in postProcessors)
+                {
+                    finalText = await processor.ProcessAsync(finalText, context, ct);
+                }
+            }
 
             // Translate if configured
             var translationTarget = job.ActiveProfile?.TranslationTarget
@@ -352,6 +385,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             var insertResult = await _textInsertion.InsertTextAsync(
                 finalText, _settings.Current.AutoPaste);
+
+            _eventBus.Publish(new TextInsertedEvent
+            {
+                Text = finalText,
+                TargetApp = job.CapturedProcessName
+            });
 
             // Restore global model if profile override was active
             if (job.ActiveModelIdAtCapture is not null
@@ -406,6 +445,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            _eventBus.Publish(new TranscriptionFailedEvent
+            {
+                ErrorMessage = ex.Message,
+                ModelId = job.ActiveModelIdAtCapture
+            });
             _sound.PlayErrorSound();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
