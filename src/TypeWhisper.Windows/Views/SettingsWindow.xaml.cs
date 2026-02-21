@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
         viewModel.RegisterSection("Profile", () => new ProfilesSection { DataContext = viewModel });
         viewModel.RegisterSection("Wörterbuch", () => new DictionarySection { DataContext = viewModel });
         viewModel.RegisterSection("Snippets", () => new SnippetsSection { DataContext = viewModel });
+        viewModel.RegisterSection("Erweiterungen", () => new PluginsSection { DataContext = viewModel });
         viewModel.RegisterSection("Verlauf", () => new HistorySection { DataContext = viewModel });
         viewModel.RegisterSection("Info", () => new InfoSection { DataContext = viewModel });
 

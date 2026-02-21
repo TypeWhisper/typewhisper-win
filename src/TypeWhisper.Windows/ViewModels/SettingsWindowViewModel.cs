@@ -17,6 +17,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public SnippetsViewModel Snippets { get; }
     public ProfilesViewModel Profiles { get; }
     public DashboardViewModel Dashboard { get; }
+    public PluginsViewModel Plugins { get; }
 
     private readonly UpdateService _updateService;
 
@@ -39,6 +40,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SnippetsViewModel snippets,
         ProfilesViewModel profiles,
         DashboardViewModel dashboard,
+        PluginsViewModel plugins,
         UpdateService updateService)
     {
         Settings = settings;
@@ -48,6 +50,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Snippets = snippets;
         Profiles = profiles;
         Dashboard = dashboard;
+        Plugins = plugins;
         _updateService = updateService;
     }
 

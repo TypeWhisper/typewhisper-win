@@ -1,0 +1,117 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.PluginsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
+             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <DockPanel Margin="24">
+        <!-- Header -->
+        <TextBlock DockPanel.Dock="Top" Text="Erweiterungen" Style="{StaticResource SectionHeaderStyle}"/>
+        <TextBlock DockPanel.Dock="Top"
+                   Text="Plugins erweitern TypeWhisper um zusaetzliche Transkriptions-Engines, LLM-Anbieter und Nachbearbeitung."
+                   Style="{StaticResource HintStyle}" Margin="0,0,0,16"/>
+
+        <!-- Empty state -->
+        <TextBlock x:Name="EmptyState"
+                   Text="Keine Plugins gefunden."
+                   Foreground="#808080" FontSize="14"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="Collapsed"/>
+
+        <!-- Plugin list -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Plugins.Plugins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:PluginItemViewModel}">
+                        <Border Background="{StaticResource InputBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="8"
+                                Padding="16,12" Margin="0,0,0,8">
+                            <StackPanel>
+                                <!-- Top row: name, badges, toggle -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Name + version + author -->
+                                    <StackPanel Grid.Column="0" Orientation="Vertical">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="14" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Version, StringFormat='  v{0}'}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="12" VerticalAlignment="Center"
+                                                       Margin="4,0,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Author -->
+                                        <TextBlock Text="{Binding Author}"
+                                                   Foreground="{StaticResource HintBrush}"
+                                                   FontSize="11" Margin="0,2,0,0"
+                                                   Visibility="{Binding Author, Converter={StaticResource NonEmptyToVis}}"/>
+
+                                        <!-- Capability badges -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Visibility="{Binding IsTranscriptionProvider, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="Transkription" Foreground="#CCCCCC" FontSize="10"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Visibility="{Binding IsLlmProvider, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="LLM" Foreground="#CCCCCC" FontSize="10"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Visibility="{Binding IsPostProcessor, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="Post-Processing" Foreground="#CCCCCC" FontSize="10"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- Enable/Disable toggle -->
+                                    <CheckBox Grid.Column="1"
+                                              IsChecked="{Binding IsEnabled}"
+                                              Style="{StaticResource InputCheckBoxStyle}"
+                                              VerticalAlignment="Top" Margin="12,0,0,0"/>
+                                </Grid>
+
+                                <!-- Description -->
+                                <TextBlock Text="{Binding Description}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           FontSize="12" TextWrapping="Wrap"
+                                           Margin="0,8,0,0"
+                                           Visibility="{Binding Description, Converter={StaticResource NonEmptyToVis}}"/>
+
+                                <!-- Expand/Collapse for settings -->
+                                <StackPanel Visibility="{Binding IsEnabled, Converter={StaticResource BoolToVis}}"
+                                            Margin="0,8,0,0">
+                                    <Button Content="{Binding ExpandButtonText}"
+                                            Style="{StaticResource LinkButtonStyle}"
+                                            Click="ToggleExpanded_Click"
+                                            HorizontalAlignment="Left"/>
+
+                                    <!-- Plugin settings view -->
+                                    <ContentControl Content="{Binding SettingsView}"
+                                                    Margin="0,8,0,0"
+                                                    Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

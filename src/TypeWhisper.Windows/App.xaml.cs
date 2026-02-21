@@ -234,6 +234,7 @@ public partial class App : Application
         services.AddSingleton<DictionaryViewModel>();
         services.AddSingleton<SnippetsViewModel>();
         services.AddSingleton<ProfilesViewModel>();
+        services.AddSingleton<PluginsViewModel>();
         services.AddSingleton<SettingsWindowViewModel>();
         services.AddSingleton<FileTranscriptionViewModel>();
         services.AddSingleton<DashboardViewModel>();
