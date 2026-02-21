@@ -47,6 +47,9 @@ public record AppSettings
     // Onboarding
     public bool HasCompletedOnboarding { get; init; }
 
+    // Plugin state
+    public Dictionary<string, bool> PluginEnabledState { get; init; } = new();
+
     public static AppSettings Default => new();
 }
 

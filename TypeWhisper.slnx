@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Project Path="src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <Project Path="src/TypeWhisper.Windows/TypeWhisper.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
