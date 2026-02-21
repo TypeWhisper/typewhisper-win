@@ -106,5 +106,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         CurrentSection = section;
         CurrentSectionName = sectionName;
+
+        // Refresh plugin availability when navigating to Modelle
+        // (API keys may have been changed in Erweiterungen)
+        if (sectionName == "Modelle")
+            ModelManager.RefreshPluginAvailability();
     }
 }
