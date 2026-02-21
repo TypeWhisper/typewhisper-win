@@ -5,23 +5,28 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
-using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Core.Translation;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.Services;
 
 public sealed class TranslationService : ITranslationService, IDisposable
 {
-    private readonly IReadOnlyList<CloudProviderBase> _cloudProviders;
+    private readonly PluginManager _pluginManager;
     private readonly HttpClient _httpClient = new();
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1);
     private readonly Dictionary<string, LoadedTranslationModel> _loadedModels = new();
     private readonly HashSet<string> _loadingModels = new();
     private bool _disposed;
 
-    public TranslationService(IReadOnlyList<CloudProviderBase> cloudProviders)
+    private const string TranslationSystemPrompt =
+        "You are a professional translator. Translate the given text accurately and naturally. " +
+        "Output ONLY the translation, nothing else. Do not add explanations, notes, or formatting.";
+
+    public TranslationService(PluginManager pluginManager)
     {
-        _cloudProviders = cloudProviders;
+        _pluginManager = pluginManager;
     }
 
     public bool IsModelReady(string sourceLang, string targetLang)
@@ -41,18 +46,20 @@ public sealed class TranslationService : ITranslationService, IDisposable
         if (sourceLang == targetLang) return text;
 
         // Prefer cloud LLM translation when available (faster, supports all language pairs)
-        var cloudProvider = GetConfiguredTranslationProvider();
-        if (cloudProvider is not null)
+        var llmProvider = GetConfiguredTranslationProvider();
+        if (llmProvider is not null)
         {
-            return await cloudProvider.TranslateAsync(text, sourceLang, targetLang, ct);
+            var model = llmProvider.SupportedModels.First().Id;
+            var userText = $"Translate from {sourceLang} to {targetLang}:\n\n{text}";
+            return await llmProvider.ProcessAsync(TranslationSystemPrompt, userText, model, ct);
         }
 
         // Fallback: local ONNX Marian models
         return await TranslateLocalAsync(text, sourceLang, targetLang, ct);
     }
 
-    private CloudProviderBase? GetConfiguredTranslationProvider() =>
-        _cloudProviders.FirstOrDefault(p => p.SupportsTranslation);
+    private ILlmProviderPlugin? GetConfiguredTranslationProvider() =>
+        _pluginManager.LlmProviders.FirstOrDefault(p => p.IsAvailable);
 
     private async Task<string> TranslateLocalAsync(string text, string sourceLang, string targetLang, CancellationToken ct)
     {
@@ -64,7 +71,7 @@ public sealed class TranslationService : ITranslationService, IDisposable
             return await Task.Run(() => RunInference(model, text), ct);
         }
 
-        // Chain through English: source→en + en→target
+        // Chain through English: source->en + en->target
         if (sourceLang != "en" && targetLang != "en")
         {
             var toEn = TranslationModelInfo.FindModel(sourceLang, "en");
@@ -79,7 +86,7 @@ public sealed class TranslationService : ITranslationService, IDisposable
             }
         }
 
-        throw new NotSupportedException($"Keine Übersetzung verfügbar für {sourceLang}→{targetLang}");
+        throw new NotSupportedException($"Keine Übersetzung verfügbar für {sourceLang}->{targetLang}");
     }
 
     private async Task<LoadedTranslationModel> GetOrLoadModelAsync(string sourceLang, string targetLang, CancellationToken ct)
@@ -103,7 +110,7 @@ public sealed class TranslationService : ITranslationService, IDisposable
             _loadingModels.Add(key);
 
             var modelInfo = TranslationModelInfo.FindModel(sourceLang, targetLang)
-                ?? throw new NotSupportedException($"No translation model for {sourceLang}→{targetLang}");
+                ?? throw new NotSupportedException($"No translation model for {sourceLang}->{targetLang}");
 
             var modelDir = Path.Combine(TypeWhisperEnvironment.ModelsPath, modelInfo.SubDirectory);
             Directory.CreateDirectory(modelDir);

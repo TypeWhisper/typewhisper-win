@@ -2,10 +2,11 @@ using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
-using TypeWhisper.Core;
+using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
-using TypeWhisper.Core.Services.Cloud;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.Services.Providers;
 
 namespace TypeWhisper.Windows.Services;
@@ -13,7 +14,7 @@ namespace TypeWhisper.Windows.Services;
 public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
     private readonly Dictionary<string, LocalProviderBase> _localProviders;
-    private readonly Dictionary<string, CloudProviderBase> _cloudProviders;
+    private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
@@ -30,17 +31,48 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     }
 
     public IReadOnlyList<LocalProviderBase> LocalProviders => [.. _localProviders.Values];
-    public IReadOnlyList<CloudProviderBase> CloudProviders => [.. _cloudProviders.Values];
+    public PluginManager PluginManager => _pluginManager;
+
+    /// <summary>
+    /// Checks whether a model ID refers to a plugin-provided model.
+    /// Plugin model IDs use the format "plugin:{pluginId}:{modelId}".
+    /// </summary>
+    public static bool IsPluginModel(string modelId) => modelId.StartsWith("plugin:");
+
+    /// <summary>
+    /// Parses a plugin model ID into its components.
+    /// </summary>
+    public static (string PluginId, string ModelId) ParsePluginModelId(string modelId)
+    {
+        if (!IsPluginModel(modelId))
+            throw new ArgumentException($"Not a plugin model ID: {modelId}");
+
+        // Format: "plugin:{pluginId}:{modelId}"
+        var firstColon = modelId.IndexOf(':');
+        var secondColon = modelId.IndexOf(':', firstColon + 1);
+        if (secondColon < 0)
+            throw new ArgumentException($"Invalid plugin model ID format: {modelId}");
+
+        return (modelId[(firstColon + 1)..secondColon], modelId[(secondColon + 1)..]);
+    }
+
+    /// <summary>
+    /// Builds a full plugin model ID from its components.
+    /// </summary>
+    public static string GetPluginModelId(string pluginId, string modelId) =>
+        $"plugin:{pluginId}:{modelId}";
 
     public ITranscriptionEngine Engine
     {
         get
         {
-            if (_activeModelId is not null && CloudProvider.IsCloudModel(_activeModelId))
+            if (_activeModelId is not null && IsPluginModel(_activeModelId))
             {
-                var (providerId, _) = CloudProvider.ParseCloudModelId(_activeModelId);
-                if (_cloudProviders.TryGetValue(providerId, out var cloud))
-                    return cloud;
+                var (pluginId, _) = ParsePluginModelId(_activeModelId);
+                var plugin = _pluginManager.TranscriptionEngines
+                    .FirstOrDefault(e => e.PluginId == pluginId);
+                if (plugin is not null)
+                    return new PluginTranscriptionEngineAdapter(plugin);
             }
 
             if (_loadedLocalModelId is not null && _localProviders.TryGetValue(_loadedLocalModelId, out var local))
@@ -52,56 +84,33 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     public ModelManagerService(
         IEnumerable<LocalProviderBase> localProviders,
-        IEnumerable<CloudProviderBase> cloudProviders,
+        PluginManager pluginManager,
         ISettingsService settings)
     {
         _localProviders = localProviders.ToDictionary(p => p.Id);
-        _cloudProviders = cloudProviders.ToDictionary(p => p.Id);
+        _pluginManager = pluginManager;
         _settings = settings;
 
         foreach (var p in _localProviders.Values)
             _modelStatuses[p.Id] = ModelStatus.NotDownloaded;
-
-        ConfigureProviderKeys();
-        settings.SettingsChanged += _ => ConfigureProviderKeys();
     }
-
-    private void ConfigureProviderKeys()
-    {
-        foreach (var provider in _cloudProviders.Values)
-        {
-            var encrypted = GetEncryptedKey(provider.Id);
-            if (!string.IsNullOrEmpty(encrypted))
-            {
-                var key = ApiKeyProtection.Decrypt(encrypted);
-                if (!string.IsNullOrEmpty(key))
-                    provider.Configure(key);
-            }
-        }
-    }
-
-    private string? GetEncryptedKey(string providerId) => providerId switch
-    {
-        "groq" => _settings.Current.GroqApiKey,
-        "openai" => _settings.Current.OpenAiApiKey,
-        _ => null
-    };
 
     public ModelStatus GetStatus(string modelId)
     {
-        if (CloudProvider.IsCloudModel(modelId))
+        if (IsPluginModel(modelId))
         {
             if (_activeModelId == modelId) return ModelStatus.Ready;
-            var (providerId, _) = CloudProvider.ParseCloudModelId(modelId);
-            var provider = _cloudProviders.GetValueOrDefault(providerId);
-            return provider is { IsConfigured: true } ? ModelStatus.Ready : ModelStatus.NotDownloaded;
+            var (pluginId, _) = ParsePluginModelId(modelId);
+            var plugin = _pluginManager.TranscriptionEngines
+                .FirstOrDefault(e => e.PluginId == pluginId);
+            return plugin is { IsConfigured: true } ? ModelStatus.Ready : ModelStatus.NotDownloaded;
         }
         return _modelStatuses.GetValueOrDefault(modelId, ModelStatus.NotDownloaded);
     }
 
     public bool IsDownloaded(string modelId)
     {
-        if (CloudProvider.IsCloudModel(modelId)) return true;
+        if (IsPluginModel(modelId)) return true;
         return _localProviders.TryGetValue(modelId, out var provider) && provider.IsDownloaded;
     }
 
@@ -118,14 +127,15 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     public async Task LoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
-        if (CloudProvider.IsCloudModel(modelId))
+        if (IsPluginModel(modelId))
         {
-            var (providerId, cloudModelId) = CloudProvider.ParseCloudModelId(modelId);
-            var provider = _cloudProviders.GetValueOrDefault(providerId)
-                ?? throw new ArgumentException($"Unknown provider: {providerId}");
-            if (!provider.IsConfigured)
-                throw new InvalidOperationException($"Kein API-Key für {provider.DisplayName}");
-            provider.SelectTranscriptionModel(cloudModelId);
+            var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
+            var plugin = _pluginManager.TranscriptionEngines
+                .FirstOrDefault(e => e.PluginId == pluginId)
+                ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
+            if (!plugin.IsConfigured)
+                throw new InvalidOperationException($"Kein API-Key für {plugin.ProviderDisplayName}");
+            plugin.SelectModel(pluginModelId);
             ActiveModelId = modelId;
             return;
         }
@@ -268,9 +278,41 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             _httpClient.Dispose();
             foreach (var p in _localProviders.Values)
                 p.Dispose();
-            foreach (var p in _cloudProviders.Values)
-                p.Dispose();
             _disposed = true;
         }
+    }
+}
+
+/// <summary>
+/// Adapts a plugin transcription engine to the ITranscriptionEngine interface
+/// used by the rest of the application.
+/// </summary>
+internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
+{
+    private readonly ITranscriptionEnginePlugin _plugin;
+
+    public PluginTranscriptionEngineAdapter(ITranscriptionEnginePlugin plugin) => _plugin = plugin;
+
+    public bool IsModelLoaded => _plugin.IsConfigured && _plugin.SelectedModelId is not null;
+
+    public Task LoadModelAsync(string modelPath, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public void UnloadModel() { }
+
+    public async Task<TranscriptionResult> TranscribeAsync(
+        float[] audioSamples, string? language = null,
+        TranscriptionTask task = TranscriptionTask.Transcribe,
+        CancellationToken cancellationToken = default)
+    {
+        var wavBytes = WavEncoder.Encode(audioSamples);
+        var translate = task == TranscriptionTask.Translate;
+        var result = await _plugin.TranscribeAsync(wavBytes, language, translate, null, cancellationToken);
+        return new TranscriptionResult
+        {
+            Text = result.Text,
+            DetectedLanguage = result.DetectedLanguage,
+            Duration = result.DurationSeconds
+        };
     }
 }

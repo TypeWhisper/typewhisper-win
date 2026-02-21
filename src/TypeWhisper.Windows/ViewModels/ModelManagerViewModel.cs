@@ -1,11 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
-using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -18,10 +15,6 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
-
-    // Cloud provider API keys
-    [ObservableProperty] private string _groqApiKey = "";
-    [ObservableProperty] private string _openAiApiKey = "";
 
     public ObservableCollection<ModelItemViewModel> LocalModels { get; } = [];
     public ObservableCollection<CloudProviderViewModel> CloudProviders { get; } = [];
@@ -38,24 +31,21 @@ public partial class ModelManagerViewModel : ObservableObject
             LocalModels.Add(new ModelItemViewModel(provider.Model, _modelManager));
         }
 
-        // Load API keys from settings (decrypt)
-        _groqApiKey = ApiKeyProtection.Decrypt(_settings.Current.GroqApiKey ?? "");
-        _openAiApiKey = ApiKeyProtection.Decrypt(_settings.Current.OpenAiApiKey ?? "");
-
-        // Build cloud provider view models from providers
-        foreach (var provider in _modelManager.CloudProviders)
+        // Build cloud provider view models from plugin transcription engines
+        foreach (var engine in _modelManager.PluginManager.TranscriptionEngines)
         {
-            var hasKey = provider.IsConfigured;
+            var hasKey = engine.IsConfigured;
+            var isLlmProvider = _modelManager.PluginManager.LlmProviders
+                .Any(l => l.PluginId == engine.PluginId);
             var providerVm = new CloudProviderViewModel(
-                provider.Id, provider.DisplayName, hasKey,
-                provider.TranslationModel is not null);
-            foreach (var model in provider.TranscriptionModels)
+                engine.PluginId, engine.ProviderDisplayName, hasKey, isLlmProvider);
+            foreach (var model in engine.TranscriptionModels)
             {
-                var fullId = CloudProvider.GetFullModelId(provider.Id, model.Id);
+                var fullId = ModelManagerService.GetPluginModelId(engine.PluginId, model.Id);
                 providerVm.Models.Add(new CloudModelItemViewModel(
                     fullId, model.DisplayName, hasKey,
                     _modelManager.ActiveModelId == fullId,
-                    model.SupportsTranslation));
+                    engine.SupportsTranslation));
             }
             CloudProviders.Add(providerVm);
         }
@@ -73,30 +63,20 @@ public partial class ModelManagerViewModel : ObservableObject
         };
     }
 
-    partial void OnGroqApiKeyChanged(string value)
+    /// <summary>
+    /// Refreshes cloud provider availability based on current plugin state.
+    /// Called by plugin settings views after API key changes.
+    /// </summary>
+    public void RefreshPluginAvailability()
     {
-        var encrypted = string.IsNullOrWhiteSpace(value) ? null : ApiKeyProtection.Encrypt(value);
-        _settings.Save(_settings.Current with { GroqApiKey = encrypted });
-        RefreshProviderAvailability("groq", !string.IsNullOrWhiteSpace(value));
-    }
-
-    partial void OnOpenAiApiKeyChanged(string value)
-    {
-        var encrypted = string.IsNullOrWhiteSpace(value) ? null : ApiKeyProtection.Encrypt(value);
-        _settings.Save(_settings.Current with { OpenAiApiKey = encrypted });
-        RefreshProviderAvailability("openai", !string.IsNullOrWhiteSpace(value));
-    }
-
-    private void RefreshProviderAvailability(string providerId, bool hasKey)
-    {
-        foreach (var p in CloudProviders)
+        foreach (var providerVm in CloudProviders)
         {
-            if (p.ProviderId == providerId)
-            {
-                p.HasApiKey = hasKey;
-                foreach (var m in p.Models)
-                    m.IsAvailable = hasKey;
-            }
+            var engine = _modelManager.PluginManager.TranscriptionEngines
+                .FirstOrDefault(e => e.PluginId == providerVm.ProviderId);
+            var hasKey = engine?.IsConfigured ?? false;
+            providerVm.HasApiKey = hasKey;
+            foreach (var m in providerVm.Models)
+                m.IsAvailable = hasKey;
         }
     }
 
@@ -106,13 +86,6 @@ public partial class ModelManagerViewModel : ObservableObject
             foreach (var m in p.Models)
                 m.IsActive = _modelManager.ActiveModelId == m.FullId;
     }
-
-    private string? GetApiKeyForProvider(string providerId) => providerId switch
-    {
-        "groq" => string.IsNullOrWhiteSpace(GroqApiKey) ? null : GroqApiKey,
-        "openai" => string.IsNullOrWhiteSpace(OpenAiApiKey) ? null : OpenAiApiKey,
-        _ => null
-    };
 
     [RelayCommand]
     private async Task DownloadAndLoadModel(string modelId)
@@ -158,45 +131,6 @@ public partial class ModelManagerViewModel : ObservableObject
             IsBusy = false;
             BusyMessage = null;
         }
-    }
-
-    [RelayCommand]
-    private async Task TestApiKey(string providerId)
-    {
-        var provider = _modelManager.CloudProviders.FirstOrDefault(p => p.Id == providerId);
-        if (provider is null) return;
-
-        var apiKey = GetApiKeyForProvider(providerId);
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            BusyMessage = "Bitte zuerst einen API-Key eingeben";
-            await Task.Delay(2000);
-            BusyMessage = null;
-            return;
-        }
-
-        IsBusy = true;
-        BusyMessage = $"{provider.DisplayName} API-Key wird getestet...";
-        try
-        {
-            using var httpClient = new HttpClient();
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{provider.BaseUrl}/v1/models");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            var response = await httpClient.SendAsync(request);
-
-            if (response.IsSuccessStatusCode)
-                BusyMessage = $"{provider.DisplayName}: API-Key gültig!";
-            else
-                BusyMessage = $"{provider.DisplayName}: Ungültiger API-Key (HTTP {(int)response.StatusCode})";
-        }
-        catch (Exception ex)
-        {
-            BusyMessage = $"Verbindungsfehler: {ex.Message}";
-        }
-
-        await Task.Delay(2500);
-        IsBusy = false;
-        BusyMessage = null;
     }
 
     [RelayCommand]

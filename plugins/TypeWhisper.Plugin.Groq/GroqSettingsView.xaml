@@ -1,0 +1,17 @@
+<UserControl x:Class="TypeWhisper.Plugin.Groq.GroqSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="0,4">
+        <TextBlock Text="API Key" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnPasswordChanged" />
+            <Button Grid.Column="1" Content="Testen" Margin="8,0,0,0" Padding="12,4"
+                    Click="OnTestClick" x:Name="TestButton" />
+        </Grid>
+        <TextBlock x:Name="StatusText" Margin="0,4,0,0" FontSize="12" />
+    </StackPanel>
+</UserControl>

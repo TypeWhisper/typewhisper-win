@@ -130,30 +130,10 @@
                                     </TextBlock.Style>
                                 </TextBlock>
 
-                                <!-- API Key Row -->
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="API-Key:" Foreground="{StaticResource LabelBrush}"
-                                               VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <PasswordBox Grid.Column="1"
-                                                 Tag="{Binding ProviderId}"
-                                                 Loaded="ApiKeyPasswordBox_Loaded"
-                                                 PasswordChanged="ApiKeyPasswordBox_PasswordChanged"
-                                                 Background="#2A2A2A"
-                                                 Foreground="{StaticResource TextBrush}"
-                                                 BorderBrush="{StaticResource BorderBrush}"
-                                                 BorderThickness="1" Padding="8,6"
-                                                 VerticalAlignment="Center"/>
-                                    <Button Grid.Column="2" Content="Testen"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Padding="12,6" Margin="8,0,0,0"
-                                            Command="{Binding DataContext.ModelManager.TestApiKeyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding ProviderId}"/>
-                                </Grid>
+                                <!-- API Key hint -->
+                                <TextBlock Foreground="{StaticResource HintBrush}" FontSize="11" Margin="0,0,0,8"
+                                           FontStyle="Italic"
+                                           Text="API-Key konfigurieren unter Erweiterungen"/>
 
                                 <!-- Transcription Models List (only visible when API key is set) -->
                                 <TextBlock Text="Transkriptions-Modelle:" Foreground="{StaticResource LabelBrush}"

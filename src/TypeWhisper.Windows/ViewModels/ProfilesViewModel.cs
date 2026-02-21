@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Translation;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -54,10 +55,10 @@ public partial class ProfilesViewModel : ObservableObject
         var options = new List<ModelOption> { new(null, "Global (Standard)") };
         foreach (var provider in modelManager.LocalProviders)
             options.Add(new(provider.Id, provider.DisplayName));
-        foreach (var provider in modelManager.CloudProviders)
-            foreach (var model in provider.TranscriptionModels)
-                options.Add(new(CloudProvider.GetFullModelId(provider.Id, model.Id),
-                    $"{provider.DisplayName}: {model.DisplayName}"));
+        foreach (var engine in modelManager.PluginManager.TranscriptionEngines)
+            foreach (var model in engine.TranscriptionModels)
+                options.Add(new(ModelManagerService.GetPluginModelId(engine.PluginId, model.Id),
+                    $"{engine.ProviderDisplayName}: {model.DisplayName}"));
         AvailableModelOptions = options;
         _profiles.ProfilesChanged += RefreshProfiles;
         RefreshProfiles();

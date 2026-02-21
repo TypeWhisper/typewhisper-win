@@ -4,8 +4,8 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Data;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Services;
-using TypeWhisper.Core.Services.Cloud;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.Services.Providers;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views;
@@ -66,6 +66,10 @@ public partial class App : Application
         var settings = _serviceProvider.GetRequiredService<ISettingsService>();
         settings.Load();
 
+        // Initialize plugins (must happen after settings.Load so enabled state is available)
+        var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();
+        pluginManager.InitializeAsync().GetAwaiter().GetResult();
+
         // Setup sound service
         var soundService = _serviceProvider.GetRequiredService<SoundService>();
         soundService.IsEnabled = settings.Current.SoundFeedbackEnabled;
@@ -124,7 +128,7 @@ public partial class App : Application
             _welcomeWindow.Show();
         }
 
-        // Auto-load previously selected model
+        // Auto-load previously selected model (after plugin initialization)
         if (!string.IsNullOrEmpty(settings.Current.SelectedModelId))
         {
             var modelManager = _serviceProvider.GetRequiredService<ModelManagerService>();
@@ -185,17 +189,16 @@ public partial class App : Application
         services.AddSingleton<LocalProviderBase>(sp => sp.GetRequiredService<ParakeetProvider>());
         services.AddSingleton<LocalProviderBase>(sp => sp.GetRequiredService<CanaryProvider>());
 
-        // Cloud providers
-        services.AddSingleton<GroqProvider>();
-        services.AddSingleton<OpenAiProvider>();
-        services.AddSingleton<CloudProviderBase>(sp => sp.GetRequiredService<GroqProvider>());
-        services.AddSingleton<CloudProviderBase>(sp => sp.GetRequiredService<OpenAiProvider>());
+        // Plugin infrastructure
+        services.AddSingleton<PluginLoader>();
+        services.AddSingleton<PluginEventBus>();
+        services.AddSingleton<PluginManager>();
 
-        // Model manager (consumes all providers)
+        // Model manager (consumes local providers and plugin manager)
         services.AddSingleton<ModelManagerService>(sp =>
             new ModelManagerService(
                 sp.GetServices<LocalProviderBase>(),
-                sp.GetServices<CloudProviderBase>(),
+                sp.GetRequiredService<PluginManager>(),
                 sp.GetRequiredService<ISettingsService>()));
 
         // Audio
@@ -210,9 +213,9 @@ public partial class App : Application
         services.AddSingleton<ISnippetService, SnippetService>();
         services.AddSingleton<IProfileService, ProfileService>();
 
-        // Translation (consumes cloud providers for LLM translation)
+        // Translation (uses plugin manager for LLM providers)
         services.AddSingleton<ITranslationService>(sp =>
-            new TranslationService(sp.GetServices<CloudProviderBase>().ToList()));
+            new TranslationService(sp.GetRequiredService<PluginManager>()));
 
         // Services
         services.AddSingleton<HotkeyService>();

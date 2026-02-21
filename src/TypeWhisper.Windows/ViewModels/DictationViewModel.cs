@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.Input;
 using SherpaOnnx;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
-using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -174,7 +173,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         PartialText = "";
         _vad?.Dispose();
         _vad = null;
-        var useVad = _modelManager.ActiveModelId is null || !CloudProvider.IsCloudModel(_modelManager.ActiveModelId);
+        var useVad = _modelManager.ActiveModelId is null || !ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
         if (useVad)
         {
             _vad = CreateVoiceActivityDetector();
@@ -363,7 +362,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             }
 
             // Save to history
-            var engineUsed = job.ActiveModelIdAtCapture is not null && CloudProvider.IsCloudModel(job.ActiveModelIdAtCapture)
+            var engineUsed = job.ActiveModelIdAtCapture is not null && ModelManagerService.IsPluginModel(job.ActiveModelIdAtCapture)
                 ? job.ActiveModelIdAtCapture
                 : "parakeet";
             _history.AddRecord(new TranscriptionRecord

@@ -3,7 +3,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
-using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -126,16 +125,16 @@ public sealed class HttpApiService : IDisposable
             downloaded = _modelManager.IsDownloaded(p.Id),
             active = _modelManager.ActiveModelId == p.Id
         });
-        var cloudModels = _modelManager.CloudProviders
-            .Where(p => p.IsConfigured)
-            .SelectMany(p => p.TranscriptionModels.Select(m => new
+        var cloudModels = _modelManager.PluginManager.TranscriptionEngines
+            .Where(e => e.IsConfigured)
+            .SelectMany(e => e.TranscriptionModels.Select(m => new
             {
-                id = CloudProvider.GetFullModelId(p.Id, m.Id),
-                name = $"{p.DisplayName}: {m.DisplayName}",
+                id = ModelManagerService.GetPluginModelId(e.PluginId, m.Id),
+                name = $"{e.ProviderDisplayName}: {m.DisplayName}",
                 size = "Cloud",
-                engine = p.Id,
+                engine = e.PluginId,
                 downloaded = true,
-                active = _modelManager.ActiveModelId == CloudProvider.GetFullModelId(p.Id, m.Id)
+                active = _modelManager.ActiveModelId == ModelManagerService.GetPluginModelId(e.PluginId, m.Id)
             }));
         var models = localModels.Concat(cloudModels);
         return (200, JsonSerializer.Serialize(new { models }));

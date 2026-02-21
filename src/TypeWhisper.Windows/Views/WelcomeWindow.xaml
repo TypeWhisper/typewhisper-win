@@ -130,36 +130,8 @@
                 <TextBlock Text="Für Cloud-Transkription via Groq oder OpenAI. API-Keys bekommst du auf den jeweiligen Webseiten. Diesen Schritt kannst du überspringen."
                            TextWrapping="Wrap" Foreground="Gray" Margin="0,0,0,16"/>
 
-                <!-- Groq -->
-                <TextBlock Text="Groq" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <PasswordBox Tag="groq" PasswordChanged="CloudApiKey_PasswordChanged"
-                                 Loaded="CloudApiKey_Loaded"
-                                 Padding="6,4" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Testen" Padding="12,4" Margin="8,0,0,0"
-                            Command="{Binding TestCloudKeyCommand}" CommandParameter="groq"/>
-                </Grid>
-
-                <!-- OpenAI -->
-                <TextBlock Text="OpenAI" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <PasswordBox Tag="openai" PasswordChanged="CloudApiKey_PasswordChanged"
-                                 Loaded="CloudApiKey_Loaded"
-                                 Padding="6,4" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" Content="Testen" Padding="12,4" Margin="8,0,0,0"
-                            Command="{Binding TestCloudKeyCommand}" CommandParameter="openai"/>
-                </Grid>
-
-                <TextBlock Text="{Binding CloudTestResult}" Foreground="Gray" FontSize="11"
-                           TextWrapping="Wrap"/>
+                <TextBlock Text="Du kannst API-Keys später in den Einstellungen unter Erweiterungen konfigurieren."
+                           Foreground="Gray" FontStyle="Italic" TextWrapping="Wrap"/>
             </StackPanel>
 
             <!-- Step 2: Microphone test -->
