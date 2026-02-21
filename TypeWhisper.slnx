@@ -4,6 +4,11 @@
     <Project Path="src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
     <Project Path="src/TypeWhisper.Windows/TypeWhisper.Windows.csproj" />
   </Folder>
+  <Folder Name="/plugins/">
+    <Project Path="plugins/TypeWhisper.Plugin.OpenAi/TypeWhisper.Plugin.OpenAi.csproj" />
+    <Project Path="plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" />
+    <Project Path="plugins/TypeWhisper.Plugin.Webhook/TypeWhisper.Plugin.Webhook.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj" />
   </Folder>

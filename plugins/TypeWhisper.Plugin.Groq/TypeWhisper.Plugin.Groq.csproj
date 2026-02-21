@@ -10,4 +10,19 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <Target Name="CopyToAppPlugins" AfterTargets="Build">
+    <PropertyGroup>
+      <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
+      <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.groq\</PluginOutputDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginOutputDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
+    <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
+  </Target>
 </Project>
