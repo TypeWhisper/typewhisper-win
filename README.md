@@ -9,7 +9,8 @@ Speech-to-text for Windows. Transcribe audio using on-device AI models — priva
 ## Features
 
 - **On-device transcription** — All processing happens locally using ONNX Runtime. Two AI engines: Parakeet TDT 0.6B (25+ languages, fast) and Canary 180M Flash (EN/DE/FR/ES with translation)
-- **Cloud transcription (optional)** — Groq and OpenAI as alternative providers. API keys encrypted at rest via DPAPI
+- **Cloud transcription (optional)** — Groq and OpenAI as built-in plugins. API keys encrypted at rest via DPAPI
+- **Plugin system** — Extensible plugin architecture with SDK. Built-in plugins for OpenAI, Groq, and Webhook notifications. Create custom plugins for transcription engines, LLM providers, post-processors, or event observers
 - **System-wide dictation** — Three independent hotkeys: Hybrid (short press toggles, long press is push-to-talk), Toggle-only, and Hold-only. Auto-pastes into any app
 - **Non-blocking pipeline** — Multiple recordings can be queued while transcription runs in the background
 - **Live partial results** — Silero VAD detects speech segments during recording and transcribes them in real time, showing results in the overlay before recording stops
@@ -59,7 +60,7 @@ Both models run on CPU with int8 quantization — no GPU required.
 | OpenAI | gpt-4o-mini-transcribe | Lower cost, good quality |
 | OpenAI | whisper-1 | Classic, supports translation |
 
-Cloud providers require an API key configured in Settings or during the welcome wizard.
+Cloud providers are loaded as plugins and can be configured in Settings > Erweiterungen.
 
 ## HTTP API
 
@@ -119,25 +120,57 @@ typewhisper-win/
 │   │   ├── Data/                   # SQLite database with migrations
 │   │   ├── Interfaces/             # Service contracts
 │   │   ├── Models/                 # Profile, AppSettings, ModelInfo, TermPack, etc.
-│   │   ├── Services/
-│   │   │   └── Cloud/              # CloudProviderBase, GroqProvider, OpenAiProvider
 │   │   └── Translation/            # MarianTokenizer, MarianConfig (local ONNX translation)
+│   ├── TypeWhisper.PluginSDK/      # Plugin SDK (net10.0-windows)
+│   │   ├── Helpers/                # OpenAiChatHelper, OpenAiTranscriptionHelper
+│   │   └── Models/                 # PluginManifest, PluginEvents, etc.
 │   └── TypeWhisper.Windows/        # WPF UI layer (net10.0-windows)
 │       ├── Controls/               # HotkeyRecorderControl
 │       ├── Native/                 # P/Invoke, KeyboardHook
 │       ├── Services/
+│       │   ├── Plugins/            # PluginLoader, PluginManager, PluginEventBus
 │       │   └── Providers/          # LocalProviderBase, ParakeetProvider, CanaryProvider
 │       ├── ViewModels/             # MVVM view models
 │       ├── Views/                  # MainWindow, SettingsWindow, WelcomeWindow, sections
 │       ├── Resources/              # Icons, sounds, silero_vad.onnx
 │       └── App.xaml.cs             # Composition root
+├── plugins/
+│   ├── TypeWhisper.Plugin.OpenAi/  # OpenAI transcription + LLM
+│   ├── TypeWhisper.Plugin.Groq/    # Groq transcription + LLM
+│   └── TypeWhisper.Plugin.Webhook/ # Webhook event notifications
 └── tests/
-    └── TypeWhisper.Core.Tests/     # xUnit + Moq, in-memory SQLite
+    ├── TypeWhisper.Core.Tests/           # xUnit + Moq, in-memory SQLite
+    └── TypeWhisper.PluginSystem.Tests/   # Plugin infrastructure tests
 ```
 
-**Patterns:** MVVM with CommunityToolkit.Mvvm. `App.xaml.cs` is the composition root. SQLite for persistence with a custom migration pattern.
+**Patterns:** MVVM with CommunityToolkit.Mvvm. `App.xaml.cs` is the composition root. SQLite for persistence with a custom migration pattern. Plugin system with AssemblyLoadContext isolation and manifest-based discovery.
 
 **Key dependencies:** NAudio (audio), NHotkey.Wpf (hotkeys), sherpa-onnx (local ASR), Microsoft.ML.OnnxRuntime (local translation), Velopack (updates), H.NotifyIcon.Wpf (system tray).
+
+## Plugin Development
+
+Plugins are .NET class libraries that reference `TypeWhisper.PluginSDK`. Each plugin lives in a directory with a `manifest.json` and its assembly DLL.
+
+### Plugin Types
+
+| Interface | Purpose |
+|-----------|---------|
+| `ITranscriptionEnginePlugin` | Cloud/custom transcription (e.g., Whisper API) |
+| `ILlmProviderPlugin` | LLM chat completions (e.g., translation, course correction) |
+| `IPostProcessorPlugin` | Post-processing pipeline (text cleanup, formatting) |
+| `ITypeWhisperPlugin` | Event observer (e.g., webhook, logging) |
+
+### Plugin Directories
+
+- **Built-in:** `{app}/Plugins/` — shipped with the app
+- **User-installed:** `%LocalAppData%/TypeWhisper/Plugins/` — installed by users
+
+### SDK Helpers
+
+The SDK includes helpers for OpenAI-compatible APIs:
+- `OpenAiTranscriptionHelper` — multipart/form-data upload for Whisper-compatible endpoints
+- `OpenAiChatHelper` — chat completion requests
+- `OpenAiApiHelper` — shared HTTP error handling
 
 ## License
 
