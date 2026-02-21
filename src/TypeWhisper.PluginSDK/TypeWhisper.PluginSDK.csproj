@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>TypeWhisper.PluginSDK</RootNamespace>
+    <AssemblyName>TypeWhisper.PluginSDK</AssemblyName>
+  </PropertyGroup>
+
+</Project>
