@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core.Interfaces;
 
@@ -23,7 +24,8 @@ public partial class DashboardViewModel : ObservableObject
     public DashboardViewModel(IHistoryService history)
     {
         _history = history;
-        _history.RecordsChanged += Refresh;
+        _history.RecordsChanged += () =>
+            Application.Current?.Dispatcher.Invoke(Refresh);
         Refresh();
     }
 
