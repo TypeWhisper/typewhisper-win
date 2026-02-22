@@ -116,8 +116,8 @@ public partial class App : Application
         var history = _serviceProvider.GetRequiredService<IHistoryService>();
         history.PurgeOldRecords(settings.Current.HistoryRetentionDays);
 
-        // Show onboarding if first run
-        if (!settings.Current.HasCompletedOnboarding)
+        // Show onboarding if first run (skip when started minimized)
+        if (!settings.Current.HasCompletedOnboarding && !Program.StartMinimized)
         {
             _welcomeWindow = _serviceProvider.GetRequiredService<WelcomeWindow>();
             _welcomeWindow.Closed += (_, _) =>

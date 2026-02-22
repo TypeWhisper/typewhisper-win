@@ -69,7 +69,8 @@ public sealed class UpdateService
             if (_pendingUpdate is not null)
             {
                 _trayIcon.ShowBalloon("Update verfügbar",
-                    $"Version {AvailableVersion} ist verfügbar. Klicken Sie hier zum Aktualisieren.");
+                    $"Version {AvailableVersion} ist verfügbar. Klicken Sie hier zum Aktualisieren.",
+                    () => _ = DownloadAndApplyAsync());
                 UpdateAvailable?.Invoke(this, EventArgs.Empty);
             }
         }

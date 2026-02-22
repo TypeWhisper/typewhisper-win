@@ -10,6 +10,7 @@ public sealed class TrayIconService : IDisposable
 {
     private TaskbarIcon? _trayIcon;
     private bool _disposed;
+    private Action? _pendingBalloonClick;
 
     public event EventHandler? ShowSettingsRequested;
     public event EventHandler? ShowFileTranscriptionRequested;
@@ -26,6 +27,12 @@ public sealed class TrayIconService : IDisposable
 
         _trayIcon.ContextMenu = BuildContextMenu();
         _trayIcon.TrayLeftMouseUp += (_, _) => ShowSettingsRequested?.Invoke(this, EventArgs.Empty);
+        _trayIcon.TrayBalloonTipClicked += (_, _) =>
+        {
+            var action = _pendingBalloonClick;
+            _pendingBalloonClick = null;
+            action?.Invoke();
+        };
 
         _trayIcon.Icon = LoadIcon();
 
@@ -38,8 +45,9 @@ public sealed class TrayIconService : IDisposable
             _trayIcon.ToolTipText = text;
     }
 
-    public void ShowBalloon(string title, string message)
+    public void ShowBalloon(string title, string message, Action? onClick = null)
     {
+        _pendingBalloonClick = onClick;
         _trayIcon?.ShowNotification(title, message);
     }
 
