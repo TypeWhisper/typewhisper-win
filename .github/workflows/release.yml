@@ -34,6 +34,14 @@ jobs:
 
       - run: dotnet publish src/TypeWhisper.Windows -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.ver.outputs.VERSION }} -o publish
 
+      - name: Copy built-in plugins to publish
+        shell: pwsh
+        run: |
+          $pluginsSrc = "src/TypeWhisper.Windows/bin/Release/net10.0-windows/Plugins"
+          if (Test-Path $pluginsSrc) {
+            Copy-Item -Path $pluginsSrc -Destination "publish/Plugins" -Recurse
+          }
+
       - run: dotnet tool install -g vpk
 
       - name: Velopack Pack

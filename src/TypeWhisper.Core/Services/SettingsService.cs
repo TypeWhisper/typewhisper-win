@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -13,6 +14,9 @@ public sealed class SettingsService : ISettingsService
     };
 
     private readonly string _filePath;
+    private string BackupPath => _filePath + ".bak";
+    private string TempPath => _filePath + ".tmp";
+
     private AppSettings _current;
 
     public AppSettings Current => _current;
@@ -26,20 +30,30 @@ public sealed class SettingsService : ISettingsService
 
     public AppSettings Load()
     {
-        try
+        // Try primary settings file
+        var result = TryLoadFrom(_filePath);
+        if (result is not null)
         {
-            if (File.Exists(_filePath))
+            _current = result;
+            return _current;
+        }
+
+        // Primary failed — try backup
+        if (File.Exists(BackupPath))
+        {
+            LogWarning("Primary settings corrupt or missing, trying backup.");
+            result = TryLoadFrom(BackupPath);
+            if (result is not null)
             {
-                var json = File.ReadAllText(_filePath);
-                _current = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? AppSettings.Default;
+                _current = result;
+                // Restore backup as primary
+                try { File.Copy(BackupPath, _filePath, overwrite: true); }
+                catch { /* best effort */ }
                 return _current;
             }
         }
-        catch
-        {
-            // Corrupt file - use defaults
-        }
 
+        LogWarning("No valid settings found, using defaults.");
         _current = AppSettings.Default;
         return _current;
     }
@@ -52,9 +66,49 @@ public sealed class SettingsService : ISettingsService
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
+        // Backup current settings before overwriting
+        if (File.Exists(_filePath))
+        {
+            try { File.Copy(_filePath, BackupPath, overwrite: true); }
+            catch { /* best effort */ }
+        }
+
+        // Atomic write: serialize to .tmp, then move over primary
         var json = JsonSerializer.Serialize(settings, JsonOptions);
-        File.WriteAllText(_filePath, json);
+        File.WriteAllText(TempPath, json);
+        File.Move(TempPath, _filePath, overwrite: true);
 
         SettingsChanged?.Invoke(settings);
+    }
+
+    private static AppSettings? TryLoadFrom(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            LogWarning($"Failed to load settings from {path}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static void LogWarning(string message)
+    {
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [SettingsService] {message}";
+        Debug.WriteLine(line);
+
+        try
+        {
+            var logDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "TypeWhisper", "Logs");
+            Directory.CreateDirectory(logDir);
+            File.AppendAllText(Path.Combine(logDir, "settings.log"), line + Environment.NewLine);
+        }
+        catch { /* logging must never throw */ }
     }
 }
