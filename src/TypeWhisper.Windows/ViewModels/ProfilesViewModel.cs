@@ -43,6 +43,7 @@ public partial class ProfilesViewModel : ObservableObject
     public ObservableCollection<string> ProcessNameChips { get; } = [];
     public ObservableCollection<string> UrlPatternChips { get; } = [];
     public ObservableCollection<Profile> Profiles { get; } = [];
+    public ObservableCollection<string> RunningApps { get; } = [];
     public IReadOnlyList<ModelOption> AvailableModelOptions { get; }
 
     public ProfilesViewModel(IProfileService profiles, IActiveWindowService activeWindow, ISettingsService settings, ModelManagerService modelManager)
@@ -81,6 +82,24 @@ public partial class ProfilesViewModel : ObservableObject
         var matched = _profiles.MatchProfile(processName, url);
         HasMatchedProfile = matched is not null;
         MatchedProfileName = matched?.Name ?? "Kein Profil";
+
+        RefreshRunningApps();
+    }
+
+    private void RefreshRunningApps()
+    {
+        var apps = _activeWindow.GetRunningAppProcessNames();
+        var current = new HashSet<string>(RunningApps, StringComparer.OrdinalIgnoreCase);
+        var incoming = new HashSet<string>(apps, StringComparer.OrdinalIgnoreCase);
+
+        if (current.SetEquals(incoming)) return;
+
+        RunningApps.Clear();
+        foreach (var app in apps)
+        {
+            if (!ProcessNameChips.Contains(app, StringComparer.OrdinalIgnoreCase))
+                RunningApps.Add(app);
+        }
     }
 
     partial void OnSelectedProfileChanged(Profile? value)
@@ -124,12 +143,22 @@ public partial class ProfilesViewModel : ObservableObject
         if (!ProcessNameChips.Contains(name, StringComparer.OrdinalIgnoreCase))
             ProcessNameChips.Add(name);
         ProcessNameInput = "";
+        RefreshRunningApps();
+    }
+
+    [RelayCommand]
+    private void AddRunningApp(string processName)
+    {
+        if (!ProcessNameChips.Contains(processName, StringComparer.OrdinalIgnoreCase))
+            ProcessNameChips.Add(processName);
+        RunningApps.Remove(processName);
     }
 
     [RelayCommand]
     private void RemoveProcessNameChip(string chip)
     {
         ProcessNameChips.Remove(chip);
+        RefreshRunningApps();
     }
 
     [RelayCommand]

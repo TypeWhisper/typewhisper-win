@@ -192,8 +192,46 @@
                                      KeyDown="ProcessNameInputBox_KeyDown"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock Text="Prozessnamen eingeben und Enter drücken (z.B. notepad, chrome, discord)"
+                    <TextBlock Text="Prozessnamen eingeben und Enter drücken, oder laufende App anklicken"
                                Style="{StaticResource HintStyle}"/>
+
+                    <!-- Running Apps Suggestions -->
+                    <ItemsControl ItemsSource="{Binding Profiles.RunningApps}" Margin="0,6,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Margin="2" Padding="8,3" Cursor="Hand"
+                                        Command="{Binding DataContext.Profiles.AddRunningAppCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="SugBorder"
+                                                    Background="#2A2A2A" CornerRadius="12"
+                                                    BorderBrush="#444444" BorderThickness="1"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="+" Foreground="{StaticResource AccentBrush}"
+                                                               FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding}" Foreground="{StaticResource HintBrush}"
+                                                               FontSize="12" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="SugBorder" Property="Background" Value="#3D3D3D"/>
+                                                    <Setter TargetName="SugBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <!-- URL Patterns (Chips) -->

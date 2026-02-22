@@ -19,6 +19,32 @@ public sealed class ActiveWindowService : IActiveWindowService
     private string? _lastTitle;
     private string? _cachedUrl;
 
+    public IReadOnlyList<string> GetRunningAppProcessNames()
+    {
+        try
+        {
+            return Process.GetProcesses()
+                .Where(p =>
+                {
+                    try { return p.MainWindowHandle != IntPtr.Zero && p.Id != OwnProcessId; }
+                    catch { return false; }
+                })
+                .Select(p =>
+                {
+                    try { return p.ProcessName; }
+                    catch { return null; }
+                })
+                .Where(n => n is not null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList()!;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     public string? GetActiveWindowProcessName()
     {
         var hwnd = NativeMethods.GetForegroundWindow();

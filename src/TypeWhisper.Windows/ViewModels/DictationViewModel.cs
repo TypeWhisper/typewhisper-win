@@ -331,7 +331,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 Text = rawText,
                 DetectedLanguage = detectedLanguage,
                 DurationSeconds = audioDuration,
-                ModelId = job.ActiveModelIdAtCapture
+                ModelId = job.ActiveModelIdAtCapture,
+                ProfileName = job.ActiveProfile?.Name
             });
 
             // Apply corrections and snippets

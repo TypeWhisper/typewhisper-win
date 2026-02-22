@@ -33,6 +33,9 @@ public sealed record TranscriptionCompletedEvent : PluginEvent
 
     /// <summary>Model ID used for transcription, or null.</summary>
     public string? ModelId { get; init; }
+
+    /// <summary>Name of the dictation profile used, or null.</summary>
+    public string? ProfileName { get; init; }
 }
 
 /// <summary>Raised when transcription fails.</summary>

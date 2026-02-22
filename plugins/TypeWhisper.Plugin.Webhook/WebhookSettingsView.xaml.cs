@@ -1,61 +1,89 @@
+using System.Collections.Specialized;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using System.Windows.Data;
 
 namespace TypeWhisper.Plugin.Webhook;
+
+public sealed class BoolToIconConverter : IValueConverter
+{
+    public static readonly BoolToIconConverter Instance = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? "\u2713" : "\u2717";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
 
 public partial class WebhookSettingsView : UserControl
 {
     private readonly WebhookPlugin _plugin;
-    private bool _initializing = true;
 
     public WebhookSettingsView(WebhookPlugin plugin)
     {
         _plugin = plugin;
         InitializeComponent();
 
-        // Pre-fill controls from current settings
-        UrlBox.Text = plugin.WebhookUrl;
-        if (!string.IsNullOrEmpty(plugin.Secret))
-            SecretBox.Password = plugin.Secret;
+        if (_plugin.Service is { } service)
+        {
+            WebhookList.ItemsSource = service.Webhooks;
+            LogList.ItemsSource = service.DeliveryLog;
 
-        RecordingStartedCheck.IsChecked = plugin.SendRecordingStarted;
-        RecordingStoppedCheck.IsChecked = plugin.SendRecordingStopped;
-        TranscriptionCompletedCheck.IsChecked = plugin.SendTranscriptionCompleted;
-        TranscriptionFailedCheck.IsChecked = plugin.SendTranscriptionFailed;
-        TextInsertedCheck.IsChecked = plugin.SendTextInserted;
+            service.Webhooks.CollectionChanged += OnWebhooksChanged;
+            service.DeliveryLog.CollectionChanged += OnLogChanged;
+        }
 
-        _initializing = false;
+        UpdateEmptyStates();
     }
 
-    private void OnUrlChanged(object sender, TextChangedEventArgs e)
+    private void UpdateEmptyStates()
     {
-        if (_initializing) return;
-        _plugin.WebhookUrl = UrlBox.Text;
-        ShowSaved();
+        var service = _plugin.Service;
+        EmptyState.Visibility = service is null || service.Webhooks.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
+        EmptyLogState.Visibility = service is null || service.DeliveryLog.Count == 0
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void OnSecretChanged(object sender, RoutedEventArgs e)
+    private void OnWebhooksChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyStates();
+    private void OnLogChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyStates();
+
+    private void OnAddWebhook(object sender, RoutedEventArgs e)
     {
-        if (_initializing) return;
-        _plugin.Secret = SecretBox.Password;
-        ShowSaved();
+        var profiles = _plugin.Host?.AvailableProfileNames ?? [];
+        var dialog = new WebhookEditWindow(profiles) { Owner = Window.GetWindow(this) };
+
+        if (dialog.ShowDialog() == true && dialog.Result is { } config)
+            _plugin.Service?.AddWebhook(config);
     }
 
-    private void OnFilterChanged(object sender, RoutedEventArgs e)
+    private void OnEditWebhook(object sender, RoutedEventArgs e)
     {
-        if (_initializing) return;
-        _plugin.SendRecordingStarted = RecordingStartedCheck.IsChecked == true;
-        _plugin.SendRecordingStopped = RecordingStoppedCheck.IsChecked == true;
-        _plugin.SendTranscriptionCompleted = TranscriptionCompletedCheck.IsChecked == true;
-        _plugin.SendTranscriptionFailed = TranscriptionFailedCheck.IsChecked == true;
-        _plugin.SendTextInserted = TextInsertedCheck.IsChecked == true;
-        ShowSaved();
+        if (sender is not Button { Tag: Guid id }) return;
+        var existing = _plugin.Service?.Webhooks.FirstOrDefault(w => w.Id == id);
+        if (existing is null) return;
+
+        var profiles = _plugin.Host?.AvailableProfileNames ?? [];
+        var dialog = new WebhookEditWindow(profiles, existing) { Owner = Window.GetWindow(this) };
+
+        if (dialog.ShowDialog() == true && dialog.Result is { } updated)
+            _plugin.Service?.UpdateWebhook(updated);
     }
 
-    private void ShowSaved()
+    private void OnDeleteWebhook(object sender, RoutedEventArgs e)
     {
-        StatusText.Text = "Gespeichert";
-        StatusText.Foreground = Brushes.Gray;
+        if (sender is not Button { Tag: Guid id }) return;
+        _plugin.Service?.RemoveWebhook(id);
+    }
+
+    private void OnToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { Tag: Guid id, IsChecked: var isChecked }) return;
+        var existing = _plugin.Service?.Webhooks.FirstOrDefault(w => w.Id == id);
+        if (existing is null) return;
+
+        _plugin.Service?.UpdateWebhook(existing with { IsEnabled = isChecked == true });
     }
 }
