@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
@@ -41,7 +42,7 @@ public sealed class PluginAssemblyLoadContext : AssemblyLoadContext
 /// Discovers and loads plugins from one or more search directories.
 /// Each plugin resides in a subdirectory containing a manifest.json file.
 /// </summary>
-public sealed class PluginLoader
+public sealed partial class PluginLoader
 {
     private static readonly JsonSerializerOptions ManifestJsonOptions = new()
     {
@@ -109,6 +110,9 @@ public sealed class PluginLoader
             return null;
         }
 
+        // Remove "Mark of the Web" from all plugin files to prevent SmartScreen blocks
+        UnblockDirectory(pluginDir);
+
         var loadContext = new PluginAssemblyLoadContext(assemblyPath);
         var assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
 
@@ -137,4 +141,36 @@ public sealed class PluginLoader
 
         return new LoadedPlugin(manifest, instance, loadContext, pluginDir);
     }
+
+    /// <summary>
+    /// Removes the Zone.Identifier alternate data stream (Mark of the Web) from all
+    /// DLL and JSON files in a directory, preventing Windows SmartScreen from blocking them.
+    /// </summary>
+    private static void UnblockDirectory(string directory)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "*.*"))
+            {
+                var ext = Path.GetExtension(file);
+                if (ext is ".dll" or ".json")
+                    UnblockFile(file);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PluginLoader] Failed to unblock files in {directory}: {ex.Message}");
+        }
+    }
+
+    private static void UnblockFile(string filePath)
+    {
+        // The Zone.Identifier is stored as an NTFS alternate data stream.
+        // DeleteFile on "path:Zone.Identifier" removes it.
+        DeleteFile(filePath + ":Zone.Identifier");
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "DeleteFileW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool DeleteFile(string lpFileName);
 }
