@@ -80,6 +80,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Header -->
@@ -124,19 +125,100 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
+            <!-- Live Window Detection -->
+            <Border Grid.Row="2" Margin="8,4,8,4" Padding="10,8" CornerRadius="6"
+                    Background="#1A888888">
+                <StackPanel>
+                    <TextBlock Text="Aktives Fenster"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{StaticResource HintBrush}" Margin="0,0,0,4"/>
+                    <TextBlock FontSize="11" Foreground="{StaticResource LabelBrush}"
+                               TextTrimming="CharacterEllipsis">
+                        <Run Text="&#xE8B7; " FontFamily="Segoe MDL2 Assets" FontSize="10"/><Run Text="{Binding Profiles.CurrentProcessName, Mode=OneWay}" Foreground="#88CCFF"/>
+                    </TextBlock>
+                    <TextBlock FontSize="11" Foreground="{StaticResource LabelBrush}"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0">
+                        <Run Text="&#xE8A7; " FontFamily="Segoe MDL2 Assets" FontSize="10"/><Run Text="{Binding Profiles.CurrentWindowTitle, Mode=OneWay}" Foreground="{StaticResource HintBrush}"/>
+                    </TextBlock>
+                    <TextBlock FontSize="11" Foreground="{StaticResource LabelBrush}"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                               Visibility="{Binding Profiles.CurrentUrl, Converter={StaticResource NonEmptyToVisibility}}">
+                        <Run Text="&#xE774; " FontFamily="Segoe MDL2 Assets" FontSize="10"/><Run Text="{Binding Profiles.CurrentUrl, Mode=OneWay}" Foreground="#88FFCC"/>
+                    </TextBlock>
+                    <Border Margin="0,4,0,0" Padding="6,3" CornerRadius="4">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#1AD32F2F"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Profiles.HasMatchedProfile}" Value="True">
+                                        <Setter Property="Background" Value="#1A4CAF50"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock FontSize="11">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Profiles.HasMatchedProfile}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource ActiveIndicatorBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                            <Run Text="Match: "/><Run Text="{Binding Profiles.MatchedProfileName, Mode=OneWay}"/>
+                        </TextBlock>
+                    </Border>
+                </StackPanel>
+            </Border>
+
             <!-- Add Profile Button -->
-            <Button Grid.Row="2" Content="+ Neues Profil"
+            <Button Grid.Row="3" Content="+ Neues Profil"
                     Style="{StaticResource SecondaryButtonStyle}"
                     Command="{Binding Profiles.AddProfileCommand}"
-                    Margin="12" HorizontalAlignment="Stretch"/>
+                    Margin="12,4,12,12" HorizontalAlignment="Stretch"/>
         </Grid>
 
         <!-- Divider -->
         <Border Grid.Column="1" Background="{StaticResource BorderBrush}"/>
 
+        <!-- Right: Empty State -->
+        <Grid Grid.Column="2" Background="{StaticResource BackgroundBrush}">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Profiles.SelectedProfile}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets" FontSize="48"
+                           Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                <TextBlock Text="Profil auswählen" FontSize="16" Foreground="{StaticResource HintBrush}"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Wähle ein Profil aus der Liste oder erstelle ein neues"
+                           FontSize="13" Foreground="{StaticResource HintBrush}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0" Opacity="0.6"/>
+            </StackPanel>
+        </Grid>
+
         <!-- Right: Detail -->
         <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       Background="{StaticResource BackgroundBrush}">
+            <ScrollViewer.Style>
+                <Style TargetType="ScrollViewer">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Profiles.SelectedProfile}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ScrollViewer.Style>
             <StackPanel MaxWidth="500" Margin="24">
                 <TextBlock Text="Profil bearbeiten" Style="{StaticResource SectionHeaderStyle}"/>
 
@@ -377,51 +459,6 @@
                             Command="{Binding Profiles.DeleteProfileCommand}"/>
                 </StackPanel>
 
-                <!-- Live Window Detection -->
-                <Border Margin="0,30,0,0" Padding="12"
-                        Background="{StaticResource SidebarBrush}" CornerRadius="8">
-                    <StackPanel>
-                        <TextBlock Text="Aktives Fenster"
-                                   FontSize="12" FontWeight="SemiBold"
-                                   Foreground="{StaticResource HintBrush}" Margin="0,0,0,8"/>
-                        <TextBlock FontSize="12" Foreground="{StaticResource LabelBrush}">
-                            <Run Text="Prozess: "/><Run Text="{Binding Profiles.CurrentProcessName, Mode=OneWay}" Foreground="#88CCFF"/>
-                        </TextBlock>
-                        <TextBlock FontSize="12" Foreground="{StaticResource LabelBrush}"
-                                   TextTrimming="CharacterEllipsis">
-                            <Run Text="Titel: "/><Run Text="{Binding Profiles.CurrentWindowTitle, Mode=OneWay}" Foreground="{StaticResource HintBrush}"/>
-                        </TextBlock>
-                        <TextBlock FontSize="12" Foreground="{StaticResource LabelBrush}"
-                                   TextTrimming="CharacterEllipsis">
-                            <Run Text="URL: "/><Run Text="{Binding Profiles.CurrentUrl, Mode=OneWay}" Foreground="#88FFCC"/>
-                        </TextBlock>
-                        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="4">
-                            <Border.Style>
-                                <Style TargetType="Border">
-                                    <Setter Property="Background" Value="#1AD32F2F"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Profiles.HasMatchedProfile}" Value="True">
-                                            <Setter Property="Background" Value="#1A4CAF50"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
-                            <TextBlock FontSize="12">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Profiles.HasMatchedProfile}" Value="True">
-                                                <Setter Property="Foreground" Value="{StaticResource ActiveIndicatorBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                                <Run Text="Profil: "/><Run Text="{Binding Profiles.MatchedProfileName, Mode=OneWay}"/>
-                            </TextBlock>
-                        </Border>
-                    </StackPanel>
-                </Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>
