@@ -62,5 +62,21 @@
     "descriptions": {
       "de": "Offline-Transkription mit sherpa-onnx (NVIDIA NeMo Parakeet + Canary)"
     }
+  },
+  {
+    "id": "com.typewhisper.openai-compatible",
+    "name": "OpenAI Compatible",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
+    "category": "Integration",
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-compatible-v1.0.0/com.typewhisper.openai-compatible-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Verbindung zu jedem OpenAI-kompatiblen Server (Ollama, LM Studio, vLLM, etc.)"
+    }
   }
 ]
