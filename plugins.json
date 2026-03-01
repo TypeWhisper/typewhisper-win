@@ -46,5 +46,21 @@
     "descriptions": {
       "de": "Sendet Ereignisbenachrichtigungen an eine Webhook-URL"
     }
+  },
+  {
+    "id": "com.typewhisper.sherpa-onnx",
+    "name": "Lokale Modelle (sherpa-onnx)",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Offline transcription via sherpa-onnx (NVIDIA NeMo Parakeet + Canary)",
+    "category": "Transcription",
+    "size": 15559,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.sherpa-onnx-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Offline-Transkription mit sherpa-onnx (NVIDIA NeMo Parakeet + Canary)"
+    }
   }
 ]
