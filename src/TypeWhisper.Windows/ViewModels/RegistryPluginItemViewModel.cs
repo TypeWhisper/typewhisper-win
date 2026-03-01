@@ -17,6 +17,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     public string? Category => _registryPlugin.Category;
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
     public string SizeDisplay => FormatSize(_registryPlugin.Size);
+    public string IconEmoji => PluginIconHelper.GetIcon(Id);
+    public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
+    public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
 
     [ObservableProperty] private PluginInstallState _installState;
     [ObservableProperty] private double _progress;

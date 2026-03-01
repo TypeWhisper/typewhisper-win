@@ -29,11 +29,17 @@ public partial class PluginsViewModel : ObservableObject
 
     private void RefreshPlugins()
     {
+        // Preserve expanded state across refresh
+        var expandedIds = Plugins.Where(p => p.IsExpanded).Select(p => p.Id).ToHashSet();
+
         Plugins.Clear();
         foreach (var plugin in _pluginManager.AllPlugins)
         {
             var isEnabled = _pluginManager.IsEnabled(plugin.Manifest.Id);
-            Plugins.Add(new PluginItemViewModel(plugin, isEnabled, _pluginManager));
+            var vm = new PluginItemViewModel(plugin, isEnabled, _pluginManager, _registryService);
+            if (expandedIds.Contains(vm.Id))
+                vm.IsExpanded = true;
+            Plugins.Add(vm);
         }
     }
 
@@ -63,18 +69,20 @@ public partial class PluginItemViewModel : ObservableObject
 {
     private readonly LoadedPlugin _plugin;
     private readonly PluginManager _pluginManager;
+    private readonly PluginRegistryService _registryService;
 
     public string Id => _plugin.Manifest.Id;
     public string Name => _plugin.Manifest.Name;
     public string Version => _plugin.Manifest.Version;
     public string? Author => _plugin.Manifest.Author;
     public string? Description => _plugin.Manifest.Description;
+    public string IconEmoji => PluginIconHelper.GetIcon(Id);
+    public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
+    public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
 
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private UserControl? _settingsView;
     [ObservableProperty] private bool _isExpanded;
-
-    public string ExpandButtonText => IsExpanded ? "Einstellungen ausblenden" : "Einstellungen anzeigen";
 
     // Capability badges
     public bool IsTranscriptionProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITranscriptionEnginePlugin;
@@ -82,10 +90,11 @@ public partial class PluginItemViewModel : ObservableObject
     public bool IsPostProcessor => _plugin.Instance is TypeWhisper.PluginSDK.IPostProcessorPlugin;
     public bool IsActionProvider => _plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin;
 
-    public PluginItemViewModel(LoadedPlugin plugin, bool isEnabled, PluginManager pluginManager)
+    public PluginItemViewModel(LoadedPlugin plugin, bool isEnabled, PluginManager pluginManager, PluginRegistryService registryService)
     {
         _plugin = plugin;
         _pluginManager = pluginManager;
+        _registryService = registryService;
         _isEnabled = isEnabled;
 
         if (isEnabled)
@@ -111,7 +120,20 @@ public partial class PluginItemViewModel : ObservableObject
         // Lazy-load settings view when first expanded
         if (value && SettingsView is null && IsEnabled)
             SettingsView = _plugin.Instance.CreateSettingsView();
+    }
 
-        OnPropertyChanged(nameof(ExpandButtonText));
+    [RelayCommand]
+    private async Task UninstallAsync()
+    {
+        var result = MessageBox.Show(
+            $"Plugin \"{Name}\" wirklich deinstallieren?",
+            "Plugin deinstallieren",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        await _registryService.UninstallPluginAsync(Id);
     }
 }

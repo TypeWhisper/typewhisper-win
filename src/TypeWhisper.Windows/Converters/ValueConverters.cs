@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -189,6 +190,29 @@ public sealed class ZeroToVisibilityConverter : IValueConverter
         bool isZero = value is int i && i == 0;
         if (parameter is string s && s == "invert") isZero = !isZero;
         return isZero ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts a hex color string like "#FF0000" to a SolidColorBrush.
+/// </summary>
+public sealed class StringToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is string hex && !string.IsNullOrEmpty(hex))
+        {
+            try
+            {
+                var color = (Color)ColorConverter.ConvertFromString(hex);
+                return new SolidColorBrush(color);
+            }
+            catch { }
+        }
+        return new SolidColorBrush(Colors.Gray);
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

@@ -21,11 +21,19 @@ public partial class PluginsSection : UserControl
         }
     }
 
-    private void ToggleExpanded_Click(object sender, RoutedEventArgs e)
+    private void OnInstalledTabClick(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: PluginItemViewModel item })
-        {
-            item.IsExpanded = !item.IsExpanded;
-        }
+        TabInstalled.Style = (Style)Resources["ActiveTabButtonStyle"];
+        TabMarketplace.Style = (Style)Resources["TabButtonStyle"];
+        InstalledPanel.Visibility = Visibility.Visible;
+        MarketplacePanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnMarketplaceTabClick(object sender, RoutedEventArgs e)
+    {
+        TabInstalled.Style = (Style)Resources["TabButtonStyle"];
+        TabMarketplace.Style = (Style)Resources["ActiveTabButtonStyle"];
+        InstalledPanel.Visibility = Visibility.Collapsed;
+        MarketplacePanel.Visibility = Visibility.Visible;
     }
 }
