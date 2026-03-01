@@ -1,0 +1,50 @@
+[
+  {
+    "id": "com.typewhisper.openai",
+    "name": "OpenAI",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "OpenAI Whisper transcription and GPT translation",
+    "category": "Transcription",
+    "size": 13505,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "OpenAI Whisper Transkription und GPT Uebersetzung"
+    }
+  },
+  {
+    "id": "com.typewhisper.groq",
+    "name": "Groq",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Groq Whisper transcription and Llama translation",
+    "category": "Transcription",
+    "size": 13343,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.groq-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Groq Whisper Transkription und Llama Uebersetzung"
+    }
+  },
+  {
+    "id": "com.typewhisper.webhook",
+    "name": "Webhook",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Sends event notifications to a webhook URL",
+    "category": "Integration",
+    "size": 16499,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.webhook-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Sendet Ereignisbenachrichtigungen an eine Webhook-URL"
+    }
+  }
+]
