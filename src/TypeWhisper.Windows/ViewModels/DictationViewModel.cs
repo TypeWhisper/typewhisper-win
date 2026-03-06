@@ -49,7 +49,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
 
-    // VAD for live transcription
+    // Live transcription
+    private readonly StreamingHandler _streamingHandler;
+    // VAD for live transcription (fallback for non-plugin models)
     private VoiceActivityDetector? _vad;
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
@@ -109,6 +111,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         PromptPalette = promptPalette;
         _promptActions = promptActions;
         _promptProcessing = promptProcessing;
+
+        _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
+        _streamingHandler.OnPartialTextUpdate = text =>
+            Application.Current?.Dispatcher.InvokeAsync(() => PartialText = text);
 
         _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
 
@@ -221,15 +227,23 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         _audio.WhisperModeEnabled = EffectiveWhisperMode;
 
-        // Initialize VAD for live transcription (only for local models — cloud API
-        // transcribes the full audio at once, VAD segments would be too slow/expensive)
+        // Live transcription: streaming handler polls growing buffer periodically
         _partialSegments.Clear();
         PartialText = "";
         _vad?.Dispose();
         _vad = null;
-        var useVad = _modelManager.ActiveModelId is null || !ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
-        if (useVad)
+        _streamingHandler.Stop();
+
+        var isPluginModel = _modelManager.ActiveModelId is not null
+            && ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
+
+        if (_settings.Current.LiveTranscriptionEnabled && isPluginModel)
         {
+            _streamingHandler.Start(EffectiveLanguage, EffectiveTask, () => _isRecording);
+        }
+        else if (!isPluginModel)
+        {
+            // VAD fallback for non-plugin models
             _vad = CreateVoiceActivityDetector();
             _audio.SamplesAvailable += OnSamplesAvailable;
         }
@@ -272,6 +286,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _durationTimer?.Dispose();
         _durationTimer = null;
 
+        _streamingHandler.Stop();
         _audio.SamplesAvailable -= OnSamplesAvailable;
 
         var samples = _audio.StopRecording();
@@ -646,6 +661,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _consumerCts.Dispose();
             _durationTimer?.Dispose();
             _feedbackTimer?.Dispose();
+            _streamingHandler.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
             _audio.AudioLevelChanged -= OnAudioLevelChanged;

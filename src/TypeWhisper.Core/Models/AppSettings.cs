@@ -26,6 +26,9 @@ public record AppSettings
     public bool PauseMediaDuringRecording { get; init; }
     public bool SoundFeedbackEnabled { get; init; } = true;
 
+    // Live transcription (streaming preview while recording)
+    public bool LiveTranscriptionEnabled { get; init; } = true;
+
     // Silence detection
     public bool SilenceAutoStopEnabled { get; init; }
     public int SilenceAutoStopSeconds { get; init; } = 10;

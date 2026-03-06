@@ -1,6 +1,7 @@
 using Moq;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -83,5 +84,77 @@ public class StreamingTranscriptionTests
 
         Assert.Equal("Streamed text", result.Text);
         Assert.Equal("de", result.DetectedLanguage);
+    }
+}
+
+public class StabilizeTextTests
+{
+    [Fact]
+    public void EmptyConfirmed_ReturnsNew()
+    {
+        var result = StreamingHandler.StabilizeText("", "Hello world");
+        Assert.Equal("Hello world", result);
+    }
+
+    [Fact]
+    public void EmptyNew_ReturnsConfirmed()
+    {
+        var result = StreamingHandler.StabilizeText("Hello", "");
+        Assert.Equal("Hello", result);
+    }
+
+    [Fact]
+    public void NewStartsWithConfirmed_ReturnsNew()
+    {
+        var result = StreamingHandler.StabilizeText("Hello", "Hello world");
+        Assert.Equal("Hello world", result);
+    }
+
+    [Fact]
+    public void ExactMatch_ReturnsConfirmed()
+    {
+        var result = StreamingHandler.StabilizeText("Hello world", "Hello world");
+        Assert.Equal("Hello world", result);
+    }
+
+    [Fact]
+    public void PartialPrefixMatch_KeepsConfirmedAndAppends()
+    {
+        // "Hello worl" matches >50% of "Hello world", so confirmed + new tail
+        var result = StreamingHandler.StabilizeText("Hello world", "Hello world, how are you?");
+        Assert.Equal("Hello world, how are you?", result);
+    }
+
+    [Fact]
+    public void MinorDivergence_KeepsConfirmedPrefix()
+    {
+        // First 6 chars match ("Hello "), >50% of 11-char confirmed
+        var result = StreamingHandler.StabilizeText("Hello world", "Hello earth and sky");
+        Assert.Equal("Hello world earth and sky", result);
+    }
+
+    [Fact]
+    public void CompletelyDifferent_AcceptsNewText()
+    {
+        var result = StreamingHandler.StabilizeText("Hello world", "Goodbye universe");
+        Assert.Equal("Goodbye universe", result);
+    }
+
+    [Fact]
+    public void SuffixPrefixOverlap_DetectsShift()
+    {
+        // Confirmed = "A B C D", new starts with "B C D E" (suffix of confirmed)
+        var confirmed = "Alpha Beta Gamma Delta";
+        var newText = "Beta Gamma Delta Epsilon";
+        var result = StreamingHandler.StabilizeText(confirmed, newText);
+        // Should keep confirmed + append the new tail " Epsilon"
+        Assert.Equal("Alpha Beta Gamma Delta Epsilon", result);
+    }
+
+    [Fact]
+    public void WhitespaceIsTrimmed()
+    {
+        var result = StreamingHandler.StabilizeText("", "  Hello  ");
+        Assert.Equal("Hello", result);
     }
 }

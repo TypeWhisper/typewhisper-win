@@ -15,6 +15,7 @@ public sealed class AudioRecordingService : IDisposable
 
     private WaveInEvent? _waveIn;
     private List<float>? _sampleBuffer;
+    private readonly object _bufferLock = new();
     private bool _isRecording;
     private bool _isWarmedUp;
     private bool _disposed;
@@ -97,6 +98,12 @@ public sealed class AudioRecordingService : IDisposable
         _isRecording = true;
     }
 
+    public float[]? GetCurrentBuffer()
+    {
+        if (!_isRecording || _sampleBuffer is null) return null;
+        lock (_bufferLock) { return [.. _sampleBuffer]; }
+    }
+
     public float[]? StopRecording()
     {
         if (!_isRecording || _waveIn is null)
@@ -104,8 +111,12 @@ public sealed class AudioRecordingService : IDisposable
 
         _isRecording = false;
 
-        var samples = _sampleBuffer?.ToArray();
-        _sampleBuffer = null;
+        float[]? samples;
+        lock (_bufferLock)
+        {
+            samples = _sampleBuffer?.ToArray();
+            _sampleBuffer = null;
+        }
 
         if (samples is null || samples.Length == 0)
             return null;
@@ -138,6 +149,7 @@ public sealed class AudioRecordingService : IDisposable
 
         float peak = 0;
         float sumSquares = 0;
+        var chunkBuffer = new float[sampleCount];
 
         for (var i = 0; i < sampleCount; i++)
         {
@@ -146,11 +158,16 @@ public sealed class AudioRecordingService : IDisposable
             if (WhisperModeEnabled)
                 sample = Math.Clamp(sample * agcGain, -1f, 1f);
 
-            _sampleBuffer?.Add(sample);
+            chunkBuffer[i] = sample;
 
             var abs = MathF.Abs(sample);
             if (abs > peak) peak = abs;
             sumSquares += sample * sample;
+        }
+
+        lock (_bufferLock)
+        {
+            _sampleBuffer?.AddRange(chunkBuffer);
         }
 
         var rms = MathF.Sqrt(sumSquares / sampleCount);
@@ -161,9 +178,7 @@ public sealed class AudioRecordingService : IDisposable
 
         if (SamplesAvailable is not null && _sampleBuffer is not null)
         {
-            var chunkSamples = new float[sampleCount];
-            _sampleBuffer.CopyTo(_sampleBuffer.Count - sampleCount, chunkSamples, 0, sampleCount);
-            SamplesAvailable.Invoke(this, new SamplesAvailableEventArgs(chunkSamples));
+            SamplesAvailable.Invoke(this, new SamplesAvailableEventArgs(chunkBuffer));
         }
     }
 
