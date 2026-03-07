@@ -61,6 +61,17 @@ jobs:
           name: release-${{ matrix.rid }}
           path: releases/*
 
+  trigger-website:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger website rebuild
+        run: |
+          gh api repos/TypeWhisper/typewhisper.com/dispatches \
+            -f event_type=release-published
+        env:
+          GITHUB_TOKEN: ${{ secrets.WEBSITE_DEPLOY_TOKEN }}
+
   release:
     needs: build
     runs-on: ubuntu-latest
