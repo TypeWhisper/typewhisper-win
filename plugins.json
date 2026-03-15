@@ -119,8 +119,8 @@
     "author": "TypeWhisper",
     "description": "Save transcriptions as Markdown notes in Obsidian vaults",
     "category": "Integration",
-    "size": 0,
-    "downloadUrl": "",
+    "size": 10493,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-obsidian-v1.0.0/com.typewhisper.obsidian-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
