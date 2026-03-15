@@ -23,4 +23,6 @@ public interface IHistoryService
 
     string ExportToText(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null);
     string ExportToCsv(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null);
+    string ExportToMarkdown(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null);
+    string ExportToJson(IReadOnlyList<TranscriptionRecord> records);
 }

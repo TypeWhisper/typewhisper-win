@@ -134,7 +134,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         var dlg = new SaveFileDialog
         {
-            Filter = "Text (*.txt)|*.txt|CSV (*.csv)|*.csv",
+            Filter = "Text (*.txt)|*.txt|CSV (*.csv)|*.csv|Markdown (*.md)|*.md|JSON (*.json)|*.json",
             DefaultExt = ".txt",
             FileName = Loc.Instance.GetString("History.ExportFilename", DateTime.Now)
         };
@@ -158,9 +158,13 @@ public partial class HistoryViewModel : ObservableObject
             Language = Loc.Instance["Export.Language"],
         };
 
-        var content = dlg.FilterIndex == 2
-            ? _history.ExportToCsv(visibleRecords, labels)
-            : _history.ExportToText(visibleRecords, labels);
+        var content = dlg.FilterIndex switch
+        {
+            2 => _history.ExportToCsv(visibleRecords, labels),
+            3 => _history.ExportToMarkdown(visibleRecords, labels),
+            4 => _history.ExportToJson(visibleRecords),
+            _ => _history.ExportToText(visibleRecords, labels)
+        };
 
         File.WriteAllText(dlg.FileName, content, System.Text.Encoding.UTF8);
     }
