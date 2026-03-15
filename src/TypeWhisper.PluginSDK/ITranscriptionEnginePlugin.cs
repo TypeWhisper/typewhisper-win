@@ -55,6 +55,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
         => throw new NotSupportedException();
 
+    /// <summary>Unloads the currently loaded model from memory to free resources.</summary>
+    Task UnloadModelAsync() => Task.CompletedTask;
+
     /// <summary>ISO language codes supported by this engine, or empty for all.</summary>
     IReadOnlyList<string> SupportedLanguages => [];
 

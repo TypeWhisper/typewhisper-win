@@ -60,6 +60,9 @@ public record AppSettings
     public Dictionary<string, bool> PluginEnabledState { get; init; } = new();
     public bool PluginFirstRunCompleted { get; init; }
 
+    // Model auto-unload (0 = disabled)
+    public int ModelAutoUnloadSeconds { get; init; }
+
     // UI Language (null = auto-detect from system)
     public string? UiLanguage { get; init; }
 

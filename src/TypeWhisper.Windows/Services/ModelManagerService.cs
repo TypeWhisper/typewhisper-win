@@ -16,6 +16,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly ISettingsService _settings;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
+    private System.Timers.Timer? _autoUnloadTimer;
     private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -173,6 +174,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (!plugin.IsConfigured && !plugin.SupportsModelDownload)
             throw new InvalidOperationException(Loc.Instance.GetString("Error.NoApiKeyFormat", plugin.ProviderDisplayName));
 
+        CancelAutoUnload();
         SetStatus(modelId, ModelStatus.LoadingModel);
         try
         {
@@ -192,11 +194,47 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     public void UnloadModel()
     {
+        CancelAutoUnload();
         if (ActiveModelId is not null)
         {
+            var plugin = ActiveTranscriptionPlugin;
+            plugin?.UnloadModelAsync().ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    System.Diagnostics.Debug.WriteLine($"UnloadModelAsync failed: {t.Exception?.Message}");
+            });
             SetStatus(ActiveModelId, ModelStatus.NotDownloaded);
             ActiveModelId = null;
         }
+    }
+
+    /// <summary>
+    /// Schedules auto-unload after the configured idle timeout.
+    /// Call this after every transcription completes.
+    /// </summary>
+    public void ScheduleAutoUnload()
+    {
+        CancelAutoUnload();
+
+        var seconds = _settings.Current.ModelAutoUnloadSeconds;
+        if (seconds <= 0 || ActiveModelId is null)
+            return;
+
+        _autoUnloadTimer = new System.Timers.Timer(seconds * 1000.0);
+        _autoUnloadTimer.AutoReset = false;
+        _autoUnloadTimer.Elapsed += (_, _) =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Auto-unloading model after {seconds}s idle");
+            UnloadModel();
+        };
+        _autoUnloadTimer.Start();
+    }
+
+    private void CancelAutoUnload()
+    {
+        _autoUnloadTimer?.Stop();
+        _autoUnloadTimer?.Dispose();
+        _autoUnloadTimer = null;
     }
 
     public void DeleteModel(string modelId)
@@ -251,6 +289,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         if (!_disposed)
         {
+            CancelAutoUnload();
             _disposed = true;
         }
     }
