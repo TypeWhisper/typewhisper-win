@@ -14,6 +14,7 @@ public sealed record Profile
     public bool? WhisperModeOverride { get; init; }
     public string? TranscriptionModelOverride { get; init; }
     public string? PromptActionId { get; init; }
+    public string? HotkeyData { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
 }

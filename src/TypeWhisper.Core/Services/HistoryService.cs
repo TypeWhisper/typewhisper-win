@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using TypeWhisper.Core.Data;
 using TypeWhisper.Core.Interfaces;
@@ -72,8 +73,8 @@ public sealed class HistoryService : IHistoryService
         cmd.CommandText = """
             INSERT INTO transcription_history
             (id, timestamp, raw_text, final_text, app_name, app_process_name, app_url,
-             duration_seconds, language, engine_used, profile_name, created_at)
-            VALUES (@id, @ts, @raw, @final, @app, @proc, @url, @dur, @lang, @engine, @profile, @created)
+             duration_seconds, language, engine_used, profile_name, model_used, created_at)
+            VALUES (@id, @ts, @raw, @final, @app, @proc, @url, @dur, @lang, @engine, @profile, @model_used, @created)
             """;
         cmd.Parameters.AddWithValue("@id", record.Id);
         cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("o"));
@@ -86,6 +87,7 @@ public sealed class HistoryService : IHistoryService
         cmd.Parameters.AddWithValue("@lang", (object?)record.Language ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@engine", record.EngineUsed);
         cmd.Parameters.AddWithValue("@profile", (object?)record.ProfileName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@model_used", (object?)record.ModelUsed ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@created", record.CreatedAt.ToString("o"));
         cmd.ExecuteNonQuery();
 
@@ -229,6 +231,55 @@ public sealed class HistoryService : IHistoryService
         return sb.ToString();
     }
 
+    public string ExportToMarkdown(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null)
+    {
+        var l = labels ?? ExportLabels.Default;
+        var sb = new StringBuilder();
+        sb.AppendLine($"# {l.Header}");
+        sb.AppendLine();
+        sb.AppendLine($"- **{l.Exported}:** {DateTime.Now:dd.MM.yyyy HH:mm}");
+        sb.AppendLine($"- **{l.Entries}:** {records.Count}");
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+
+        foreach (var r in records)
+        {
+            sb.AppendLine($"## {r.Timestamp:dd.MM.yyyy HH:mm}");
+            sb.AppendLine();
+            if (!string.IsNullOrEmpty(r.AppProcessName))
+                sb.AppendLine($"- **{l.App}:** {r.AppProcessName}");
+            sb.AppendLine($"- **{l.Duration}:** {r.DurationSeconds:F1}s");
+            if (!string.IsNullOrEmpty(r.Language))
+                sb.AppendLine($"- **{l.Language}:** {r.Language}");
+            sb.AppendLine();
+            sb.AppendLine(r.FinalText);
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public string ExportToJson(IReadOnlyList<TranscriptionRecord> records)
+    {
+        var data = records.Select(r => new
+        {
+            id = r.Id,
+            timestamp = r.Timestamp.ToString("o"),
+            text = r.FinalText,
+            raw_text = r.RawText,
+            app = r.AppProcessName,
+            duration_seconds = r.DurationSeconds,
+            language = r.Language,
+            engine = r.EngineUsed,
+            model = r.ModelUsed,
+            profile = r.ProfileName,
+            words = r.WordCount
+        });
+
+        return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+    }
+
     private void EnsureCacheLoaded()
     {
         if (_cacheLoaded) return;
@@ -254,7 +305,7 @@ public sealed class HistoryService : IHistoryService
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, timestamp, raw_text, final_text, app_name, app_process_name, app_url,
-                   duration_seconds, language, engine_used, created_at, profile_name
+                   duration_seconds, language, engine_used, created_at, profile_name, model_used
             FROM transcription_history ORDER BY timestamp DESC
             """;
 
@@ -275,7 +326,8 @@ public sealed class HistoryService : IHistoryService
                 Language = reader.IsDBNull(8) ? null : reader.GetString(8),
                 EngineUsed = reader.GetString(9),
                 CreatedAt = DateTime.Parse(reader.GetString(10)),
-                ProfileName = reader.IsDBNull(11) ? null : reader.GetString(11)
+                ProfileName = reader.IsDBNull(11) ? null : reader.GetString(11),
+                ModelUsed = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
         return records;

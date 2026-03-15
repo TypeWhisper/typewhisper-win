@@ -4,7 +4,10 @@ using GregsStack.InputSimulatorStandard;
 using GregsStack.InputSimulatorStandard.Native;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -14,6 +17,7 @@ public partial class PromptPaletteViewModel : ObservableObject
     private readonly IPromptActionService _promptActions;
     private readonly PromptProcessingService _processing;
     private readonly TextInsertionService _textInsertion;
+    private readonly PluginManager _pluginManager;
     private readonly InputSimulator _inputSimulator = new();
 
     private bool _opening;
@@ -23,11 +27,13 @@ public partial class PromptPaletteViewModel : ObservableObject
     public PromptPaletteViewModel(
         IPromptActionService promptActions,
         PromptProcessingService processing,
-        TextInsertionService textInsertion)
+        TextInsertionService textInsertion,
+        PluginManager pluginManager)
     {
         _promptActions = promptActions;
         _processing = processing;
         _textInsertion = textInsertion;
+        _pluginManager = pluginManager;
     }
 
     public async void TogglePalette()
@@ -80,6 +86,22 @@ public partial class PromptPaletteViewModel : ObservableObject
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             var result = await _processing.ProcessAsync(action, capturedText, cts.Token);
+
+            // Route to action plugin if configured
+            if (!string.IsNullOrEmpty(action.TargetActionPluginId))
+            {
+                var actionPlugin = _pluginManager.ActionPlugins
+                    .FirstOrDefault(p => p.PluginId == action.TargetActionPluginId
+                                      || p.ActionId == action.TargetActionPluginId);
+
+                if (actionPlugin is not null)
+                {
+                    var context = new ActionContext(null, null, null, null, capturedText);
+                    await actionPlugin.ExecuteAsync(result, context, cts.Token);
+                    return;
+                }
+            }
+
             await _textInsertion.InsertTextAsync(result, autoPaste: true);
         }
         catch (Exception ex)

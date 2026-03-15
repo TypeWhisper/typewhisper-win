@@ -4,7 +4,7 @@ namespace TypeWhisper.Core.Data;
 
 public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
 
     private readonly string _connectionString;
     private SqliteConnection? _connection;
@@ -57,6 +57,8 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
             MigrateToVersion4(connection);
         if (version < 5)
             MigrateToVersion5(connection);
+        if (version < 6)
+            MigrateToVersion6(connection);
     }
 
     private static int GetSchemaVersion(SqliteConnection connection)
@@ -229,6 +231,35 @@ public sealed class TypeWhisperDatabase : ITypeWhisperDatabase
             Exec(connection, "ALTER TABLE profiles ADD COLUMN prompt_action_id TEXT");
 
         SetSchemaVersion(connection, 5);
+    }
+
+    private static void MigrateToVersion6(SqliteConnection connection)
+    {
+        // Add target_action_plugin_id and hotkey_key to prompt_actions
+        AddColumnIfMissing(connection, "prompt_actions", "target_action_plugin_id", "TEXT");
+        AddColumnIfMissing(connection, "prompt_actions", "hotkey_key", "TEXT");
+
+        // Add model_used to transcription_history
+        AddColumnIfMissing(connection, "transcription_history", "model_used", "TEXT");
+
+        // Add hotkey_data to profiles
+        AddColumnIfMissing(connection, "profiles", "hotkey_data", "TEXT");
+
+        SetSchemaVersion(connection, 6);
+    }
+
+    private static void AddColumnIfMissing(SqliteConnection connection, string table, string column, string type)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.GetString(1) == column)
+                return;
+        }
+        reader.Close();
+        Exec(connection, $"ALTER TABLE {table} ADD COLUMN {column} {type}");
     }
 
     private static void Exec(SqliteConnection connection, string sql)

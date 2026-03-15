@@ -189,6 +189,86 @@ public class PromptActionServiceTests : IDisposable
         Assert.Contains("prompt_action_id", columns);
     }
 
+    [Fact]
+    public void SchemaV6_AddsNewColumnsToPromptActions()
+    {
+        var conn = _db.GetConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(prompt_actions)";
+        using var reader = cmd.ExecuteReader();
+
+        var columns = new List<string>();
+        while (reader.Read())
+            columns.Add(reader.GetString(1));
+
+        Assert.Contains("target_action_plugin_id", columns);
+        Assert.Contains("hotkey_key", columns);
+    }
+
+    [Fact]
+    public void SchemaV6_AddsModelUsedToHistory()
+    {
+        var conn = _db.GetConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(transcription_history)";
+        using var reader = cmd.ExecuteReader();
+
+        var columns = new List<string>();
+        while (reader.Read())
+            columns.Add(reader.GetString(1));
+
+        Assert.Contains("model_used", columns);
+    }
+
+    [Fact]
+    public void SchemaV6_AddsHotkeyDataToProfiles()
+    {
+        var conn = _db.GetConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info(profiles)";
+        using var reader = cmd.ExecuteReader();
+
+        var columns = new List<string>();
+        while (reader.Read())
+            columns.Add(reader.GetString(1));
+
+        Assert.Contains("hotkey_data", columns);
+    }
+
+    [Fact]
+    public void TargetActionPluginId_PersistsCorrectly()
+    {
+        _sut.AddAction(new PromptAction
+        {
+            Id = "1",
+            Name = "With Target",
+            SystemPrompt = "test",
+            TargetActionPluginId = "com.test.linear",
+            HotkeyKey = "Ctrl+Shift+L"
+        });
+
+        var freshService = new PromptActionService(_db);
+        var action = Assert.Single(freshService.Actions);
+        Assert.Equal("com.test.linear", action.TargetActionPluginId);
+        Assert.Equal("Ctrl+Shift+L", action.HotkeyKey);
+    }
+
+    [Fact]
+    public void TargetActionPluginId_NullByDefault()
+    {
+        _sut.AddAction(new PromptAction
+        {
+            Id = "1",
+            Name = "Normal",
+            SystemPrompt = "test"
+        });
+
+        var freshService = new PromptActionService(_db);
+        var action = Assert.Single(freshService.Actions);
+        Assert.Null(action.TargetActionPluginId);
+        Assert.Null(action.HotkeyKey);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

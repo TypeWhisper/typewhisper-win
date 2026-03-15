@@ -244,6 +244,7 @@
   "Status.Pasted": "Pasted",
   "Status.Clipboard": "Copied to clipboard",
   "Status.Done": "Done",
+  "Status.ActionFormat": "Running {0}...",
   "Status.Cancelled": "Cancelled",
   "Status.ErrorFormat": "Error: {0}",
   "Status.ModelErrorFormat": "Model error: {0}",

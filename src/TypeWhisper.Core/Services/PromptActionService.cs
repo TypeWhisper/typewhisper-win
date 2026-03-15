@@ -47,9 +47,10 @@ public sealed class PromptActionService : IPromptActionService
         cmd.CommandText = """
             INSERT INTO prompt_actions
             (id, name, system_prompt, icon, is_preset, is_enabled, sort_order,
-             provider_override, model_override, created_at, updated_at)
+             provider_override, model_override, target_action_plugin_id, hotkey_key,
+             created_at, updated_at)
             VALUES (@id, @name, @prompt, @icon, @preset, @enabled, @sort,
-                    @provider, @model, @created, @updated)
+                    @provider, @model, @target_action, @hotkey_key, @created, @updated)
             """;
         BindParams(cmd, action);
         cmd.ExecuteNonQuery();
@@ -70,6 +71,7 @@ public sealed class PromptActionService : IPromptActionService
             SET name = @name, system_prompt = @prompt, icon = @icon,
                 is_preset = @preset, is_enabled = @enabled, sort_order = @sort,
                 provider_override = @provider, model_override = @model,
+                target_action_plugin_id = @target_action, hotkey_key = @hotkey_key,
                 updated_at = @updated
             WHERE id = @id
             """;
@@ -159,6 +161,8 @@ public sealed class PromptActionService : IPromptActionService
         cmd.Parameters.AddWithValue("@sort", a.SortOrder);
         cmd.Parameters.AddWithValue("@provider", (object?)a.ProviderOverride ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@model", (object?)a.ModelOverride ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@target_action", (object?)a.TargetActionPluginId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@hotkey_key", (object?)a.HotkeyKey ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@created", a.CreatedAt.ToString("o"));
         cmd.Parameters.AddWithValue("@updated", a.UpdatedAt.ToString("o"));
     }
@@ -172,7 +176,8 @@ public sealed class PromptActionService : IPromptActionService
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT id, name, system_prompt, icon, is_preset, is_enabled, sort_order,
-                   provider_override, model_override, created_at, updated_at
+                   provider_override, model_override, created_at, updated_at,
+                   target_action_plugin_id, hotkey_key
             FROM prompt_actions ORDER BY sort_order, name
             """;
 
@@ -192,7 +197,9 @@ public sealed class PromptActionService : IPromptActionService
                 ProviderOverride = reader.IsDBNull(7) ? null : reader.GetString(7),
                 ModelOverride = reader.IsDBNull(8) ? null : reader.GetString(8),
                 CreatedAt = DateTime.Parse(reader.GetString(9)),
-                UpdatedAt = DateTime.Parse(reader.GetString(10))
+                UpdatedAt = DateTime.Parse(reader.GetString(10)),
+                TargetActionPluginId = reader.IsDBNull(11) ? null : reader.GetString(11),
+                HotkeyKey = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
         _cacheLoaded = true;

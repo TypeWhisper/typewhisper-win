@@ -13,6 +13,7 @@ public sealed record TranscriptionRecord
     public string? Language { get; init; }
     public string? ProfileName { get; init; }
     public string EngineUsed { get; init; } = "whisper";
+    public string? ModelUsed { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 
     public int WordCount => FinalText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;

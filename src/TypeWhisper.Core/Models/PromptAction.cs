@@ -11,6 +11,8 @@ public sealed record PromptAction
     public int SortOrder { get; init; }
     public string? ProviderOverride { get; init; }
     public string? ModelOverride { get; init; }
+    public string? TargetActionPluginId { get; init; }
+    public string? HotkeyKey { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
 }

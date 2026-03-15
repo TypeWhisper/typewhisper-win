@@ -230,6 +230,9 @@ public partial class App : Application
         services.AddSingleton<IProfileService, ProfileService>();
         services.AddSingleton<IPromptActionService, PromptActionService>();
 
+        // Post-processing pipeline
+        services.AddSingleton<IPostProcessingPipeline, PostProcessingPipeline>();
+
         // Translation (uses plugin manager for LLM providers)
         services.AddSingleton<ITranslationService>(sp =>
             new TranslationService(sp.GetRequiredService<PluginManager>()));

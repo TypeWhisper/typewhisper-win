@@ -75,5 +75,6 @@ public enum InsertionResult
 {
     Pasted,
     CopiedToClipboard,
-    NoText
+    NoText,
+    ActionHandled
 }

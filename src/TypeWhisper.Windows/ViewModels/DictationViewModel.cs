@@ -33,6 +33,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly PluginEventBus _eventBus;
     private readonly IPromptActionService _promptActions;
     private readonly PromptProcessingService _promptProcessing;
+    private readonly IPostProcessingPipeline _pipeline;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -91,7 +92,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         IMediaPauseService mediaPause,
         IPromptActionService promptActions,
         PromptProcessingService promptProcessing,
-        PromptPaletteViewModel promptPalette)
+        PromptPaletteViewModel promptPalette,
+        IPostProcessingPipeline pipeline)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -111,6 +113,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         PromptPalette = promptPalette;
         _promptActions = promptActions;
         _promptProcessing = promptProcessing;
+        _pipeline = pipeline;
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
         _streamingHandler.OnPartialTextUpdate = text =>
@@ -188,6 +191,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _activeProfile?.TranscriptionModelOverride;
 
     [RelayCommand]
+    /// <summary>Public API for starting recording (used by HTTP API).</summary>
+    public Task StartRecordingAsync() => StartRecording();
+
+    /// <summary>Public API for stopping recording (used by HTTP API).</summary>
+    public Task StopRecordingAsync() => StopRecording();
+
+    /// <summary>Whether the service is currently recording.</summary>
+    public bool IsRecording => _isRecording;
+
     private async Task StartRecording()
     {
         if (_isRecording) return;
@@ -403,68 +415,126 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 ProfileName = job.ActiveProfile?.Name
             });
 
-            // Apply corrections and snippets
-            var finalText = _dictionary.ApplyCorrections(rawText);
-            finalText = _snippets.ApplySnippets(finalText, () =>
+            // Build pipeline options
+            var pipelineContext = new PostProcessingContext
             {
-                var text = "";
-                Application.Current.Dispatcher.Invoke(() =>
-                    text = System.Windows.Clipboard.GetText());
-                return text;
-            });
+                SourceLanguage = detectedLanguage ?? job.EffectiveLanguage,
+                ActiveAppName = job.CapturedWindowTitle,
+                ActiveAppProcessName = job.CapturedProcessName,
+                ProfileName = job.ActiveProfile?.Name,
+                AudioDurationSeconds = audioDuration
+            };
 
-            // Post-processor pipeline
-            var postProcessors = _modelManager.PluginManager.PostProcessors;
-            if (postProcessors.Count > 0)
-            {
-                var context = new PostProcessingContext
-                {
-                    SourceLanguage = detectedLanguage ?? job.EffectiveLanguage,
-                    ActiveAppName = job.CapturedWindowTitle,
-                    ActiveAppProcessName = job.CapturedProcessName,
-                    ProfileName = job.ActiveProfile?.Name,
-                    AudioDurationSeconds = audioDuration
-                };
-                foreach (var processor in postProcessors)
-                {
-                    finalText = await processor.ProcessAsync(finalText, context, ct);
-                }
-            }
-
-            // Profile prompt action: run through LLM if configured
+            // Build LLM handler if profile has prompt action
+            Func<string, CancellationToken, Task<string>>? llmHandler = null;
             if (job.ActiveProfile?.PromptActionId is { } promptActionId)
             {
                 var promptAction = _promptActions.Actions.FirstOrDefault(a => a.Id == promptActionId);
                 if (promptAction is not null && _promptProcessing.IsAnyProviderAvailable)
-                {
-                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = Loc.Instance["Status.AiPrompt"]);
-                    finalText = await _promptProcessing.ProcessAsync(promptAction, finalText, ct);
-                }
+                    llmHandler = (text, token) => _promptProcessing.ProcessAsync(promptAction, text, token);
             }
 
-            // Translate if configured
+            // Build plugin post-processors (capture context in closure)
+            var postProcessors = _modelManager.PluginManager.PostProcessors;
+            var pluginProcessors = postProcessors.Select(p =>
+                new PluginPostProcessor(p.Priority,
+                    (text, token) => p.ProcessAsync(text, pipelineContext, token))).ToList();
+
             var translationTarget = job.ActiveProfile?.TranslationTarget
                 ?? _settings.Current.TranslationTargetLanguage;
-            if (!string.IsNullOrEmpty(translationTarget))
+
+            var pipelineOptions = new PipelineOptions
             {
-                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
-                var sourceLang = detectedLanguage ?? language ?? "de";
-                if (sourceLang != translationTarget)
+                DictionaryCorrector = _dictionary.ApplyCorrections,
+                SnippetExpander = text => _snippets.ApplySnippets(text, () =>
                 {
-                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = Loc.Instance["Status.Translating"]);
-                    finalText = await _translation.TranslateAsync(finalText, sourceLang, translationTarget, ct);
+                    var t = "";
+                    Application.Current.Dispatcher.Invoke(() =>
+                        t = System.Windows.Clipboard.GetText());
+                    return t;
+                }),
+                LlmHandler = llmHandler,
+                TranslationHandler = !string.IsNullOrEmpty(translationTarget)
+                    ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
+                    : null,
+                TranslationTarget = translationTarget,
+                EffectiveSourceLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                DetectedLanguage = detectedLanguage,
+                PluginPostProcessors = pluginProcessors,
+                StatusCallback = async status =>
+                {
+                    var msg = status == "AI"
+                        ? Loc.Instance["Status.AiPrompt"]
+                        : Loc.Instance["Status.Translating"];
+                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = msg);
                 }
+            };
+
+            var pipelineResult = await _pipeline.ProcessAsync(rawText, pipelineOptions, ct);
+            var finalText = pipelineResult.Text;
+
+            // Route to action plugin if configured
+            string? targetActionPluginId = null;
+            if (job.ActiveProfile?.PromptActionId is { } paId)
+            {
+                var pa = _promptActions.Actions.FirstOrDefault(a => a.Id == paId);
+                targetActionPluginId = pa?.TargetActionPluginId;
             }
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            InsertionResult insertResult;
+            if (!string.IsNullOrEmpty(targetActionPluginId))
             {
-                TranscribedText = finalText;
-                State = DictationState.Inserting;
-                StatusText = Loc.Instance["Status.Inserting"];
-            });
+                var actionPlugin = _modelManager.PluginManager.ActionPlugins
+                    .FirstOrDefault(p => p.PluginId == targetActionPluginId || p.ActionId == targetActionPluginId);
 
-            var insertResult = await _textInsertion.InsertTextAsync(
-                finalText, _settings.Current.AutoPaste);
+                if (actionPlugin is not null)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        TranscribedText = finalText;
+                        State = DictationState.Processing;
+                        StatusText = Loc.Instance.GetString("Status.ActionFormat", actionPlugin.ActionName);
+                    });
+
+                    var actionContext = new ActionContext(
+                        job.CapturedWindowTitle,
+                        job.CapturedProcessName,
+                        null,
+                        detectedLanguage,
+                        rawText);
+                    var actionResult = await actionPlugin.ExecuteAsync(finalText, actionContext, ct);
+
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        FeedbackText = actionResult.Message ?? (actionResult.Success ? "Done" : "Failed");
+                        FeedbackIsError = !actionResult.Success;
+                        ShowFeedback = true;
+                    });
+
+                    insertResult = InsertionResult.ActionHandled;
+                }
+                else
+                {
+                    // Fallback to text insertion if action plugin not found
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        TranscribedText = finalText;
+                        State = DictationState.Inserting;
+                        StatusText = Loc.Instance["Status.Inserting"];
+                    });
+                    insertResult = await _textInsertion.InsertTextAsync(finalText, _settings.Current.AutoPaste);
+                }
+            }
+            else
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    TranscribedText = finalText;
+                    State = DictationState.Inserting;
+                    StatusText = Loc.Instance["Status.Inserting"];
+                });
+                insertResult = await _textInsertion.InsertTextAsync(finalText, _settings.Current.AutoPaste);
+            }
 
             _eventBus.Publish(new TextInsertedEvent
             {
@@ -495,10 +565,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 DurationSeconds = audioDuration,
                 Language = detectedLanguage,
                 ProfileName = job.ActiveProfile?.Name,
-                EngineUsed = engineUsed
+                EngineUsed = engineUsed,
+                ModelUsed = job.ActiveModelIdAtCapture
             });
 
             _sound.PlaySuccessSound();
+            _modelManager.ScheduleAutoUnload();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 StatusText = insertResult switch

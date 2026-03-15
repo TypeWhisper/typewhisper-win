@@ -70,6 +70,39 @@ public class ProfileServiceTests : IDisposable
         Assert.Equal("action-456", loaded.PromptActionId);
     }
 
+    [Fact]
+    public void HotkeyData_RoundTrips()
+    {
+        var profile = new Profile
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "With Hotkey",
+            HotkeyData = "{\"key\":\"Ctrl+1\"}"
+        };
+
+        _sut.AddProfile(profile);
+
+        var freshService = new ProfileService(_db);
+        var loaded = freshService.Profiles.First(p => p.Id == profile.Id);
+        Assert.Equal("{\"key\":\"Ctrl+1\"}", loaded.HotkeyData);
+    }
+
+    [Fact]
+    public void HotkeyData_NullByDefault()
+    {
+        var profile = new Profile
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "No Hotkey"
+        };
+
+        _sut.AddProfile(profile);
+
+        var freshService = new ProfileService(_db);
+        var loaded = freshService.Profiles.First(p => p.Id == profile.Id);
+        Assert.Null(loaded.HotkeyData);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

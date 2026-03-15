@@ -244,6 +244,7 @@
   "Status.Pasted": "Eingef\u00fcgt",
   "Status.Clipboard": "In Zwischenablage",
   "Status.Done": "Fertig",
+  "Status.ActionFormat": "{0} wird ausgeführt...",
   "Status.Cancelled": "Abgebrochen",
   "Status.ErrorFormat": "Fehler: {0}",
   "Status.ModelErrorFormat": "Modell-Fehler: {0}",
