@@ -103,8 +103,8 @@
     "author": "TypeWhisper",
     "description": "Create Linear issues from transcriptions via GraphQL API",
     "category": "Integration",
-    "size": 0,
-    "downloadUrl": "",
+    "size": 12812,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-linear-v1.0.0/com.typewhisper.linear-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
