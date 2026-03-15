@@ -135,8 +135,8 @@
     "author": "TypeWhisper",
     "description": "Process transcriptions through custom shell scripts (cmd/PowerShell)",
     "category": "Processing",
-    "size": 0,
-    "downloadUrl": "",
+    "size": 12476,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-script-v1.0.0/com.typewhisper.script-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
