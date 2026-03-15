@@ -1,0 +1,9 @@
+{
+  "id": "com.typewhisper.gemini",
+  "name": "Google Gemini",
+  "version": "1.0.0",
+  "author": "TypeWhisper",
+  "description": "Google Gemini LLM provider for prompt actions and translation",
+  "assemblyName": "TypeWhisper.Plugin.Gemini.dll",
+  "pluginClass": "TypeWhisper.Plugin.Gemini.GeminiPlugin"
+}
