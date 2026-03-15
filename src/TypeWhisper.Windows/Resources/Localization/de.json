@@ -93,6 +93,8 @@
   "Profiles.WhisperModeOverrideHint": "\u00dcberschreibt die globale Whisper-Modus Einstellung",
   "Profiles.TranscriptionModel": "Transkriptions-Modell",
   "Profiles.TranscriptionModelHint": "\u00dcberschreibt das globale Modell f\u00fcr dieses Profil (lokal oder Cloud)",
+  "Profiles.HotkeyLabel": "Profil-Hotkey",
+  "Profiles.HotkeyHint": "Eigener Hotkey zum Starten der Diktat mit diesem Profil (umgeht App-Matching)",
   "Profiles.Priority": "Priorit\u00e4t",
   "Profiles.PriorityHint": "H\u00f6here Zahl = h\u00f6here Priorit\u00e4t bei Mehrfach-Match",
   "Profiles.Save": "Speichern",

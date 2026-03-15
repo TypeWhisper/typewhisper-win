@@ -47,6 +47,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     // Captured at recording start for the current session
     private Profile? _activeProfile;
+    private string? _profileHotkeyOverrideId;
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
 
@@ -150,6 +151,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         _hotkey.PromptPaletteRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(() =>
             PromptPalette.TogglePalette());
+        _hotkey.ProfileDictationRequested += (_, profileId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+        {
+            _profileHotkeyOverrideId = profileId;
+            await StartRecording();
+        });
     }
 
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
@@ -212,7 +218,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
         _capturedWindowTitle = _activeWindow.GetActiveWindowTitle();
         var url = _activeWindow.GetBrowserUrl();
-        _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
+        if (_profileHotkeyOverrideId is not null)
+        {
+            _activeProfile = _profiles.Profiles.FirstOrDefault(p => p.Id == _profileHotkeyOverrideId);
+            _profileHotkeyOverrideId = null;
+        }
+        else
+        {
+            _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
+        }
 
         // Switch to profile model override if needed (cloud switch is instant)
         var profileModel = EffectiveModelId;

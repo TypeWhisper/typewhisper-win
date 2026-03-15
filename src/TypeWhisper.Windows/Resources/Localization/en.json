@@ -93,6 +93,8 @@
   "Profiles.WhisperModeOverrideHint": "Overrides the global Whisper Mode setting",
   "Profiles.TranscriptionModel": "Transcription Model",
   "Profiles.TranscriptionModelHint": "Overrides the global model for this profile (local or cloud)",
+  "Profiles.HotkeyLabel": "Profile Hotkey",
+  "Profiles.HotkeyHint": "Dedicated hotkey to start dictation with this profile (bypasses app matching)",
   "Profiles.Priority": "Priority",
   "Profiles.PriorityHint": "Higher number = higher priority on multiple matches",
   "Profiles.Save": "Save",

@@ -4,6 +4,7 @@
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
              xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
+             xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
              xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -400,6 +401,16 @@
                               DisplayMemberPath="DisplayName"
                               HorizontalAlignment="Stretch"/>
                     <TextBlock Text="{loc:Str Profiles.TranscriptionModelHint}"
+                               Style="{StaticResource HintStyle}"/>
+                </StackPanel>
+
+                <!-- Profile Hotkey -->
+                <StackPanel Margin="0,0,0,20">
+                    <TextBlock Text="{loc:Str Profiles.HotkeyLabel}" Style="{StaticResource LabelStyle}"/>
+                    <controls:HotkeyRecorderControl
+                        Hotkey="{Binding Profiles.EditHotkey, Mode=TwoWay}"
+                        HorizontalAlignment="Left" Width="250"/>
+                    <TextBlock Text="{loc:Str Profiles.HotkeyHint}"
                                Style="{StaticResource HintStyle}"/>
                 </StackPanel>
 

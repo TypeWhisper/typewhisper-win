@@ -28,6 +28,7 @@ public partial class ProfilesViewModel : ObservableObject
     [ObservableProperty] private string? _editTranscriptionModelOverride;
     [ObservableProperty] private int _editPriority;
     [ObservableProperty] private bool _editIsEnabled = true;
+    [ObservableProperty] private string? _editHotkey;
 
     // Chip inputs
     [ObservableProperty] private string _processNameInput = "";
@@ -137,6 +138,7 @@ public partial class ProfilesViewModel : ObservableObject
             EditTranscriptionModelOverride = null;
             EditPriority = 0;
             EditIsEnabled = true;
+            EditHotkey = null;
             return;
         }
 
@@ -148,6 +150,7 @@ public partial class ProfilesViewModel : ObservableObject
         EditTranscriptionModelOverride = value.TranscriptionModelOverride;
         EditPriority = value.Priority;
         EditIsEnabled = value.IsEnabled;
+        EditHotkey = value.HotkeyData;
 
         foreach (var p in value.ProcessNames) ProcessNameChips.Add(p);
         foreach (var u in value.UrlPatterns) UrlPatternChips.Add(u);
@@ -234,6 +237,7 @@ public partial class ProfilesViewModel : ObservableObject
             TranscriptionModelOverride = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride) ? null : EditTranscriptionModelOverride,
             Priority = EditPriority,
             IsEnabled = EditIsEnabled,
+            HotkeyData = string.IsNullOrWhiteSpace(EditHotkey) ? null : EditHotkey,
             UpdatedAt = DateTime.UtcNow
         };
 

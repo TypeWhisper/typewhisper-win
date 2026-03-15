@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
 using TypeWhisper.Core.Interfaces;
@@ -17,10 +18,12 @@ public sealed class HotkeyService : IDisposable
     private const double PushToTalkThresholdMs = 600;
 
     private readonly ISettingsService _settings;
+    private readonly IProfileService _profiles;
     private readonly KeyboardHook _hybridHook;
     private readonly KeyboardHook _toggleOnlyHook;
     private readonly KeyboardHook _holdOnlyHook;
     private readonly KeyboardHook _promptPaletteHook;
+    private readonly List<(KeyboardHook Hook, string ProfileId)> _profileHooks = [];
 
     private bool _disposed;
     private DateTime _keyDownTime;
@@ -29,12 +32,14 @@ public sealed class HotkeyService : IDisposable
     public event EventHandler? DictationStartRequested;
     public event EventHandler? DictationStopRequested;
     public event EventHandler? PromptPaletteRequested;
+    public event EventHandler<string>? ProfileDictationRequested;
     public HotkeyMode? CurrentMode { get; private set; }
     public bool IsEnabled { get; set; } = true;
 
-    public HotkeyService(ISettingsService settings)
+    public HotkeyService(ISettingsService settings, IProfileService profiles)
     {
         _settings = settings;
+        _profiles = profiles;
 
         _hybridHook = new KeyboardHook();
         _hybridHook.KeyDown += OnHybridKeyDown;
@@ -55,6 +60,7 @@ public sealed class HotkeyService : IDisposable
     {
         ApplySettings();
         _settings.SettingsChanged += _ => Application.Current?.Dispatcher.Invoke(ApplySettings);
+        _profiles.ProfilesChanged += () => Application.Current?.Dispatcher.Invoke(ApplyProfileHotkeys);
     }
 
     public void ApplySettings()
@@ -62,6 +68,7 @@ public sealed class HotkeyService : IDisposable
         var s = _settings.Current;
 
         StopAllHooks();
+        StopProfileHooks();
 
         var hybridKey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey) ? s.PushToTalkHotkey : s.ToggleHotkey;
         if (!string.IsNullOrWhiteSpace(hybridKey))
@@ -87,6 +94,52 @@ public sealed class HotkeyService : IDisposable
             _promptPaletteHook.SetHotkey(s.PromptPaletteHotkey);
             _promptPaletteHook.Start();
         }
+
+        ApplyProfileHotkeys();
+    }
+
+    private void ApplyProfileHotkeys()
+    {
+        StopProfileHooks();
+
+        foreach (var profile in _profiles.Profiles)
+        {
+            if (!profile.IsEnabled || string.IsNullOrWhiteSpace(profile.HotkeyData)) continue;
+
+            var hook = new KeyboardHook();
+            var profileId = profile.Id;
+            hook.KeyDown += (_, _) =>
+            {
+                if (!IsEnabled) return;
+
+                if (_isActive)
+                {
+                    _isActive = false;
+                    CurrentMode = null;
+                    DictationStopRequested?.Invoke(this, EventArgs.Empty);
+                }
+                else
+                {
+                    _isActive = true;
+                    CurrentMode = HotkeyMode.Toggle;
+                    ProfileDictationRequested?.Invoke(this, profileId);
+                }
+            };
+            hook.SetHotkey(profile.HotkeyData);
+            hook.Start();
+            _profileHooks.Add((hook, profileId));
+            Debug.WriteLine($"Registered profile hotkey: {profile.HotkeyData} for {profile.Name}");
+        }
+    }
+
+    private void StopProfileHooks()
+    {
+        foreach (var (hook, _) in _profileHooks)
+        {
+            hook.Stop();
+            hook.Dispose();
+        }
+        _profileHooks.Clear();
     }
 
     // --- Hybrid: short press = toggle, long hold = PTT ---
@@ -200,6 +253,7 @@ public sealed class HotkeyService : IDisposable
         if (!_disposed)
         {
             StopAllHooks();
+            StopProfileHooks();
             _hybridHook.Dispose();
             _toggleOnlyHook.Dispose();
             _holdOnlyHook.Dispose();
