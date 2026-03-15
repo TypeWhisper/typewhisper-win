@@ -151,8 +151,8 @@
     "author": "TypeWhisper",
     "description": "Floating window showing real-time transcription during recording",
     "category": "UI",
-    "size": 0,
-    "downloadUrl": "",
+    "size": 8692,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-live-transcript-v1.0.0/com.typewhisper.live-transcript-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
