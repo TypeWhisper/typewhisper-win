@@ -1,0 +1,9 @@
+{
+  "id": "com.typewhisper.linear",
+  "name": "Linear",
+  "version": "1.0.0",
+  "author": "TypeWhisper",
+  "description": "Create Linear issues from transcriptions",
+  "assemblyName": "TypeWhisper.Plugin.Linear.dll",
+  "pluginClass": "TypeWhisper.Plugin.Linear.LinearPlugin"
+}
