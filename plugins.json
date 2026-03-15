@@ -78,5 +78,85 @@
     "descriptions": {
       "de": "Verbindung zu jedem OpenAI-kompatiblen Server (Ollama, LM Studio, vLLM, etc.)"
     }
+  },
+  {
+    "id": "com.typewhisper.gemini",
+    "name": "Google Gemini",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Google Gemini LLM provider (Flash, Pro, Flash Lite)",
+    "category": "LLM",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Google Gemini LLM-Anbieter (Flash, Pro, Flash Lite)"
+    }
+  },
+  {
+    "id": "com.typewhisper.linear",
+    "name": "Linear",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Create Linear issues from transcriptions via GraphQL API",
+    "category": "Integration",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Linear-Issues aus Transkriptionen erstellen (GraphQL API)"
+    }
+  },
+  {
+    "id": "com.typewhisper.obsidian",
+    "name": "Obsidian",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Save transcriptions as Markdown notes in Obsidian vaults",
+    "category": "Integration",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Transkriptionen als Markdown-Notizen in Obsidian-Vaults speichern"
+    }
+  },
+  {
+    "id": "com.typewhisper.script",
+    "name": "Script Runner",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Process transcriptions through custom shell scripts (cmd/PowerShell)",
+    "category": "Processing",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Transkriptionen durch eigene Shell-Skripte verarbeiten (cmd/PowerShell)"
+    }
+  },
+  {
+    "id": "com.typewhisper.live-transcript",
+    "name": "Live Transcript",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Floating window showing real-time transcription during recording",
+    "category": "UI",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Schwebendes Fenster mit Echtzeit-Transkription waehrend der Aufnahme"
+    }
   }
 ]
