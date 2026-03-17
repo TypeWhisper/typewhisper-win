@@ -158,5 +158,21 @@
     "descriptions": {
       "de": "Schwebendes Fenster mit Echtzeit-Transkription waehrend der Aufnahme"
     }
+  },
+  {
+    "id": "com.typewhisper.granite-speech",
+    "name": "IBM Granite Speech (Local)",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Offline transcription via IBM Granite-4.0 1B Speech with embedded Python runtime",
+    "category": "Transcription",
+    "size": 0,
+    "downloadUrl": "",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Offline-Transkription mit IBM Granite-4.0 1B Speech und eingebetteter Python-Laufzeit"
+    }
   }
 ]
