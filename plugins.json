@@ -162,13 +162,13 @@
   {
     "id": "com.typewhisper.granite-speech",
     "name": "IBM Granite Speech (Local)",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Offline transcription via IBM Granite-4.0 1B Speech with embedded Python runtime",
     "category": "Transcription",
-    "size": 15475,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-granite-speech-v1.0.0/com.typewhisper.granite-speech-1.0.0.zip",
+    "size": 17584,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-granite-speech-v1.0.1/com.typewhisper.granite-speech-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
