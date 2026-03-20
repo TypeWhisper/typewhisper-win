@@ -22,7 +22,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         ["en", "fr", "de", "es", "pt", "ja"];
 
     private readonly SemaphoreSlim _sidecarLock = new(1, 1);
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(30) };
     private IPluginHostServices? _host;
     private Process? _sidecar;
     private StreamWriter? _sidecarIn;
@@ -89,38 +89,82 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         var pythonExe = Path.Combine(pythonDir, "python.exe");
 
         // Step 1: Download & extract embedded Python (~11 MB)
-        if (!File.Exists(pythonExe))
+        if (!File.Exists(pythonExe) || !ValidatePythonInstallation(pythonDir))
         {
             progress?.Report(0.0);
-            var zipPath = Path.Combine(dataDir, "python-embed.zip");
-            await DownloadFileAsync(PythonEmbedUrl, zipPath, ct);
-            Directory.CreateDirectory(pythonDir);
-            ZipFile.ExtractToDirectory(zipPath, pythonDir, overwriteFiles: true);
-            File.Delete(zipPath);
-            PatchPthFile(pythonDir);
+            Log(PluginLogLevel.Info, "Step 1: Downloading embedded Python...");
+
+            if (Directory.Exists(pythonDir))
+            {
+                Log(PluginLogLevel.Warning, "Incomplete Python installation detected, cleaning up...");
+                Directory.Delete(pythonDir, recursive: true);
+            }
+
+            await RetryAsync(async () =>
+            {
+                if (Directory.Exists(pythonDir))
+                    Directory.Delete(pythonDir, recursive: true);
+
+                var zipPath = Path.Combine(dataDir, "python-embed.zip");
+                await DownloadFileAsync(PythonEmbedUrl, zipPath, ct);
+                Directory.CreateDirectory(pythonDir);
+                ZipFile.ExtractToDirectory(zipPath, pythonDir, overwriteFiles: true);
+                File.Delete(zipPath);
+                PatchPthFile(pythonDir);
+
+                if (!File.Exists(pythonExe))
+                    throw new InvalidOperationException("python.exe not found after extraction");
+                if (!ValidatePythonInstallation(pythonDir))
+                    throw new InvalidOperationException("Python installation validation failed after extraction");
+            }, maxRetries: 2, ct);
+
+            Log(PluginLogLevel.Info, "Step 1 complete: Python installed");
         }
 
         // Step 2: Bootstrap pip
         progress?.Report(0.05);
         if (!File.Exists(Path.Combine(pythonDir, "Scripts", "pip.exe")))
         {
-            var getPipPath = Path.Combine(pythonDir, "get-pip.py");
-            await DownloadFileAsync(GetPipUrl, getPipPath, ct);
-            await RunProcessAsync(pythonExe, $"\"{getPipPath}\"", ct);
-            File.Delete(getPipPath);
+            Log(PluginLogLevel.Info, "Step 2: Bootstrapping pip...");
+
+            await RetryAsync(async () =>
+            {
+                var getPipPath = Path.Combine(pythonDir, "get-pip.py");
+                await DownloadFileAsync(GetPipUrl, getPipPath, ct);
+                await RunProcessAsync(pythonExe, $"\"{getPipPath}\"", ct, timeoutMs: 300_000);
+                File.Delete(getPipPath);
+
+                if (!File.Exists(Path.Combine(pythonDir, "Scripts", "pip.exe")))
+                    throw new InvalidOperationException("pip.exe not found after bootstrap");
+            }, maxRetries: 2, ct);
+
+            Log(PluginLogLevel.Info, "Step 2 complete: pip installed");
         }
 
         // Step 3: Install packages (torch CPU ~300 MB, transformers, soundfile)
         progress?.Report(0.10);
+        Log(PluginLogLevel.Info, "Step 3: Installing Python packages (this may take a while)...");
+
         var reqPath = GetScriptPath("requirements.txt");
-        await RunProcessAsync(pythonExe,
-            $"-m pip install -q -r \"{reqPath}\" " +
-            "--index-url https://download.pytorch.org/whl/cpu " +
-            "--extra-index-url https://pypi.org/simple/",
-            ct, timeoutMs: 600_000);
+        await RetryAsync(async () =>
+        {
+            await RunProcessAsync(pythonExe,
+                $"-m pip install -q --no-cache-dir -r \"{reqPath}\" " +
+                "--index-url https://download.pytorch.org/whl/cpu " +
+                "--extra-index-url https://pypi.org/simple/",
+                ct, timeoutMs: 1_800_000);
+
+            await RunProcessAsync(pythonExe,
+                "-c \"import torch; import transformers; import soundfile; import huggingface_hub\"",
+                ct, timeoutMs: 30_000);
+        }, maxRetries: 2, ct);
+
+        Log(PluginLogLevel.Info, "Step 3 complete: packages installed");
 
         // Step 4: Download HF model (~4.5 GB, with per-file progress)
         progress?.Report(0.30);
+        Log(PluginLogLevel.Info, "Step 4: Downloading model files...");
+
         var scriptPath = GetScriptPath("granite_speech_server.py");
         var psi = new ProcessStartInfo
         {
@@ -150,6 +194,9 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
                     progress?.Report(0.30 + prog.GetDouble() * 0.70);
                 }
 
+                if (root.TryGetProperty("warning", out var warn))
+                    Log(PluginLogLevel.Warning, $"Model download: {warn.GetString()}");
+
                 if (root.TryGetProperty("error", out var err))
                     throw new InvalidOperationException($"Model download failed: {err.GetString()}");
             }
@@ -164,13 +211,14 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         {
             var stderr = await proc.StandardError.ReadToEndAsync(ct);
             throw new InvalidOperationException(
-                $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 500)..]}");
+                $"Model download failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 1000)..]}");
         }
 
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, ".setup-complete"),
             DateTime.UtcNow.ToString("O"), ct);
 
+        Log(PluginLogLevel.Info, "Setup complete");
         progress?.Report(1.0);
     }
 
@@ -369,7 +417,24 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         }
     }
 
+    private static bool ValidatePythonInstallation(string pythonDir)
+    {
+        if (!File.Exists(Path.Combine(pythonDir, "python.exe")))
+            return false;
+        if (Directory.GetFiles(pythonDir, "python*.zip").Length == 0)
+            return false;
+        if (Directory.GetFiles(pythonDir, "python*._pth").Length == 0)
+            return false;
+        return true;
+    }
+
     // --- General helpers ---
+
+    private void Log(PluginLogLevel level, string message)
+    {
+        _host?.Log(level, message);
+        Debug.WriteLine($"[GraniteSpeech] {message}");
+    }
 
     private string GetDataDirectory() =>
         _host?.PluginDataDirectory ?? Path.Combine(".", "PluginData");
@@ -414,4 +479,29 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
                 $"{exe} failed (exit {proc.ExitCode}): {stderr[Math.Max(0, stderr.Length - 500)..]}");
         }
     }
+
+    private async Task RetryAsync(Func<Task> action, int maxRetries, CancellationToken ct,
+        Action<int, Exception>? onRetry = null)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await action();
+                return;
+            }
+            catch (Exception ex) when (attempt < maxRetries && IsTransient(ex) && !ct.IsCancellationRequested)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                Log(PluginLogLevel.Warning, $"Attempt {attempt + 1} failed ({ex.Message}), retrying in {delay.TotalSeconds}s...");
+                onRetry?.Invoke(attempt + 1, ex);
+                await Task.Delay(delay, ct);
+            }
+        }
+    }
+
+    private static bool IsTransient(Exception ex) => ex is HttpRequestException
+        or TimeoutException
+        or IOException
+        || (ex is InvalidOperationException ioe && ioe.Message.Contains("failed (exit"));
 }

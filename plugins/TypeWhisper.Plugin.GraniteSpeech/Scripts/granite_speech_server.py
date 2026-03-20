@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 MODEL_NAME = "ibm-granite/granite-4.0-1b-speech"
 
@@ -59,7 +60,13 @@ def cmd_setup():
     from huggingface_hub import HfApi, hf_hub_download
 
     api = HfApi()
-    all_files = api.list_repo_files(MODEL_NAME)
+
+    try:
+        all_files = api.list_repo_files(MODEL_NAME)
+    except Exception as e:
+        respond({"error": f"Failed to list model files: {e}"})
+        sys.exit(1)
+
     model_files = [
         f
         for f in all_files
@@ -67,8 +74,28 @@ def cmd_setup():
     ]
 
     total = len(model_files)
+    max_retries = 3
+
     for i, filename in enumerate(model_files):
-        hf_hub_download(MODEL_NAME, filename)
+        for attempt in range(max_retries):
+            try:
+                hf_hub_download(MODEL_NAME, filename)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = 2**attempt
+                    respond(
+                        {
+                            "warning": f"Retry {attempt + 1}/{max_retries} for {filename}: {e}",
+                            "progress": i / total,
+                            "phase": "model",
+                        }
+                    )
+                    time.sleep(delay)
+                else:
+                    respond({"error": f"Failed to download {filename} after {max_retries} attempts: {e}"})
+                    sys.exit(1)
+
         respond({"progress": (i + 1) / total, "phase": "model"})
 
     respond({"progress": 1.0, "phase": "done"})
