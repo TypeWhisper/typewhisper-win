@@ -97,7 +97,16 @@
                          AcceptsReturn="True" TextWrapping="Wrap"
                          MinHeight="80" MaxHeight="160"
                          VerticalScrollBarVisibility="Auto"
-                         Margin="0,0,0,12"/>
+                         Margin="0,0,0,10"/>
+
+                <!-- Provider override -->
+                <TextBlock Text="{loc:Str Prompts.ProviderOverride}" Style="{StaticResource LabelStyle}"/>
+                <ComboBox ItemsSource="{Binding Prompts.AvailableProviders}"
+                          SelectedValue="{Binding Prompts.EditProviderOverride}"
+                          SelectedValuePath="Value"
+                          DisplayMemberPath="DisplayName"
+                          Width="320" HorizontalAlignment="Left"
+                          Margin="0,0,0,12"/>
 
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

@@ -7,6 +7,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.Views;
 
@@ -80,7 +81,14 @@ public partial class PromptPaletteViewModel : ObservableObject
             return;
 
         if (!_processing.IsAnyProviderAvailable)
+        {
+            MessageBox.Show(
+                Loc.Instance["Error.NoLlmProvider"],
+                "TypeWhisper",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
+        }
 
         try
         {
@@ -104,9 +112,18 @@ public partial class PromptPaletteViewModel : ObservableObject
 
             await _textInsertion.InsertTextAsync(result, autoPaste: true);
         }
+        catch (OperationCanceledException)
+        {
+            // Timeout or user cancellation - no error to show
+        }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Prompt processing error: {ex.Message}");
+            MessageBox.Show(
+                Loc.Instance.GetString("Error.PromptProcessingFailed", ex.Message),
+                "TypeWhisper",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 

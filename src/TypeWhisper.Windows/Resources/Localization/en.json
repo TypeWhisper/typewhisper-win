@@ -357,6 +357,9 @@
   "Welcome.Done": "Done!",
 
   "Prompts.DefaultProviderLabel": "(Default)",
+  "Prompts.DefaultProviderLabelNone": "(Default - none configured)",
+  "Prompts.DefaultProviderLabelFormat": "(Default - {0})",
+  "Prompts.ProviderOverride": "Provider",
   "Prompts.NewPromptTitle": "New Prompt",
   "Prompts.EditPromptTitle": "Edit Prompt",
 
@@ -369,6 +372,7 @@
   "Translation.None": "No Translation",
 
   "Error.NoLlmProvider": "No LLM provider available. Please configure an API key in Extensions.",
+  "Error.PromptProcessingFailed": "Prompt processing failed: {0}",
   "Error.NoApiKeyFormat": "No API key for {0}",
   "Error.FileNotFound": "File not found.",
   "Error.TranslationNotAvailableFormat": "No translation available for {0}->{1}",

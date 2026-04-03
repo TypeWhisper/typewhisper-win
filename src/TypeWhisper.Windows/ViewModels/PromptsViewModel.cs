@@ -189,7 +189,7 @@ public partial class PromptsViewModel : ObservableObject
     public void RefreshProviders()
     {
         AvailableProviders.Clear();
-        AvailableProviders.Add(new ProviderOption(null, Loc.Instance["Prompts.DefaultProviderLabel"]));
+        AvailableProviders.Add(new ProviderOption(null, GetDefaultProviderLabel()));
         foreach (var provider in _pluginManager.LlmProviders)
         {
             if (!provider.IsAvailable) continue;
@@ -204,6 +204,20 @@ public partial class PromptsViewModel : ObservableObject
             }
         }
         OnPropertyChanged(nameof(HasLlmProviders));
+    }
+
+    private string GetDefaultProviderLabel()
+    {
+        var firstAvailable = _pluginManager.LlmProviders.FirstOrDefault(p => p.IsAvailable);
+        if (firstAvailable is null)
+            return Loc.Instance["Prompts.DefaultProviderLabelNone"];
+
+        var firstModel = firstAvailable.SupportedModels.FirstOrDefault();
+        if (firstModel is not null)
+            return Loc.Instance.GetString("Prompts.DefaultProviderLabelFormat",
+                $"{firstAvailable.ProviderName} / {firstModel.DisplayName}");
+
+        return Loc.Instance["Prompts.DefaultProviderLabelNone"];
     }
 }
 

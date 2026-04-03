@@ -447,8 +447,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (job.ActiveProfile?.PromptActionId is { } promptActionId)
             {
                 var promptAction = _promptActions.Actions.FirstOrDefault(a => a.Id == promptActionId);
-                if (promptAction is not null && _promptProcessing.IsAnyProviderAvailable)
-                    llmHandler = (text, token) => _promptProcessing.ProcessAsync(promptAction, text, token);
+                if (promptAction is not null)
+                {
+                    if (_promptProcessing.IsAnyProviderAvailable)
+                    {
+                        llmHandler = (text, token) => _promptProcessing.ProcessAsync(promptAction, text, token);
+                    }
+                    else
+                    {
+                        FeedbackText = Loc.Instance["Error.NoLlmProvider"];
+                        FeedbackIsError = true;
+                        ShowFeedback = true;
+                    }
+                }
             }
 
             // Build plugin post-processors (capture context in closure)

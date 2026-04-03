@@ -357,6 +357,9 @@
   "Welcome.Done": "Fertig!",
 
   "Prompts.DefaultProviderLabel": "(Standard)",
+  "Prompts.DefaultProviderLabelNone": "(Standard - keiner konfiguriert)",
+  "Prompts.DefaultProviderLabelFormat": "(Standard - {0})",
+  "Prompts.ProviderOverride": "Provider",
   "Prompts.NewPromptTitle": "Neuer Prompt",
   "Prompts.EditPromptTitle": "Prompt bearbeiten",
 
@@ -369,6 +372,7 @@
   "Translation.None": "Keine \u00dcbersetzung",
 
   "Error.NoLlmProvider": "Kein LLM-Provider verf\u00fcgbar. Bitte konfigurieren Sie einen API-Key in den Erweiterungen.",
+  "Error.PromptProcessingFailed": "Prompt-Verarbeitung fehlgeschlagen: {0}",
   "Error.NoApiKeyFormat": "Kein API-Key f\u00fcr {0}",
   "Error.FileNotFound": "Datei nicht gefunden.",
   "Error.TranslationNotAvailableFormat": "Keine \u00dcbersetzung verf\u00fcgbar f\u00fcr {0}->{1}",
