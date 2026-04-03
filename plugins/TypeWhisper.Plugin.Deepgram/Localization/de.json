@@ -1,0 +1,9 @@
+{
+  "Settings.Test": "Testen",
+  "Settings.Saved": "Gespeichert",
+  "Settings.EnterApiKey": "Bitte zuerst einen API-Key eingeben",
+  "Settings.Testing": "Teste...",
+  "Settings.ApiKeyValid": "API-Key gültig!",
+  "Settings.ApiKeyInvalid": "Ungültiger API-Key",
+  "Settings.Error": "Fehler: {0}"
+}

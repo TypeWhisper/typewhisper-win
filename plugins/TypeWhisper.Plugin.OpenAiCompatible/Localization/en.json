@@ -1,0 +1,19 @@
+{
+  "Settings.Connect": "Connect",
+  "Settings.Save": "Save",
+  "Settings.ApiKeyHint": "Not needed for local servers like Ollama or LM Studio",
+  "Settings.ModelSelection": "\uD83D\uDCCB Model Selection",
+  "Settings.Refresh": "\uD83D\uDD04 Refresh",
+  "Settings.TranscriptionModel": "Transcription Model",
+  "Settings.LlmModel": "LLM Model",
+  "Settings.NoModelsFound": "\u26A0 No models found via the API. You can enter model names manually.",
+  "Settings.Connecting": "Connecting...",
+  "Settings.TryingConnection": "Trying to connect to {0}...",
+  "Settings.ConnectionFailed": "Connection failed",
+  "Settings.ServerNotResponding": "Server {0} is not responding or the /v1/models endpoint is not available.",
+  "Settings.Timeout": "Timeout",
+  "Settings.TimeoutDetail": "Server {0} did not respond within 10 seconds.",
+  "Settings.ConnectionError": "Connection error",
+  "Settings.ConnectionSuccess": "Server: {0}\n{1} model(s) available",
+  "Settings.Connected": "Connected - {0} models"
+}
