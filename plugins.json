@@ -66,13 +66,13 @@
   {
     "id": "com.typewhisper.openai-compatible",
     "name": "OpenAI Compatible",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
     "category": "Integration",
-    "size": 15456,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-compatible-v1.0.0/com.typewhisper.openai-compatible-1.0.0.zip",
+    "size": 17928,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-compatible-v1.0.1/com.typewhisper.openai-compatible-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
