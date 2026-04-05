@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.openai",
   "name": "OpenAI",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "OpenAI Whisper transcription and GPT translation",
   "assemblyName": "TypeWhisper.Plugin.OpenAi.dll",
