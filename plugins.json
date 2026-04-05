@@ -183,7 +183,7 @@
     "author": "TypeWhisper",
     "description": "Run Google Gemma 4 locally via LLamaSharp - no cloud, no Ollama required",
     "category": "LLM",
-    "size": 20319,
+    "size": 31867024,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gemma-local-v1.0.0/com.typewhisper.gemma-local-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
