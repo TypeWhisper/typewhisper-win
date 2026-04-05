@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using TypeWhisper.Windows.Native;
 
 namespace TypeWhisper.Windows.Services.Localization;
 
@@ -116,12 +117,30 @@ public sealed class Loc : INotifyPropertyChanged
     public bool HasLanguage(string langCode) => _strings.ContainsKey(langCode);
 
     /// <summary>
-    /// Auto-detect language from system culture, falling back to English.
+    /// Auto-detect language from the Windows user default UI language, falling back to
+    /// CultureInfo.CurrentUICulture, then to English if the detected language is unavailable.
+    /// Uses GetUserDefaultUILanguage() which reads the registry directly and is not affected
+    /// by parent-process culture inheritance (e.g. Velopack installer).
     /// </summary>
     public string DetectSystemLanguage()
     {
-        var code = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-        return HasLanguage(code) ? code : FallbackLanguage;
+        string code;
+        try
+        {
+            var langId = NativeMethods.GetUserDefaultUILanguage();
+            var culture = CultureInfo.GetCultureInfo(langId);
+            code = culture.TwoLetterISOLanguageName;
+            Debug.WriteLine($"[Loc] GetUserDefaultUILanguage() LANGID=0x{langId:X4} -> \"{culture.Name}\" -> \"{code}\"");
+        }
+        catch (Exception ex)
+        {
+            code = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            Debug.WriteLine($"[Loc] GetUserDefaultUILanguage() failed ({ex.Message}), fallback CurrentUICulture=\"{code}\"");
+        }
+
+        var result = HasLanguage(code) ? code : FallbackLanguage;
+        Debug.WriteLine($"[Loc] DetectSystemLanguage() -> \"{result}\"");
+        return result;
     }
 
     public string GetString(string key)

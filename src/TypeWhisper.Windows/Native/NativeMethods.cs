@@ -62,6 +62,10 @@ internal static partial class NativeMethods
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial IntPtr GetModuleHandleW(string? lpModuleName);
 
+    // Language detection — reads the Windows registry directly, unaffected by parent-process culture
+    [LibraryImport("kernel32.dll")]
+    public static partial ushort GetUserDefaultUILanguage();
+
     [LibraryImport("user32.dll")]
     public static partial short GetAsyncKeyState(int vKey);
 

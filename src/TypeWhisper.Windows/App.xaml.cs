@@ -4,7 +4,6 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Data;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Services;
-using System.Globalization;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
@@ -73,9 +72,8 @@ public partial class App : Application
 
         // Initialize localization
         Loc.Instance.Initialize();
-        var uiLang = settings.Current.UiLanguage
-            ?? CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-        Loc.Instance.CurrentLanguage = Loc.Instance.HasLanguage(uiLang) ? uiLang : "en";
+        Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
+            ?? Loc.Instance.DetectSystemLanguage();
 
         // Initialize plugins (must happen after settings.Load so enabled state is available)
         var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();
