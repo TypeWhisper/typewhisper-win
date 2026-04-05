@@ -18,13 +18,13 @@
   {
     "id": "com.typewhisper.groq",
     "name": "Groq",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Groq Whisper transcription and Llama translation",
     "category": "Transcription",
-    "size": 13047,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.groq-1.0.0.zip",
+    "size": 13761,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-groq-v1.0.1/com.typewhisper.groq-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
