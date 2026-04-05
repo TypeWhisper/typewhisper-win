@@ -12,7 +12,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     private const string BaseUrl = "https://api.groq.com/openai";
     private const string TranslationModel = "llama-3.3-70b-versatile";
 
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
