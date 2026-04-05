@@ -48,6 +48,7 @@ jobs:
             'script'             = 'TypeWhisper.Plugin.Script'
             'live-transcript'    = 'TypeWhisper.Plugin.LiveTranscript'
             'granite-speech'     = 'TypeWhisper.Plugin.GraniteSpeech'
+            'gemma-local'        = 'TypeWhisper.Plugin.GemmaLocal'
           }
           $projectName = $map[$env:PLUGIN_NAME]
           if (-not $projectName) {
