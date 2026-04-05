@@ -2,13 +2,13 @@
   {
     "id": "com.typewhisper.openai",
     "name": "OpenAI",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "OpenAI Whisper transcription and GPT translation",
     "category": "Transcription",
-    "size": 13193,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.0.0.zip",
+    "size": 13887,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-v1.0.1/com.typewhisper.openai-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
