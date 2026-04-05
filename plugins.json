@@ -82,13 +82,13 @@
   {
     "id": "com.typewhisper.gemini",
     "name": "Google Gemini",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Google Gemini LLM provider (Flash, Pro, Flash Lite)",
     "category": "LLM",
-    "size": 9649,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gemini-v1.0.0/com.typewhisper.gemini-1.0.0.zip",
+    "size": 10366,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gemini-v1.0.1/com.typewhisper.gemini-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
