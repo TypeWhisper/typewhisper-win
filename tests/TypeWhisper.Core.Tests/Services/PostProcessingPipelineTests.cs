@@ -65,6 +65,21 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_Translation_SkippedWhenEffectiveLanguageMatchesTarget()
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = (text, src, tgt, _) => Task.FromResult($"[{tgt}] {text}"),
+            TranslationTarget = "it",
+            EffectiveSourceLanguage = "it",
+            DetectedLanguage = "en" // Whisper hallucinated English
+        };
+
+        var result = await _sut.ProcessAsync("ciao mondo", options);
+        Assert.Equal("ciao mondo", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Translation_SkippedWhenSameLanguage()
     {
         var options = new PipelineOptions
