@@ -106,6 +106,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     // API key management (for settings view)
 
     internal string? ApiKey => _apiKey;
+    internal IPluginLocalization? Loc => _host?.Localization;
 
     internal async Task SetApiKeyAsync(string apiKey)
     {

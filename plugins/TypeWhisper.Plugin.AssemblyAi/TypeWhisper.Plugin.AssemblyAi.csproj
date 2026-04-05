@@ -14,6 +14,9 @@
     <Content Include="manifest.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Localization\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Target Name="CopyToAppPlugins" AfterTargets="Build">
     <PropertyGroup>
@@ -24,5 +27,10 @@
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
     <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
+    <ItemGroup>
+      <_LocalizationFiles Include="$(ProjectDir)Localization\*.json" />
+    </ItemGroup>
+    <MakeDir Directories="$(PluginOutputDir)Localization\" />
+    <Copy SourceFiles="@(_LocalizationFiles)" DestinationFolder="$(PluginOutputDir)Localization\" />
   </Target>
 </Project>

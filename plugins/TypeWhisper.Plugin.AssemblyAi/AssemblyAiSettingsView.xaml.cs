@@ -12,6 +12,7 @@ public partial class AssemblyAiSettingsView : UserControl
     {
         _plugin = plugin;
         InitializeComponent();
+        TestButton.Content = L("Settings.Test");
 
         if (!string.IsNullOrEmpty(plugin.ApiKey))
         {
@@ -23,7 +24,7 @@ public partial class AssemblyAiSettingsView : UserControl
     {
         var key = ApiKeyBox.Password;
         await _plugin.SetApiKeyAsync(key);
-        StatusText.Text = string.IsNullOrWhiteSpace(key) ? "" : "Gespeichert";
+        StatusText.Text = string.IsNullOrWhiteSpace(key) ? "" : L("Settings.Saved");
         StatusText.Foreground = Brushes.Gray;
     }
 
@@ -32,13 +33,13 @@ public partial class AssemblyAiSettingsView : UserControl
         var key = ApiKeyBox.Password;
         if (string.IsNullOrWhiteSpace(key))
         {
-            StatusText.Text = "Bitte zuerst einen API-Key eingeben";
+            StatusText.Text = L("Settings.EnterApiKey");
             StatusText.Foreground = Brushes.Orange;
             return;
         }
 
         TestButton.IsEnabled = false;
-        StatusText.Text = "Teste...";
+        StatusText.Text = L("Settings.Testing");
         StatusText.Foreground = Brushes.Gray;
 
         try
@@ -46,18 +47,18 @@ public partial class AssemblyAiSettingsView : UserControl
             var valid = await _plugin.ValidateApiKeyAsync(key);
             if (valid)
             {
-                StatusText.Text = "API-Key gültig!";
+                StatusText.Text = L("Settings.ApiKeyValid");
                 StatusText.Foreground = Brushes.Green;
             }
             else
             {
-                StatusText.Text = "Ungültiger API-Key";
+                StatusText.Text = L("Settings.ApiKeyInvalid");
                 StatusText.Foreground = Brushes.Red;
             }
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Fehler: {ex.Message}";
+            StatusText.Text = L("Settings.Error", ex.Message);
             StatusText.Foreground = Brushes.Red;
         }
         finally
@@ -65,4 +66,7 @@ public partial class AssemblyAiSettingsView : UserControl
             TestButton.IsEnabled = true;
         }
     }
+
+    private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
+    private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;
 }

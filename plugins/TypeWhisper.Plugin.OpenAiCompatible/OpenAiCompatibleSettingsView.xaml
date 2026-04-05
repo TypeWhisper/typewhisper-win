@@ -19,7 +19,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="UrlBox" FontFamily="Consolas" Text="http://localhost:11434"/>
-            <Button Grid.Column="1" Content="Verbinden" Margin="8,0,0,0"
+            <Button Grid.Column="1" Margin="8,0,0,0"
                     Click="OnConnectClick" x:Name="ConnectButton"/>
         </Grid>
 
@@ -43,7 +43,7 @@
         <TextBlock Text="&#x1F511; API Key (optional)" Foreground="{StaticResource PluginLabelBrush}"
                    FontWeight="SemiBold" Margin="0,14,0,6"/>
         <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnApiKeyChanged"/>
-        <TextBlock Text="Nicht nötig für lokale Server wie Ollama oder LM Studio"
+        <TextBlock x:Name="ApiKeyHintText"
                    FontSize="11" Foreground="{StaticResource PluginHintBrush}" Margin="0,3,0,0"/>
 
         <!-- Models Section (hidden until connected) -->
@@ -54,21 +54,21 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="&#x1F4CB; Modellauswahl" Foreground="{StaticResource PluginLabelBrush}"
+                <TextBlock x:Name="ModelSelectionHeader" Foreground="{StaticResource PluginLabelBrush}"
                            FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Content="&#x1F504; Aktualisieren"
+                <Button Grid.Column="1"
                         Click="OnRefreshClick" x:Name="RefreshButton"/>
             </Grid>
 
             <!-- Fetched models pickers -->
             <StackPanel x:Name="PickerSection" Visibility="Collapsed">
-                <TextBlock Text="Transkriptions-Modell" FontSize="12"
+                <TextBlock x:Name="TranscriptionModelLabel1" FontSize="12"
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <ComboBox x:Name="TranscriptionModelPicker"
                           SelectionChanged="OnTranscriptionModelChanged"
                           DisplayMemberPath="Id" Margin="0,0,0,12"/>
 
-                <TextBlock Text="LLM-Modell" FontSize="12"
+                <TextBlock x:Name="LlmModelLabel1" FontSize="12"
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <ComboBox x:Name="LlmModelPicker"
                           SelectionChanged="OnLlmModelChanged"
@@ -78,11 +78,11 @@
             <!-- Manual entry fallback -->
             <StackPanel x:Name="ManualSection" Visibility="Collapsed">
                 <Border Background="#252525" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
-                    <TextBlock Text="&#x26A0; Keine Modelle über die API gefunden. Du kannst die Modellnamen manuell eingeben."
+                    <TextBlock x:Name="NoModelsWarning"
                                FontSize="12" Foreground="{StaticResource PluginHintBrush}" TextWrapping="Wrap"/>
                 </Border>
 
-                <TextBlock Text="Transkriptions-Modell" FontSize="12"
+                <TextBlock x:Name="TranscriptionModelLabel2" FontSize="12"
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
@@ -90,11 +90,11 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="ManualTranscriptionBox" FontFamily="Consolas"/>
-                    <Button Grid.Column="1" Content="Speichern" Margin="8,0,0,0"
+                    <Button Grid.Column="1" x:Name="SaveTranscriptionButton" Margin="8,0,0,0"
                             Click="OnSaveManualTranscription"/>
                 </Grid>
 
-                <TextBlock Text="LLM-Modell" FontSize="12"
+                <TextBlock x:Name="LlmModelLabel2" FontSize="12"
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -102,7 +102,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="ManualLlmBox" FontFamily="Consolas"/>
-                    <Button Grid.Column="1" Content="Speichern" Margin="8,0,0,0"
+                    <Button Grid.Column="1" x:Name="SaveLlmButton" Margin="8,0,0,0"
                             Click="OnSaveManualLlm"/>
                 </Grid>
             </StackPanel>

@@ -4,6 +4,7 @@ using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using AppLocalization = TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services.Plugins;
 
@@ -46,7 +47,7 @@ public sealed class PluginHostServices : IPluginHostServices
         _eventBus = eventBus;
         _profiles = profiles;
         _onCapabilitiesChanged = onCapabilitiesChanged;
-        _localization = new PluginLocalization(pluginDirectory);
+        _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
         _pluginDataDirectory = Path.Combine(Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
     }

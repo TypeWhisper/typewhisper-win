@@ -132,6 +132,7 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
     // Internal methods for settings view
     internal string? BaseUrl => _baseUrl;
     internal string? ApiKey => _apiKey;
+    internal IPluginLocalization? Loc => _host?.Localization;
     internal string? SelectedTranscriptionModelId => _selectedModelId;
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal IReadOnlyList<FetchedModel> FetchedModels => _fetchedModels;

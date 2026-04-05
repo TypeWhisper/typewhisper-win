@@ -12,6 +12,19 @@ public partial class OpenAiCompatibleSettingsView : UserControl
     {
         _plugin = plugin;
         InitializeComponent();
+
+        ConnectButton.Content = L("Settings.Connect");
+        ApiKeyHintText.Text = L("Settings.ApiKeyHint");
+        ModelSelectionHeader.Text = L("Settings.ModelSelection");
+        RefreshButton.Content = L("Settings.Refresh");
+        TranscriptionModelLabel1.Text = L("Settings.TranscriptionModel");
+        LlmModelLabel1.Text = L("Settings.LlmModel");
+        NoModelsWarning.Text = L("Settings.NoModelsFound");
+        TranscriptionModelLabel2.Text = L("Settings.TranscriptionModel");
+        SaveTranscriptionButton.Content = L("Settings.Save");
+        LlmModelLabel2.Text = L("Settings.LlmModel");
+        SaveLlmButton.Content = L("Settings.Save");
+
         Loaded += OnLoaded;
     }
 
@@ -51,8 +64,8 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             await _plugin.SetApiKeyAsync(key);
 
         ConnectButton.IsEnabled = false;
-        ConnectButton.Content = "Verbinde...";
-        ShowConnectionStatus("\u23F3", "Verbinde...", $"Versuche Verbindung zu {url}...", Brushes.Gray);
+        ConnectButton.Content = L("Settings.Connecting");
+        ShowConnectionStatus("\u23F3", L("Settings.Connecting"), L("Settings.TryingConnection", url), Brushes.Gray);
 
         try
         {
@@ -75,15 +88,15 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             }
             else
             {
-                ShowConnectionStatus("\u274C", "Verbindung fehlgeschlagen",
-                    $"Server {url} antwortet nicht oder der /v1/models Endpunkt ist nicht verfügbar.",
+                ShowConnectionStatus("\u274C", L("Settings.ConnectionFailed"),
+                    L("Settings.ServerNotResponding", url),
                     Brushes.Red);
             }
         }
         catch (OperationCanceledException)
         {
-            ShowConnectionStatus("\u274C", "Zeitüberschreitung",
-                $"Server {url} hat nicht innerhalb von 10 Sekunden geantwortet.",
+            ShowConnectionStatus("\u274C", L("Settings.Timeout"),
+                L("Settings.TimeoutDetail", url),
                 Brushes.Red);
         }
         catch (Exception ex)
@@ -92,12 +105,12 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             if (ex.InnerException is not null)
                 detail += $" ({ex.InnerException.Message})";
 
-            ShowConnectionStatus("\u274C", "Verbindungsfehler", detail, Brushes.Red);
+            ShowConnectionStatus("\u274C", L("Settings.ConnectionError"), detail, Brushes.Red);
         }
         finally
         {
             ConnectButton.IsEnabled = true;
-            ConnectButton.Content = "Verbinden";
+            ConnectButton.Content = L("Settings.Connect");
         }
     }
 
@@ -110,8 +123,8 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         transcriptionCount = modelCount;
         llmCount = modelCount;
 
-        var detail = $"Server: {url}\n{modelCount} Modell(e) verfügbar";
-        ShowConnectionStatus("\u2705", $"Verbunden — {modelCount} Modelle", detail,
+        var detail = L("Settings.ConnectionSuccess", url, modelCount);
+        ShowConnectionStatus("\u2705", L("Settings.Connected", modelCount), detail,
             new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)));
     }
 
@@ -201,4 +214,7 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         if (!string.IsNullOrEmpty(id))
             _plugin.SelectLlmModel(id);
     }
+
+    private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
+    private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;
 }
