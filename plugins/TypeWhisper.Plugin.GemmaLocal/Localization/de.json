@@ -1,0 +1,16 @@
+{
+  "Settings.SelectModel": "Gemma-Modell auswählen",
+  "Settings.Download": "Herunterladen",
+  "Settings.Load": "Laden",
+  "Settings.Unload": "Entladen",
+  "Settings.Cancel": "Abbrechen",
+  "Settings.NotDownloaded": "Nicht heruntergeladen",
+  "Settings.Downloaded": "Heruntergeladen, bereit zum Laden",
+  "Settings.Loaded": "Geladen und bereit",
+  "Settings.Loading": "Modell wird geladen...",
+  "Settings.Downloading": "Wird heruntergeladen...",
+  "Settings.DownloadComplete": "Download abgeschlossen! Klicke auf Laden, um das Modell zu nutzen.",
+  "Settings.DownloadCancelled": "Download abgebrochen",
+  "Settings.ModelReady": "Modell geladen und einsatzbereit!",
+  "Settings.Error": "Fehler: {0}"
+}

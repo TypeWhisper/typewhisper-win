@@ -47,6 +47,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
         new PluginModelInfo(DefaultModel, "Gemini 2.5 Flash") { IsRecommended = true },
         new PluginModelInfo("gemini-2.5-pro", "Gemini 2.5 Pro"),
         new PluginModelInfo("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
+        new PluginModelInfo("gemma-4-27b-it", "Gemma 4 27B"),
+        new PluginModelInfo("gemma-4-12b-it", "Gemma 4 12B"),
+        new PluginModelInfo("gemma-4-4b-it", "Gemma 4 4B"),
     ];
 
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
