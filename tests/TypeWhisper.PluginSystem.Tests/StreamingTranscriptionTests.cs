@@ -44,6 +44,20 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public void PluginTranscriptionResult_NoSpeechProbability_DefaultIsNull()
+    {
+        var result = new PluginTranscriptionResult("Hello", "en", 2.0);
+        Assert.Null(result.NoSpeechProbability);
+    }
+
+    [Fact]
+    public void PluginTranscriptionResult_NoSpeechProbability_CanBeSet()
+    {
+        var result = new PluginTranscriptionResult("So.", "en", 1.0, 0.95f);
+        Assert.Equal(0.95f, result.NoSpeechProbability);
+    }
+
+    [Fact]
     public void SupportsStreaming_CanBeOverridden()
     {
         var mock = new Mock<ITranscriptionEnginePlugin>();

@@ -64,6 +64,24 @@ public static class OpenAiTranscriptionHelper
         var language = root.TryGetProperty("language", out var langEl) ? langEl.GetString() : null;
         var duration = root.TryGetProperty("duration", out var durEl) ? durEl.GetDouble() : 0;
 
-        return new PluginTranscriptionResult(text.Trim(), language, duration);
+        // Extract min no_speech_prob from segments (verbose_json format).
+        // Using min so that the filter only triggers when ALL segments are silence.
+        float? minNoSpeechProb = null;
+        if (root.TryGetProperty("segments", out var segmentsEl)
+            && segmentsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var seg in segmentsEl.EnumerateArray())
+            {
+                if (seg.TryGetProperty("no_speech_prob", out var nspEl))
+                {
+                    var prob = (float)nspEl.GetDouble();
+                    minNoSpeechProb = minNoSpeechProb is null
+                        ? prob
+                        : Math.Min(minNoSpeechProb.Value, prob);
+                }
+            }
+        }
+
+        return new PluginTranscriptionResult(text.Trim(), language, duration, minNoSpeechProb);
     }
 }

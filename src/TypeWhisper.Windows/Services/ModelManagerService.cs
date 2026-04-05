@@ -346,7 +346,8 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
         {
             Text = result.Text,
             DetectedLanguage = result.DetectedLanguage,
-            Duration = result.DurationSeconds
+            Duration = result.DurationSeconds,
+            NoSpeechProbability = result.NoSpeechProbability
         };
     }
 }

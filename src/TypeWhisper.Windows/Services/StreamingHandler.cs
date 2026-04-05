@@ -166,12 +166,17 @@ public sealed class StreamingHandler : IDisposable
                 var buffer = _audio.GetCurrentBuffer();
                 var bufferDuration = buffer is not null ? buffer.Length / 16000.0 : 0;
 
-                if (buffer is not null && bufferDuration > 0.5)
+                if (buffer is not null && bufferDuration > 0.5
+                    && _audio.PeakRmsLevel >= AudioRecordingService.SpeechEnergyThreshold)
                 {
                     try
                     {
                         var lang = language == "auto" ? null : language;
                         var result = await engine.TranscribeAsync(buffer, lang, task, ct);
+
+                        if (result.NoSpeechProbability is > 0.8f)
+                            continue;
+
                         var text = result.Text?.Trim() ?? "";
 
                         if (!string.IsNullOrEmpty(text))

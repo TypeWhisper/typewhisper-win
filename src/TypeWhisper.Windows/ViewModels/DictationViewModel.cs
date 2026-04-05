@@ -396,6 +396,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // Skip transcription if audio is essentially silence (prevents cloud model hallucinations)
+        if (!_audio.HasSpeechEnergy && partialSnapshot.Count == 0)
+        {
+            UpdateVisualState();
+            StatusText = Loc.Instance["Status.NoSpeech"];
+            PartialText = "";
+            _hotkey.ForceStop();
+            return;
+        }
+
         // Snapshot all context and enqueue — returns immediately
         var job = new TranscriptionJob(
             samples,
@@ -446,6 +456,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
                 var result = await _modelManager.Engine.TranscribeAsync(
                     job.Samples, language, job.EffectiveTask, ct);
+
+                if (result.NoSpeechProbability is > 0.8f)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        StatusText = Loc.Instance["Status.NoSpeech"];
+                        UpdateVisualState();
+                    });
+                    return;
+                }
 
                 if (string.IsNullOrWhiteSpace(result.Text))
                 {

@@ -13,6 +13,12 @@ public sealed class AudioRecordingService : IDisposable
     private const float AgcMinGain = 1f;
     private const float NormalizationTarget = 0.707f;
 
+    /// <summary>
+    /// Minimum per-chunk RMS level to consider as containing speech.
+    /// Below this threshold, audio is treated as silence.
+    /// </summary>
+    public const float SpeechEnergyThreshold = 0.01f;
+
     private WaveInEvent? _waveIn;
     private WaveInEvent? _previewWaveIn;
     private List<float>? _sampleBuffer;
@@ -25,6 +31,7 @@ public sealed class AudioRecordingService : IDisposable
     private int? _configuredDeviceNumber;
     private int _activeDeviceNumber;
     private float _peakRmsLevel;
+    private float _preGainPeakRms;
     private float _currentRmsLevel;
     private System.Timers.Timer? _devicePollTimer;
     private int _lastKnownDeviceCount;
@@ -42,6 +49,7 @@ public sealed class AudioRecordingService : IDisposable
     public bool IsRecording => _isRecording;
     public float PeakRmsLevel => _peakRmsLevel;
     public float CurrentRmsLevel => _currentRmsLevel;
+    public bool HasSpeechEnergy => _preGainPeakRms >= SpeechEnergyThreshold;
     public TimeSpan RecordingDuration => _isRecording ? DateTime.UtcNow - _recordingStartTime : TimeSpan.Zero;
 
     public void SetMicrophoneDevice(int? deviceNumber)
@@ -121,6 +129,7 @@ public sealed class AudioRecordingService : IDisposable
 
         _sampleBuffer = new List<float>(SampleRate * 60); // Pre-alloc ~1 min
         _peakRmsLevel = 0;
+        _preGainPeakRms = 0;
         _recordingStartTime = DateTime.UtcNow;
         _isRecording = true;
     }
@@ -161,15 +170,18 @@ public sealed class AudioRecordingService : IDisposable
         var sampleCount = e.BytesRecorded / 2;
         float agcGain = 1f;
 
+        // Compute pre-gain RMS for speech energy detection (unaffected by AGC)
+        float preGainSum = 0;
+        for (var i = 0; i < sampleCount; i++)
+        {
+            var s = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
+            preGainSum += s * s;
+        }
+        var preGainRms = MathF.Sqrt(preGainSum / sampleCount);
+        if (preGainRms > _preGainPeakRms) _preGainPeakRms = preGainRms;
+
         if (WhisperModeEnabled)
         {
-            float preGainSum = 0;
-            for (var i = 0; i < sampleCount; i++)
-            {
-                var s = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
-                preGainSum += s * s;
-            }
-            var preGainRms = MathF.Sqrt(preGainSum / sampleCount);
             if (preGainRms > 0.0001f)
                 agcGain = Math.Clamp(AgcTargetRms / preGainRms, AgcMinGain, AgcMaxGain);
         }

@@ -10,4 +10,8 @@
     <AssemblyName>TypeWhisper.PluginSDK</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
+  </ItemGroup>
+
 </Project>
