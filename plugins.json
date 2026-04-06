@@ -50,13 +50,13 @@
   {
     "id": "com.typewhisper.sherpa-onnx",
     "name": "Lokale Modelle (sherpa-onnx)",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Offline transcription via sherpa-onnx (NVIDIA NeMo Parakeet + Canary)",
     "category": "Transcription",
-    "size": 15559,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.sherpa-onnx-1.0.0.zip",
+    "size": 15494,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-sherpa-onnx-v1.0.1/com.typewhisper.sherpa-onnx-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
