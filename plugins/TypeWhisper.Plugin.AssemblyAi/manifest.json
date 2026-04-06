@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.assemblyai",
   "name": "AssemblyAI",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "TypeWhisper",
   "description": "AssemblyAI Universal-2 transcription engine",
   "assemblyName": "TypeWhisper.Plugin.AssemblyAi.dll",

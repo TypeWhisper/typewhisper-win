@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.deepgram",
   "name": "Deepgram",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "TypeWhisper",
   "description": "Deepgram Nova transcription engine",
   "assemblyName": "TypeWhisper.Plugin.Deepgram.dll",

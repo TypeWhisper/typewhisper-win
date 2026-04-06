@@ -108,7 +108,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
         if (root.GetProperty("results").GetProperty("channels")[0].TryGetProperty("detected_language", out var langEl))
             detectedLanguage = langEl.GetString();
 
-        return new PluginTranscriptionResult(transcript, detectedLanguage, duration);
+        return new PluginTranscriptionResult(transcript, detectedLanguage, duration, NoSpeechProbability: null);
     }
 
     // API key management (for settings view)

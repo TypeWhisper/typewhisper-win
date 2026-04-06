@@ -8,4 +8,11 @@ namespace TypeWhisper.PluginSDK.Models;
 /// <param name="DurationSeconds">Duration of the audio in seconds.</param>
 public sealed record PluginTranscriptionResult(
     string Text, string? DetectedLanguage, double DurationSeconds,
-    float? NoSpeechProbability = null);
+    float? NoSpeechProbability = null)
+{
+    /// <summary>
+    /// Backward-compatible constructor for plugins compiled against SDK &lt; 1.1.
+    /// </summary>
+    public PluginTranscriptionResult(string text, string detectedLanguage, double durationSeconds)
+        : this(text, detectedLanguage, durationSeconds, null) { }
+}

@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.sherpa-onnx",
   "name": "Lokale Modelle (sherpa-onnx)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "Offline transcription via sherpa-onnx (NVIDIA NeMo Parakeet + Canary)",
   "assemblyName": "TypeWhisper.Plugin.SherpaOnnx.dll",

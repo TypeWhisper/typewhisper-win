@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.granite-speech",
   "name": "IBM Granite Speech (Local)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "Offline transcription via IBM Granite-4.0 1B Speech (ONNX Runtime)",
   "assemblyName": "TypeWhisper.Plugin.GraniteSpeech.dll",

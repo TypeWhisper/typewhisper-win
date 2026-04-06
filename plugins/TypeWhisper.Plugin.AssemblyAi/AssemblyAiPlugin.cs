@@ -164,7 +164,7 @@ public sealed class AssemblyAiPlugin : ITranscriptionEnginePlugin
                 var text = root.GetProperty("text").GetString() ?? "";
                 var duration = root.TryGetProperty("audio_duration", out var durEl) ? durEl.GetDouble() : 0.0;
                 string? detectedLanguage = root.TryGetProperty("language_code", out var langEl) ? langEl.GetString() : null;
-                return new PluginTranscriptionResult(text, detectedLanguage, duration);
+                return new PluginTranscriptionResult(text, detectedLanguage, duration, NoSpeechProbability: null);
             }
         }
 

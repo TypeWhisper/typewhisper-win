@@ -204,7 +204,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                     ? ParseCanaryResult(rawText)
                     : (rawText, (string?)null);
 
-                return new PluginTranscriptionResult(text, detectedLanguage, audioDuration);
+                return new PluginTranscriptionResult(text, detectedLanguage, audioDuration, NoSpeechProbability: null);
             }
         }, ct);
     }

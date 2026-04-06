@@ -270,7 +270,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
             var text = response.GetProperty("text").GetString() ?? "";
             var duration = response.GetProperty("duration").GetDouble();
 
-            return new PluginTranscriptionResult(text, language, duration);
+            return new PluginTranscriptionResult(text, language, duration, NoSpeechProbability: null);
         }
         finally
         {
