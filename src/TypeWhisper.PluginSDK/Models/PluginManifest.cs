@@ -23,6 +23,12 @@ public sealed record PluginManifest
     /// <summary>Short description of the plugin.</summary>
     public string? Description { get; init; }
 
+    /// <summary>Plugin category for UI grouping (e.g. "transcription", "llm", "memory", "action", "utility").</summary>
+    public string? Category { get; init; }
+
+    /// <summary>Whether this is a local (on-device) or cloud-based plugin.</summary>
+    public bool IsLocal { get; init; }
+
     /// <summary>DLL file name containing the plugin type (e.g. "MyPlugin.dll").</summary>
     public required string AssemblyName { get; init; }
 

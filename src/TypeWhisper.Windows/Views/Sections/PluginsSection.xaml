@@ -99,9 +99,27 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Installed plugins list -->
+                    <!-- Installed plugins list (grouped by category) -->
                     <ItemsControl ItemsSource="{Binding Plugins.Plugins}"
                                   HorizontalContentAlignment="Stretch">
+                        <ItemsControl.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,16,0,8">
+                                            <TextBlock Text="{Binding Name}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="14" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding ItemCount, StringFormat='  {0}'}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="12" VerticalAlignment="Center"
+                                                       Margin="4,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ItemsControl.GroupStyle>
                         <ItemsControl.ItemContainerStyle>
                             <Style TargetType="ContentPresenter">
                                 <Setter Property="HorizontalAlignment" Value="Stretch"/>

@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
@@ -18,6 +20,13 @@ public partial class PluginsSection : UserControl
         if (vm is not null)
         {
             EmptyState.Visibility = vm.Plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // Setup grouping by Category
+            var view = CollectionViewSource.GetDefaultView(vm.Plugins);
+            if (view.GroupDescriptions.Count == 0)
+                view.GroupDescriptions.Add(new PropertyGroupDescription("Category"));
+            view.SortDescriptions.Add(new SortDescription("Category", ListSortDirection.Ascending));
+            view.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
         }
     }
 

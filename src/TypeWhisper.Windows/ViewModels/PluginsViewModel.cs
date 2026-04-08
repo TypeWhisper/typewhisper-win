@@ -90,6 +90,28 @@ public partial class PluginItemViewModel : ObservableObject
     public bool IsLlmProvider => _plugin.Instance is TypeWhisper.PluginSDK.ILlmProviderPlugin;
     public bool IsPostProcessor => _plugin.Instance is TypeWhisper.PluginSDK.IPostProcessorPlugin;
     public bool IsActionProvider => _plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin;
+    public bool IsMemoryStorage => _plugin.Instance is TypeWhisper.PluginSDK.IMemoryStoragePlugin;
+
+    public string Category => (_plugin.Manifest.Category?.ToLowerInvariant()) switch
+    {
+        "transcription" => "Transcription Engines",
+        "llm" => "LLM Providers",
+        "memory" => "Memory",
+        "postprocessing" or "post-processing" => "Post-Processing",
+        "action" => "Actions",
+        _ => _plugin.Instance switch
+        {
+            TypeWhisper.PluginSDK.ITranscriptionEnginePlugin => "Transcription Engines",
+            TypeWhisper.PluginSDK.ILlmProviderPlugin => "LLM Providers",
+            TypeWhisper.PluginSDK.IMemoryStoragePlugin => "Memory",
+            TypeWhisper.PluginSDK.IPostProcessorPlugin => "Post-Processing",
+            TypeWhisper.PluginSDK.IActionPlugin => "Actions",
+            _ => "Utilities"
+        }
+    };
+
+    public bool IsLocal => _plugin.Manifest.IsLocal;
+    public string LocationBadge => IsLocal ? "Local" : "Cloud";
 
     public PluginItemViewModel(LoadedPlugin plugin, bool isEnabled, PluginManager pluginManager, PluginRegistryService registryService)
     {
