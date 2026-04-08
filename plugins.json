@@ -190,5 +190,159 @@
     "descriptions": {
       "de": "Google Gemma 4 lokal ausfuehren mit LLamaSharp - keine Cloud, kein Ollama noetig"
     }
+  },
+  {
+    "id": "com.typewhisper.claude",
+    "name": "Claude",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Anthropic Claude LLM for prompt processing",
+    "category": "LLM",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-claude-v1.0.0/com.typewhisper.claude-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.openrouter",
+    "name": "OpenRouter",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "OpenRouter multi-model LLM gateway",
+    "category": "LLM",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.0.0/com.typewhisper.openrouter-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.cerebras",
+    "name": "Cerebras",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Cerebras fast LLM inference",
+    "category": "LLM",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cerebras-v1.0.0/com.typewhisper.cerebras-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.cohere",
+    "name": "Cohere",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Cohere Command LLM for prompt processing",
+    "category": "LLM",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cohere-v1.0.0/com.typewhisper.cohere-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.fireworks",
+    "name": "Fireworks",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Fireworks AI fast LLM inference",
+    "category": "LLM",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fireworks-v1.0.0/com.typewhisper.fireworks-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.gladia",
+    "name": "Gladia",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Gladia pre-recorded transcription",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gladia-v1.0.0/com.typewhisper.gladia-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.speechmatics",
+    "name": "Speechmatics",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Speechmatics batch transcription",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-speechmatics-v1.0.0/com.typewhisper.speechmatics-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.soniox",
+    "name": "Soniox",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Soniox speech recognition",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.0.0/com.typewhisper.soniox-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.cloudflare-asr",
+    "name": "Cloudflare ASR",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Cloudflare Workers AI Whisper endpoint",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cloudflare-asr-v1.0.0/com.typewhisper.cloudflare-asr-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.google-cloud-stt",
+    "name": "Google Cloud STT",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Google Cloud Speech-to-Text v1 REST API",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-google-cloud-stt-v1.0.0/com.typewhisper.google-cloud-stt-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.qwen3-stt",
+    "name": "Qwen3 STT",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Qwen3 ASR via OpenAI-compatible local endpoint",
+    "category": "Transcription",
+    "requiresApiKey": false,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-qwen3-stt-v1.0.0/com.typewhisper.qwen3-stt-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.voxtral",
+    "name": "Voxtral",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Mistral Voxtral Whisper-compatible transcription",
+    "category": "Transcription",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-v1.0.0/com.typewhisper.voxtral-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.file-memory",
+    "name": "File Memory",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "File-based memory storage for extracted facts",
+    "category": "Memory",
+    "requiresApiKey": false,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-file-memory-v1.0.0/com.typewhisper.file-memory-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.openai-vector-memory",
+    "name": "OpenAI Vector Memory",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Vector-based memory storage using OpenAI embeddings",
+    "category": "Memory",
+    "requiresApiKey": true,
+    "size": 0,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-vector-memory-v1.0.0/com.typewhisper.openai-vector-memory-1.0.0.zip"
   }
 ]
