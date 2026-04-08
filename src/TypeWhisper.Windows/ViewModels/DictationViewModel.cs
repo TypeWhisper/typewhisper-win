@@ -663,39 +663,41 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 await _modelManager.LoadModelAsync(_settings.Current.SelectedModelId);
             }
 
-            // Save audio file
-            string? audioFileName = null;
-            try
+            // Save to history (if enabled)
+            if (_settings.Current.SaveToHistoryEnabled)
             {
-                audioFileName = $"{Guid.NewGuid():N}.wav";
-                var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, audioFileName);
-                var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.Samples);
-                await File.WriteAllBytesAsync(audioPath, wav, ct);
-            }
-            catch
-            {
-                audioFileName = null;
-            }
+                string? audioFileName = null;
+                try
+                {
+                    audioFileName = $"{Guid.NewGuid():N}.wav";
+                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, audioFileName);
+                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.Samples);
+                    await File.WriteAllBytesAsync(audioPath, wav, ct);
+                }
+                catch
+                {
+                    audioFileName = null;
+                }
 
-            // Save to history
-            var engineUsed = job.ActiveModelIdAtCapture is not null && ModelManagerService.IsPluginModel(job.ActiveModelIdAtCapture)
-                ? job.ActiveModelIdAtCapture
-                : "parakeet";
-            _history.AddRecord(new TranscriptionRecord
-            {
-                Id = Guid.NewGuid().ToString(),
-                Timestamp = DateTime.UtcNow,
-                RawText = rawText,
-                FinalText = finalText,
-                AppName = job.CapturedWindowTitle,
-                AppProcessName = job.CapturedProcessName,
-                DurationSeconds = audioDuration,
-                Language = detectedLanguage,
-                ProfileName = job.ActiveProfile?.Name,
-                EngineUsed = engineUsed,
-                ModelUsed = job.ActiveModelIdAtCapture,
-                AudioFileName = audioFileName
-            });
+                var engineUsed = job.ActiveModelIdAtCapture is not null && ModelManagerService.IsPluginModel(job.ActiveModelIdAtCapture)
+                    ? job.ActiveModelIdAtCapture
+                    : "parakeet";
+                _history.AddRecord(new TranscriptionRecord
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Timestamp = DateTime.UtcNow,
+                    RawText = rawText,
+                    FinalText = finalText,
+                    AppName = job.CapturedWindowTitle,
+                    AppProcessName = job.CapturedProcessName,
+                    DurationSeconds = audioDuration,
+                    Language = detectedLanguage,
+                    ProfileName = job.ActiveProfile?.Name,
+                    EngineUsed = engineUsed,
+                    ModelUsed = job.ActiveModelIdAtCapture,
+                    AudioFileName = audioFileName
+                });
+            }
 
             _sound.PlaySuccessSound();
             _speechFeedback.AnnounceTranscriptionComplete(finalText);

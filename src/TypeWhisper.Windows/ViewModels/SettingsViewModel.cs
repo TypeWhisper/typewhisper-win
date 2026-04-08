@@ -32,6 +32,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _transcriptionTask = "transcribe";
     [ObservableProperty] private int? _selectedMicrophoneDevice;
     [ObservableProperty] private float _previewLevel;
+    [ObservableProperty] private bool _saveToHistoryEnabled = true;
     [ObservableProperty] private bool _spokenFeedbackEnabled;
     [ObservableProperty] private bool _memoryEnabled;
     [ObservableProperty] private int _autoUnloadMinutes;
@@ -159,6 +160,7 @@ public partial class SettingsViewModel : ObservableObject
             OverlayLeftWidget = OverlayLeftWidget,
             OverlayRightWidget = OverlayRightWidget,
             PromptPaletteHotkey = PromptPaletteHotkey,
+            SaveToHistoryEnabled = SaveToHistoryEnabled,
             SpokenFeedbackEnabled = SpokenFeedbackEnabled,
             MemoryEnabled = MemoryEnabled,
             ModelAutoUnloadSeconds = AutoUnloadMinutes * 60,
@@ -194,6 +196,7 @@ public partial class SettingsViewModel : ObservableObject
         OverlayLeftWidget = s.OverlayLeftWidget;
         OverlayRightWidget = s.OverlayRightWidget;
         PromptPaletteHotkey = s.PromptPaletteHotkey;
+        SaveToHistoryEnabled = s.SaveToHistoryEnabled;
         SpokenFeedbackEnabled = s.SpokenFeedbackEnabled;
         MemoryEnabled = s.MemoryEnabled;
         AutoUnloadMinutes = s.ModelAutoUnloadSeconds / 60;

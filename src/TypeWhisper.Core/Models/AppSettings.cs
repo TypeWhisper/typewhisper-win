@@ -63,6 +63,9 @@ public record AppSettings
     // Model auto-unload (0 = disabled)
     public int ModelAutoUnloadSeconds { get; init; }
 
+    // History
+    public bool SaveToHistoryEnabled { get; init; } = true;
+
     // Spoken feedback (TTS readback after transcription)
     public bool SpokenFeedbackEnabled { get; init; }
 

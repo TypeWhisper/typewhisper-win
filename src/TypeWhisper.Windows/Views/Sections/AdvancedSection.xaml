@@ -50,8 +50,14 @@
                            Style="{StaticResource HintStyle}"/>
             </StackPanel>
 
-            <!-- History Retention -->
+            <!-- Data -->
             <TextBlock Text="Data" Style="{StaticResource SectionHeaderStyle}" FontSize="16" Margin="0,8,0,8"/>
+            <StackPanel Margin="0,0,0,16">
+                <CheckBox Content="Save transcriptions to history"
+                          IsChecked="{Binding Settings.SaveToHistoryEnabled, Mode=TwoWay, FallbackValue=True}"/>
+                <TextBlock Text="When disabled, transcriptions are inserted but not stored in history."
+                           Style="{StaticResource HintStyle}"/>
+            </StackPanel>
             <StackPanel Margin="0,0,0,16">
                 <TextBlock Text="History retention" Style="{StaticResource LabelStyle}"/>
                 <ComboBox Width="200" HorizontalAlignment="Left"

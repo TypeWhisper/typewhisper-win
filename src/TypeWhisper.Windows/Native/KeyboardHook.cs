@@ -100,18 +100,21 @@ public sealed class KeyboardHook : IDisposable
                     {
                         _isPressed = true;
                         KeyDown?.Invoke(this, EventArgs.Empty);
+                        return (IntPtr)1; // Swallow the key event
                     }
                 }
                 else if (!winRequired && IsModifierKey(vkCode) && AreAllModifiersPressed())
                 {
                     _isPressed = true;
                     KeyDown?.Invoke(this, EventArgs.Empty);
+                    return (IntPtr)1; // Swallow the key event
                 }
             }
             else if (isKeyUp && _isPressed && ShouldRelease(vkCode))
             {
                 _isPressed = false;
                 KeyUp?.Invoke(this, EventArgs.Empty);
+                return (IntPtr)1; // Swallow the key-up too
             }
         }
 
