@@ -34,6 +34,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly IPromptActionService _promptActions;
     private readonly PromptProcessingService _promptProcessing;
     private readonly IPostProcessingPipeline _pipeline;
+    private readonly IErrorLogService _errorLog;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -94,7 +95,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         IPromptActionService promptActions,
         PromptProcessingService promptProcessing,
         PromptPaletteViewModel promptPalette,
-        IPostProcessingPipeline pipeline)
+        IPostProcessingPipeline pipeline,
+        IErrorLogService errorLog)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -115,6 +117,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _promptActions = promptActions;
         _promptProcessing = promptProcessing;
         _pipeline = pipeline;
+        _errorLog = errorLog;
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
         _streamingHandler.OnPartialTextUpdate = text =>
@@ -693,6 +696,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
+            _errorLog.AddEntry(ex.Message, ErrorCategory.Transcription);
             _eventBus.Publish(new TranscriptionFailedEvent
             {
                 ErrorMessage = ex.Message,

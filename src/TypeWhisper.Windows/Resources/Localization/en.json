@@ -237,6 +237,10 @@
   "Info.UpdateNow": "Update Now",
   "Info.PoweredBy": "Powered by Parakeet (On-Device)",
   "Info.License": "License: GPL-3.0-or-later",
+  "Info.ErrorLog": "Error Log",
+  "Info.ExportDiagnostics": "Export Diagnostics",
+  "Info.ClearErrors": "Clear",
+  "Info.NoErrors": "No errors recorded.",
 
   "Status.Ready": "Ready",
   "Status.Recording": "Recording...",

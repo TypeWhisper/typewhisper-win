@@ -1,7 +1,10 @@
+using System.Collections.ObjectModel;
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
+using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Views;
@@ -24,6 +27,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public PromptsViewModel Prompts { get; }
 
     private readonly UpdateService _updateService;
+    private readonly IErrorLogService _errorLog;
 
     [ObservableProperty] private UserControl? _currentSection;
     [ObservableProperty] private string _currentSectionName = "Dashboard";
@@ -32,6 +36,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private bool _isUpdateAvailable;
 
     public string CurrentAppVersion => _updateService.CurrentVersion;
+
+    public ObservableCollection<ErrorLogEntry> ErrorLogEntries { get; } = [];
+    public bool HasErrorLogEntries => ErrorLogEntries.Count > 0;
 
     private readonly Dictionary<string, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<string, UserControl> _sectionCache = [];
@@ -46,7 +53,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         DashboardViewModel dashboard,
         PluginsViewModel plugins,
         PromptsViewModel prompts,
-        UpdateService updateService)
+        UpdateService updateService,
+        IErrorLogService errorLog)
     {
         Settings = settings;
         ModelManager = modelManager;
@@ -58,6 +66,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Plugins = plugins;
         Prompts = prompts;
         _updateService = updateService;
+        _errorLog = errorLog;
+
+        RefreshErrorLog();
+        _errorLog.EntriesChanged += RefreshErrorLog;
     }
 
     [RelayCommand]
@@ -86,6 +98,40 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         UpdateStatusText = Loc.Instance["Update.Downloading"];
         await _updateService.DownloadAndApplyAsync();
         UpdateStatusText = Loc.Instance["Update.Failed"];
+    }
+
+    [RelayCommand]
+    private void ClearErrorLog()
+    {
+        _errorLog.ClearAll();
+    }
+
+    [RelayCommand]
+    private void ExportDiagnostics()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"typewhisper-diagnostics-{DateTime.Now:yyyy-MM-dd-HHmmss}.json",
+            DefaultExt = ".json",
+            Filter = "JSON|*.json"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var json = _errorLog.ExportDiagnostics();
+            System.IO.File.WriteAllText(dialog.FileName, json);
+        }
+    }
+
+    private void RefreshErrorLog()
+    {
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            ErrorLogEntries.Clear();
+            foreach (var entry in _errorLog.Entries)
+                ErrorLogEntries.Add(entry);
+            OnPropertyChanged(nameof(HasErrorLogEntries));
+        });
     }
 
     [RelayCommand]

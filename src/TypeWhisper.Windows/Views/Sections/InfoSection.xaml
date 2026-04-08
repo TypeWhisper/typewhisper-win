@@ -15,45 +15,170 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
-        <TextBlock Text="TypeWhisper" FontSize="28" FontWeight="Bold"
-                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-        <TextBlock Text="{loc:Str Info.Subtitle}"
-                   Foreground="{StaticResource HintBrush}" FontSize="14"
-                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- Version -->
-        <TextBlock HorizontalAlignment="Center" Margin="0,4,0,24"
-                   Foreground="{StaticResource HintBrush}" FontSize="12">
-            <Run Text="Version"/>
-            <Run Text="{Binding CurrentAppVersion, Mode=OneWay}"/>
-        </TextBlock>
+        <!-- App Info (top) -->
+        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="24,24,24,0">
+            <TextBlock Text="TypeWhisper" FontSize="28" FontWeight="Bold"
+                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
+            <TextBlock Text="{loc:Str Info.Subtitle}"
+                       Foreground="{StaticResource HintBrush}" FontSize="14"
+                       HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
-        <!-- Update check -->
-        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,24">
-            <ui:Button Content="{loc:Str Info.CheckUpdates}"
-                       Appearance="Secondary"
-                       Command="{Binding CheckForUpdatesCommand}"
-                       IsEnabled="{Binding IsCheckingForUpdates, Converter={StaticResource InvertBoolConverter}}"
-                       HorizontalAlignment="Center"
-                       Visibility="{Binding IsUpdateAvailable, Converter={StaticResource InvertBoolToVisConverter}}"/>
+            <!-- Version -->
+            <TextBlock HorizontalAlignment="Center" Margin="0,4,0,16"
+                       Foreground="{StaticResource HintBrush}" FontSize="12">
+                <Run Text="Version"/>
+                <Run Text="{Binding CurrentAppVersion, Mode=OneWay}"/>
+            </TextBlock>
 
-            <ui:Button Content="{loc:Str Info.UpdateNow}"
-                       Appearance="Primary"
-                       Command="{Binding ApplyUpdateCommand}"
-                       HorizontalAlignment="Center"
-                       Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVis}}"/>
+            <!-- Update check -->
+            <StackPanel HorizontalAlignment="Center" Margin="0,0,0,16">
+                <ui:Button Content="{loc:Str Info.CheckUpdates}"
+                           Appearance="Secondary"
+                           Command="{Binding CheckForUpdatesCommand}"
+                           IsEnabled="{Binding IsCheckingForUpdates, Converter={StaticResource InvertBoolConverter}}"
+                           HorizontalAlignment="Center"
+                           Visibility="{Binding IsUpdateAvailable, Converter={StaticResource InvertBoolToVisConverter}}"/>
 
-            <TextBlock Text="{Binding UpdateStatusText}"
-                       Foreground="{StaticResource HintBrush}" FontSize="12"
+                <ui:Button Content="{loc:Str Info.UpdateNow}"
+                           Appearance="Primary"
+                           Command="{Binding ApplyUpdateCommand}"
+                           HorizontalAlignment="Center"
+                           Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVis}}"/>
+
+                <TextBlock Text="{Binding UpdateStatusText}"
+                           Foreground="{StaticResource HintBrush}" FontSize="12"
+                           HorizontalAlignment="Center" Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <TextBlock Text="{loc:Str Info.PoweredBy}"
+                       Foreground="{StaticResource LabelBrush}"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="{loc:Str Info.License}"
+                       Foreground="{StaticResource HintBrush}"
                        HorizontalAlignment="Center" Margin="0,8,0,0"/>
         </StackPanel>
 
-        <TextBlock Text="{loc:Str Info.PoweredBy}"
-                   Foreground="{StaticResource LabelBrush}"
-                   HorizontalAlignment="Center"/>
-        <TextBlock Text="{loc:Str Info.License}"
-                   Foreground="{StaticResource HintBrush}"
-                   HorizontalAlignment="Center" Margin="0,8,0,0"/>
-    </StackPanel>
+        <!-- Error Log -->
+        <Border Grid.Row="1" Margin="24,24,24,24"
+                Background="#08FFFFFF" CornerRadius="8"
+                BorderBrush="#15FFFFFF" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Error Log Header -->
+                <Grid Grid.Row="0" Margin="16,12,16,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="{loc:Str Info.ErrorLog}"
+                               Foreground="{StaticResource TextBrush}"
+                               FontSize="14" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+
+                    <ui:Button Grid.Column="1"
+                               Content="{loc:Str Info.ExportDiagnostics}"
+                               Appearance="Secondary"
+                               Command="{Binding ExportDiagnosticsCommand}"
+                               Margin="0,0,8,0"
+                               FontSize="12" Padding="12,6"/>
+
+                    <ui:Button Grid.Column="2"
+                               Content="{loc:Str Info.ClearErrors}"
+                               Appearance="Danger"
+                               Command="{Binding ClearErrorLogCommand}"
+                               Visibility="{Binding HasErrorLogEntries, Converter={StaticResource BoolToVis}}"
+                               FontSize="12" Padding="12,6"/>
+                </Grid>
+
+                <!-- Empty state -->
+                <StackPanel Grid.Row="1"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Visibility="{Binding HasErrorLogEntries, Converter={StaticResource InvertBoolToVisConverter}}">
+                    <TextBlock Text="&#x2714;" FontSize="36"
+                               Foreground="{StaticResource HintBrush}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <TextBlock Text="{loc:Str Info.NoErrors}"
+                               Foreground="{StaticResource HintBrush}"
+                               FontSize="13" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Error entries list -->
+                <ListView Grid.Row="1" ItemsSource="{Binding ErrorLogEntries}"
+                          Visibility="{Binding HasErrorLogEntries, Converter={StaticResource BoolToVis}}"
+                          Background="Transparent" BorderThickness="0"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          Margin="8,0,8,8">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="8,6"/>
+                            <Setter Property="Margin" Value="0,1"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Border Background="{TemplateBinding Background}"
+                                                Padding="{TemplateBinding Padding}"
+                                                CornerRadius="4">
+                                            <ContentPresenter/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Category icon -->
+                                <Border Grid.Column="0" Width="24" Height="24"
+                                        CornerRadius="4" Margin="0,0,10,0"
+                                        Background="#20FF4444" VerticalAlignment="Top">
+                                    <TextBlock Text="!" FontSize="12" FontWeight="Bold"
+                                               Foreground="#FFFF6666"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <!-- Message + category -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Message}"
+                                               Foreground="{StaticResource TextBrush}"
+                                               FontSize="12" TextWrapping="Wrap"
+                                               MaxHeight="54"/>
+                                    <TextBlock Text="{Binding Category}"
+                                               Foreground="{StaticResource HintBrush}"
+                                               FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- Timestamp -->
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding Timestamp, StringFormat='{}{0:dd.MM HH:mm}'}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           FontSize="11" VerticalAlignment="Top"
+                                           Margin="8,0,0,0"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
+    </Grid>
 </UserControl>
