@@ -3,14 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
+        xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
-        xmlns:plugins="clr-namespace:TypeWhisper.Windows.Services.Plugins"
         Title="{loc:Str Welcome.Title}"
-        Width="560" Height="560"
+        Width="620"
+        Height="690"
+        MinWidth="620"
+        MinHeight="690"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         ExtendsContentIntoTitleBar="True"
-        WindowBackdropType="Mica"
+        WindowBackdropType="None"
+        Background="#0E131B"
         Foreground="{DynamicResource TextFillColorPrimaryBrush}">
 
     <Window.Resources>
@@ -19,262 +23,754 @@
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-            <conv:StepToVisibilityConverter x:Key="StepConverter"/>
-            <conv:LevelToWidthConverter x:Key="LevelToWidth"/>
-            <conv:InstallStateToVisibilityConverter x:Key="InstallStateToVis"/>
             <conv:InvertBoolConverter x:Key="InvertBool"/>
-            <conv:StringToBrushConverter x:Key="StringToBrush"/>
+            <conv:InvertBoolToVisibilityConverter x:Key="InvertBoolToVis"/>
+            <conv:StepToVisibilityConverter x:Key="StepConverter"/>
+            <conv:AudioLevelWidthConverter x:Key="AudioLevelWidthConverter"/>
+            <conv:InstallStateToVisibilityConverter x:Key="InstallStateToVis"/>
         </ResourceDictionary>
     </Window.Resources>
 
-    <DockPanel Margin="24,36,24,24">
-        <!-- Header -->
-        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
-            <TextBlock Text="TypeWhisper" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center"
-                       Foreground="{StaticResource TextBrush}"/>
-            <TextBlock Text="{loc:Str Welcome.Subtitle}" Foreground="{StaticResource HintBrush}"
-                       HorizontalAlignment="Center" Margin="0,4,0,0"/>
-        </StackPanel>
+    <Grid Background="{StaticResource BackgroundBrush}">
+        <Border Margin="0"
+                Style="{StaticResource WizardShellStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <!-- Bottom: Navigation -->
-        <Grid DockPanel.Dock="Bottom" Margin="0,16,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+                <StackPanel Grid.Row="0"
+                            Margin="0,2,0,0">
+                    <TextBlock Text="TypeWhisper"
+                               Style="{StaticResource PageTitleStyle}"
+                               FontSize="30"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str Welcome.Subtitle}"
+                               Style="{StaticResource PageSubtitleStyle}"
+                               HorizontalAlignment="Center"
+                               Margin="0,6,0,0"/>
+                </StackPanel>
 
-            <Button Grid.Column="0" Content="{loc:Str Welcome.Back}" Command="{Binding PreviousStepCommand}"
-                    Style="{StaticResource SecondaryButtonStyle}" Width="80" Padding="8,4"/>
-            <Button Grid.Column="2" Content="{loc:Str Welcome.Skip}" Command="{Binding SkipCommand}"
-                    Style="{StaticResource SecondaryButtonStyle}" Width="100" Padding="8,4" Margin="0,0,8,0"/>
-            <Button Grid.Column="3" Content="{loc:Str Welcome.Next}" Command="{Binding NextStepCommand}"
-                    Style="{StaticResource PrimaryButtonStyle}" Width="80" Padding="8,4"/>
-        </Grid>
+                <UniformGrid Grid.Row="1"
+                             Columns="4"
+                             HorizontalAlignment="Center"
+                             Margin="0,18,0,18">
+                    <Border Width="24" Height="8" CornerRadius="4" Margin="4,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#2A3443"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentStep}" Value="0">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <Border Width="24" Height="8" CornerRadius="4" Margin="4,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#2A3443"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentStep}" Value="1">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <Border Width="24" Height="8" CornerRadius="4" Margin="4,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#2A3443"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentStep}" Value="2">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                    <Border Width="24" Height="8" CornerRadius="4" Margin="4,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#2A3443"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentStep}" Value="3">
+                                        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                </UniformGrid>
 
-        <!-- Steps indicator (4 steps) -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
-            <Ellipse Width="10" Height="10" Margin="4">
-                <Ellipse.Style>
-                    <Style TargetType="Ellipse">
-                        <Setter Property="Fill" Value="#555"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentStep}" Value="0">
-                                <Setter Property="Fill" Value="#5865F2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Ellipse.Style>
-            </Ellipse>
-            <Ellipse Width="10" Height="10" Margin="4">
-                <Ellipse.Style>
-                    <Style TargetType="Ellipse">
-                        <Setter Property="Fill" Value="#555"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentStep}" Value="1">
-                                <Setter Property="Fill" Value="#5865F2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Ellipse.Style>
-            </Ellipse>
-            <Ellipse Width="10" Height="10" Margin="4">
-                <Ellipse.Style>
-                    <Style TargetType="Ellipse">
-                        <Setter Property="Fill" Value="#555"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentStep}" Value="2">
-                                <Setter Property="Fill" Value="#5865F2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Ellipse.Style>
-            </Ellipse>
-            <Ellipse Width="10" Height="10" Margin="4">
-                <Ellipse.Style>
-                    <Style TargetType="Ellipse">
-                        <Setter Property="Fill" Value="#555"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentStep}" Value="3">
-                                <Setter Property="Fill" Value="#5865F2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Ellipse.Style>
-            </Ellipse>
-        </StackPanel>
+                <Grid Grid.Row="2">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=0}">
+                        <StackPanel MaxWidth="540">
+                            <Border Style="{StaticResource SettingsHeroCardStyle}"
+                                    Padding="18">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Welcome.Step1Title}"
+                                               Style="{StaticResource SettingsGroupTitleStyle}"
+                                               Margin="0"/>
+                                    <TextBlock Text="{loc:Str Welcome.Step1Desc}"
+                                               Style="{StaticResource PageSubtitleStyle}"
+                                               Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
 
-        <!-- Content area -->
-        <Grid>
-            <!-- Step 0: Extensions + Model -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                          Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=0}">
-                <StackPanel>
-                    <TextBlock Text="{loc:Str Welcome.Step1Title}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4"
-                               Foreground="{StaticResource TextBrush}"/>
-                    <TextBlock Text="{loc:Str Welcome.Step1Desc}"
-                               TextWrapping="Wrap" Foreground="{StaticResource HintBrush}" Margin="0,0,0,12"/>
+                            <TextBlock Text="{loc:Str Welcome.ModelHeader}"
+                                       Style="{StaticResource SettingsGroupTitleStyle}"/>
 
-                    <!-- Extensions list -->
-                    <TextBlock Text="{loc:Str Welcome.ExtensionsHeader}" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{StaticResource LabelBrush}" Margin="0,0,0,6"/>
+                        <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                                <StackPanel Margin="18">
+                                    <TextBlock Text="{loc:Str Welcome.RecommendedHeader}"
+                                               Style="{StaticResource NavGroupLabelStyle}"
+                                               Margin="0,0,0,8"/>
 
-                    <ItemsControl ItemsSource="{Binding Plugins}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{StaticResource InputBackgroundBrush}"
-                                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                        CornerRadius="6" Padding="10,8" Margin="0,0,0,4">
-                                    <DockPanel>
-                                        <!-- Install/Installed badge -->
-                                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0">
-                                            <!-- Install button -->
-                                            <Button Content="{loc:Str Welcome.Install}"
-                                                    Command="{Binding InstallCommand}"
-                                                    Style="{StaticResource PrimaryButtonStyle}"
-                                                    Padding="10,4" FontSize="11"
-                                                    IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
-                                                    Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
-                                            <!-- Installed label -->
-                                            <TextBlock Text="{loc:Str Welcome.Installed}" FontSize="11"
-                                                       Foreground="#44cc44" FontWeight="SemiBold"
-                                                       Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}"/>
-                                        </StackPanel>
+                                    <Border Background="#18212D"
+                                            BorderBrush="#1AFFFFFF"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            Padding="12,10"
+                                            Margin="0,0,0,8">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#18212D"/>
+                                                <Setter Property="BorderBrush" Value="#1AFFFFFF"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLocalRecommendationSelected}" Value="True">
+                                                        <Setter Property="Background" Value="#162437"/>
+                                                        <Setter Property="BorderBrush" Value="#24466D94"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
 
-                                        <!-- Icon + Info -->
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding IconEmoji}" FontSize="18" VerticalAlignment="Center"
-                                                       Margin="0,0,8,0"/>
-                                            <StackPanel VerticalAlignment="Center">
-                                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}">
-                                                    <Run Text="{Binding Name, Mode=OneWay}"/>
-                                                    <Run Text="{Binding SizeDisplay, Mode=OneWay}" Foreground="{StaticResource HintBrush}" FontWeight="Normal" FontSize="11"/>
-                                                </TextBlock>
-                                                <TextBlock Text="{Binding Description}" FontSize="11"
-                                                           Foreground="{StaticResource HintBrush}" TextTrimming="CharacterEllipsis"/>
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Parakeet"
+                                                               Foreground="{StaticResource TextBrush}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"/>
+                                                    <Border Background="#1439B980"
+                                                            CornerRadius="999"
+                                                            Padding="8,3"
+                                                            Margin="8,0,0,0">
+                                                        <TextBlock Text="{loc:Str Welcome.WorksOffline}"
+                                                                   Foreground="{StaticResource SuccessBrush}"
+                                                                   FontSize="10.5"
+                                                                   FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{loc:Str Welcome.LocalRecommendationDesc}"
+                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                           FontSize="12"
+                                                           Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding LocalRecommendationStatus}"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           FontSize="11"
+                                                           Margin="0,6,0,0"/>
                                             </StackPanel>
-                                        </StackPanel>
-                                    </DockPanel>
+
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center"
+                                                        Margin="12,0,0,0">
+                                                <Button Content="{loc:Str Welcome.Install}"
+                                                        Command="{Binding RecommendedLocalPlugin.InstallCommand}"
+                                                        Padding="12,6"
+                                                        Margin="0,0,8,0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsLocalRecommendationInstalled}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding RecommendedLocalPlugin}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+
+                                                <Button Content="{loc:Str Welcome.UseParakeet}"
+                                                        Command="{Binding SelectRecommendedLocalCommand}"
+                                                        Padding="12,6">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsLocalRecommendationInstalled}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Background="#18212D"
+                                            BorderBrush="#1AFFFFFF"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            Padding="12,10"
+                                            Margin="0,0,0,12">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#18212D"/>
+                                                <Setter Property="BorderBrush" Value="#1AFFFFFF"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCloudRecommendationSelected}" Value="True">
+                                                        <Setter Property="Background" Value="#162437"/>
+                                                        <Setter Property="BorderBrush" Value="#24466D94"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Groq"
+                                                               Foreground="{StaticResource TextBrush}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"/>
+                                                    <Border Background="#142E7DD6"
+                                                            CornerRadius="999"
+                                                            Padding="8,3"
+                                                            Margin="8,0,0,0">
+                                                        <TextBlock Text="{loc:Str Welcome.Fastest}"
+                                                                   Foreground="{StaticResource AccentBrush}"
+                                                                   FontSize="10.5"
+                                                                   FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{loc:Str Welcome.CloudRecommendationDesc}"
+                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                           FontSize="12"
+                                                           Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding CloudRecommendationStatus}"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           FontSize="11"
+                                                           Margin="0,6,0,0"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center"
+                                                        Margin="12,0,0,0">
+                                                <Button Content="{loc:Str Welcome.Install}"
+                                                        Command="{Binding RecommendedCloudPlugin.InstallCommand}"
+                                                        Padding="12,6"
+                                                        Margin="0,0,8,0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCloudRecommendationInstalled}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding RecommendedCloudPlugin}" Value="{x:Null}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+
+                                                <Button Content="{loc:Str Welcome.UseGroq}"
+                                                        Command="{Binding SelectRecommendedCloudCommand}"
+                                                        Padding="12,6">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsCloudRecommendationConfigured}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <TextBlock Text="{loc:Str Welcome.AllModelsHeader}"
+                                               Style="{StaticResource NavGroupLabelStyle}"
+                                               Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="{loc:Str Welcome.NoModels}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource PageSubtitleStyle}">
+                                                <Setter Property="Margin" Value="0,0,0,12"/>
+                                                <Setter Property="FontStyle" Value="Italic"/>
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <ComboBox ItemsSource="{Binding AvailableModels}"
+                                              SelectedValue="{Binding SelectedModelId}"
+                                              SelectedValuePath="FullModelId"
+                                              DisplayMemberPath="DisplayName"
+                                              Margin="0,0,0,12">
+                                        <ComboBox.Style>
+                                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ComboBox.Style>
+                                    </ComboBox>
+
+                                    <Button Content="{Binding SelectedModelActionLabel}"
+                                            Command="{Binding DownloadModelCommand}"
+                                            Width="180"
+                                            HorizontalAlignment="Left"
+                                            IsEnabled="{Binding CanApplySelectedModel}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <ProgressBar Value="{Binding DownloadProgress}"
+                                                 Maximum="1"
+                                                 Height="6"
+                                                 Margin="0,12,0,6"
+                                                 Background="#273140"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+
+                                    <TextBlock Text="{Binding DownloadStatus}"
+                                               Style="{StaticResource PageSubtitleStyle}"
+                                               Margin="0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="{loc:Str Welcome.ExtensionsHeader}"
+                                       Style="{StaticResource SettingsGroupTitleStyle}"/>
+
+                            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                                <StackPanel Margin="18,18,18,10">
+                                    <ItemsControl ItemsSource="{Binding Plugins}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{StaticResource InputBackgroundBrush}"
+                                                        BorderBrush="#1AFFFFFF"
+                                                        BorderThickness="1"
+                                                        CornerRadius="12"
+                                                        Padding="12,10"
+                                                        Margin="0,0,0,8">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Border Width="34"
+                                                                    Height="34"
+                                                                    CornerRadius="10"
+                                                                    Background="#1D2937"
+                                                                    BorderBrush="#1AFFFFFF"
+                                                                    BorderThickness="1">
+                                                                <TextBlock Text="{Binding IconEmoji}"
+                                                                           FontSize="17"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <StackPanel Margin="10,0,0,0"
+                                                                        VerticalAlignment="Center">
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               Foreground="{StaticResource TextBrush}"
+                                                                               FontSize="12.5"
+                                                                               FontWeight="SemiBold"
+                                                                               VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding SizeDisplay, StringFormat=' {0}'}"
+                                                                               Foreground="{StaticResource HintBrush}"
+                                                                               FontSize="11"
+                                                                               VerticalAlignment="Center"
+                                                                               Margin="4,0,0,0"/>
+                                                                </StackPanel>
+                                                                <TextBlock Text="{Binding Description}"
+                                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                                           FontSize="11.5"
+                                                                           Margin="0,2,0,0"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <Grid Grid.Column="1"
+                                                              VerticalAlignment="Center"
+                                                              Margin="12,0,0,0">
+                                                            <Button Content="{loc:Str Welcome.Install}"
+                                                                    Command="{Binding InstallCommand}"
+                                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                                    FontSize="11"
+                                                                    Padding="12,6"
+                                                                    MinWidth="84"
+                                                                    IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
+                                                                    Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
+                                                            <Border Background="#1239B980"
+                                                                    BorderBrush="#2239B980"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="999"
+                                                                    Padding="10,5"
+                                                                    Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}">
+                                                                <TextBlock Text="{loc:Str Welcome.Installed}"
+                                                                           Foreground="{StaticResource SuccessBrush}"
+                                                                           FontSize="11"
+                                                                           FontWeight="SemiBold"/>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel MaxWidth="540"
+                                Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=1}">
+                        <Border Style="{StaticResource SettingsHeroCardStyle}"
+                                Padding="18"
+                                Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Welcome.Step2Title}"
+                                           Style="{StaticResource SettingsGroupTitleStyle}"
+                                           Margin="0"/>
+                                <TextBlock Text="{loc:Str Welcome.Step2Desc}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                            <StackPanel Margin="18">
+                                <TextBlock Text="{loc:Str Welcome.MicLevelLabel}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"
+                                           Margin="0,0,0,10"/>
+
+                                <Border x:Name="MicLevelTrack"
+                                        Height="12"
+                                        CornerRadius="6"
+                                        Background="#283240"
+                                        BorderBrush="#1FFFFFFF"
+                                        BorderThickness="1">
+                                    <Border Background="{StaticResource AccentBrush}"
+                                            CornerRadius="6"
+                                            HorizontalAlignment="Left">
+                                        <Border.Width>
+                                            <MultiBinding Converter="{StaticResource AudioLevelWidthConverter}">
+                                                <Binding Path="MicLevel"/>
+                                                <Binding ElementName="MicLevelTrack" Path="ActualWidth"/>
+                                            </MultiBinding>
+                                        </Border.Width>
+                                    </Border>
                                 </Border>
 
-                                <!-- Progress bar for installing -->
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                <TextBlock Text="{loc:Str Welcome.MicLevelHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           Margin="0,10,0,0"/>
 
-                    <!-- Model selection (only when engines available) -->
-                    <TextBlock Text="{loc:Str Welcome.ModelHeader}" FontSize="13" FontWeight="SemiBold"
-                               Foreground="{StaticResource LabelBrush}" Margin="0,14,0,6"/>
+                                <Border Style="{StaticResource WizardInfoBannerStyle}"
+                                        Margin="0,14,0,0"
+                                        Visibility="{Binding MicWorking, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{loc:Str Welcome.MicWorks}"
+                                               Foreground="{StaticResource SuccessBrush}"
+                                               FontSize="12.5"
+                                               FontWeight="SemiBold"/>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-                    <!-- No models hint -->
-                    <TextBlock Text="{loc:Str Welcome.NoModels}" FontSize="11" FontStyle="Italic"
-                               Foreground="{StaticResource HintBrush}" Margin="0,0,0,8"
-                               TextWrapping="Wrap">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                    <StackPanel MaxWidth="540"
+                                Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=2}">
+                        <Border Style="{StaticResource SettingsHeroCardStyle}"
+                                Padding="18"
+                                Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Welcome.Step3Title}"
+                                           Style="{StaticResource SettingsGroupTitleStyle}"
+                                           Margin="0"/>
+                                <TextBlock Text="{loc:Str Welcome.Step3Desc}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
 
-                    <ComboBox ItemsSource="{Binding AvailableModels}"
-                              SelectedValue="{Binding SelectedModelId}"
-                              SelectedValuePath="FullModelId"
-                              DisplayMemberPath="DisplayName"
-                              MinHeight="36" Margin="0,0,0,8">
-                        <ComboBox.Style>
-                            <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ComboBox.Style>
-                    </ComboBox>
+                        <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                            <Grid Margin="18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="190"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                    <Button Content="{loc:Str Welcome.Download}" Command="{Binding DownloadModelCommand}"
-                            Width="140" HorizontalAlignment="Left" Padding="12,6">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding AvailableModels.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
+                                <TextBlock Text="{loc:Str Welcome.MainHotkeyLabel}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
 
-                    <ProgressBar Value="{Binding DownloadProgress}" Maximum="1" Height="6"
-                                 Margin="0,8,0,4" Background="#333" Foreground="{StaticResource AccentBrush}"
-                                 Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
-                    <TextBlock Text="{Binding DownloadStatus}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                </StackPanel>
-            </ScrollViewer>
+                                <controls:HotkeyRecorderControl Grid.Column="1"
+                                                                Hotkey="{Binding MainDictationHotkey, Mode=TwoWay}"
+                                                                AllowModifierOnly="True"
+                                                                HorizontalAlignment="Stretch"
+                                                                MinWidth="280"/>
 
-            <!-- Step 1: Microphone test -->
-            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=1}">
-                <TextBlock Text="{loc:Str Welcome.Step2Title}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"
-                           Foreground="{StaticResource TextBrush}"/>
-                <TextBlock Text="{loc:Str Welcome.Step2Desc}"
-                           TextWrapping="Wrap" Foreground="{StaticResource HintBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Grid.Row="1"
+                                           Grid.ColumnSpan="2"
+                                           Text="{loc:Str Welcome.MainHotkeyHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           Margin="0,12,0,0"/>
+                            </Grid>
+                        </Border>
 
-                <Border Height="20" CornerRadius="4" Background="#333" Margin="0,0,0,8">
-                    <Border CornerRadius="4" Background="#44cc44" HorizontalAlignment="Left"
-                            Width="{Binding MicLevel, Converter={StaticResource LevelToWidth}}"/>
-                </Border>
+                        <Border Style="{StaticResource WizardInfoBannerStyle}">
+                            <TextBlock Text="{loc:Str Welcome.AdvancedHotkeysHint}"
+                                       Style="{StaticResource PageSubtitleStyle}"
+                                       Margin="0"/>
+                        </Border>
+                    </StackPanel>
 
-                <TextBlock Text="{loc:Str Welcome.MicWorks}" Foreground="Green" FontWeight="SemiBold"
-                           Visibility="{Binding MicWorking, Converter={StaticResource BoolToVis}}"/>
-            </StackPanel>
+                    <StackPanel MaxWidth="540"
+                                Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=3}">
+                        <Border Style="{StaticResource SettingsHeroCardStyle}"
+                                Padding="18"
+                                Margin="0,0,0,18">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Welcome.Step4Title}"
+                                           Style="{StaticResource SettingsGroupTitleStyle}"
+                                           Margin="0"/>
+                                <TextBlock Text="{loc:Str Welcome.Step4Desc}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
 
-            <!-- Step 2: Hotkey config -->
-            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=2}">
-                <TextBlock Text="{loc:Str Welcome.Step3Title}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"
-                           Foreground="{StaticResource TextBrush}"/>
-                <TextBlock Text="{loc:Str Welcome.Step3Desc}"
-                           TextWrapping="Wrap" Foreground="{StaticResource HintBrush}" Margin="0,0,0,12"/>
+                        <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                            <Grid Margin="18">
+                                <StackPanel Visibility="{Binding CanTryItOut, Converter={StaticResource InvertBoolToVis}}">
+                                    <Border Style="{StaticResource WizardInfoBannerStyle}">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str Welcome.TrialBlockedTitle}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str Welcome.TrialNoEngineReady}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       Margin="0,10,0,0"
+                                                       Visibility="{Binding HasReadyEngine, Converter={StaticResource InvertBoolToVis}}"/>
+                                            <TextBlock Text="{loc:Str Welcome.TrialNoHotkey}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       Margin="0,8,0,0"
+                                                       Visibility="{Binding HasConfiguredMainHotkey, Converter={StaticResource InvertBoolToVis}}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
 
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="140"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                                <StackPanel Visibility="{Binding CanTryItOut, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Visibility="{Binding TrialSuccess, Converter={StaticResource InvertBoolToVis}}">
+                                        <TextBlock Text="{loc:Str Welcome.TrialInstruction}"
+                                                   Style="{StaticResource PageSubtitleStyle}"
+                                                   Margin="0"/>
 
-                    <TextBlock Grid.Row="0" Text="{loc:Str Welcome.ToggleHotkeyLabel}" VerticalAlignment="Center"
-                               Foreground="{StaticResource LabelBrush}"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ToggleHotkey}" Width="200" HorizontalAlignment="Left"
-                             Style="{StaticResource InputTextBoxStyle}"/>
+                                        <Border Background="#162437"
+                                                BorderBrush="#22466D94"
+                                                BorderThickness="1"
+                                                CornerRadius="999"
+                                                Padding="12,7"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding MainDictationHotkeyDisplay}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="12.5"
+                                                       FontWeight="SemiBold"/>
+                                        </Border>
 
-                    <TextBlock Grid.Row="1" Text="{loc:Str Welcome.PttLabel}" VerticalAlignment="Center" Margin="0,8,0,0"
-                               Foreground="{StaticResource LabelBrush}"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PushToTalkHotkey}" Width="200"
-                             HorizontalAlignment="Left" Margin="0,8,0,0"
-                             Style="{StaticResource InputTextBoxStyle}"/>
+                                        <TextBox Text="{Binding TrialText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource WizardTrialTextBoxStyle}"
+                                                 Margin="0,14,0,0"/>
+
+                                        <Border Style="{StaticResource WizardInfoBannerStyle}"
+                                                Margin="0,12,0,0"
+                                                Visibility="{Binding UsesClipboardFallback, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{loc:Str Welcome.TrialClipboardHint}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       Margin="0"/>
+                                        </Border>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="0,12,0,0"
+                                                    Visibility="{Binding TrialIsRecording, Converter={StaticResource BoolToVis}}">
+                                            <Ellipse Width="8"
+                                                     Height="8"
+                                                     Fill="{StaticResource DangerBrush}"
+                                                     VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding TrialStatusText}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="0,12,0,0"
+                                                    Visibility="{Binding TrialIsProcessing, Converter={StaticResource BoolToVis}}">
+                                            <ProgressBar Width="44"
+                                                         Height="4"
+                                                         Margin="0,0,10,0"
+                                                         VerticalAlignment="Center"
+                                                         IsIndeterminate="True"
+                                                         Background="#273140"
+                                                         Foreground="{StaticResource AccentBrush}"/>
+                                            <TextBlock Text="{Binding TrialStatusText}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <Border Style="{StaticResource WizardInfoBannerStyle}"
+                                                Margin="0,12,0,0"
+                                                Visibility="{Binding TrialHasError, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{Binding TrialStatusText}"
+                                                       Foreground="{StaticResource DangerBrush}"
+                                                       FontSize="12.5"
+                                                       FontWeight="SemiBold"/>
+                                        </Border>
+
+                                        <Border Style="{StaticResource WizardInfoBannerStyle}"
+                                                Margin="0,12,0,0"
+                                                Visibility="{Binding ShowTrialInlineStatus, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{Binding TrialInlineStatus}"
+                                                       Style="{StaticResource PageSubtitleStyle}"
+                                                       Margin="0"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <StackPanel Visibility="{Binding TrialSuccess, Converter={StaticResource BoolToVis}}">
+                                        <Border Style="{StaticResource SettingsHeroCardStyle}"
+                                                Padding="24">
+                                            <StackPanel>
+                                                <Border Width="56"
+                                                        Height="56"
+                                                        CornerRadius="28"
+                                                        Background="#1439B980"
+                                                        HorizontalAlignment="Center">
+                                                    <TextBlock Text="✓"
+                                                               Foreground="{StaticResource SuccessBrush}"
+                                                               FontSize="28"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+
+                                                <TextBlock Text="{loc:Str Welcome.AllSet}"
+                                                           Style="{StaticResource PageTitleStyle}"
+                                                           FontSize="26"
+                                                           HorizontalAlignment="Center"
+                                                           Margin="0,16,0,0"/>
+                                                <TextBlock Text="{loc:Str Welcome.AllSetDesc}"
+                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                           TextAlignment="Center"
+                                                           Margin="0,10,0,0"/>
+
+                                                <Border Background="#162437"
+                                                        BorderBrush="#22466D94"
+                                                        BorderThickness="1"
+                                                        CornerRadius="12"
+                                                        Padding="14,12"
+                                                        Margin="0,18,0,0">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{loc:Str Welcome.MainHotkeyLabel}"
+                                                                   Foreground="{StaticResource HintBrush}"
+                                                                   FontSize="11.5"
+                                                                   HorizontalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding MainDictationHotkeyDisplay}"
+                                                                   Foreground="{StaticResource TextBrush}"
+                                                                   FontSize="15"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Center"
+                                                                   Margin="0,6,0,0"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </Grid>
-            </StackPanel>
 
-            <!-- Step 3: Done -->
-            <StackPanel Visibility="{Binding CurrentStep, Converter={StaticResource StepConverter}, ConverterParameter=3}"
-                        VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{loc:Str Welcome.AllSet}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"
-                           Foreground="{StaticResource TextBrush}"/>
-                <TextBlock Text="{loc:Str Welcome.AllSetDesc}"
-                           TextWrapping="Wrap" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center" Margin="0,8,0,16"/>
-                <Button Content="{loc:Str Welcome.GetStarted}" Command="{Binding SkipCommand}"
-                        Style="{StaticResource PrimaryButtonStyle}" Width="120" HorizontalAlignment="Center" Padding="12,8" FontSize="14"/>
-            </StackPanel>
-        </Grid>
-    </DockPanel>
+                <Grid Grid.Row="3"
+                      Margin="0,20,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Content="{loc:Str Welcome.Back}"
+                            Command="{Binding PreviousStepCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Width="96"
+                            IsEnabled="{Binding IsFirstStep, Converter={StaticResource InvertBool}}"/>
+
+                    <Button Grid.Column="2"
+                            Content="{loc:Str Welcome.Skip}"
+                            Command="{Binding SkipCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Width="100"
+                            Margin="0,0,8,0"
+                            Visibility="{Binding IsFinalStep, Converter={StaticResource InvertBoolToVis}}"/>
+
+                    <Button Grid.Column="3"
+                            Content="{Binding PrimaryActionLabel}"
+                            Command="{Binding NextStepCommand}"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Width="120"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
 </ui:FluentWindow>

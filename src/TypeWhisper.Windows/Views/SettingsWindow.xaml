@@ -5,7 +5,7 @@
         xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
         xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
-        Title="{loc:Str Settings.Title}"
+        Title="{loc:Str Settings.WindowTitle}"
         MinWidth="1040"
         MinHeight="680"
         Width="1240"
@@ -32,8 +32,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <ui:TitleBar Grid.Row="0"
-                         Title="{loc:Str Settings.Title}"
+             <ui:TitleBar Grid.Row="0"
+                         Title="{loc:Str Settings.WindowTitle}"
                          ShowMaximize="False"
                          Margin="18,8,18,0"/>
 
@@ -108,24 +108,19 @@
 
                 <Grid Grid.Column="2" Margin="0,0,18,18">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="72"/>
+                        <RowDefinition Height="52"/>
                         <RowDefinition Height="1"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="28,0,28,0">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="{loc:Str Settings.Title}"
-                                   FontSize="22"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextBrush}"
-                                   VerticalAlignment="Center"/>
-
-                        <StackPanel Grid.Column="1"
+                        <StackPanel Grid.Column="2"
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
                             <TextBlock Text="{Binding UpdateStatusText}"

@@ -30,6 +30,16 @@ public partial class SnippetsViewModel : ObservableObject
     [ObservableProperty] private string? _selectedTagFilter;
     public ObservableCollection<string> AvailableTags { get; } = [];
     public ObservableCollection<Snippet> Snippets { get; } = [];
+    public bool HasSnippets => Snippets.Count > 0;
+    public bool HasActiveTagFilter => !string.IsNullOrWhiteSpace(SelectedTagFilter);
+    public int SnippetCount => Snippets.Count;
+    public int EnabledSnippetCount => Snippets.Count(static snippet => snippet.IsEnabled);
+    public string SummaryText => HasActiveTagFilter
+        ? Loc.Instance.GetString("Snippets.FilteredSummaryFormat", SnippetCount, EnabledSnippetCount, SelectedTagFilter ?? "")
+        : Loc.Instance.GetString("Snippets.SummaryFormat", SnippetCount, EnabledSnippetCount);
+    public string EditorTitle => IsCreatingNew
+        ? Loc.Instance["SnippetEditor.NewTitle"]
+        : Loc.Instance["SnippetEditor.EditTitle"];
 
     public SnippetsViewModel(ISnippetService snippets)
     {
@@ -38,7 +48,13 @@ public partial class SnippetsViewModel : ObservableObject
         RefreshSnippets();
     }
 
-    partial void OnSelectedTagFilterChanged(string? value) => RefreshSnippets();
+    partial void OnSelectedTagFilterChanged(string? value)
+    {
+        RefreshSnippets();
+        NotifyStateChanged();
+    }
+
+    partial void OnIsCreatingNewChanged(bool value) => OnPropertyChanged(nameof(EditorTitle));
 
     [RelayCommand]
     private void StartCreate()
@@ -217,5 +233,16 @@ public partial class SnippetsViewModel : ObservableObject
         AvailableTags.Clear();
         foreach (var tag in _snippets.AllTags)
             AvailableTags.Add(tag);
+
+        NotifyStateChanged();
+    }
+
+    private void NotifyStateChanged()
+    {
+        OnPropertyChanged(nameof(HasSnippets));
+        OnPropertyChanged(nameof(HasActiveTagFilter));
+        OnPropertyChanged(nameof(SnippetCount));
+        OnPropertyChanged(nameof(EnabledSnippetCount));
+        OnPropertyChanged(nameof(SummaryText));
     }
 }

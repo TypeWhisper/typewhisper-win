@@ -281,9 +281,6 @@ internal sealed class HotkeyRecorderSession
             return "";
 
         var modifiers = GetCurrentModifiers();
-        if (modifiers.HasFlag(ModifierKeys.Windows))
-            return "";
-
         var hotkey = HotkeyRecorderControl.CountModifiers(modifiers) >= 2
             ? HotkeyRecorderControl.FormatModifierOnly(modifiers)
             : "";

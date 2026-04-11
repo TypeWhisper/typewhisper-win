@@ -33,7 +33,7 @@ public partial class SnippetsSection : UserControl
     private void UpdateEmptyState(int count)
     {
         EmptyState.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SnippetList.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SnippetListHost.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

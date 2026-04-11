@@ -95,6 +95,8 @@ public partial class SettingsViewModel : ObservableObject
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         _isLoading = false;
 
+        _settings.SettingsChanged += OnSettingsChanged;
+
         PropertyChanged += (_, _) =>
         {
             if (!_isLoading) Save();
@@ -137,10 +139,12 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
+        var mainDictationHotkey = PushToTalkHotkey?.Trim() ?? "";
+
         var updated = _settings.Current with
         {
-            ToggleHotkey = ToggleHotkey,
-            PushToTalkHotkey = PushToTalkHotkey,
+            ToggleHotkey = mainDictationHotkey,
+            PushToTalkHotkey = mainDictationHotkey,
             Language = Language,
             AutoPaste = AutoPaste,
             Mode = Mode,
@@ -175,8 +179,14 @@ public partial class SettingsViewModel : ObservableObject
 
     private void LoadFromSettings(AppSettings s)
     {
-        ToggleHotkey = s.ToggleHotkey;
-        PushToTalkHotkey = s.PushToTalkHotkey;
+        var mainDictationHotkey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey)
+            ? s.PushToTalkHotkey
+            : s.ToggleHotkey;
+
+        ToggleHotkey = string.IsNullOrWhiteSpace(s.ToggleHotkey)
+            ? mainDictationHotkey
+            : s.ToggleHotkey;
+        PushToTalkHotkey = mainDictationHotkey;
         Language = s.Language;
         AutoPaste = s.AutoPaste;
         Mode = s.Mode;
@@ -204,6 +214,17 @@ public partial class SettingsViewModel : ObservableObject
         MemoryEnabled = s.MemoryEnabled;
         AutoUnloadMinutes = s.ModelAutoUnloadSeconds / 60;
         UiLanguage = s.UiLanguage;
+    }
+
+    private void OnSettingsChanged(AppSettings updatedSettings)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            _isLoading = true;
+            LoadFromSettings(updatedSettings);
+            AutostartEnabled = StartupService.IsEnabled;
+            _isLoading = false;
+        });
     }
 }
 

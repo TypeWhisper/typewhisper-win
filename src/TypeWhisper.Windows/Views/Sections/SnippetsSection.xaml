@@ -15,132 +15,232 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <DockPanel Margin="24">
-        <!-- Header -->
-        <TextBlock DockPanel.Dock="Top" Text="{loc:Str Snippets.Title}" Style="{StaticResource SectionHeaderStyle}"/>
-        <TextBlock DockPanel.Dock="Top"
-                   Text="{loc:Str Snippets.Subtitle}"
-                   Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- Toolbar -->
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+        <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text="{loc:Str Snippets.TagFilter}" Foreground="#808080" FontSize="12"
-                       VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox Grid.Column="1" Width="130"
-                      SelectedItem="{Binding Snippets.SelectedTagFilter}"
-                      ItemsSource="{Binding Snippets.AvailableTags}"
-                      IsEditable="False"/>
-            <Button Grid.Column="2" Content="{loc:Str Snippets.AllTags}" Margin="6,0,0,0"
-                    Style="{StaticResource LinkButtonStyle}"
-                    Command="{Binding Snippets.ClearTagFilterCommand}"
-                    Visibility="{Binding Snippets.SelectedTagFilter, Converter={StaticResource NonEmptyToVis}}"/>
+            <StackPanel Margin="0,0,18,0">
+                <TextBlock Text="{Binding Snippets.SummaryText}"
+                           Style="{StaticResource SettingsGroupTitleStyle}" Margin="0,0,0,4"/>
+                <TextBlock Text="{loc:Str Snippets.Subtitle}"
+                           Style="{StaticResource PageSubtitleStyle}" Margin="0,0,0,4"/>
+                <TextBlock Text="{loc:Str Snippets.Hint}"
+                           Style="{StaticResource HintStyle}" Margin="0"/>
+            </StackPanel>
 
-            <ui:Button Grid.Column="4" Content="{loc:Str Snippets.Import}"
+            <Button Grid.Column="1" Content="{loc:Str Snippets.Import}"
+                    Style="{StaticResource SecondaryButtonStyle}"
                     Command="{Binding Snippets.ImportSnippetsCommand}"
-                    Appearance="Secondary" Padding="12,6" Margin="0,0,4,0"/>
-            <ui:Button Grid.Column="5" Content="{loc:Str Snippets.Export}"
+                    Padding="12,7" FontSize="12" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Content="{loc:Str Snippets.Export}"
+                    Style="{StaticResource SecondaryButtonStyle}"
                     Command="{Binding Snippets.ExportSnippetsCommand}"
-                    Appearance="Secondary" Padding="12,6" Margin="0,0,4,0"/>
-            <ui:Button Grid.Column="6" Content="{loc:Str Snippets.New}"
+                    Padding="12,7" FontSize="12" Margin="0,0,8,0"/>
+            <Button Grid.Column="3" Content="{loc:Str Snippets.New}"
+                    Style="{StaticResource PrimaryButtonStyle}"
                     Command="{Binding Snippets.StartCreateCommand}"
-                    Appearance="Primary" Padding="12,6"/>
+                    Padding="14,7" FontSize="12"/>
         </Grid>
 
-        <!-- Empty State (shown via code-behind) -->
-        <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center"
+        <Border Grid.Row="1" Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,18">
+            <Grid Margin="16,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="{loc:Str Snippets.TagFilter}"
+                           Style="{StaticResource HintStyle}"
+                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <ComboBox Grid.Column="1"
+                          Style="{StaticResource SettingsCompactComboBoxStyle}"
+                          Width="180"
+                          SelectedItem="{Binding Snippets.SelectedTagFilter}"
+                          ItemsSource="{Binding Snippets.AvailableTags}"
+                          IsEditable="False"/>
+                <Button Grid.Column="2" Content="{loc:Str Snippets.AllTags}"
+                        Style="{StaticResource LinkButtonStyle}"
+                        Command="{Binding Snippets.ClearTagFilterCommand}"
+                        Margin="8,0,0,0"
+                        Visibility="{Binding Snippets.SelectedTagFilter, Converter={StaticResource NonEmptyToVis}}"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <StackPanel x:Name="EmptyState"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="360"
+                        Visibility="Collapsed">
+                <TextBlock Text=""
+                           FontFamily="Segoe Fluent Icons"
+                           FontSize="34"
+                           Foreground="{StaticResource HintBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,12"/>
+                <TextBlock Text="{loc:Str Snippets.EmptyTitle}"
+                           Foreground="{StaticResource TextBrush}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="{loc:Str Snippets.EmptySubtitle}"
+                           Style="{StaticResource PageSubtitleStyle}"
+                           TextAlignment="Center"
+                           Margin="0,0,0,18"/>
+                <Button Content="{loc:Str Snippets.CreateFirst}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding Snippets.StartCreateCommand}"
+                        Padding="16,8"
+                        HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <Border x:Name="SnippetListHost"
+                    Style="{StaticResource SettingsGroupPanelStyle}"
                     Visibility="Collapsed">
-            <TextBlock Text="{loc:Str Snippets.EmptyTitle}"
-                       Foreground="#808080" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-            <ui:Button Content="{loc:Str Snippets.CreateFirst}"
-                    Command="{Binding Snippets.StartCreateCommand}"
-                    Appearance="Primary" Padding="16,8"
-                    HorizontalAlignment="Center"/>
-        </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Snippets.Snippets}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="18,14"
+                                        BorderBrush="#16FFFFFF"
+                                        BorderThickness="0,0,0,1"
+                                        MouseLeftButtonDown="Card_MouseLeftButtonDown"
+                                        Cursor="Hand">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Opacity" Value="1"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                    <Setter Property="Opacity" Value="0.62"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{loc:Str Snippets.ContextEdit}" Click="ContextEdit_Click"/>
+                                            <MenuItem Header="{loc:Str Snippets.ContextDelete}" Click="ContextDelete_Click"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-        <!-- Snippet List -->
-        <ScrollViewer x:Name="SnippetList" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Snippets.Snippets}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource TimelineCardStyle}" Margin="0,0,0,6"
-                                MouseLeftButtonDown="Card_MouseLeftButtonDown">
-                            <Border.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="{loc:Str Snippets.ContextEdit}" Click="ContextEdit_Click"/>
-                                    <MenuItem Header="{loc:Str Snippets.ContextDelete}" Click="ContextDelete_Click"/>
-                                </ContextMenu>
-                            </Border.ContextMenu>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0"
+                                                Background="#14337FD8"
+                                                BorderBrush="#225E9FF2"
+                                                BorderThickness="1"
+                                                CornerRadius="7"
+                                                Padding="9,4"
+                                                VerticalAlignment="Top">
+                                            <TextBlock Text="{Binding Trigger}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12.5"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource AccentBrush}"/>
+                                        </Border>
 
-                                <!-- Trigger (monospace, accent) -->
-                                <TextBlock Grid.Column="0" Text="{Binding Trigger}"
-                                           FontFamily="Consolas" FontSize="13"
-                                           Foreground="{StaticResource AccentBrush}"
-                                           VerticalAlignment="Center"
-                                           MinWidth="80"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="→"
+                                                   Foreground="{StaticResource HintBrush}"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Top"
+                                                   Margin="12,4,14,0"/>
 
-                                <!-- Arrow -->
-                                <TextBlock Grid.Column="1" Text="→" Foreground="#808080"
-                                           VerticalAlignment="Center" FontSize="12" Margin="8,0"/>
-
-                                <!-- Replacement + Tags -->
-                                <StackPanel Grid.Column="2" Margin="0,0,8,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Replacement}"
-                                               Foreground="{StaticResource TextBrush}"
-                                               FontSize="13" TextTrimming="CharacterEllipsis"
-                                               MaxHeight="20"/>
-                                    <!-- Tag badges -->
-                                    <ItemsControl ItemsSource="{Binding Tags, Converter={StaticResource TagSplitConverter}}"
-                                                  Margin="0,3,0,0"
-                                                  Visibility="{Binding Tags, Converter={StaticResource NonEmptyToVis}}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Style="{StaticResource BadgeStyle}">
-                                                    <TextBlock Text="{Binding}" Foreground="#CCCCCC" FontSize="10"/>
+                                        <StackPanel Grid.Column="2" Margin="0,0,14,0">
+                                            <TextBlock Text="{Binding Replacement}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Replacement}"/>
+                                            <WrapPanel Margin="0,7,0,0">
+                                                <Border Style="{StaticResource BadgeStyle}"
+                                                        Margin="0,0,6,0"
+                                                        Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="Aa"
+                                                               Foreground="#D6DEE9"
+                                                               FontSize="10"
+                                                               FontWeight="SemiBold"/>
                                                 </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
+                                                <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
+                                                    <TextBlock Text="{Binding UsageCount, StringFormat={}{0}x}"
+                                                               Foreground="#D6DEE9"
+                                                               FontSize="10"/>
+                                                </Border>
+                                                <ItemsControl ItemsSource="{Binding Tags, Converter={StaticResource TagSplitConverter}}"
+                                                              Visibility="{Binding Tags, Converter={StaticResource NonEmptyToVis}}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding}" Foreground="#D6DEE9" FontSize="10"/>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </WrapPanel>
+                                        </StackPanel>
 
-                                <!-- Badges: CaseSensitive -->
-                                <Border Grid.Column="3" Style="{StaticResource BadgeStyle}"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="Aa" Foreground="#CCCCCC" FontSize="10" FontWeight="SemiBold"/>
+                                        <Button Grid.Column="3"
+                                                Content="{loc:Str Snippets.ContextEdit}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.Snippets.EditItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="12,6"
+                                                FontSize="12"
+                                                Margin="0,0,8,0"
+                                                VerticalAlignment="Center"/>
+
+                                        <Button Grid.Column="4"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.Snippets.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{loc:Str Snippets.ContextDelete}"
+                                                Padding="10,6"
+                                                Margin="0,0,8,0"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text=""
+                                                       FontFamily="Segoe Fluent Icons"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource LabelBrush}"/>
+                                        </Button>
+
+                                        <ui:ToggleSwitch Grid.Column="5"
+                                                         IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                         VerticalAlignment="Center"
+                                                         Checked="ToggleEnabled_Click"
+                                                         Unchecked="ToggleEnabled_Click"/>
+                                    </Grid>
                                 </Border>
-
-                                <!-- Toggle Enabled -->
-                                <ui:ToggleSwitch Grid.Column="4" IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                          VerticalAlignment="Center" Margin="8,0,0,0"
-                                          Checked="ToggleEnabled_Click" Unchecked="ToggleEnabled_Click"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-    </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>

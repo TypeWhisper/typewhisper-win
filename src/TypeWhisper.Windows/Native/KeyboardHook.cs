@@ -443,11 +443,6 @@ internal static class HotkeyParser
                     break;
             }
         }
-        // Modifier-only hotkeys that include Win collide badly with native
-        // Windows shortcuts, so treat them as unsupported.
-        if (vk == 0 && (modifiers & NativeMethods.MOD_WIN) != 0)
-            return false;
-
         return vk != 0 || modifiers != 0;
     }
 
