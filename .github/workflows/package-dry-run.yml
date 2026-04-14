@@ -24,7 +24,7 @@ jobs:
           - win-x64
           - win-arm64
     env:
-      VERSION: 0.0.0-dryrun.${{ github.run_number }}
+      VERSION: 0.0.1-dryrun.${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v4
