@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: plugins-smoke-${{ github.event.pull_request.number || github.ref }}
+  group: plugins-smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -102,6 +102,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Ensure NuGet global packages folder
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.nuget\packages') | Out-Null
 
       - uses: actions/setup-dotnet@v4
         with:

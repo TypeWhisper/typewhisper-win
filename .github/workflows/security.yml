@@ -15,7 +15,7 @@ permissions:
   security-events: write
 
 concurrency:
-  group: security-${{ github.event.pull_request.number || github.ref }}
+  group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +41,10 @@ jobs:
         with:
           languages: csharp
           queries: security-extended,security-and-quality
+
+      - name: Ensure NuGet global packages folder
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.nuget\packages') | Out-Null
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -100,6 +104,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Ensure NuGet global packages folder
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.nuget\packages') | Out-Null
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -161,20 +169,36 @@ jobs:
           if-no-files-found: ignore
 
   python-package-audit:
-    if: ${{ hashFiles('plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt') != '' }}
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Python requirements file
+        id: requirements
+        shell: bash
+        run: |
+          if [[ -f plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.requirements.outputs.exists == 'true'
         with:
           python-version: '3.x'
 
       - name: Install pip-audit
+        if: steps.requirements.outputs.exists == 'true'
         run: python -m pip install --upgrade pip pip-audit
 
+      - name: No Python dependencies to audit
+        if: steps.requirements.outputs.exists != 'true'
+        run: echo "No Granite Speech requirements.txt found. Skipping Python dependency audit."
+
       - name: Audit Python dependencies
+        if: steps.requirements.outputs.exists == 'true'
         shell: bash
         run: |
           set -euo pipefail
