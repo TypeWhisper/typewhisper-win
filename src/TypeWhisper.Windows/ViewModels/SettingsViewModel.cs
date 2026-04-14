@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -45,7 +46,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _promptPaletteHotkey = "";
     [ObservableProperty] private string? _uiLanguage;
 
-    public IReadOnlyList<TranslationTargetOption> TranslationTargetOptions { get; } = LocalizeTranslationOptions(TranslationModelInfo.GlobalTargetOptions);
+    public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -54,9 +55,8 @@ public partial class SettingsViewModel : ObservableObject
             "Globale Einstellung" => o with { DisplayName = Loc.Instance["Translation.GlobalSetting"] },
             _ => o
         }).ToList();
-    public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
 
-    public static IReadOnlyList<OverlayWidgetOption> WidgetOptions { get; } =
+    private static IReadOnlyList<OverlayWidgetOption> BuildWidgetOptions() =>
     [
         new(OverlayWidget.None, Loc.Instance["Widget.None"]),
         new(OverlayWidget.Indicator, Loc.Instance["Widget.Indicator"]),
@@ -67,6 +67,9 @@ public partial class SettingsViewModel : ObservableObject
         new(OverlayWidget.HotkeyMode, Loc.Instance["Widget.HotkeyMode"]),
         new(OverlayWidget.AppName, Loc.Instance["Widget.AppName"]),
     ];
+
+    public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+    public ObservableCollection<OverlayWidgetOption> WidgetOptions { get; } = [];
 
     private bool _isLoading;
 
@@ -79,19 +82,25 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnSelectedMicrophoneDeviceChanged(int? value)
     {
         if (_isLoading) return;
-        StartMicrophonePreview();
+        _audio.SetMicrophoneDevice(value);
+        StopMicrophonePreview();
     }
 
     public SettingsViewModel(ISettingsService settings, AudioRecordingService audio)
     {
         _settings = settings;
         _audio = audio;
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
 
         _isLoading = true;
+        RefreshLocalizedCollections();
         LoadFromSettings(_settings.Current);
         AutostartEnabled = StartupService.IsEnabled;
         RefreshMicrophones();
+        _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         _isLoading = false;
+
+        _settings.SettingsChanged += OnSettingsChanged;
 
         PropertyChanged += (_, _) =>
         {
@@ -114,6 +123,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         _audio.PreviewLevelChanged -= OnPreviewLevelChanged;
         if (!_audio.HasDevice) return;
+        _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         _audio.StartPreview(SelectedMicrophoneDevice);
         _audio.PreviewLevelChanged += OnPreviewLevelChanged;
     }
@@ -134,10 +144,12 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
+        var mainDictationHotkey = PushToTalkHotkey?.Trim() ?? "";
+
         var updated = _settings.Current with
         {
-            ToggleHotkey = ToggleHotkey,
-            PushToTalkHotkey = PushToTalkHotkey,
+            ToggleHotkey = mainDictationHotkey,
+            PushToTalkHotkey = mainDictationHotkey,
             Language = Language,
             AutoPaste = AutoPaste,
             Mode = Mode,
@@ -172,8 +184,14 @@ public partial class SettingsViewModel : ObservableObject
 
     private void LoadFromSettings(AppSettings s)
     {
-        ToggleHotkey = s.ToggleHotkey;
-        PushToTalkHotkey = s.PushToTalkHotkey;
+        var mainDictationHotkey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey)
+            ? s.PushToTalkHotkey
+            : s.ToggleHotkey;
+
+        ToggleHotkey = string.IsNullOrWhiteSpace(s.ToggleHotkey)
+            ? mainDictationHotkey
+            : s.ToggleHotkey;
+        PushToTalkHotkey = mainDictationHotkey;
         Language = s.Language;
         AutoPaste = s.AutoPaste;
         Mode = s.Mode;
@@ -201,6 +219,36 @@ public partial class SettingsViewModel : ObservableObject
         MemoryEnabled = s.MemoryEnabled;
         AutoUnloadMinutes = s.ModelAutoUnloadSeconds / 60;
         UiLanguage = s.UiLanguage;
+    }
+
+    private void OnSettingsChanged(AppSettings updatedSettings)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            _isLoading = true;
+            LoadFromSettings(updatedSettings);
+            AutostartEnabled = StartupService.IsEnabled;
+            _isLoading = false;
+        });
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        Application.Current?.Dispatcher.Invoke(RefreshLocalizedCollections);
+    }
+
+    private void RefreshLocalizedCollections()
+    {
+        ReplaceCollection(TranslationTargetOptions, LocalizeTranslationOptions(TranslationModelInfo.GlobalTargetOptions));
+        ReplaceCollection(WidgetOptions, BuildWidgetOptions());
+        RefreshMicrophones();
+    }
+
+    private static void ReplaceCollection<T>(ObservableCollection<T> target, IReadOnlyList<T> values)
+    {
+        target.Clear();
+        foreach (var value in values)
+            target.Add(value);
     }
 }
 

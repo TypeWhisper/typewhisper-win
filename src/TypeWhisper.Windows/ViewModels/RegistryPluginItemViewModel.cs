@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -20,6 +21,10 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
+    public string CategoryKey => PluginMarketplaceCategories.Resolve(Category).Key;
+    public string CategoryLabel => PluginMarketplaceCategories.Resolve(Category).DisplayName;
+    public int CategorySortOrder => PluginMarketplaceCategories.Resolve(Category).SortOrder;
+    public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
 
     [ObservableProperty] private PluginInstallState _installState;
     [ObservableProperty] private double _progress;
@@ -103,5 +108,36 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         < 1024 => $"{bytes} B",
         < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
         _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
+    };
+
+    internal void NotifyLocalizationChanged()
+    {
+        OnPropertyChanged(nameof(CategoryLabel));
+        OnPropertyChanged(nameof(LocationBadge));
+    }
+}
+
+internal sealed record PluginMarketplaceCategoryDescriptor(string Key, string DisplayName, int SortOrder);
+
+internal static class PluginMarketplaceCategories
+{
+    public static PluginMarketplaceCategoryDescriptor Resolve(string? rawCategory) => Normalize(rawCategory) switch
+    {
+        "transcription" => new("transcription", Loc.Instance["Plugins.CategoryTranscription"], 0),
+        "llm" => new("llm", Loc.Instance["Plugins.CategoryLlmProviders"], 1),
+        "post-processing" => new("post-processing", Loc.Instance["Plugins.CategoryPostProcessors"], 2),
+        "action" => new("action", Loc.Instance["Plugins.CategoryActions"], 3),
+        "memory" => new("memory", Loc.Instance["Plugins.CategoryMemory"], 4),
+        _ => new("utility", Loc.Instance["Plugins.CategoryUtilities"], 5)
+    };
+
+    private static string Normalize(string? rawCategory) => rawCategory?.Trim().ToLowerInvariant() switch
+    {
+        "transcription" => "transcription",
+        "llm" => "llm",
+        "postprocessing" or "post-processing" or "postprocessor" or "post-processor" => "post-processing",
+        "action" => "action",
+        "memory" => "memory",
+        _ => "utility"
     };
 }

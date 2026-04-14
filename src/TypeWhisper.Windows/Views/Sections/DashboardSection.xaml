@@ -1,7 +1,6 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.DashboardSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
              xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
     <UserControl.Resources>
@@ -12,27 +11,51 @@
             <conv:BarHeightConverter x:Key="BarHeightConverter"/>
             <conv:DayLabelConverter x:Key="DayLabelConverter"/>
             <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
-            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="700" Margin="24">
+        <StackPanel MaxWidth="860" Margin="28">
 
-            <!-- Header: Title + Period Toggle -->
-            <DockPanel Margin="0,0,0,20">
-                <TextBlock Text="{loc:Str Dashboard.Title}" Style="{StaticResource SectionHeaderStyle}"
-                           DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0"/>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
-                            HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <RadioButton Content="{loc:Str Dashboard.Week}" Style="{StaticResource TabRadioStyle}"
-                                 IsChecked="True" Checked="WeekChecked"/>
-                    <RadioButton Content="{loc:Str Dashboard.Month}" Style="{StaticResource TabRadioStyle}"
-                                 Checked="MonthChecked"/>
-                    <RadioButton Content="{loc:Str Dashboard.AllTime}" Style="{StaticResource TabRadioStyle}"
-                                 Checked="AllTimeChecked"/>
-                </StackPanel>
-            </DockPanel>
+            <Grid Margin="0,0,0,20">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str Dashboard.Title}" Style="{StaticResource PageTitleStyle}"/>
+                        <TextBlock Text="{loc:Str Dashboard.Subtitle}"
+                                   Style="{StaticResource PageSubtitleStyle}" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <Border Style="{StaticResource SettingsSummaryBarStyle}" Margin="0,0,0,18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str Dashboard.Statistics}" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock Text="{loc:Str Dashboard.StatisticsHint}"
+                                   Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <RadioButton Content="{loc:Str Dashboard.Weekly}" Style="{StaticResource TabRadioStyle}"
+                                     IsChecked="True" Checked="WeekChecked"/>
+                        <RadioButton Content="{loc:Str Dashboard.Month}" Style="{StaticResource TabRadioStyle}"
+                                     Checked="MonthChecked"/>
+                        <RadioButton Content="{loc:Str Dashboard.AllTime}" Style="{StaticResource TabRadioStyle}"
+                                     Checked="AllTimeChecked"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- 4 Stat Cards -->
             <UniformGrid Rows="1" Columns="4" Margin="0,0,0,24">
@@ -165,13 +188,35 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <DockPanel Margin="2,0">
-                                <TextBlock DockPanel.Dock="Bottom"
-                                           Text="{Binding Date, Converter={StaticResource DayLabelConverter}}"
-                                           Foreground="{StaticResource HintBrush}" FontSize="10"
-                                           HorizontalAlignment="Center" Margin="0,6,0,0"/>
-                                <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
-                                        CornerRadius="3,3,0,0" Margin="3,0">
+                            <Grid Margin="2,0"
+                                  ToolTipService.ShowDuration="60000"
+                                  Cursor="Hand"
+                                  Background="Transparent">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ToolTip>
+                                    <ToolTip Background="{StaticResource SidebarBrush}"
+                                             BorderBrush="{StaticResource BorderBrush}"
+                                             Foreground="{StaticResource TextBrush}"
+                                             Padding="10,8">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding WordCount}"
+                                                       FontSize="15" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str Dashboard.Words}"
+                                                       FontSize="11" Foreground="{StaticResource HintBrush}"
+                                                       Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding Date, StringFormat={}{0:dd.MM.yyyy}}"
+                                                       FontSize="11" Foreground="{StaticResource HintBrush}"/>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Grid.ToolTip>
+                                <Border Grid.Row="0"
+                                        VerticalAlignment="Bottom"
+                                        HorizontalAlignment="Stretch"
+                                        CornerRadius="3,3,0,0"
+                                        Margin="3,0">
                                     <Border.Background>
                                         <SolidColorBrush Color="{StaticResource AccentColor}"/>
                                     </Border.Background>
@@ -183,61 +228,29 @@
                                         </MultiBinding>
                                     </Border.Height>
                                 </Border>
-                            </DockPanel>
+                                <TextBlock Grid.Row="1"
+                                           Text="{Binding Date, Converter={StaticResource DayLabelConverter}}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           FontSize="10"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,6,0,0"/>
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Border>
 
-            <!-- Recent Transcriptions -->
-            <TextBlock Text="{loc:Str Dashboard.Recent}" FontSize="16" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextBrush}" Margin="0,24,0,12"
-                       Visibility="{Binding Dashboard.HasRecentTranscriptions, Converter={StaticResource BoolToVis}}"/>
-
-            <ItemsControl ItemsSource="{Binding Dashboard.RecentTranscriptions}"
-                          Visibility="{Binding Dashboard.HasRecentTranscriptions, Converter={StaticResource BoolToVis}}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="{StaticResource InputBackgroundBrush}"
-                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="14,10" Margin="0,0,0,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{Binding Preview}" FontSize="12"
-                                               Foreground="{StaticResource TextBrush}"
-                                               TextTrimming="CharacterEllipsis" MaxHeight="36"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <TextBlock Text="{Binding TimeAgo}" FontSize="11"
-                                                   Foreground="{StaticResource HintBrush}"/>
-                                        <TextBlock Text=" · " FontSize="11"
-                                                   Foreground="{StaticResource HintBrush}"
-                                                   Visibility="{Binding AppName, Converter={StaticResource ZeroToVisibility}, ConverterParameter=invert}"/>
-                                        <TextBlock Text="{Binding AppName}" FontSize="11"
-                                                   Foreground="{StaticResource HintBrush}"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <TextBlock Grid.Column="1" Text="&#x203A;" FontSize="18"
-                                           Foreground="{StaticResource HintBrush}"
-                                           VerticalAlignment="Center" Margin="8,0,0,0"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
             <!-- Setup Wizard shortcut -->
-            <Border Background="{StaticResource InputBackgroundBrush}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                    CornerRadius="8" Padding="16" Margin="0,24,0,0">
+            <Border Style="{StaticResource SettingsCardStyle}" Margin="0,24,0,0">
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Content="{loc:Str Dashboard.RunWizard}"
-                            Command="{Binding OpenSetupWizardCommand}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Padding="12,6" VerticalAlignment="Center"/>
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="{loc:Str Dashboard.RunWizard}"
+                                Command="{Binding OpenSetupWizardCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Padding="12,6"/>
+                    </StackPanel>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str Dashboard.WizardTitle}" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource TextBrush}"/>

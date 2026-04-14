@@ -7,6 +7,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -29,6 +30,13 @@ public partial class PromptsViewModel : ObservableObject
     private string? _editingActionId;
 
     public ObservableCollection<PromptAction> Actions { get; } = [];
+    public bool HasActions => Actions.Count > 0;
+    public int ActionCount => Actions.Count;
+    public int EnabledActionCount => Actions.Count(static action => action.IsEnabled);
+    public string SummaryText => Loc.Instance.GetString("Prompts.SummaryFormat", ActionCount, EnabledActionCount);
+    public string EditorTitle => IsCreatingNew
+        ? Loc.Instance["Prompts.NewPromptTitle"]
+        : Loc.Instance["Prompts.EditPromptTitle"];
 
     public bool HasLlmProviders => _pluginManager.LlmProviders.Any(p => p.IsAvailable);
 
@@ -39,10 +47,12 @@ public partial class PromptsViewModel : ObservableObject
         {
             _settings.Save(_settings.Current with { DefaultLlmProvider = value });
             OnPropertyChanged();
+            OnPropertyChanged(nameof(DefaultProviderSummary));
         }
     }
 
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
+    public string DefaultProviderSummary => GetDefaultProviderLabel();
 
     public static IReadOnlyList<string> IconOptions { get; } =
     [
@@ -76,12 +86,14 @@ public partial class PromptsViewModel : ObservableObject
         EditProviderOverride = null;
         EditModelOverride = null;
         IsEditorOpen = true;
+        ShowEditorDialog();
     }
 
     [RelayCommand]
     private void StartEdit(PromptAction? action)
     {
         if (action is null) return;
+        SelectedAction = action;
         _editingActionId = action.Id;
         IsCreatingNew = false;
         EditName = action.Name;
@@ -90,6 +102,7 @@ public partial class PromptsViewModel : ObservableObject
         EditProviderOverride = action.ProviderOverride;
         EditModelOverride = action.ModelOverride;
         IsEditorOpen = true;
+        ShowEditorDialog();
     }
 
     [RelayCommand]
@@ -184,6 +197,7 @@ public partial class PromptsViewModel : ObservableObject
         Actions.Clear();
         foreach (var action in _promptActions.Actions.OrderBy(a => a.SortOrder))
             Actions.Add(action);
+        NotifyStateChanged();
     }
 
     public void RefreshProviders()
@@ -204,6 +218,7 @@ public partial class PromptsViewModel : ObservableObject
             }
         }
         OnPropertyChanged(nameof(HasLlmProviders));
+        OnPropertyChanged(nameof(DefaultProviderSummary));
     }
 
     private string GetDefaultProviderLabel()
@@ -218,6 +233,25 @@ public partial class PromptsViewModel : ObservableObject
                 $"{firstAvailable.ProviderName} / {firstModel.DisplayName}");
 
         return Loc.Instance["Prompts.DefaultProviderLabelNone"];
+    }
+
+    partial void OnIsCreatingNewChanged(bool value) => OnPropertyChanged(nameof(EditorTitle));
+
+    private void ShowEditorDialog()
+    {
+        var owner = Application.Current.Windows.OfType<SettingsWindow>().FirstOrDefault();
+        var editor = new PromptEditorWindow(this);
+        if (owner is not null)
+            editor.Owner = owner;
+        editor.ShowDialog();
+    }
+
+    private void NotifyStateChanged()
+    {
+        OnPropertyChanged(nameof(HasActions));
+        OnPropertyChanged(nameof(ActionCount));
+        OnPropertyChanged(nameof(EnabledActionCount));
+        OnPropertyChanged(nameof(SummaryText));
     }
 }
 

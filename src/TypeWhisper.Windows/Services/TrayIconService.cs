@@ -92,7 +92,7 @@ public sealed class TrayIconService : IDisposable
     {
         using var bmp = new Bitmap(16, 16);
         using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.FromArgb(88, 101, 242));
+        g.Clear(Color.FromArgb(0, 120, 212));
         using var font = new Font("Segoe UI", 10f, System.Drawing.FontStyle.Bold);
         using var brush = new SolidBrush(Color.White);
         g.DrawString("T", font, brush, 1f, 0f);

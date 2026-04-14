@@ -11,20 +11,22 @@ public partial class SettingsWindow : FluentWindow
         InitializeComponent();
         DataContext = viewModel;
 
-        viewModel.RegisterSection("Home", () => new DashboardSection { DataContext = viewModel });
-        viewModel.RegisterSection("General", () => new GeneralSection { DataContext = viewModel });
-        viewModel.RegisterSection("Recording", () => new AudioSection { DataContext = viewModel });
-        viewModel.RegisterSection("Models", () => new ModelsSection { DataContext = viewModel });
-        viewModel.RegisterSection("History", () => new HistorySection { DataContext = viewModel });
-        viewModel.RegisterSection("Dictionary", () => new DictionarySection { DataContext = viewModel });
-        viewModel.RegisterSection("Snippets", () => new SnippetsSection { DataContext = viewModel });
-        viewModel.RegisterSection("Profiles", () => new ProfilesSection { DataContext = viewModel });
-        viewModel.RegisterSection("Prompts", () => new PromptsSection { DataContext = viewModel });
-        viewModel.RegisterSection("Recorder", () => new RecorderSection { DataContext = viewModel });
-        viewModel.RegisterSection("Plugins", () => new PluginsSection { DataContext = viewModel });
-        viewModel.RegisterSection("Advanced", () => new AdvancedSection { DataContext = viewModel });
-        viewModel.RegisterSection("License", () => new LicenseSection { DataContext = viewModel });
-        viewModel.RegisterSection("About", () => new InfoSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Dashboard, () => new DashboardSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Dictation, () => new AudioSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Shortcuts, () => new ShortcutsSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.FileTranscription, () => new FileTranscriptionSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Recorder, () => new RecorderSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.History, () => new HistorySection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Dictionary, () => new DictionarySection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Snippets, () => new SnippetsSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Profiles, () => new ProfilesSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Prompts, () => new PromptsSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Integrations, () => new PluginsSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.General, () => new GeneralSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Appearance, () => new AppearanceSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Advanced, () => new AdvancedSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.License, () => new LicenseSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.About, () => new InfoSection { DataContext = viewModel });
 
         viewModel.NavigateToDefault();
 

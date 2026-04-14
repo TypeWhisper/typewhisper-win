@@ -122,6 +122,12 @@ public sealed class AudioRecordingService : IDisposable
     {
         if (_isRecording) return;
 
+        // The settings microphone preview uses its own WaveIn instance and can
+        // block real capture while the settings window stays open on Dictation.
+        // Always stop preview before entering recording mode.
+        if (_isPreviewing)
+            StopPreview();
+
         if (!_isWarmedUp && !WarmUp())
             return;
 
@@ -309,6 +315,9 @@ public sealed class AudioRecordingService : IDisposable
 
     public void StartPreview(int? deviceNumber)
     {
+        if (_isRecording)
+            return;
+
         StopPreview();
         if (_disposed || WaveInEvent.DeviceCount == 0) return;
 

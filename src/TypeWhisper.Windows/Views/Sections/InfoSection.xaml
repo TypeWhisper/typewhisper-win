@@ -32,7 +32,7 @@
             <!-- Version -->
             <TextBlock HorizontalAlignment="Center" Margin="0,4,0,16"
                        Foreground="{StaticResource HintBrush}" FontSize="12">
-                <Run Text="Version"/>
+                <Run Text="{loc:Str Info.Version}"/>
                 <Run Text="{Binding CurrentAppVersion, Mode=OneWay}"/>
             </TextBlock>
 

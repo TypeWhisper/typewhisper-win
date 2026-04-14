@@ -15,7 +15,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="600" Margin="24">
             <TextBlock Text="{loc:Str Nav.Recorder}" Style="{StaticResource SectionHeaderStyle}"/>
-            <TextBlock Text="Record audio and transcribe it."
+            <TextBlock Text="{loc:Str Recorder.Description}"
                        Style="{StaticResource HintStyle}" Margin="0,0,0,24"/>
 
             <!-- Recording controls -->
@@ -37,18 +37,32 @@
                         <ui:Button.Content>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#x23FA;" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock VerticalAlignment="Center">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="Record"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
-                                                    <Setter Property="Text" Value="Stop"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
+                                <Grid VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str Recorder.Record}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{loc:Str Recorder.Stop}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
                             </StackPanel>
                         </ui:Button.Content>
                     </ui:Button>
@@ -66,7 +80,7 @@
             </Border>
 
             <!-- Recordings list -->
-            <TextBlock Text="Recordings" FontSize="16" FontWeight="SemiBold"
+            <TextBlock Text="{loc:Str Recorder.Recordings}" FontSize="16" FontWeight="SemiBold"
                        Foreground="{StaticResource TextBrush}" Margin="0,0,0,12"
                        Visibility="{Binding Recorder.HasRecordings, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
 
@@ -93,7 +107,7 @@
                                                Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <ui:Button Grid.Column="1" Appearance="Secondary"
-                                           ToolTip="Delete" Padding="6,4"
+                                           ToolTip="{loc:Str Recorder.Delete}" Padding="6,4"
                                            VerticalAlignment="Center"
                                            Command="{Binding DataContext.Recorder.DeleteRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                            CommandParameter="{Binding}">

@@ -1,11 +1,14 @@
+using System.IO;
 using TypeWhisper.Windows.Services;
 using Velopack;
+using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows;
 
 public static class Program
 {
     private static Mutex? _singleInstanceMutex;
+    private static readonly string CallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
     public static bool StartMinimized { get; private set; }
 
@@ -21,11 +24,16 @@ public static class Program
             .Run();
 
         StartMinimized = args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+        TypeWhisperEnvironment.EnsureDirectories();
+        var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
 
         // Single instance check
         _singleInstanceMutex = new Mutex(true, "TypeWhisper-SingleInstance", out var createdNew);
         if (!createdNew)
         {
+            if (!string.IsNullOrWhiteSpace(callbackArg))
+                File.WriteAllText(CallbackInboxPath, callbackArg);
+
             // Another instance is already running
             return;
         }

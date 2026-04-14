@@ -9,6 +9,7 @@ public partial class WelcomeWindow : FluentWindow
     {
         DataContext = viewModel;
         viewModel.Completed += (_, _) => Close();
+        Closed += (_, _) => viewModel.Cleanup();
         InitializeComponent();
     }
 }

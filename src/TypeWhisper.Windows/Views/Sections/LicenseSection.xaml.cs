@@ -2,34 +2,46 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
 public partial class LicenseSection : UserControl
 {
-    public LicenseSection() => InitializeComponent();
+    private readonly LicenseSectionViewModel _viewModel;
 
-    private async void OnActivateClick(object sender, RoutedEventArgs e)
+    public LicenseSection()
     {
-        var key = LicenseKeyBox.Password;
-        if (string.IsNullOrWhiteSpace(key))
-        {
-            LicenseStatus.Text = "Please enter a license key.";
-            return;
-        }
+        InitializeComponent();
 
-        try
-        {
-            LicenseStatus.Text = "Activating...";
-            var license = App.Services.GetRequiredService<LicenseService>();
-            await license.ActivateAsync(key);
-            LicenseStatus.Text = $"Activated! Tier: {license.Tier}";
-            LicenseStatus.Foreground = FindResource("ActiveIndicatorBrush") as System.Windows.Media.Brush
-                ?? LicenseStatus.Foreground;
-        }
-        catch (Exception ex)
-        {
-            LicenseStatus.Text = $"Activation failed: {ex.Message}";
-        }
+        _viewModel = new LicenseSectionViewModel(
+            App.Services.GetRequiredService<LicenseService>(),
+            App.Services.GetRequiredService<SupporterDiscordService>());
+
+        ContentRoot.DataContext = _viewModel;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
+        await _viewModel.InitializeAsync();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
+    }
+
+    private void OnCommercialLicenseKeyChanged(object sender, RoutedEventArgs e)
+    {
+        _viewModel.CommercialLicenseKeyInput = CommercialLicenseKeyBox.Password;
+    }
+
+    private void OnSupporterLicenseKeyChanged(object sender, RoutedEventArgs e)
+    {
+        _viewModel.SupporterLicenseKeyInput = SupporterLicenseKeyBox.Password;
     }
 }

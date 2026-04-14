@@ -15,12 +15,19 @@ public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private bool _isSyncingSelection;
 
     [ObservableProperty] private string? _activeModelId;
+    [ObservableProperty] private string? _selectedModelOptionId;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
+    [ObservableProperty] private string _activeProviderDisplayName = "None";
+    [ObservableProperty] private string _activeModelDisplayName = "No model selected";
+    [ObservableProperty] private string _activeModelStatusText = "";
+    [ObservableProperty] private bool _isActiveModelReady;
 
     public ObservableCollection<ProviderViewModel> Providers { get; } = [];
+    public ObservableCollection<ModelOptionViewModel> AvailableModelOptions { get; } = [];
 
     public ModelManagerViewModel(ModelManagerService modelManager, ISettingsService settings)
     {
@@ -49,6 +56,7 @@ public partial class ModelManagerViewModel : ObservableObject
     private void RebuildProviders()
     {
         Providers.Clear();
+        AvailableModelOptions.Clear();
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines)
         {
             var isLlmProvider = _modelManager.PluginManager.LlmProviders
@@ -68,9 +76,18 @@ public partial class ModelManagerViewModel : ObservableObject
                     engine.SupportsModelDownload,
                     _modelManager.IsDownloaded(fullId),
                     status));
+
+                AvailableModelOptions.Add(new ModelOptionViewModel(
+                    fullId,
+                    engine.ProviderDisplayName,
+                    model.DisplayName,
+                    $"{engine.ProviderDisplayName} / {model.DisplayName}"));
             }
             Providers.Add(providerVm);
         }
+
+        SyncSelectedModelOption();
+        RefreshActiveModelDetails();
     }
 
     /// <summary>
@@ -98,8 +115,23 @@ public partial class ModelManagerViewModel : ObservableObject
                 m.IsActive = _modelManager.ActiveModelId == m.FullId;
                 m.IsDownloaded = _modelManager.IsDownloaded(m.FullId);
                 var status = _modelManager.GetStatus(m.FullId);
+                m.IsReady = status.Type == ModelStatusType.Ready;
                 m.StatusText = FormatStatus(status, m.IsDownloaded);
             }
+
+        SyncSelectedModelOption();
+        RefreshActiveModelDetails();
+    }
+
+    partial void OnSelectedModelOptionIdChanged(string? value)
+    {
+        if (_isSyncingSelection || string.IsNullOrWhiteSpace(value) || value == ActiveModelId)
+            return;
+
+        RefreshActiveModelDetails();
+
+        if (ActivateModelCommand.CanExecute(value))
+            ActivateModelCommand.Execute(value);
     }
 
     internal static string FormatStatus(ModelStatus status, bool isDownloaded) => status.Type switch
@@ -132,6 +164,41 @@ public partial class ModelManagerViewModel : ObservableObject
             IsBusy = false;
             BusyMessage = null;
         }
+    }
+
+    private void SyncSelectedModelOption()
+    {
+        if (IsBusy && !string.IsNullOrWhiteSpace(SelectedModelOptionId))
+            return;
+
+        _isSyncingSelection = true;
+        SelectedModelOptionId = ActiveModelId;
+        _isSyncingSelection = false;
+    }
+
+    private void RefreshActiveModelDetails()
+    {
+        var displayModelId = !string.IsNullOrWhiteSpace(SelectedModelOptionId)
+            ? SelectedModelOptionId
+            : ActiveModelId;
+
+        var activeModel = Providers
+            .SelectMany(p => p.Models.Select(m => (Provider: p, Model: m)))
+            .FirstOrDefault(x => x.Model.FullId == displayModelId);
+
+        if (activeModel.Model is null)
+        {
+            ActiveProviderDisplayName = "None";
+            ActiveModelDisplayName = "No model selected";
+            ActiveModelStatusText = "";
+            IsActiveModelReady = false;
+            return;
+        }
+
+        ActiveProviderDisplayName = activeModel.Provider.DisplayName;
+        ActiveModelDisplayName = activeModel.Model.DisplayName;
+        ActiveModelStatusText = activeModel.Model.StatusText;
+        IsActiveModelReady = activeModel.Model.IsReady;
     }
 
     [RelayCommand]
@@ -175,6 +242,7 @@ public partial class ModelItemViewModel : ObservableObject
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _isAvailable;
     [ObservableProperty] private bool _isDownloaded;
+    [ObservableProperty] private bool _isReady;
     [ObservableProperty] private string _statusText = "";
 
     public ModelItemViewModel(string fullId, PluginModelInfo model, bool isAvailable,
@@ -191,6 +259,23 @@ public partial class ModelItemViewModel : ObservableObject
         _isAvailable = isAvailable;
         _isActive = isActive;
         _isDownloaded = isDownloaded;
+        _isReady = status.Type == ModelStatusType.Ready;
         _statusText = ModelManagerViewModel.FormatStatus(status, isDownloaded);
+    }
+}
+
+public sealed class ModelOptionViewModel
+{
+    public string FullId { get; }
+    public string ProviderDisplayName { get; }
+    public string ModelDisplayName { get; }
+    public string DisplayName { get; }
+
+    public ModelOptionViewModel(string fullId, string providerDisplayName, string modelDisplayName, string displayName)
+    {
+        FullId = fullId;
+        ProviderDisplayName = providerDisplayName;
+        ModelDisplayName = modelDisplayName;
+        DisplayName = displayName;
     }
 }

@@ -2,12 +2,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.Controls;
 
 public sealed class HotkeyRecorderControl : Control
 {
     private readonly HotkeyRecorderSession _recordingSession = new();
+    private static int _activeRecordingControls;
 
     public static readonly DependencyProperty HotkeyProperty =
         DependencyProperty.Register(nameof(Hotkey), typeof(string), typeof(HotkeyRecorderControl),
@@ -15,7 +18,7 @@ public sealed class HotkeyRecorderControl : Control
 
     public static readonly DependencyProperty IsRecordingProperty =
         DependencyProperty.Register(nameof(IsRecording), typeof(bool), typeof(HotkeyRecorderControl),
-            new PropertyMetadata(false));
+            new PropertyMetadata(false, OnIsRecordingChanged));
 
     public static readonly DependencyProperty AllowModifierOnlyProperty =
         DependencyProperty.Register(nameof(AllowModifierOnly), typeof(bool), typeof(HotkeyRecorderControl),
@@ -49,6 +52,30 @@ public sealed class HotkeyRecorderControl : Control
     {
         Focusable = true;
         Cursor = Cursors.Hand;
+        Unloaded += (_, _) =>
+        {
+            if (IsRecording)
+                CancelRecording();
+        };
+    }
+
+    private static void OnIsRecordingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not HotkeyRecorderControl)
+            return;
+
+        var isRecording = e.NewValue is true;
+        if (isRecording)
+        {
+            _activeRecordingControls++;
+        }
+        else if (_activeRecordingControls > 0)
+        {
+            _activeRecordingControls--;
+        }
+
+        var hotkeyService = App.Services.GetRequiredService<HotkeyService>();
+        hotkeyService.IsEnabled = _activeRecordingControls == 0;
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)

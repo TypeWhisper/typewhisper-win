@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
-             xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
              xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -15,181 +14,174 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <DockPanel Margin="24">
-        <!-- Header -->
-        <TextBlock DockPanel.Dock="Top" Text="{loc:Str Prompts.Title}" Style="{StaticResource SectionHeaderStyle}"/>
-        <TextBlock DockPanel.Dock="Top"
-                   Text="{loc:Str Prompts.Subtitle}"
-                   Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- Warning: No LLM provider -->
-        <ui:InfoBar DockPanel.Dock="Top"
-                    Title="{loc:Str Prompts.NoLlmProvider}"
-                    Message="{loc:Str Prompts.NoLlmProviderHint}"
-                    Severity="Warning" IsOpen="True" IsClosable="False"
-                    Margin="0,0,0,12"
-                    Visibility="{Binding Prompts.HasLlmProviders, Converter={StaticResource InverseBoolToVis}}"/>
+        <Border Grid.Row="0" Style="{StaticResource SettingsSummaryBarStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-        <!-- Default LLM Provider -->
-        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16"
-                    Visibility="{Binding Prompts.HasLlmProviders, Converter={StaticResource BoolToVis}}">
-            <TextBlock Text="{loc:Str Prompts.DefaultProvider}" Style="{StaticResource LabelStyle}"/>
-            <ComboBox ItemsSource="{Binding Prompts.AvailableProviders}"
-                      SelectedValue="{Binding Prompts.DefaultLlmProvider}"
-                      SelectedValuePath="Value"
-                      DisplayMemberPath="DisplayName"
-                      Width="320" HorizontalAlignment="Left"/>
-        </StackPanel>
-
-        <!-- Editor Panel -->
-        <Border DockPanel.Dock="Top"
-                Background="#18FFFFFF" CornerRadius="8" Padding="16,12" Margin="0,0,0,12"
-                Visibility="{Binding Prompts.IsEditorOpen, Converter={StaticResource BoolToVis}}">
-            <StackPanel>
-                <TextBlock x:Name="EditorTitle"
-                           Foreground="{StaticResource TextBrush}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
-
-                <!-- Icon picker -->
-                <TextBlock Text="{loc:Str Prompts.Icon}" Style="{StaticResource LabelStyle}"/>
-                <ItemsControl ItemsSource="{x:Static vm:PromptsViewModel.IconOptions}" Margin="0,0,0,10">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Content="{Binding}" FontSize="18" Padding="4,2" Margin="2"
-                                    Click="IconPick_Click"
-                                    Background="Transparent" BorderThickness="0" Cursor="Hand">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="6,3">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="Bd" Property="Background" Value="#30FFFFFF"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Name -->
-                <TextBlock Text="{loc:Str Prompts.NameLabel}" Style="{StaticResource LabelStyle}"/>
-                <TextBox Text="{Binding Prompts.EditName, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,10"/>
-
-                <!-- System Prompt -->
-                <TextBlock Text="{loc:Str Prompts.SystemPrompt}" Style="{StaticResource LabelStyle}"/>
-                <TextBox Text="{Binding Prompts.EditSystemPrompt, UpdateSourceTrigger=PropertyChanged}"
-                         Style="{StaticResource InputTextBoxStyle}"
-                         AcceptsReturn="True" TextWrapping="Wrap"
-                         MinHeight="80" MaxHeight="160"
-                         VerticalScrollBarVisibility="Auto"
-                         Margin="0,0,0,10"/>
-
-                <!-- Provider override -->
-                <TextBlock Text="{loc:Str Prompts.ProviderOverride}" Style="{StaticResource LabelStyle}"/>
-                <ComboBox ItemsSource="{Binding Prompts.AvailableProviders}"
-                          SelectedValue="{Binding Prompts.EditProviderOverride}"
-                          SelectedValuePath="Value"
-                          DisplayMemberPath="DisplayName"
-                          Width="320" HorizontalAlignment="Left"
-                          Margin="0,0,0,12"/>
-
-                <!-- Buttons -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <ui:Button Content="{loc:Str Prompts.Cancel}"
-                              Command="{Binding Prompts.CancelEditorCommand}"
-                              Appearance="Secondary" Padding="12,6" Margin="0,0,8,0"/>
-                    <ui:Button Content="{loc:Str Prompts.Save}"
-                              Command="{Binding Prompts.SaveEditorCommand}"
-                              Appearance="Primary" Padding="12,6"/>
+                <StackPanel Margin="0,0,18,0">
+                    <TextBlock Text="{loc:Str Prompts.Title}" Style="{StaticResource SettingsGroupTitleStyle}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding Prompts.SummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str Prompts.Subtitle}" Style="{StaticResource HintStyle}" Margin="0"/>
                 </StackPanel>
-            </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Margin="0,0,12,0"
+                            VerticalAlignment="Center"
+                            Visibility="{Binding Prompts.HasLlmProviders, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{loc:Str Prompts.DefaultProvider}" Style="{StaticResource HintStyle}" Margin="0,0,0,6"/>
+                    <ComboBox ItemsSource="{Binding Prompts.AvailableProviders}"
+                              SelectedValue="{Binding Prompts.DefaultLlmProvider}"
+                              SelectedValuePath="Value"
+                              DisplayMemberPath="DisplayName"
+                              Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                              Width="280"/>
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                        Content="{loc:Str Prompts.New}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding Prompts.StartCreateCommand}"
+                        Padding="14,7"
+                        FontSize="12"
+                        VerticalAlignment="Center"/>
+            </Grid>
         </Border>
 
-        <!-- Toolbar -->
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,12"
-              Visibility="{Binding Prompts.IsEditorOpen, Converter={StaticResource InverseBoolToVis}}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <ui:Button Grid.Column="1" Content="{loc:Str Prompts.New}"
-                      Command="{Binding Prompts.StartCreateCommand}"
-                      Appearance="Primary" Padding="12,6"/>
-        </Grid>
+        <ui:InfoBar Grid.Row="1"
+                    Title="{loc:Str Prompts.NoLlmProvider}"
+                    Message="{loc:Str Prompts.NoLlmProviderHint}"
+                    Severity="Warning"
+                    IsOpen="True"
+                    IsClosable="False"
+                    Margin="0,0,0,16"
+                    Visibility="{Binding Prompts.HasLlmProviders, Converter={StaticResource InverseBoolToVis}}"/>
 
-        <!-- Empty State -->
-        <StackPanel x:Name="EmptyState" VerticalAlignment="Center" HorizontalAlignment="Center"
+        <Grid Grid.Row="2">
+            <StackPanel x:Name="EmptyState"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="360"
+                        Visibility="Collapsed">
+                <TextBlock Text=""
+                           FontFamily="Segoe Fluent Icons"
+                           FontSize="34"
+                           Foreground="{StaticResource HintBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,12"/>
+                <TextBlock Text="{loc:Str Prompts.EmptyTitle}"
+                           Foreground="{StaticResource TextBrush}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="{loc:Str Prompts.EmptySubtitle}"
+                           Style="{StaticResource PageSubtitleStyle}"
+                           TextAlignment="Center"
+                           Margin="0,0,0,18"/>
+                <Button Content="{loc:Str Prompts.CreateFirst}"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding Prompts.StartCreateCommand}"
+                        Padding="16,8"
+                        HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <Border x:Name="ActionListHost"
+                    Style="{StaticResource SettingsGroupPanelStyle}"
                     Visibility="Collapsed">
-            <TextBlock Text="{loc:Str Prompts.EmptyTitle}"
-                       Foreground="#808080" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-            <ui:Button Content="{loc:Str Prompts.CreateFirst}"
-                      Command="{Binding Prompts.StartCreateCommand}"
-                      Appearance="Primary" Padding="16,8"
-                      HorizontalAlignment="Center"/>
-        </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ActionList"
+                                  ItemsSource="{Binding Prompts.Actions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource SettingsCollectionRowStyle}"
+                                        MouseLeftButtonDown="Card_MouseLeftButtonDown"
+                                        Cursor="Hand">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{loc:Str Prompts.ContextEdit}" Click="ContextEdit_Click"/>
+                                            <MenuItem Header="{loc:Str Prompts.ContextMoveUp}" Click="ContextMoveUp_Click"/>
+                                            <MenuItem Header="{loc:Str Prompts.ContextMoveDown}" Click="ContextMoveDown_Click"/>
+                                            <Separator/>
+                                            <MenuItem Header="{loc:Str Prompts.ContextDelete}" Click="ContextDelete_Click"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-        <!-- Actions List -->
-        <ScrollViewer x:Name="ActionList" VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Prompts.Actions}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource TimelineCardStyle}" Margin="0,0,0,6"
-                                MouseLeftButtonDown="Card_MouseLeftButtonDown">
-                            <Border.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="{loc:Str Prompts.ContextEdit}" Click="ContextEdit_Click"/>
-                                    <MenuItem Header="{loc:Str Prompts.ContextMoveUp}" Click="ContextMoveUp_Click"/>
-                                    <MenuItem Header="{loc:Str Prompts.ContextMoveDown}" Click="ContextMoveDown_Click"/>
-                                    <Separator/>
-                                    <MenuItem Header="{loc:Str Prompts.ContextDelete}" Click="ContextDelete_Click"/>
-                                </ContextMenu>
-                            </Border.ContextMenu>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0"
+                                                Width="36"
+                                                Height="36"
+                                                CornerRadius="10"
+                                                Background="#162338"
+                                                BorderBrush="#24507BAA"
+                                                BorderThickness="1"
+                                                Margin="0,0,14,0">
+                                            <TextBlock Text="{Binding Icon}"
+                                                       FontSize="18"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
 
-                                <!-- Icon -->
-                                <TextBlock Grid.Column="0" Text="{Binding Icon}"
-                                           FontSize="20" VerticalAlignment="Center"
-                                           Margin="0,0,12,0"/>
+                                        <StackPanel Grid.Column="1" Margin="0,0,14,0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="{StaticResource TextBrush}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"/>
+                                                <Border Style="{StaticResource BadgeStyle}"
+                                                        Margin="8,0,0,0"
+                                                        Visibility="{Binding IsEnabled, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{loc:Str Prompts.EnabledBadge}"
+                                                               Foreground="#D6DEE9"
+                                                               FontSize="10"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding SystemPrompt}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="12"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxHeight="18"
+                                                       Margin="0,4,0,0"/>
+                                        </StackPanel>
 
-                                <!-- Name + Prompt preview -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                    <TextBlock Text="{Binding Name}"
-                                               Foreground="{StaticResource TextBrush}"
-                                               FontSize="13" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding SystemPrompt}"
-                                               Foreground="#808080" FontSize="11"
-                                               TextTrimming="CharacterEllipsis" MaxHeight="18"/>
-                                </StackPanel>
+                                        <Button Grid.Column="2"
+                                                Content="{loc:Str Prompts.ContextEdit}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding DataContext.Prompts.StartEditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="12,6"
+                                                FontSize="12"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center"/>
 
-                                <!-- Toggle Enabled -->
-                                <ui:ToggleSwitch Grid.Column="2" IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                                 VerticalAlignment="Center" Margin="8,0,0,0"
-                                                 Checked="ToggleEnabled_Click" Unchecked="ToggleEnabled_Click"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-    </DockPanel>
+                                        <ui:ToggleSwitch Grid.Column="3"
+                                                         IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                         VerticalAlignment="Center"
+                                                         Checked="ToggleEnabled_Click"
+                                                         Unchecked="ToggleEnabled_Click"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>

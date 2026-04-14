@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Audio;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -17,11 +18,12 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     private readonly ModelManagerService _modelManager;
     private System.Timers.Timer? _timer;
     private DateTime _recordingStart;
+    private string? _statusKey;
 
     [ObservableProperty] private bool _isRecording;
     [ObservableProperty] private string _durationText = "0:00";
     [ObservableProperty] private float _audioLevel;
-    [ObservableProperty] private string _statusText = "Ready";
+    [ObservableProperty] private string _statusText = Loc.Instance["Status.Ready"];
     [ObservableProperty] private bool _isTranscribing;
 
     public ObservableCollection<RecordingItem> Recordings { get; } = [];
@@ -33,6 +35,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         _modelManager = modelManager;
         _audio.AudioLevelChanged += (_, e) =>
             Application.Current?.Dispatcher.InvokeAsync(() => AudioLevel = e.PeakLevel);
+        _statusKey = "Status.Ready";
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
         LoadExistingRecordings();
     }
 
@@ -49,14 +53,14 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     {
         if (!_audio.WarmUp())
         {
-            StatusText = "No microphone available";
+            SetLocalizedStatus("Status.NoMicrophone");
             return;
         }
 
         _audio.StartRecording();
         IsRecording = true;
         _recordingStart = DateTime.UtcNow;
-        StatusText = "Recording...";
+        SetLocalizedStatus("Status.Recording");
 
         _timer = new System.Timers.Timer(100);
         _timer.Elapsed += (_, _) =>
@@ -80,7 +84,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
 
         if (samples.Length == 0)
         {
-            StatusText = "No audio captured";
+            SetLocalizedStatus("Recorder.NoAudioCaptured");
             return;
         }
 
@@ -90,7 +94,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         var wav = WavEncoder.Encode(samples);
         await File.WriteAllBytesAsync(filePath, wav);
 
-        StatusText = "Saved. Transcribing...";
+        SetLocalizedStatus("Recorder.SavedTranscribing");
         IsTranscribing = true;
 
         // Auto-transcribe
@@ -115,7 +119,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
 
         var item = new RecordingItem(fileName, filePath, DateTime.Now, duration, transcript);
         Application.Current?.Dispatcher.Invoke(() => Recordings.Insert(0, item));
-        StatusText = transcript is not null ? "Done" : "Saved (no model loaded)";
+        SetLocalizedStatus(transcript is not null ? "Status.Done" : "Recorder.SavedNoModel");
         DurationText = "0:00";
     }
 
@@ -150,8 +154,26 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         catch { }
     }
 
+    private void SetLocalizedStatus(string key)
+    {
+        _statusKey = key;
+        StatusText = Loc.Instance[key];
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_statusKey))
+            return;
+
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            StatusText = Loc.Instance[_statusKey];
+        });
+    }
+
     public void Dispose()
     {
+        Loc.Instance.LanguageChanged -= OnLanguageChanged;
         _timer?.Dispose();
     }
 }

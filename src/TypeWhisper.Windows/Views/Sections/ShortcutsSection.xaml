@@ -1,0 +1,146 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.ShortcutsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
+             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="28" MaxWidth="860">
+            <StackPanel Margin="0,0,0,18">
+                <TextBlock Text="{loc:Str Nav.Shortcuts}"
+                           Style="{StaticResource SettingsGroupTitleStyle}"
+                           Margin="0,0,0,6"/>
+                <TextBlock Text="{loc:Str Shortcuts.Subtitle}"
+                           Style="{StaticResource PageSubtitleStyle}"
+                           Margin="0"/>
+            </StackPanel>
+
+            <TextBlock Text="{loc:Str Shortcuts.MainSection}"
+                       Style="{StaticResource NavGroupLabelStyle}"
+                       Margin="0,0,0,8"/>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                <StackPanel>
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Shortcuts.MainHotkey}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.MainHotkeyHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.PushToTalkHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="{loc:Str Shortcuts.MoreSection}"
+                       Style="{StaticResource NavGroupLabelStyle}"
+                       Margin="0,0,0,8"/>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                <StackPanel>
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Shortcuts.ToggleOnly}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.ToggleOnlyHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.ToggleOnlyHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Height="1"
+                            Background="#16FFFFFF"
+                            Margin="18,0"/>
+
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Shortcuts.HoldOnly}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.HoldOnlyHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.HoldOnlyHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Height="1"
+                            Background="#16FFFFFF"
+                            Margin="18,0"/>
+
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str General.PromptPalette}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.PromptPaletteHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.PromptPaletteHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

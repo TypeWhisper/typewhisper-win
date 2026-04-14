@@ -184,6 +184,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         _hotkey.PromptPaletteRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(() =>
             PromptPalette.TogglePalette());
+        _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await AbortActiveOperation());
         _hotkey.ProfileDictationRequested += (_, profileId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             _profileHotkeyOverrideId = profileId;
@@ -435,6 +437,42 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         Interlocked.Increment(ref _pendingJobCount);
         await _jobChannel.Writer.WriteAsync(job);
         UpdateVisualState();
+    }
+
+    private Task AbortActiveOperation()
+    {
+        if (_isRecording)
+        {
+            _isRecording = false;
+
+            _durationTimer?.Stop();
+            _durationTimer?.Dispose();
+            _durationTimer = null;
+
+            _streamingHandler.Stop();
+            _audio.SamplesAvailable -= OnSamplesAvailable;
+            _audio.StopRecording();
+            _audioDucking.RestoreAudio();
+            _mediaPause.ResumeMedia();
+            _vad?.Dispose();
+            _vad = null;
+            _partialSegments.Clear();
+            PartialText = "";
+            RecordingSeconds = 0;
+            CurrentHotkeyMode = null;
+            _hotkey.ForceStop();
+            StatusText = Loc.Instance["Status.Cancelled"];
+            UpdateVisualState();
+            return Task.CompletedTask;
+        }
+
+        if (_pendingJobCount > 0)
+        {
+            CancelProcessing();
+            StatusText = Loc.Instance["Status.Cancelled"];
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task ProcessJobsAsync(CancellationToken ct)
@@ -776,6 +814,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             IsExpanded = false;
             ShowFeedback = false;
         }
+
+        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
     }
 
     private async void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs e)

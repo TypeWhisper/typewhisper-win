@@ -23,6 +23,7 @@ public sealed class HotkeyService : IDisposable
     private readonly KeyboardHook _toggleOnlyHook;
     private readonly KeyboardHook _holdOnlyHook;
     private readonly KeyboardHook _promptPaletteHook;
+    private readonly KeyboardHook _cancelHook;
     private readonly List<(KeyboardHook Hook, string ProfileId)> _profileHooks = [];
 
     private bool _disposed;
@@ -32,9 +33,31 @@ public sealed class HotkeyService : IDisposable
     public event EventHandler? DictationStartRequested;
     public event EventHandler? DictationStopRequested;
     public event EventHandler? PromptPaletteRequested;
+    public event EventHandler? CancelRequested;
     public event EventHandler<string>? ProfileDictationRequested;
     public HotkeyMode? CurrentMode { get; private set; }
-    public bool IsEnabled { get; set; } = true;
+
+    private bool _isCancelShortcutEnabled;
+    public bool IsCancelShortcutEnabled
+    {
+        get => _isCancelShortcutEnabled;
+        set
+        {
+            _isCancelShortcutEnabled = value;
+            ApplyEnabledState();
+        }
+    }
+
+    private bool _isEnabled = true;
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set
+        {
+            _isEnabled = value;
+            ApplyEnabledState();
+        }
+    }
 
     public HotkeyService(ISettingsService settings, IProfileService profiles)
     {
@@ -54,6 +77,10 @@ public sealed class HotkeyService : IDisposable
 
         _promptPaletteHook = new KeyboardHook();
         _promptPaletteHook.KeyDown += OnPromptPaletteKeyDown;
+
+        _cancelHook = new KeyboardHook();
+        _cancelHook.SetHotkey("Escape");
+        _cancelHook.KeyDown += OnCancelKeyDown;
     }
 
     public void Initialize(Window window)
@@ -95,7 +122,10 @@ public sealed class HotkeyService : IDisposable
             _promptPaletteHook.Start();
         }
 
+        _cancelHook.Start();
+
         ApplyProfileHotkeys();
+        ApplyEnabledState();
     }
 
     private void ApplyProfileHotkeys()
@@ -127,9 +157,22 @@ public sealed class HotkeyService : IDisposable
             };
             hook.SetHotkey(profile.HotkeyData);
             hook.Start();
+            hook.IsEnabled = _isEnabled;
             _profileHooks.Add((hook, profileId));
             Debug.WriteLine($"Registered profile hotkey: {profile.HotkeyData} for {profile.Name}");
         }
+    }
+
+    private void ApplyEnabledState()
+    {
+        _hybridHook.IsEnabled = _isEnabled;
+        _toggleOnlyHook.IsEnabled = _isEnabled;
+        _holdOnlyHook.IsEnabled = _isEnabled;
+        _promptPaletteHook.IsEnabled = _isEnabled;
+        _cancelHook.IsEnabled = _isEnabled && IsCancelShortcutEnabled;
+
+        foreach (var (hook, _) in _profileHooks)
+            hook.IsEnabled = _isEnabled;
     }
 
     private void StopProfileHooks()
@@ -239,6 +282,12 @@ public sealed class HotkeyService : IDisposable
         PromptPaletteRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnCancelKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled || !IsCancelShortcutEnabled) return;
+        CancelRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- Common ---
 
     private void StopAllHooks()
@@ -247,6 +296,7 @@ public sealed class HotkeyService : IDisposable
         _toggleOnlyHook.Stop();
         _holdOnlyHook.Stop();
         _promptPaletteHook.Stop();
+        _cancelHook.Stop();
         _isActive = false;
         CurrentMode = null;
     }
@@ -270,6 +320,7 @@ public sealed class HotkeyService : IDisposable
             _toggleOnlyHook.Dispose();
             _holdOnlyHook.Dispose();
             _promptPaletteHook.Dispose();
+            _cancelHook.Dispose();
             _disposed = true;
         }
     }

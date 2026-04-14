@@ -12,63 +12,161 @@
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="600" Margin="24">
-            <TextBlock Text="{loc:Str Nav.Advanced}" Style="{StaticResource SectionHeaderStyle}"/>
+        <StackPanel Margin="28,22,28,28" MaxWidth="980">
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Advanced.MemorySection}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-            <!-- Memory -->
-            <TextBlock Text="Memory" Style="{StaticResource SectionHeaderStyle}" FontSize="16" Margin="0,24,0,8"/>
-            <TextBlock Text="Automatically extracts facts from your transcriptions using an LLM. Memories are injected into prompt context."
-                       Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.EnableMemory}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.MemoryEnabled, Mode=TwoWay, FallbackValue=False}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
 
-            <StackPanel Margin="0,0,0,24">
-                <CheckBox Content="Enable Memory" IsChecked="{Binding Settings.MemoryEnabled, Mode=TwoWay, FallbackValue=False}"/>
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <TextBlock Text="{loc:Str Advanced.MemoryHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="12"
+                                       Margin="0"/>
+                        </Border>
+                    </Grid>
+                </Border>
             </StackPanel>
 
-            <!-- Recording -->
-            <TextBlock Text="Recording" Style="{StaticResource SectionHeaderStyle}" FontSize="16" Margin="0,0,0,8"/>
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Recording.Title}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-            <StackPanel Margin="0,0,0,16">
-                <TextBlock Text="Auto-unload model" Style="{StaticResource LabelStyle}"/>
-                <TextBlock Text="Automatically unloads local models from memory after inactivity. Does not affect cloud engines."
-                           Style="{StaticResource HintStyle}" Margin="0,0,0,8"/>
-                <ComboBox Width="200" HorizontalAlignment="Left"
-                          SelectedValue="{Binding Settings.AutoUnloadMinutes, FallbackValue=0}"
-                          SelectedValuePath="Tag">
-                    <ComboBoxItem Content="Never" Tag="0"/>
-                    <ComboBoxItem Content="After 5 minutes" Tag="5"/>
-                    <ComboBoxItem Content="After 15 minutes" Tag="15"/>
-                    <ComboBoxItem Content="After 30 minutes" Tag="30"/>
-                    <ComboBoxItem Content="After 1 hour" Tag="60"/>
-                </ComboBox>
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.AutoUnloadModel}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                          SelectedValue="{Binding Settings.AutoUnloadMinutes, FallbackValue=0}"
+                                          SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="{loc:Str Advanced.AutoUnloadNever}" Tag="0"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.AutoUnload5}" Tag="5"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.AutoUnload15}" Tag="15"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.AutoUnload30}" Tag="30"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.AutoUnload60}" Tag="60"/>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.SpokenFeedback}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.SpokenFeedbackEnabled, Mode=TwoWay, FallbackValue=False}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <TextBlock Text="{loc:Str Advanced.RecordingHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="12"
+                                       Margin="0"/>
+                        </Border>
+                    </Grid>
+                </Border>
             </StackPanel>
 
-            <!-- Spoken Feedback -->
-            <StackPanel Margin="0,0,0,16">
-                <CheckBox Content="Spoken feedback"
-                          IsChecked="{Binding Settings.SpokenFeedbackEnabled, Mode=TwoWay, FallbackValue=False}"/>
-                <TextBlock Text="Reads back the transcribed text via speech synthesis after each dictation."
-                           Style="{StaticResource HintStyle}"/>
-            </StackPanel>
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Advanced.DataSection}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-            <!-- Data -->
-            <TextBlock Text="Data" Style="{StaticResource SectionHeaderStyle}" FontSize="16" Margin="0,8,0,8"/>
-            <StackPanel Margin="0,0,0,16">
-                <CheckBox Content="Save transcriptions to history"
-                          IsChecked="{Binding Settings.SaveToHistoryEnabled, Mode=TwoWay, FallbackValue=True}"/>
-                <TextBlock Text="When disabled, transcriptions are inserted but not stored in history."
-                           Style="{StaticResource HintStyle}"/>
-            </StackPanel>
-            <StackPanel Margin="0,0,0,16">
-                <TextBlock Text="History retention" Style="{StaticResource LabelStyle}"/>
-                <ComboBox Width="200" HorizontalAlignment="Left"
-                          SelectedValue="{Binding Settings.HistoryRetentionDays}"
-                          SelectedValuePath="Tag">
-                    <ComboBoxItem Content="7 days" Tag="7"/>
-                    <ComboBoxItem Content="30 days" Tag="30"/>
-                    <ComboBoxItem Content="90 days" Tag="90"/>
-                    <ComboBoxItem Content="1 year" Tag="365"/>
-                    <ComboBoxItem Content="Forever" Tag="9999"/>
-                </ComboBox>
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.SaveToHistory}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.SaveToHistoryEnabled, Mode=TwoWay, FallbackValue=True}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.HistoryRetention}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                          SelectedValue="{Binding Settings.HistoryRetentionDays}"
+                                          SelectedValuePath="Tag">
+                                    <ComboBoxItem Content="{loc:Str Advanced.Retention7}" Tag="7"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.Retention30}" Tag="30"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.Retention90}" Tag="90"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.Retention365}" Tag="365"/>
+                                    <ComboBoxItem Content="{loc:Str Advanced.RetentionForever}" Tag="9999"/>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <TextBlock Text="{loc:Str Advanced.DataHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="12"
+                                       Margin="0"/>
+                        </Border>
+                    </Grid>
+                </Border>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

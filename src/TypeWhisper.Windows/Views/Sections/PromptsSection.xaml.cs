@@ -22,17 +22,8 @@ public partial class PromptsSection : UserControl
         if (GetViewModel() is { } vm)
         {
             vm.Actions.CollectionChanged += OnActionsChanged;
-            vm.PropertyChanged += OnPromptsPropertyChanged;
             vm.RefreshProviders();
             UpdateEmptyState(vm.Actions.Count);
-        }
-    }
-
-    private void OnPromptsPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(PromptsViewModel.IsEditorOpen) && GetViewModel() is { } vm)
-        {
-            EditorTitle.Text = vm.IsCreatingNew ? Loc.Instance["Prompts.NewPromptTitle"] : Loc.Instance["Prompts.EditPromptTitle"];
         }
     }
 
@@ -45,7 +36,7 @@ public partial class PromptsSection : UserControl
     private void UpdateEmptyState(int count)
     {
         EmptyState.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        ActionList.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ActionListHost.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -85,12 +76,6 @@ public partial class PromptsSection : UserControl
     {
         if (sender is FrameworkElement { DataContext: PromptAction action })
             GetViewModel()?.ToggleEnabledCommand.Execute(action);
-    }
-
-    private void IconPick_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Content: string icon } && GetViewModel() is { } vm)
-            vm.EditIcon = icon;
     }
 
     private PromptsViewModel? GetViewModel()

@@ -35,6 +35,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         _history = history;
         _dictionary = dictionary;
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
 
         GroupedEntries = CollectionViewSource.GetDefaultView(Entries);
         GroupedEntries.GroupDescriptions.Add(
@@ -213,6 +214,15 @@ public partial class HistoryViewModel : ObservableObject
 
     internal void LearnCorrection(CorrectionSuggestion suggestion) =>
         _dictionary.LearnCorrection(suggestion.Original, suggestion.Replacement);
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            if (_hasLoaded)
+                RefreshRecords();
+        });
+    }
 }
 
 public partial class HistoryEntryViewModel : ObservableObject
