@@ -587,6 +587,7 @@
 
   "Hotkey.Placeholder": "Tastenkombination dr\u00fccken...",
   "Hotkey.ClickToAssign": "Klicken zum Belegen",
+  "Hotkey.ModifierOnlyHint": "Einzelne Modifikatortasten wie Win sind nicht erlaubt. Nutze eine Kombination wie Ctrl+Shift oder Alt+Win, damit Windows-Shortcuts weiter funktionieren.",
 
   "PromptPalette.NoActions": "Keine Aktionen gefunden",
 

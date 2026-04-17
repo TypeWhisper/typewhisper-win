@@ -557,11 +557,16 @@
                                                                 HorizontalAlignment="Stretch"
                                                                 MinWidth="280"/>
 
-                                <TextBlock Grid.Row="1"
-                                           Grid.ColumnSpan="2"
-                                           Text="{loc:Str Welcome.MainHotkeyHint}"
-                                           Style="{StaticResource PageSubtitleStyle}"
-                                           Margin="0,12,0,0"/>
+                                <StackPanel Grid.Row="1"
+                                            Grid.ColumnSpan="2"
+                                            Margin="0,12,0,0">
+                                    <TextBlock Text="{loc:Str Welcome.MainHotkeyHint}"
+                                               Style="{StaticResource PageSubtitleStyle}"
+                                               Margin="0"/>
+                                    <TextBlock Text="{loc:Str Hotkey.ModifierOnlyHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,8,0,0"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
 

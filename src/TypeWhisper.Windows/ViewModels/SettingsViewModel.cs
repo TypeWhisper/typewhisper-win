@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
@@ -144,7 +145,7 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
-        var mainDictationHotkey = PushToTalkHotkey?.Trim() ?? "";
+        var mainDictationHotkey = HotkeyParser.Normalize(PushToTalkHotkey);
 
         var updated = _settings.Current with
         {
@@ -164,14 +165,14 @@ public partial class SettingsViewModel : ObservableObject
             TranslationTargetLanguage = TranslationTargetLanguage,
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
-            ToggleOnlyHotkey = ToggleOnlyHotkey,
-            HoldOnlyHotkey = HoldOnlyHotkey,
+            ToggleOnlyHotkey = HotkeyParser.Normalize(ToggleOnlyHotkey),
+            HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
             AudioDuckingEnabled = AudioDuckingEnabled,
             AudioDuckingLevel = AudioDuckingLevel,
             PauseMediaDuringRecording = PauseMediaDuringRecording,
             OverlayLeftWidget = OverlayLeftWidget,
             OverlayRightWidget = OverlayRightWidget,
-            PromptPaletteHotkey = PromptPaletteHotkey,
+            PromptPaletteHotkey = HotkeyParser.Normalize(PromptPaletteHotkey),
             SaveToHistoryEnabled = SaveToHistoryEnabled,
             SpokenFeedbackEnabled = SpokenFeedbackEnabled,
             MemoryEnabled = MemoryEnabled,
@@ -184,13 +185,15 @@ public partial class SettingsViewModel : ObservableObject
 
     private void LoadFromSettings(AppSettings s)
     {
-        var mainDictationHotkey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey)
-            ? s.PushToTalkHotkey
-            : s.ToggleHotkey;
+        var pushToTalkHotkey = HotkeyParser.Normalize(s.PushToTalkHotkey);
+        var toggleHotkey = HotkeyParser.Normalize(s.ToggleHotkey);
+        var mainDictationHotkey = !string.IsNullOrWhiteSpace(pushToTalkHotkey)
+            ? pushToTalkHotkey
+            : toggleHotkey;
 
-        ToggleHotkey = string.IsNullOrWhiteSpace(s.ToggleHotkey)
+        ToggleHotkey = string.IsNullOrWhiteSpace(toggleHotkey)
             ? mainDictationHotkey
-            : s.ToggleHotkey;
+            : toggleHotkey;
         PushToTalkHotkey = mainDictationHotkey;
         Language = s.Language;
         AutoPaste = s.AutoPaste;
@@ -206,14 +209,14 @@ public partial class SettingsViewModel : ObservableObject
         TranslationTargetLanguage = s.TranslationTargetLanguage;
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
-        ToggleOnlyHotkey = s.ToggleOnlyHotkey;
-        HoldOnlyHotkey = s.HoldOnlyHotkey;
+        ToggleOnlyHotkey = HotkeyParser.Normalize(s.ToggleOnlyHotkey);
+        HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
         AudioDuckingEnabled = s.AudioDuckingEnabled;
         AudioDuckingLevel = s.AudioDuckingLevel;
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;
         OverlayLeftWidget = s.OverlayLeftWidget;
         OverlayRightWidget = s.OverlayRightWidget;
-        PromptPaletteHotkey = s.PromptPaletteHotkey;
+        PromptPaletteHotkey = HotkeyParser.Normalize(s.PromptPaletteHotkey);
         SaveToHistoryEnabled = s.SaveToHistoryEnabled;
         SpokenFeedbackEnabled = s.SpokenFeedbackEnabled;
         MemoryEnabled = s.MemoryEnabled;

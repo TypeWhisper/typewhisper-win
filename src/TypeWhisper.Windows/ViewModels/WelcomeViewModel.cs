@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
@@ -419,13 +420,13 @@ public partial class WelcomeViewModel : ObservableObject
     }
 
     private static string ResolveMainDictationHotkey(AppSettings settings) =>
-        !string.IsNullOrWhiteSpace(settings.PushToTalkHotkey)
-            ? settings.PushToTalkHotkey
-            : settings.ToggleHotkey;
+        !string.IsNullOrWhiteSpace(HotkeyParser.Normalize(settings.PushToTalkHotkey))
+            ? HotkeyParser.Normalize(settings.PushToTalkHotkey)
+            : HotkeyParser.Normalize(settings.ToggleHotkey);
 
     private void PersistMainDictationHotkey(string? hotkey)
     {
-        var normalizedHotkey = hotkey?.Trim() ?? "";
+        var normalizedHotkey = HotkeyParser.Normalize(hotkey);
         var current = _settings.Current;
 
         if (current.PushToTalkHotkey == normalizedHotkey && current.ToggleHotkey == normalizedHotkey)

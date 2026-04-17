@@ -20,6 +20,9 @@
                 <TextBlock Text="{loc:Str Shortcuts.Subtitle}"
                            Style="{StaticResource PageSubtitleStyle}"
                            Margin="0"/>
+                <TextBlock Text="{loc:Str Hotkey.ModifierOnlyHint}"
+                           Style="{StaticResource HintStyle}"
+                           Margin="0,8,0,0"/>
             </StackPanel>
 
             <TextBlock Text="{loc:Str Shortcuts.MainSection}"

@@ -380,6 +380,7 @@
                                     <StackPanel Margin="0,0,14,0">
                                         <TextBlock Text="{loc:Str Profiles.HotkeyLabel}" Style="{StaticResource ProfileRowLabelStyle}" Margin="0,0,0,6"/>
                                         <TextBlock Text="{loc:Str Profiles.HotkeyHint}" Style="{StaticResource HintStyle}" Margin="0"/>
+                                        <TextBlock Text="{loc:Str Hotkey.ModifierOnlyHint}" Style="{StaticResource HintStyle}" Margin="0,6,0,0"/>
                                     </StackPanel>
                                     <controls:HotkeyRecorderControl Grid.Column="1" Hotkey="{Binding Profiles.EditHotkey, Mode=TwoWay}" HorizontalAlignment="Right" Width="250"/>
                                 </Grid>
