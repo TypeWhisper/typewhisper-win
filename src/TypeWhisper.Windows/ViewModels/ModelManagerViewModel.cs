@@ -51,6 +51,12 @@ public partial class ModelManagerViewModel : ObservableObject
 
         _modelManager.PluginManager.PluginStateChanged += (_, _) =>
             Application.Current.Dispatcher.Invoke(RebuildProviders);
+
+        _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
+        {
+            SyncSelectedModelOption();
+            RefreshActiveModelDetails();
+        });
     }
 
     private void RebuildProviders()
@@ -172,8 +178,19 @@ public partial class ModelManagerViewModel : ObservableObject
             return;
 
         _isSyncingSelection = true;
-        SelectedModelOptionId = ActiveModelId;
+        SelectedModelOptionId = _settings.Current.SelectedModelId;
         _isSyncingSelection = false;
+    }
+
+    private static void InvokeOnUiThread(Action action)
+    {
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+            return;
+        }
+
+        action();
     }
 
     private void RefreshActiveModelDetails()

@@ -41,8 +41,7 @@
                             Visibility="{Binding Prompts.HasLlmProviders, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="{loc:Str Prompts.DefaultProvider}" Style="{StaticResource HintStyle}" Margin="0,0,0,6"/>
                     <ComboBox ItemsSource="{Binding Prompts.AvailableProviders}"
-                              SelectedValue="{Binding Prompts.DefaultLlmProvider}"
-                              SelectedValuePath="Value"
+                              SelectedItem="{Binding Prompts.SelectedDefaultProvider}"
                               DisplayMemberPath="DisplayName"
                               Style="{StaticResource SettingsAlignedComboBoxStyle}"
                               Width="280"/>

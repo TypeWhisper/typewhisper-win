@@ -279,13 +279,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
         }
 
-        // Switch to profile model override if needed (cloud switch is instant)
-        var profileModel = EffectiveModelId;
-        if (profileModel is not null && profileModel != _modelManager.ActiveModelId)
+        var desiredModelId = EffectiveModelId ?? _settings.Current.SelectedModelId;
+        if (string.IsNullOrWhiteSpace(desiredModelId))
+        {
+            StatusText = Loc.Instance["Status.NoModelLoaded"];
+            _isRecording = false;
+            return;
+        }
+
+        if (desiredModelId != _modelManager.ActiveModelId || !_modelManager.Engine.IsModelLoaded)
         {
             try
             {
-                await _modelManager.LoadModelAsync(profileModel);
+                if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
+                {
+                    StatusText = Loc.Instance["Status.NoModelLoaded"];
+                    _isRecording = false;
+                    return;
+                }
             }
             catch (Exception ex)
             {

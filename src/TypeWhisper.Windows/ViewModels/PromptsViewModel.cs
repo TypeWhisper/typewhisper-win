@@ -47,12 +47,23 @@ public partial class PromptsViewModel : ObservableObject
         {
             _settings.Save(_settings.Current with { DefaultLlmProvider = value });
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedDefaultProvider));
             OnPropertyChanged(nameof(DefaultProviderSummary));
         }
     }
 
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
     public string DefaultProviderSummary => GetDefaultProviderLabel();
+    public ProviderOption? SelectedDefaultProvider
+    {
+        get => AvailableProviders.FirstOrDefault(option => option.Value == DefaultLlmProvider)
+            ?? AvailableProviders.FirstOrDefault();
+        set
+        {
+            DefaultLlmProvider = value?.Value;
+            OnPropertyChanged();
+        }
+    }
 
     public static IReadOnlyList<string> IconOptions { get; } =
     [
@@ -71,6 +82,13 @@ public partial class PromptsViewModel : ObservableObject
         _settings = settings;
 
         _promptActions.ActionsChanged += RefreshActions;
+        _pluginManager.PluginStateChanged += (_, _) => InvokeOnUiThread(RefreshProviders);
+        _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
+        {
+            OnPropertyChanged(nameof(DefaultLlmProvider));
+            OnPropertyChanged(nameof(SelectedDefaultProvider));
+            OnPropertyChanged(nameof(DefaultProviderSummary));
+        });
         RefreshActions();
         RefreshProviders();
     }
@@ -218,7 +236,19 @@ public partial class PromptsViewModel : ObservableObject
             }
         }
         OnPropertyChanged(nameof(HasLlmProviders));
+        OnPropertyChanged(nameof(SelectedDefaultProvider));
         OnPropertyChanged(nameof(DefaultProviderSummary));
+    }
+
+    private static void InvokeOnUiThread(Action action)
+    {
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+            return;
+        }
+
+        action();
     }
 
     private string GetDefaultProviderLabel()
