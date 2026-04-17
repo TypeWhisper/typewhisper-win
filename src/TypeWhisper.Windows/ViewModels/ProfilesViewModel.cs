@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Translation;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Views;
@@ -267,7 +268,7 @@ public partial class ProfilesViewModel : ObservableObject
         EditTranscriptionModelOverride = value.TranscriptionModelOverride;
         EditPriority = value.Priority;
         EditIsEnabled = value.IsEnabled;
-        EditHotkey = value.HotkeyData;
+        EditHotkey = HotkeyParser.Normalize(value.HotkeyData);
 
         foreach (var p in value.ProcessNames) ProcessNameChips.Add(p);
         foreach (var u in value.UrlPatterns) UrlPatternChips.Add(u);
@@ -360,7 +361,7 @@ public partial class ProfilesViewModel : ObservableObject
             TranscriptionModelOverride = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride) ? null : EditTranscriptionModelOverride,
             Priority = EditPriority,
             IsEnabled = EditIsEnabled,
-            HotkeyData = string.IsNullOrWhiteSpace(EditHotkey) ? null : EditHotkey,
+            HotkeyData = string.IsNullOrWhiteSpace(HotkeyParser.Normalize(EditHotkey)) ? null : HotkeyParser.Normalize(EditHotkey),
             UpdatedAt = DateTime.UtcNow
         };
 

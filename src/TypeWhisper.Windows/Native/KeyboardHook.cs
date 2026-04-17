@@ -156,7 +156,6 @@ internal sealed class HotkeyMatchStateMachine
     private readonly HashSet<uint> _pressedKeys = [];
     private readonly HashSet<uint> _pendingSuppressedKeyUps = [];
     private readonly HashSet<uint> _suppressedKeyDowns = [];
-    private uint _pendingSuppressedWinKey;
 
     private uint _targetModifiers;
     private uint _targetVk;
@@ -193,15 +192,6 @@ internal sealed class HotkeyMatchStateMachine
         if (isKeyDown)
         {
             var firstPress = _pressedKeys.Add(vkCode);
-            var preSuppressedWinDown = false;
-
-            if (!_isPressed && firstPress && ShouldPreSuppressWinKeyDown(vkCode))
-            {
-                swallow = true;
-                preSuppressedWinDown = true;
-                _pendingSuppressedWinKey = vkCode;
-                _suppressedKeyDowns.Add(vkCode);
-            }
 
             if (!_isPressed)
             {
@@ -220,9 +210,6 @@ internal sealed class HotkeyMatchStateMachine
                         _pendingSuppressedKeyUps.Add(unsuppressedWinKey);
                         _suppressedKeyDowns.Add(unsuppressedWinKey);
                     }
-
-                    if (preSuppressedWinDown)
-                        _pendingSuppressedWinKey = 0;
                 }
             }
             else if (!firstPress && ShouldSuppressWhilePressed(vkCode))
@@ -235,14 +222,6 @@ internal sealed class HotkeyMatchStateMachine
         }
         else if (isKeyUp)
         {
-            if (!_isPressed && _pendingSuppressedWinKey == vkCode)
-            {
-                _pendingSuppressedWinKey = 0;
-                _pressedKeys.Remove(vkCode);
-                _suppressedKeyDowns.Remove(vkCode);
-                return new HotkeyProcessResult(raiseKeyDown, raiseKeyUp, true, vkCode);
-            }
-
             if (_isPressed && ShouldRelease(vkCode))
             {
                 _isPressed = false;
@@ -254,8 +233,6 @@ internal sealed class HotkeyMatchStateMachine
 
             _pressedKeys.Remove(vkCode);
             _suppressedKeyDowns.Remove(vkCode);
-            if (_pendingSuppressedWinKey == vkCode)
-                _pendingSuppressedWinKey = 0;
         }
 
         return new HotkeyProcessResult(raiseKeyDown, raiseKeyUp, swallow);
@@ -266,7 +243,6 @@ internal sealed class HotkeyMatchStateMachine
         _pressedKeys.Clear();
         _pendingSuppressedKeyUps.Clear();
         _suppressedKeyDowns.Clear();
-        _pendingSuppressedWinKey = 0;
         _isPressed = false;
     }
 
@@ -340,17 +316,6 @@ internal sealed class HotkeyMatchStateMachine
         vkCode == _targetVk
         || ((_targetModifiers & NativeMethods.MOD_WIN) != 0 && HotkeyKeyClassifier.IsWinKey(vkCode));
 
-    private bool ShouldPreSuppressWinKeyDown(uint vkCode)
-    {
-        if (!HotkeyKeyClassifier.IsWinKey(vkCode))
-            return false;
-
-        if ((_targetModifiers & NativeMethods.MOD_WIN) == 0)
-            return false;
-
-        return _targetVk != 0 || (_targetModifiers & ~NativeMethods.MOD_WIN) != 0;
-    }
-
     private void CaptureWinKeyUpsForSuppression()
     {
         if ((_targetModifiers & NativeMethods.MOD_WIN) == 0)
@@ -422,6 +387,12 @@ internal static class HotkeyKeyClassifier
 
 internal static class HotkeyParser
 {
+    public static string Normalize(string? hotkeyString)
+    {
+        var normalized = hotkeyString?.Trim() ?? "";
+        return Parse(normalized, out _, out _) ? normalized : "";
+    }
+
     public static bool Parse(string hotkeyString, out uint modifiers, out uint vk)
     {
         modifiers = 0;
@@ -447,9 +418,23 @@ internal static class HotkeyParser
                     break;
             }
         }
-        return vk != 0 || modifiers != 0;
+
+        if (vk == 0)
+            return CountModifiers(modifiers) >= 2;
+
+        return true;
     }
 
     private static uint ParseKey(string key) =>
         HotkeyKeyMap.TryGetVirtualKey(key, out var virtualKey) ? virtualKey : 0;
+
+    private static int CountModifiers(uint modifiers)
+    {
+        var count = 0;
+        if ((modifiers & NativeMethods.MOD_CONTROL) != 0) count++;
+        if ((modifiers & NativeMethods.MOD_SHIFT) != 0) count++;
+        if ((modifiers & NativeMethods.MOD_ALT) != 0) count++;
+        if ((modifiers & NativeMethods.MOD_WIN) != 0) count++;
+        return count;
+    }
 }
