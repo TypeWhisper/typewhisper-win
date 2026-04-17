@@ -120,6 +120,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           TAG="${{ github.ref_name }}"
+          NOTES_FILE="docs/releases/${TAG}.md"
 
           # Check if a draft release already exists (manual feature release notes)
           EXISTING_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "")
@@ -131,11 +132,23 @@ jobs:
           elif [ "$EXISTING_DRAFT" = "false" ]; then
             echo "Published release found for $TAG. Uploading assets..."
             gh release upload "$TAG" artifacts/* --clobber
+          elif [ -f "$NOTES_FILE" ]; then
+            echo "Using curated release notes from $NOTES_FILE"
+
+            PRERELEASE_FLAG=""
+            if [[ "$TAG" == *-* ]]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+
+            gh release create "$TAG" artifacts/* \
+              --title "$TAG" \
+              --notes-file "$NOTES_FILE" \
+              $PRERELEASE_FLAG
           else
             echo "No existing release. Generating notes from commits..."
 
             # Find previous tag
-            PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+            PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | sed -n '2p')
 
             if [ -n "$PREV_TAG" ]; then
               RANGE="${PREV_TAG}..${TAG}"

@@ -12,6 +12,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class GroqPluginTests
 {
     [Fact]
+    public void PluginVersion_MatchesManifestVersion()
+    {
+        var manifestPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json"));
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(
+            File.ReadAllText(manifestPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var sut = new GroqPlugin();
+
+        Assert.NotNull(manifest);
+        Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
+    [Fact]
     public void TranscriptionModels_RemainCuratedWhisperModels()
     {
         var sut = new GroqPlugin();

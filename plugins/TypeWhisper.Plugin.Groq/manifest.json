@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.groq",
   "name": "Groq",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "TypeWhisper",
   "description": "Groq Whisper transcription and Llama translation",
   "assemblyName": "TypeWhisper.Plugin.Groq.dll",

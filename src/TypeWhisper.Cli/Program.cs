@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text.Json;
 
 namespace TypeWhisper.Cli;
@@ -24,7 +25,7 @@ static class Program
 
         if (args[0] == "--version")
         {
-            Console.WriteLine("typewhisper-cli 1.0.0");
+            Console.WriteLine($"typewhisper-cli {GetVersion()}");
             return 0;
         }
 
@@ -159,6 +160,24 @@ static class Program
     }
 
     static bool HasFlag(string[] args, string flag) => Array.IndexOf(args, flag) >= 0;
+
+    static string GetVersion()
+    {
+        var info = Assembly.GetEntryAssembly()
+            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(info))
+        {
+            var plus = info.IndexOf('+');
+            return plus > 0 ? info[..plus] : info;
+        }
+
+        return Assembly.GetEntryAssembly()
+            ?.GetName()
+            .Version?
+            .ToString() ?? "dev";
+    }
 
     static string Prop(JsonElement el, string name) =>
         el.TryGetProperty(name, out var v) ? v.GetString() ?? "" : "";
