@@ -103,9 +103,17 @@ public partial class SettingsViewModel : ObservableObject
 
         _settings.SettingsChanged += OnSettingsChanged;
 
-        PropertyChanged += (_, _) =>
+        PropertyChanged += (_, args) =>
         {
-            if (!_isLoading) Save();
+            if (_isLoading) return;
+
+            if (args.PropertyName == nameof(AutostartEnabled))
+            {
+                ApplyAutostartSetting();
+                return;
+            }
+
+            Save();
         };
     }
 
@@ -180,7 +188,23 @@ public partial class SettingsViewModel : ObservableObject
             UiLanguage = UiLanguage
         };
         _settings.Save(updated);
-        StartupService.SetEnabled(AutostartEnabled);
+    }
+
+    private void ApplyAutostartSetting()
+    {
+        var requestedAutostartEnabled = AutostartEnabled;
+        var currentAutostartEnabled = StartupService.IsEnabled;
+
+        if (currentAutostartEnabled != requestedAutostartEnabled)
+            StartupService.SetEnabled(requestedAutostartEnabled);
+
+        var actualAutostartEnabled = StartupService.IsEnabled;
+        if (actualAutostartEnabled == requestedAutostartEnabled)
+            return;
+
+        _isLoading = true;
+        AutostartEnabled = actualAutostartEnabled;
+        _isLoading = false;
     }
 
     private void LoadFromSettings(AppSettings s)
