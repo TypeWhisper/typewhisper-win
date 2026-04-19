@@ -30,7 +30,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _silenceAutoStopEnabled;
     [ObservableProperty] private int _silenceAutoStopSeconds = 10;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
-    [ObservableProperty] private int _historyRetentionDays = 90;
+    [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
     [ObservableProperty] private string _transcriptionTask = "transcribe";
     [ObservableProperty] private int? _selectedMicrophoneDevice;
     [ObservableProperty] private float _previewLevel;
@@ -48,6 +48,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string? _uiLanguage;
 
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
+    public ObservableCollection<HistoryRetentionOption> HistoryRetentionOptions { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -67,6 +68,18 @@ public partial class SettingsViewModel : ObservableObject
         new(OverlayWidget.Profile, Loc.Instance["Widget.Profile"]),
         new(OverlayWidget.HotkeyMode, Loc.Instance["Widget.HotkeyMode"]),
         new(OverlayWidget.AppName, Loc.Instance["Widget.AppName"]),
+    ];
+
+    private static IReadOnlyList<HistoryRetentionOption> BuildHistoryRetentionOptions() =>
+    [
+        new(HistoryRetentionMode.Duration, 60, Loc.Instance["Advanced.Retention1Hour"]),
+        new(HistoryRetentionMode.Duration, 24 * 60, Loc.Instance["Advanced.Retention1Day"]),
+        new(HistoryRetentionMode.Duration, 7 * 24 * 60, Loc.Instance["Advanced.Retention7"]),
+        new(HistoryRetentionMode.Duration, 30 * 24 * 60, Loc.Instance["Advanced.Retention30"]),
+        new(HistoryRetentionMode.Duration, 90 * 24 * 60, Loc.Instance["Advanced.Retention90"]),
+        new(HistoryRetentionMode.Duration, 365 * 24 * 60, Loc.Instance["Advanced.Retention365"]),
+        new(HistoryRetentionMode.Forever, null, Loc.Instance["Advanced.RetentionForever"]),
+        new(HistoryRetentionMode.UntilAppCloses, null, Loc.Instance["Advanced.RetentionUntilAppCloses"])
     ];
 
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
@@ -167,7 +180,8 @@ public partial class SettingsViewModel : ObservableObject
             SilenceAutoStopEnabled = SilenceAutoStopEnabled,
             SilenceAutoStopSeconds = SilenceAutoStopSeconds,
             OverlayPosition = OverlayPosition,
-            HistoryRetentionDays = HistoryRetentionDays,
+            HistoryRetentionMode = SelectedHistoryRetentionOption?.Mode ?? AppSettings.Default.HistoryRetentionMode,
+            HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
             TranscriptionTask = TranscriptionTask,
             SelectedMicrophoneDevice = SelectedMicrophoneDevice,
             TranslationTargetLanguage = TranslationTargetLanguage,
@@ -227,7 +241,7 @@ public partial class SettingsViewModel : ObservableObject
         SilenceAutoStopEnabled = s.SilenceAutoStopEnabled;
         SilenceAutoStopSeconds = s.SilenceAutoStopSeconds;
         OverlayPosition = s.OverlayPosition;
-        HistoryRetentionDays = s.HistoryRetentionDays;
+        SelectedHistoryRetentionOption = MatchHistoryRetentionOption(s.HistoryRetentionMode, s.HistoryRetentionMinutes);
         TranscriptionTask = s.TranscriptionTask;
         SelectedMicrophoneDevice = s.SelectedMicrophoneDevice;
         TranslationTargetLanguage = s.TranslationTargetLanguage;
@@ -261,14 +275,33 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        Application.Current?.Dispatcher.Invoke(RefreshLocalizedCollections);
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            _isLoading = true;
+            RefreshLocalizedCollections();
+            SelectedHistoryRetentionOption = MatchHistoryRetentionOption(
+                _settings.Current.HistoryRetentionMode,
+                _settings.Current.HistoryRetentionMinutes);
+            _isLoading = false;
+        });
     }
 
     private void RefreshLocalizedCollections()
     {
         ReplaceCollection(TranslationTargetOptions, LocalizeTranslationOptions(TranslationModelInfo.GlobalTargetOptions));
+        ReplaceCollection(HistoryRetentionOptions, BuildHistoryRetentionOptions());
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
         RefreshMicrophones();
+    }
+
+    private HistoryRetentionOption MatchHistoryRetentionOption(HistoryRetentionMode mode, int minutes)
+    {
+        return HistoryRetentionOptions.FirstOrDefault(option =>
+            option.Mode == mode &&
+            (mode != HistoryRetentionMode.Duration || option.Minutes == minutes))
+            ?? HistoryRetentionOptions.First(option =>
+                option.Mode == AppSettings.Default.HistoryRetentionMode &&
+                option.Minutes == AppSettings.Default.HistoryRetentionMinutes);
     }
 
     private static void ReplaceCollection<T>(ObservableCollection<T> target, IReadOnlyList<T> values)
@@ -281,3 +314,4 @@ public partial class SettingsViewModel : ObservableObject
 
 public sealed record MicrophoneItem(int? DeviceNumber, string Name);
 public sealed record OverlayWidgetOption(OverlayWidget Value, string DisplayName);
+public sealed record HistoryRetentionOption(HistoryRetentionMode Mode, int? Minutes, string DisplayName);

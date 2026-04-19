@@ -18,6 +18,7 @@ namespace TypeWhisper.Windows;
 public partial class App : Application
 {
     private ServiceProvider? _serviceProvider;
+    private HistoryRetentionCoordinator? _historyRetentionCoordinator;
     private TrayIconService? _trayIcon;
     private SettingsWindow? _settingsWindow;
     private FileTranscriptionWindow? _fileTranscriptionWindow;
@@ -118,6 +119,9 @@ public partial class App : Application
         speechFeedback.IsEnabled = settings.Current.SpokenFeedbackEnabled;
         settings.SettingsChanged += s => speechFeedback.IsEnabled = s.SpokenFeedbackEnabled;
 
+        _historyRetentionCoordinator = _serviceProvider.GetRequiredService<HistoryRetentionCoordinator>();
+        _historyRetentionCoordinator.Initialize();
+
         // Setup tray icon
         _trayIcon = _serviceProvider.GetRequiredService<TrayIconService>();
         _trayIcon.Initialize();
@@ -155,10 +159,6 @@ public partial class App : Application
             var api = _serviceProvider.GetRequiredService<HttpApiService>();
             api.Start(settings.Current.ApiServerPort);
         }
-
-        // Purge old history records on startup
-        var history = _serviceProvider.GetRequiredService<IHistoryService>();
-        history.PurgeOldRecords(settings.Current.HistoryRetentionDays);
 
         // Show onboarding if first run (skip when started minimized)
         if (!settings.Current.HasCompletedOnboarding && !Program.StartMinimized)
@@ -335,6 +335,7 @@ public partial class App : Application
 
         // Services
         services.AddSingleton<SpeechFeedbackService>();
+        services.AddSingleton<HistoryRetentionCoordinator>();
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
@@ -402,6 +403,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _protocolCallbackTimer?.Stop();
+        _historyRetentionCoordinator?.HandleShutdown();
         _trayIcon?.Dispose();
         _serviceProvider?.Dispose();
         base.OnExit(e);

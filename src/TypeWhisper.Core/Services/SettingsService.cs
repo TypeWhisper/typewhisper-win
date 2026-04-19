@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 
@@ -87,13 +88,59 @@ public sealed class SettingsService : ISettingsService
         {
             if (!File.Exists(path)) return null;
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+            return settings is null ? null : ApplyHistoryRetentionMigration(settings, json);
         }
         catch (Exception ex)
         {
             LogWarning($"Failed to load settings from {path}: {ex.Message}");
             return null;
         }
+    }
+
+    private static AppSettings ApplyHistoryRetentionMigration(AppSettings settings, string json)
+    {
+        JsonNode? root;
+        try
+        {
+            root = JsonNode.Parse(json);
+        }
+        catch
+        {
+            return settings;
+        }
+
+        if (root is not JsonObject obj)
+            return settings;
+
+        if (!obj.ContainsKey("historyRetentionMode") && obj.TryGetPropertyValue("historyRetentionDays", out var legacyNode))
+        {
+            var legacyDays = legacyNode?.GetValue<int?>();
+            return legacyDays switch
+            {
+                9999 => settings with
+                {
+                    HistoryRetentionMode = HistoryRetentionMode.Forever
+                },
+                > 0 => settings with
+                {
+                    HistoryRetentionMode = HistoryRetentionMode.Duration,
+                    HistoryRetentionMinutes = legacyDays.Value * 24 * 60
+                },
+                _ => settings with
+                {
+                    HistoryRetentionMode = AppSettings.Default.HistoryRetentionMode,
+                    HistoryRetentionMinutes = AppSettings.Default.HistoryRetentionMinutes
+                }
+            };
+        }
+
+        if (settings.HistoryRetentionMode == HistoryRetentionMode.Duration && settings.HistoryRetentionMinutes <= 0)
+        {
+            return settings with { HistoryRetentionMinutes = AppSettings.Default.HistoryRetentionMinutes };
+        }
+
+        return settings;
     }
 
     private static void LogWarning(string message)

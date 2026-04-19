@@ -10,6 +10,7 @@ public sealed class HistoryService : IHistoryService
 {
     private readonly string _filePath;
     private readonly string? _audioDirectory;
+    private readonly object _gate = new();
     private List<TranscriptionRecord> _cache = [];
     private bool _cacheLoaded;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
@@ -24,7 +25,10 @@ public sealed class HistoryService : IHistoryService
         get
         {
             EnsureCacheLoaded();
-            return _cache;
+            lock (_gate)
+            {
+                return _cache.ToList();
+            }
         }
     }
 
@@ -49,9 +53,12 @@ public sealed class HistoryService : IHistoryService
         {
             if (_cacheLoaded) return;
             var records = await Task.Run(LoadFromDisk).ConfigureAwait(false);
-            _cache = records;
-            RebuildStats();
-            _cacheLoaded = true;
+            lock (_gate)
+            {
+                _cache = records;
+                RebuildStats();
+                _cacheLoaded = true;
+            }
         }
         finally
         {
@@ -62,98 +69,147 @@ public sealed class HistoryService : IHistoryService
     public IReadOnlyList<string> GetDistinctApps()
     {
         EnsureCacheLoaded();
-        return _distinctApps;
+        lock (_gate)
+        {
+            return _distinctApps.ToList();
+        }
     }
 
     public void AddRecord(TranscriptionRecord record)
     {
         EnsureCacheLoaded();
-        _cache.Insert(0, record);
-
-        _totalRecords++;
-        _totalWords += record.WordCount;
-        _totalDuration += record.DurationSeconds;
-        if (!string.IsNullOrEmpty(record.AppProcessName) &&
-            !_distinctApps.Contains(record.AppProcessName, StringComparer.OrdinalIgnoreCase))
+        List<TranscriptionRecord> snapshot;
+        lock (_gate)
         {
-            _distinctApps.Add(record.AppProcessName);
-            _distinctApps.Sort(StringComparer.OrdinalIgnoreCase);
+            _cache.Insert(0, record);
+
+            _totalRecords++;
+            _totalWords += record.WordCount;
+            _totalDuration += record.DurationSeconds;
+            if (!string.IsNullOrEmpty(record.AppProcessName) &&
+                !_distinctApps.Contains(record.AppProcessName, StringComparer.OrdinalIgnoreCase))
+            {
+                _distinctApps.Add(record.AppProcessName);
+                _distinctApps.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+
+            snapshot = _cache.ToList();
         }
 
-        SaveToDisk();
+        SaveToDisk(snapshot);
         RecordsChanged?.Invoke();
     }
 
     public void UpdateRecord(string id, string finalText)
     {
         EnsureCacheLoaded();
-        var idx = _cache.FindIndex(r => r.Id == id);
-        if (idx >= 0)
+        List<TranscriptionRecord> snapshot;
+        lock (_gate)
         {
-            var old = _cache[idx];
-            var updated = old with { FinalText = finalText };
-            _cache[idx] = updated;
-            _totalWords += updated.WordCount - old.WordCount;
+            var idx = _cache.FindIndex(r => r.Id == id);
+            if (idx >= 0)
+            {
+                var old = _cache[idx];
+                var updated = old with { FinalText = finalText };
+                _cache[idx] = updated;
+                _totalWords += updated.WordCount - old.WordCount;
+            }
+
+            snapshot = _cache.ToList();
         }
 
-        SaveToDisk();
+        SaveToDisk(snapshot);
         RecordsChanged?.Invoke();
     }
 
     public void DeleteRecord(string id)
     {
         EnsureCacheLoaded();
-        var idx = _cache.FindIndex(r => r.Id == id);
-        if (idx >= 0)
+        List<TranscriptionRecord> snapshot;
+        string? removedAudioFileName = null;
+        lock (_gate)
         {
-            var removed = _cache[idx];
-            _cache.RemoveAt(idx);
-            _totalRecords--;
-            _totalWords -= removed.WordCount;
-            _totalDuration -= removed.DurationSeconds;
-            DeleteAudioFile(removed.AudioFileName);
+            var idx = _cache.FindIndex(r => r.Id == id);
+            if (idx >= 0)
+            {
+                var removed = _cache[idx];
+                _cache.RemoveAt(idx);
+                _totalRecords--;
+                _totalWords -= removed.WordCount;
+                _totalDuration -= removed.DurationSeconds;
+                removedAudioFileName = removed.AudioFileName;
+            }
+
+            RebuildDistinctApps();
+            snapshot = _cache.ToList();
         }
 
-        RebuildDistinctApps();
-        SaveToDisk();
+        DeleteAudioFile(removedAudioFileName);
+        SaveToDisk(snapshot);
         RecordsChanged?.Invoke();
     }
 
     public void ClearAll()
     {
-        _cache.Clear();
-        _totalRecords = 0;
-        _totalWords = 0;
-        _totalDuration = 0;
-        _distinctApps.Clear();
-        SaveToDisk();
+        EnsureCacheLoaded();
+        List<string?> audioFiles;
+        lock (_gate)
+        {
+            audioFiles = _cache.Select(r => r.AudioFileName).ToList();
+            _cache.Clear();
+            _totalRecords = 0;
+            _totalWords = 0;
+            _totalDuration = 0;
+            _distinctApps.Clear();
+        }
+
+        DeleteAudioFiles(audioFiles);
+        SaveToDisk([]);
         RecordsChanged?.Invoke();
     }
 
     public IReadOnlyList<TranscriptionRecord> Search(string query)
     {
         EnsureCacheLoaded();
-        if (string.IsNullOrWhiteSpace(query)) return _cache;
+        lock (_gate)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return _cache.ToList();
 
-        return _cache.Where(r =>
-            r.FinalText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            r.RawText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            (r.AppName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
-        ).ToList();
+            return _cache.Where(r =>
+                r.FinalText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                r.RawText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (r.AppName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            ).ToList();
+        }
     }
 
-    public void PurgeOldRecords(int retentionDays)
+    public void PurgeOldRecords(TimeSpan? retention)
     {
-        EnsureCacheLoaded();
-        var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
-        var removed = _cache.RemoveAll(r => r.CreatedAt < cutoff);
+        if (retention is null) return;
 
-        if (removed > 0)
+        EnsureCacheLoaded();
+        var cutoff = DateTime.UtcNow - retention.Value;
+        List<string?> removedAudioFiles;
+        List<TranscriptionRecord>? snapshot = null;
+
+        lock (_gate)
         {
+            removedAudioFiles = _cache
+                .Where(r => r.CreatedAt < cutoff)
+                .Select(r => r.AudioFileName)
+                .ToList();
+
+            if (removedAudioFiles.Count == 0)
+                return;
+
+            _cache = _cache.Where(r => r.CreatedAt >= cutoff).ToList();
             RebuildStats();
-            SaveToDisk();
-            RecordsChanged?.Invoke();
+            snapshot = _cache.ToList();
         }
+
+        DeleteAudioFiles(removedAudioFiles);
+        SaveToDisk(snapshot!);
+        RecordsChanged?.Invoke();
     }
 
     public string ExportToText(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null)
@@ -248,9 +304,13 @@ public sealed class HistoryService : IHistoryService
         try
         {
             if (_cacheLoaded) return;
-            _cache = LoadFromDisk();
-            RebuildStats();
-            _cacheLoaded = true;
+            var records = LoadFromDisk();
+            lock (_gate)
+            {
+                _cache = records;
+                RebuildStats();
+                _cacheLoaded = true;
+            }
         }
         finally
         {
@@ -273,7 +333,7 @@ public sealed class HistoryService : IHistoryService
         }
     }
 
-    private void SaveToDisk()
+    private void SaveToDisk(IReadOnlyList<TranscriptionRecord> records)
     {
         try
         {
@@ -281,7 +341,7 @@ public sealed class HistoryService : IHistoryService
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(records, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, json);
         }
         catch { }
@@ -314,5 +374,11 @@ public sealed class HistoryService : IHistoryService
             if (File.Exists(path)) File.Delete(path);
         }
         catch { }
+    }
+
+    private void DeleteAudioFiles(IEnumerable<string?> audioFileNames)
+    {
+        foreach (var audioFileName in audioFileNames)
+            DeleteAudioFile(audioFileName);
     }
 }

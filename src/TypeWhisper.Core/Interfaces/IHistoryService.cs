@@ -12,7 +12,7 @@ public interface IHistoryService
     void DeleteRecord(string id);
     void ClearAll();
     IReadOnlyList<TranscriptionRecord> Search(string query);
-    void PurgeOldRecords(int retentionDays);
+    void PurgeOldRecords(TimeSpan? retention);
 
     int TotalRecords { get; }
     int TotalWords { get; }

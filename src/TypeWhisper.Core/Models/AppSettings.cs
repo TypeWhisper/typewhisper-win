@@ -9,7 +9,8 @@ public record AppSettings
     public string Language { get; init; } = "auto";
     public bool AutoPaste { get; init; } = true;
     public RecordingMode Mode { get; init; } = RecordingMode.Toggle;
-    public int HistoryRetentionDays { get; init; } = 90;
+    public HistoryRetentionMode HistoryRetentionMode { get; init; } = HistoryRetentionMode.Duration;
+    public int HistoryRetentionMinutes { get; init; } = 90 * 24 * 60;
     public int? SelectedMicrophoneDevice { get; init; }
 
     // Model
@@ -84,6 +85,13 @@ public enum RecordingMode
     Toggle,
     PushToTalk,
     Hybrid
+}
+
+public enum HistoryRetentionMode
+{
+    Duration,
+    Forever,
+    UntilAppCloses
 }
 
 public enum OverlayPosition

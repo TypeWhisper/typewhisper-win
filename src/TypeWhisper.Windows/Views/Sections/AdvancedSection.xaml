@@ -146,14 +146,9 @@
                                 <TextBlock Text="{loc:Str Advanced.HistoryRetention}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
-                                          SelectedValue="{Binding Settings.HistoryRetentionDays}"
-                                          SelectedValuePath="Tag">
-                                    <ComboBoxItem Content="{loc:Str Advanced.Retention7}" Tag="7"/>
-                                    <ComboBoxItem Content="{loc:Str Advanced.Retention30}" Tag="30"/>
-                                    <ComboBoxItem Content="{loc:Str Advanced.Retention90}" Tag="90"/>
-                                    <ComboBoxItem Content="{loc:Str Advanced.Retention365}" Tag="365"/>
-                                    <ComboBoxItem Content="{loc:Str Advanced.RetentionForever}" Tag="9999"/>
-                                </ComboBox>
+                                          ItemsSource="{Binding Settings.HistoryRetentionOptions}"
+                                          SelectedItem="{Binding Settings.SelectedHistoryRetentionOption}"
+                                          DisplayMemberPath="DisplayName"/>
                             </Grid>
                         </Border>
 

@@ -139,4 +139,65 @@ public class SettingsServiceTests : IDisposable
         Assert.NotNull(received);
         Assert.Equal("es", received!.Language);
     }
+
+    [Fact]
+    public void Load_LegacyHistoryRetentionDays_MigratesToMinutes()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en",
+          "historyRetentionDays": 7
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(HistoryRetentionMode.Duration, sut.Current.HistoryRetentionMode);
+        Assert.Equal(7 * 24 * 60, sut.Current.HistoryRetentionMinutes);
+    }
+
+    [Fact]
+    public void Load_LegacyForeverRetention_MigratesToExplicitMode()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en",
+          "historyRetentionDays": 9999
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(HistoryRetentionMode.Forever, sut.Current.HistoryRetentionMode);
+    }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsMinuteBasedRetention()
+    {
+        var sut = new SettingsService(_filePath);
+        sut.Save(AppSettings.Default with
+        {
+            HistoryRetentionMode = HistoryRetentionMode.Duration,
+            HistoryRetentionMinutes = 60
+        });
+
+        var loaded = new SettingsService(_filePath);
+
+        Assert.Equal(HistoryRetentionMode.Duration, loaded.Current.HistoryRetentionMode);
+        Assert.Equal(60, loaded.Current.HistoryRetentionMinutes);
+    }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsUntilAppClosesMode()
+    {
+        var sut = new SettingsService(_filePath);
+        sut.Save(AppSettings.Default with
+        {
+            HistoryRetentionMode = HistoryRetentionMode.UntilAppCloses
+        });
+
+        var loaded = new SettingsService(_filePath);
+
+        Assert.Equal(HistoryRetentionMode.UntilAppCloses, loaded.Current.HistoryRetentionMode);
+    }
 }

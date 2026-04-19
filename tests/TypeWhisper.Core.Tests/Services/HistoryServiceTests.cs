@@ -5,13 +5,19 @@ namespace TypeWhisper.Core.Tests.Services;
 
 public class HistoryServiceTests : IDisposable
 {
+    private readonly string _tempDir;
     private readonly string _filePath;
+    private readonly string _audioDirectory;
     private readonly HistoryService _sut;
 
     public HistoryServiceTests()
     {
-        _filePath = Path.GetTempFileName();
-        _sut = new HistoryService(_filePath);
+        _tempDir = Path.Combine(Path.GetTempPath(), $"tw_history_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+        _filePath = Path.Combine(_tempDir, "history.json");
+        _audioDirectory = Path.Combine(_tempDir, "audio");
+        Directory.CreateDirectory(_audioDirectory);
+        _sut = new HistoryService(_filePath, _audioDirectory);
     }
 
     [Fact]
@@ -102,8 +108,72 @@ public class HistoryServiceTests : IDisposable
         Assert.EndsWith("]", result.Trim());
     }
 
+    [Fact]
+    public void PurgeOldRecords_RemovesEntriesOlderThanRetention()
+    {
+        var now = DateTime.UtcNow;
+        var stale = CreateRecord("stale", now.AddHours(-2));
+        var fresh = CreateRecord("fresh", now.AddMinutes(-20));
+
+        _sut.AddRecord(stale);
+        _sut.AddRecord(fresh);
+
+        _sut.PurgeOldRecords(TimeSpan.FromHours(1));
+
+        Assert.DoesNotContain(_sut.Records, record => record.Id == stale.Id);
+        Assert.Contains(_sut.Records, record => record.Id == fresh.Id);
+    }
+
+    [Fact]
+    public void PurgeOldRecords_NullRetentionDoesNothing()
+    {
+        var record = CreateRecord("keep", DateTime.UtcNow.AddDays(-30));
+        _sut.AddRecord(record);
+
+        _sut.PurgeOldRecords(null);
+
+        Assert.Contains(_sut.Records, entry => entry.Id == record.Id);
+    }
+
+    [Fact]
+    public void PurgeOldRecords_DeletesAssociatedAudioFiles()
+    {
+        var audioFile = "expired.wav";
+        File.WriteAllText(Path.Combine(_audioDirectory, audioFile), "audio");
+        var record = CreateRecord("expired", DateTime.UtcNow.AddHours(-3), audioFile);
+        _sut.AddRecord(record);
+
+        _sut.PurgeOldRecords(TimeSpan.FromHours(1));
+
+        Assert.False(File.Exists(Path.Combine(_audioDirectory, audioFile)));
+    }
+
+    [Fact]
+    public void ClearAll_DeletesAssociatedAudioFiles()
+    {
+        var audioFile = "session.wav";
+        File.WriteAllText(Path.Combine(_audioDirectory, audioFile), "audio");
+        _sut.AddRecord(CreateRecord("session", DateTime.UtcNow, audioFile));
+
+        _sut.ClearAll();
+
+        Assert.Empty(_sut.Records);
+        Assert.False(File.Exists(Path.Combine(_audioDirectory, audioFile)));
+    }
+
     public void Dispose()
     {
-        if (File.Exists(_filePath)) File.Delete(_filePath);
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
+
+    private static TranscriptionRecord CreateRecord(string id, DateTime createdAt, string? audioFileName = null) =>
+        new()
+        {
+            Id = id,
+            Timestamp = createdAt,
+            CreatedAt = createdAt,
+            RawText = "test",
+            FinalText = "test",
+            AudioFileName = audioFileName
+        };
 }
