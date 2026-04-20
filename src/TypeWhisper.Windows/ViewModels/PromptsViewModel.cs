@@ -16,6 +16,7 @@ public partial class PromptsViewModel : ObservableObject
     private readonly IPromptActionService _promptActions;
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
+    private bool _isRefreshingProviders;
 
     [ObservableProperty] private PromptAction? _selectedAction;
 
@@ -45,6 +46,9 @@ public partial class PromptsViewModel : ObservableObject
         get => _settings.Current.DefaultLlmProvider;
         set
         {
+            if (string.Equals(_settings.Current.DefaultLlmProvider, value, StringComparison.Ordinal))
+                return;
+
             _settings.Save(_settings.Current with { DefaultLlmProvider = value });
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedDefaultProvider));
@@ -60,7 +64,27 @@ public partial class PromptsViewModel : ObservableObject
             ?? AvailableProviders.FirstOrDefault();
         set
         {
+            if (_isRefreshingProviders)
+                return;
+
+            if (string.Equals(DefaultLlmProvider, value?.Value, StringComparison.Ordinal))
+                return;
+
             DefaultLlmProvider = value?.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public ProviderOption? SelectedEditProvider
+    {
+        get => AvailableProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
+            ?? AvailableProviders.FirstOrDefault();
+        set
+        {
+            if (string.Equals(EditProviderOverride, value?.Value, StringComparison.Ordinal))
+                return;
+
+            EditProviderOverride = value?.Value;
             OnPropertyChanged();
         }
     }
@@ -85,9 +109,8 @@ public partial class PromptsViewModel : ObservableObject
         _pluginManager.PluginStateChanged += (_, _) => InvokeOnUiThread(RefreshProviders);
         _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
         {
+            RefreshProviders();
             OnPropertyChanged(nameof(DefaultLlmProvider));
-            OnPropertyChanged(nameof(SelectedDefaultProvider));
-            OnPropertyChanged(nameof(DefaultProviderSummary));
         });
         RefreshActions();
         RefreshProviders();
@@ -112,13 +135,7 @@ public partial class PromptsViewModel : ObservableObject
     {
         if (action is null) return;
         SelectedAction = action;
-        _editingActionId = action.Id;
-        IsCreatingNew = false;
-        EditName = action.Name;
-        EditSystemPrompt = action.SystemPrompt;
-        EditIcon = action.Icon;
-        EditProviderOverride = action.ProviderOverride;
-        EditModelOverride = action.ModelOverride;
+        PopulateEditorFromAction(action);
         IsEditorOpen = true;
         ShowEditorDialog();
     }
@@ -220,23 +237,16 @@ public partial class PromptsViewModel : ObservableObject
 
     public void RefreshProviders()
     {
+        _isRefreshingProviders = true;
         AvailableProviders.Clear();
         AvailableProviders.Add(new ProviderOption(null, GetDefaultProviderLabel()));
-        foreach (var provider in _pluginManager.LlmProviders)
-        {
-            if (!provider.IsAvailable) continue;
-            var plugin = _pluginManager.AllPlugins
-                .FirstOrDefault(p => p.Instance == provider);
-            if (plugin is null) continue;
+        foreach (var option in GetExplicitProviderOptions())
+            AvailableProviders.Add(option);
+        _isRefreshingProviders = false;
 
-            foreach (var model in provider.SupportedModels)
-            {
-                var modelId = $"plugin:{plugin.Manifest.Id}:{model.Id}";
-                AvailableProviders.Add(new ProviderOption(modelId, $"{provider.ProviderName} / {model.DisplayName}"));
-            }
-        }
         OnPropertyChanged(nameof(HasLlmProviders));
         OnPropertyChanged(nameof(SelectedDefaultProvider));
+        OnPropertyChanged(nameof(SelectedEditProvider));
         OnPropertyChanged(nameof(DefaultProviderSummary));
     }
 
@@ -253,19 +263,56 @@ public partial class PromptsViewModel : ObservableObject
 
     private string GetDefaultProviderLabel()
     {
-        var firstAvailable = _pluginManager.LlmProviders.FirstOrDefault(p => p.IsAvailable);
-        if (firstAvailable is null)
+        var configuredDefault = _settings.Current.DefaultLlmProvider;
+        if (string.IsNullOrWhiteSpace(configuredDefault))
             return Loc.Instance["Prompts.DefaultProviderLabelNone"];
 
-        var firstModel = firstAvailable.SupportedModels.FirstOrDefault();
-        if (firstModel is not null)
-            return Loc.Instance.GetString("Prompts.DefaultProviderLabelFormat",
-                $"{firstAvailable.ProviderName} / {firstModel.DisplayName}");
+        var configuredOption = TryResolveProviderOption(configuredDefault);
+        if (configuredOption is not null)
+            return Loc.Instance.GetString("Prompts.DefaultProviderLabelFormat", configuredOption.DisplayName);
 
         return Loc.Instance["Prompts.DefaultProviderLabelNone"];
     }
 
+    private IReadOnlyList<ProviderOption> GetExplicitProviderOptions()
+    {
+        var options = new List<ProviderOption>();
+        foreach (var provider in _pluginManager.LlmProviders)
+        {
+            if (!provider.IsAvailable) continue;
+            var plugin = _pluginManager.AllPlugins
+                .FirstOrDefault(p => p.Instance == provider);
+            if (plugin is null) continue;
+
+            foreach (var model in provider.SupportedModels)
+            {
+                var modelId = $"plugin:{plugin.Manifest.Id}:{model.Id}";
+                options.Add(new ProviderOption(modelId, $"{provider.ProviderName} / {model.DisplayName}"));
+            }
+        }
+
+        return options;
+    }
+
+    private ProviderOption? TryResolveProviderOption(string pluginModelId)
+    {
+        return GetExplicitProviderOptions()
+            .FirstOrDefault(option => string.Equals(option.Value, pluginModelId, StringComparison.Ordinal));
+    }
+
+    private void PopulateEditorFromAction(PromptAction action)
+    {
+        _editingActionId = action.Id;
+        IsCreatingNew = false;
+        EditName = action.Name;
+        EditSystemPrompt = action.SystemPrompt;
+        EditIcon = action.Icon;
+        EditProviderOverride = action.ProviderOverride;
+        EditModelOverride = action.ModelOverride;
+    }
+
     partial void OnIsCreatingNewChanged(bool value) => OnPropertyChanged(nameof(EditorTitle));
+    partial void OnEditProviderOverrideChanged(string? value) => OnPropertyChanged(nameof(SelectedEditProvider));
 
     private void ShowEditorDialog()
     {
