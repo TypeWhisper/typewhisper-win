@@ -95,8 +95,7 @@
                                     </StackPanel>
                                     <ComboBox Grid.Column="1"
                                               ItemsSource="{Binding AvailableProviders}"
-                                              SelectedValue="{Binding EditProviderOverride}"
-                                              SelectedValuePath="Value"
+                                              SelectedItem="{Binding SelectedEditProvider}"
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
                                 </Grid>

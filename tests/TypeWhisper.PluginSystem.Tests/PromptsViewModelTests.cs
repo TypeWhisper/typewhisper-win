@@ -5,6 +5,7 @@ using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
@@ -20,6 +21,8 @@ public class PromptsViewModelTests
     public PromptsViewModelTests()
     {
         _profiles.Setup(p => p.Profiles).Returns([]);
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
     }
 
     [Fact]
@@ -56,6 +59,136 @@ public class PromptsViewModelTests
         Assert.Equal(explicitOption, sut.SelectedDefaultProvider);
     }
 
+    [Fact]
+    public void DefaultProviderLabel_UsesConfiguredDefaultLlmProvider()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.openai:gpt-4.1-mini"
+        });
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var openAi = CreateLlmProvider("com.typewhisper.openai", "OpenAI", "gpt-4.1-mini", "GPT-4.1 Mini");
+        var pluginManager = CreatePluginManager(settings, groq, openAi);
+
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+
+        Assert.Equal("(Default - OpenAI / GPT-4.1 Mini)", sut.AvailableProviders.First().DisplayName);
+        Assert.Equal("(Default - OpenAI / GPT-4.1 Mini)", sut.DefaultProviderSummary);
+    }
+
+    [Fact]
+    public void SettingsChanged_RebuildsAvailableProvidersAndUpdatesDefaultLabel()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.groq:llama-3.3-70b-versatile"
+        });
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var openAi = CreateLlmProvider("com.typewhisper.openai", "OpenAI", "gpt-4.1-mini", "GPT-4.1 Mini");
+        var pluginManager = CreatePluginManager(settings, groq, openAi);
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+
+        settings.Save(settings.Current with
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.openai:gpt-4.1-mini"
+        });
+
+        Assert.Equal("(Default - OpenAI / GPT-4.1 Mini)", sut.AvailableProviders.First().DisplayName);
+        Assert.Equal("(Default - OpenAI / GPT-4.1 Mini)", sut.DefaultProviderSummary);
+    }
+
+    [Fact]
+    public void SelectedDefaultProvider_ReflectsConfiguredDefaultAfterSettingsChange()
+    {
+        var settings = new FakeSettingsService(new AppSettings());
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var openAi = CreateLlmProvider("com.typewhisper.openai", "OpenAI", "gpt-4.1-mini", "GPT-4.1 Mini");
+        var pluginManager = CreatePluginManager(settings, groq, openAi);
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+
+        settings.Save(settings.Current with
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.openai:gpt-4.1-mini"
+        });
+
+        Assert.Equal("plugin:com.typewhisper.openai:gpt-4.1-mini", sut.SelectedDefaultProvider?.Value);
+        Assert.Equal("OpenAI / GPT-4.1 Mini", sut.SelectedDefaultProvider?.DisplayName);
+    }
+
+    [Fact]
+    public void PromptEditorStandardSelection_RemainsNullOverride()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.groq:llama-3.3-70b-versatile"
+        });
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var pluginManager = CreatePluginManager(settings, groq);
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+        var action = new PromptAction
+        {
+            Id = "prompt-1",
+            Name = "Translate",
+            SystemPrompt = "Translate this.",
+            ProviderOverride = null
+        };
+
+        InvokePrivateMethod(sut, "PopulateEditorFromAction", action);
+
+        Assert.Null(sut.EditProviderOverride);
+        Assert.Null(sut.AvailableProviders.First().Value);
+        Assert.Equal("(Default - Groq / Llama 3.3 70B Versatile)", sut.AvailableProviders.First().DisplayName);
+        Assert.Equal(sut.AvailableProviders.First(), sut.SelectedEditProvider);
+    }
+
+    [Fact]
+    public void SelectedEditProvider_UsesExplicitOverride_WhenPresent()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.groq:llama-3.3-70b-versatile"
+        });
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var openAi = CreateLlmProvider("com.typewhisper.openai", "OpenAI", "gpt-4.1-mini", "GPT-4.1 Mini");
+        var pluginManager = CreatePluginManager(settings, groq, openAi);
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+        var action = new PromptAction
+        {
+            Id = "prompt-2",
+            Name = "Reply",
+            SystemPrompt = "Write a reply.",
+            ProviderOverride = "plugin:com.typewhisper.openai:gpt-4.1-mini"
+        };
+
+        InvokePrivateMethod(sut, "PopulateEditorFromAction", action);
+
+        Assert.Equal("plugin:com.typewhisper.openai:gpt-4.1-mini", sut.EditProviderOverride);
+        Assert.Equal("OpenAI / GPT-4.1 Mini", sut.SelectedEditProvider?.DisplayName);
+    }
+
+    [Fact]
+    public void DefaultProviderLabel_ShowsUnavailableState_WhenConfiguredDefaultCannotBeResolved()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            DefaultLlmProvider = "plugin:com.typewhisper.openai:gpt-4.1-mini"
+        });
+        var promptActions = CreatePromptActionService();
+        var groq = CreateLlmProvider("com.typewhisper.groq", "Groq", "llama-3.3-70b-versatile", "Llama 3.3 70B Versatile");
+        var pluginManager = CreatePluginManager(settings, groq);
+
+        var sut = new PromptsViewModel(promptActions.Object, pluginManager, settings);
+
+        Assert.Equal("(Default - none configured)", sut.AvailableProviders.First().DisplayName);
+        Assert.Equal("(Default - none configured)", sut.DefaultProviderSummary);
+        Assert.DoesNotContain("Groq", sut.AvailableProviders.First().DisplayName);
+    }
+
     private Mock<IPromptActionService> CreatePromptActionService()
     {
         var promptActions = new Mock<IPromptActionService>();
@@ -64,7 +197,7 @@ public class PromptsViewModelTests
         return promptActions;
     }
 
-    private PluginManager CreatePluginManager(ISettingsService settings, Mock<ILlmProviderPlugin> provider)
+    private PluginManager CreatePluginManager(ISettingsService settings, params Mock<ILlmProviderPlugin>[] providers)
     {
         var pluginManager = new PluginManager(
             _loader,
@@ -74,23 +207,23 @@ public class PromptsViewModelTests
             settings,
             []);
 
-        var manifest = new PluginManifest
-        {
-            Id = "com.typewhisper.groq",
-            Name = "Groq",
-            Version = "1.0.0",
-            AssemblyName = Path.GetFileName(Assembly.GetExecutingAssembly().Location),
-            PluginClass = typeof(object).FullName ?? "System.Object"
-        };
+        var loadedPlugins = providers
+            .Select(provider => new LoadedPlugin(
+                new PluginManifest
+                {
+                    Id = provider.Object.PluginId,
+                    Name = provider.Object.ProviderName,
+                    Version = "1.0.0",
+                    AssemblyName = Path.GetFileName(Assembly.GetExecutingAssembly().Location),
+                    PluginClass = typeof(object).FullName ?? "System.Object"
+                },
+                provider.Object,
+                new PluginAssemblyLoadContext(Assembly.GetExecutingAssembly().Location),
+                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? AppContext.BaseDirectory))
+            .ToList();
 
-        var loadedPlugin = new LoadedPlugin(
-            manifest,
-            provider.Object,
-            new PluginAssemblyLoadContext(Assembly.GetExecutingAssembly().Location),
-            Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? AppContext.BaseDirectory);
-
-        SetPrivateField(pluginManager, "_allPlugins", new List<LoadedPlugin> { loadedPlugin });
-        SetPrivateField(pluginManager, "_llmProviders", new List<ILlmProviderPlugin> { provider.Object });
+        SetPrivateField(pluginManager, "_allPlugins", loadedPlugins);
+        SetPrivateField(pluginManager, "_llmProviders", providers.Select(provider => provider.Object).ToList());
         return pluginManager;
     }
 
@@ -115,6 +248,13 @@ public class PromptsViewModelTests
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
         field.SetValue(target, value);
+    }
+
+    private static void InvokePrivateMethod(object target, string methodName, params object[] arguments)
+    {
+        var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(target.GetType().FullName, methodName);
+        method.Invoke(target, arguments);
     }
 
     private sealed class FakeSettingsService(AppSettings initialSettings) : ISettingsService
