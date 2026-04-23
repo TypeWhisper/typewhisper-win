@@ -6,12 +6,22 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Velopack release track to validate.'
+        required: false
+        default: stable
+        type: choice
+        options:
+          - stable
+          - rc
+          - daily
 
 permissions:
   contents: read
 
 concurrency:
-  group: package-dry-run-${{ github.event.pull_request.number || github.ref }}
+  group: package-dry-run-${{ github.event.pull_request.number || github.ref }}-${{ inputs.channel || 'stable' }}
   cancel-in-progress: true
 
 jobs:
@@ -23,11 +33,36 @@ jobs:
         rid:
           - win-x64
           - win-arm64
-    env:
-      VERSION: 0.0.1-dryrun.${{ github.run_number }}
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Resolve dry-run channel
+        id: meta
+        shell: pwsh
+        run: |
+          $channel = "${{ inputs.channel || 'stable' }}"
+          $date = (Get-Date).ToUniversalTime().ToString("yyyyMMdd")
+          $rid = "${{ matrix.rid }}"
+
+          switch ($channel) {
+            "rc" {
+              $version = "0.0.1-rc.dryrun.${{ github.run_number }}"
+              $suffix = "-rc"
+            }
+            "daily" {
+              $version = "0.0.1-daily.$date.${{ github.run_number }}"
+              $suffix = "-daily"
+            }
+            default {
+              $version = "0.0.1-dryrun.${{ github.run_number }}"
+              $suffix = ""
+            }
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "channel_suffix=$suffix" >> $env:GITHUB_OUTPUT
+          "velopack_channel=$rid$suffix" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -41,13 +76,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
-          New-Item -ItemType Directory -Force -Path "releases/${{ matrix.rid }}" | Out-Null
+          New-Item -ItemType Directory -Force -Path "releases/${{ steps.meta.outputs.velopack_channel }}" | Out-Null
 
       - name: Restore solution
         run: dotnet restore TypeWhisper.slnx
 
       - name: Build solution
-        run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ env.VERSION }} -bl:artifacts/logs/typewhisper-package.binlog
+        run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }} -bl:artifacts/logs/typewhisper-package.binlog
 
       - name: Build bundled plugins
         shell: pwsh
@@ -58,14 +93,14 @@ jobs:
               throw "Restore failed: $($project.FullName)"
             }
 
-            dotnet build $project.FullName -c Release --no-restore -p:Version=$env:VERSION
+            dotnet build $project.FullName -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }}
             if ($LASTEXITCODE -ne 0) {
               throw "Build failed: $($project.FullName)"
             }
           }
 
       - name: Publish app
-        run: dotnet publish src/TypeWhisper.Windows/TypeWhisper.Windows.csproj -c Release -r ${{ matrix.rid }} -p:Version=${{ env.VERSION }} -o publish/${{ matrix.rid }}
+        run: dotnet publish src/TypeWhisper.Windows/TypeWhisper.Windows.csproj -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.meta.outputs.version }} -o publish/${{ matrix.rid }}
 
       - name: Copy bundled plugins into publish output
         shell: pwsh
@@ -87,18 +122,18 @@ jobs:
         run: |
           vpk pack `
             --packId TypeWhisper `
-            --packVersion $env:VERSION `
+            --packVersion ${{ steps.meta.outputs.version }} `
             --packDir "publish/${{ matrix.rid }}" `
             --mainExe TypeWhisper.exe `
             --icon src/TypeWhisper.Windows/Resources/Icons/app.ico `
-            --channel ${{ matrix.rid }} `
-            --outputDir "releases/${{ matrix.rid }}"
+            --channel ${{ steps.meta.outputs.velopack_channel }} `
+            --outputDir "releases/${{ steps.meta.outputs.velopack_channel }}"
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: package-dry-run-${{ matrix.rid }}
+          name: package-dry-run-${{ steps.meta.outputs.velopack_channel }}
           path: |
             artifacts/logs/*.binlog
-            releases/${{ matrix.rid }}/*
+            releases/${{ steps.meta.outputs.velopack_channel }}/*
           if-no-files-found: ignore

@@ -46,22 +46,15 @@ public sealed class UpdateService
         _trayIcon = trayIcon;
     }
 
-    public void Initialize(ReleaseChannel channel = ReleaseChannel.Stable)
+    public void Initialize(ReleaseChannel? channel = null)
     {
-        Channel = channel;
+        var resolvedChannel = channel ?? InferReleaseChannel(CurrentVersion);
+        Channel = resolvedChannel;
         try
         {
-            var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64
-                ? "win-arm64" : "win-x64";
-            var channelSuffix = channel switch
-            {
-                ReleaseChannel.ReleaseCandidate => "-rc",
-                ReleaseChannel.Daily => "-daily",
-                _ => ""
-            };
             _updateManager = new UpdateManager(
-                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, channel != ReleaseChannel.Stable),
-                new UpdateOptions { ExplicitChannel = $"{arch}{channelSuffix}" });
+                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, resolvedChannel != ReleaseChannel.Stable),
+                new UpdateOptions { ExplicitChannel = GetVelopackChannel(RuntimeInformation.OSArchitecture, resolvedChannel) });
         }
         catch
         {
@@ -109,6 +102,31 @@ public sealed class UpdateService
             _trayIcon.ShowBalloon(Loc.Instance["Update.BalloonFailedTitle"],
                 Loc.Instance["Update.BalloonFailedMessage"]);
         }
+    }
+
+    internal static ReleaseChannel InferReleaseChannel(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return ReleaseChannel.Stable;
+
+        if (version.Contains("-daily.", StringComparison.OrdinalIgnoreCase))
+            return ReleaseChannel.Daily;
+
+        if (version.Contains("-rc", StringComparison.OrdinalIgnoreCase))
+            return ReleaseChannel.ReleaseCandidate;
+
+        return ReleaseChannel.Stable;
+    }
+
+    internal static string GetVelopackChannel(Architecture architecture, ReleaseChannel channel)
+    {
+        var arch = architecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
+        return channel switch
+        {
+            ReleaseChannel.ReleaseCandidate => $"{arch}-rc",
+            ReleaseChannel.Daily => $"{arch}-daily",
+            _ => arch
+        };
     }
 }
 
