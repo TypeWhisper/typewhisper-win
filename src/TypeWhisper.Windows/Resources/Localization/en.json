@@ -444,6 +444,9 @@
 
   "Info.Subtitle": "Speech-to-text for your Windows desktop",
   "Info.Version": "Version",
+  "Info.VersionFormat": "Version {0}",
+  "Info.VersionWithChannelFormat": "Version {0} ({1})",
+  "Info.UpdateChannel": "Update Channel",
   "Info.CheckUpdates": "Check for Updates",
   "Info.UpdateNow": "Update Now",
   "Info.PoweredBy": "Works with local and cloud transcription engines",
@@ -482,6 +485,13 @@
   "Update.Failed": "Update failed. Please try again.",
   "Update.NoUpdate": "No Update",
   "Update.NoUpdateMessage": "You already have the latest version.",
+  "Update.ChannelStable": "Stable",
+  "Update.ChannelReleaseCandidate": "Release Candidate",
+  "Update.ChannelDaily": "Daily",
+  "Update.ChannelStableDescription": "Stable gets production releases only.",
+  "Update.ChannelReleaseCandidateDescription": "Release Candidate follows RC preview builds.",
+  "Update.ChannelDailyDescription": "Daily follows the latest daily preview builds.",
+  "Update.ChannelChangedFormat": "Update channel set to {0}.",
 
   "Tray.Settings": "Settings...",
   "Tray.TranscribeFile": "Transcribe file...",

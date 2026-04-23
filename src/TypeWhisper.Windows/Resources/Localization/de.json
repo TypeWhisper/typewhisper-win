@@ -444,6 +444,9 @@
 
   "Info.Subtitle": "Sprache-zu-Text für deinen Windows-Desktop",
   "Info.Version": "Version",
+  "Info.VersionFormat": "Version {0}",
+  "Info.VersionWithChannelFormat": "Version {0} ({1})",
+  "Info.UpdateChannel": "Update-Channel",
   "Info.CheckUpdates": "Nach Updates suchen",
   "Info.UpdateNow": "Jetzt aktualisieren",
   "Info.PoweredBy": "Funktioniert mit lokalen und Cloud-Transkriptions-Engines",
@@ -482,6 +485,13 @@
   "Update.Failed": "Update fehlgeschlagen. Bitte erneut versuchen.",
   "Update.NoUpdate": "Kein Update",
   "Update.NoUpdateMessage": "Sie haben bereits die neueste Version.",
+  "Update.ChannelStable": "Stable",
+  "Update.ChannelReleaseCandidate": "Release Candidate",
+  "Update.ChannelDaily": "Daily",
+  "Update.ChannelStableDescription": "Stable bekommt nur Produktions-Releases.",
+  "Update.ChannelReleaseCandidateDescription": "Release Candidate folgt den RC-Preview-Builds.",
+  "Update.ChannelDailyDescription": "Daily folgt den neuesten Daily-Preview-Builds.",
+  "Update.ChannelChangedFormat": "Update-Channel auf {0} gesetzt.",
 
   "Tray.Settings": "Einstellungen...",
   "Tray.TranscribeFile": "Datei transkribieren...",

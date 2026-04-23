@@ -31,7 +31,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public FileTranscriptionViewModel FileTranscription { get; }
 
     private readonly UpdateService _updateService;
+    private readonly ISettingsService _settingsService;
     private readonly IErrorLogService _errorLog;
+    private bool _isSyncingUpdateChannel;
 
     [ObservableProperty] private UserControl? _currentSection;
     [ObservableProperty] private SettingsRoute _currentRoute = _lastOpenedRoute;
@@ -42,12 +44,17 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private bool _isCheckingForUpdates;
     [ObservableProperty] private bool _isUpdateAvailable;
     [ObservableProperty] private int _pendingFileImporterRequestId;
+    [ObservableProperty] private ReleaseChannel _selectedUpdateChannel;
 
     public string CurrentAppVersion => _updateService.CurrentVersion;
+    public string CurrentAppVersionDisplay => BuildCurrentAppVersionDisplay();
     public double CurrentPageContentWidth => CurrentPageMetadata.ContentWidth;
     public bool CurrentPageShowsSummaryRow => CurrentPageMetadata.ShowsSummaryRow;
     public bool CurrentPageUsesStickyActions => CurrentPageMetadata.UsesStickyActions;
+    public string SelectedUpdateChannelDescription =>
+        UpdateChannelOptions.FirstOrDefault(option => option.Value == SelectedUpdateChannel)?.Description ?? string.Empty;
     public ObservableCollection<ErrorLogEntry> ErrorLogEntries { get; } = [];
+    public ObservableCollection<ReleaseChannelOption> UpdateChannelOptions { get; } = [];
     public bool HasErrorLogEntries => ErrorLogEntries.Count > 0;
     public ObservableCollection<SettingsNavigationGroup> NavigationGroups { get; } = [];
 
@@ -68,6 +75,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         AudioRecorderViewModel recorder,
         FileTranscriptionViewModel fileTranscription,
         UpdateService updateService,
+        ISettingsService settingsService,
         IErrorLogService errorLog)
     {
         Settings = settings;
@@ -82,20 +90,27 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Recorder = recorder;
         FileTranscription = fileTranscription;
         _updateService = updateService;
+        _settingsService = settingsService;
         _errorLog = errorLog;
         Loc.Instance.LanguageChanged += (_, _) =>
         {
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
+                RefreshUpdateChannelOptions();
                 BuildNavigation();
                 SyncRouteMetadata(CurrentRoute);
                 SyncNavigationSelection();
+                OnPropertyChanged(nameof(CurrentAppVersionDisplay));
+                OnPropertyChanged(nameof(SelectedUpdateChannelDescription));
             });
         };
 
+        RefreshUpdateChannelOptions();
+        SyncSelectedUpdateChannel(_settingsService.Current);
         BuildNavigation();
         RefreshErrorLog();
         _errorLog.EntriesChanged += RefreshErrorLog;
+        _settingsService.SettingsChanged += SyncSelectedUpdateChannel;
         SyncRouteMetadata(CurrentRoute);
         SyncNavigationSelection();
     }
@@ -154,6 +169,22 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             IsUpdateAvailable = false;
             UpdateStatusText = Loc.Instance["Update.UpToDate"];
         }
+    }
+
+    partial void OnSelectedUpdateChannelChanged(ReleaseChannel value)
+    {
+        OnPropertyChanged(nameof(SelectedUpdateChannelDescription));
+
+        if (_isSyncingUpdateChannel)
+            return;
+
+        _settingsService.Save(_settingsService.Current with
+        {
+            UpdateChannel = UpdateService.ToSettingsValue(value)
+        });
+        _updateService.SwitchChannel(value);
+        IsUpdateAvailable = false;
+        UpdateStatusText = Loc.Instance.GetString("Update.ChannelChangedFormat", FormatReleaseChannelDisplayName(value));
     }
 
     [RelayCommand]
@@ -248,6 +279,69 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
                 ErrorLogEntries.Add(entry);
             OnPropertyChanged(nameof(HasErrorLogEntries));
         });
+    }
+
+    private void SyncSelectedUpdateChannel(AppSettings settings)
+    {
+        DispatchToUi(() =>
+        {
+            var resolvedChannel = UpdateService.ResolveReleaseChannel(settings.UpdateChannel, _updateService.CurrentVersion);
+            _isSyncingUpdateChannel = true;
+            SelectedUpdateChannel = resolvedChannel;
+            _isSyncingUpdateChannel = false;
+            OnPropertyChanged(nameof(SelectedUpdateChannelDescription));
+        });
+    }
+
+    private static void DispatchToUi(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        dispatcher.Invoke(action);
+    }
+
+    private void RefreshUpdateChannelOptions()
+    {
+        UpdateChannelOptions.Clear();
+        UpdateChannelOptions.Add(new ReleaseChannelOption(
+            ReleaseChannel.Stable,
+            Loc.Instance["Update.ChannelStable"],
+            Loc.Instance["Update.ChannelStableDescription"]));
+        UpdateChannelOptions.Add(new ReleaseChannelOption(
+            ReleaseChannel.ReleaseCandidate,
+            Loc.Instance["Update.ChannelReleaseCandidate"],
+            Loc.Instance["Update.ChannelReleaseCandidateDescription"]));
+        UpdateChannelOptions.Add(new ReleaseChannelOption(
+            ReleaseChannel.Daily,
+            Loc.Instance["Update.ChannelDaily"],
+            Loc.Instance["Update.ChannelDailyDescription"]));
+    }
+
+    private string BuildCurrentAppVersionDisplay()
+    {
+        var installedChannel = UpdateService.InferReleaseChannel(CurrentAppVersion);
+        if (installedChannel == ReleaseChannel.Stable)
+            return Loc.Instance.GetString("Info.VersionFormat", CurrentAppVersion);
+
+        return Loc.Instance.GetString(
+            "Info.VersionWithChannelFormat",
+            CurrentAppVersion,
+            FormatReleaseChannelDisplayName(installedChannel));
+    }
+
+    private static string FormatReleaseChannelDisplayName(ReleaseChannel channel)
+    {
+        return channel switch
+        {
+            ReleaseChannel.ReleaseCandidate => Loc.Instance["Update.ChannelReleaseCandidate"],
+            ReleaseChannel.Daily => Loc.Instance["Update.ChannelDaily"],
+            _ => Loc.Instance["Update.ChannelStable"]
+        };
     }
 
     private void BuildNavigation()
@@ -368,3 +462,5 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentPageUsesStickyActions));
     }
 }
+
+public sealed record ReleaseChannelOption(ReleaseChannel Value, string DisplayName, string Description);

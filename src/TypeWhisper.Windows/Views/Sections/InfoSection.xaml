@@ -30,11 +30,38 @@
                        HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
             <!-- Version -->
-            <TextBlock HorizontalAlignment="Center" Margin="0,4,0,16"
-                       Foreground="{StaticResource HintBrush}" FontSize="12">
-                <Run Text="{loc:Str Info.Version}"/>
-                <Run Text="{Binding CurrentAppVersion, Mode=OneWay}"/>
-            </TextBlock>
+            <TextBlock Text="{Binding CurrentAppVersionDisplay, Mode=OneWay}"
+                       HorizontalAlignment="Center" Margin="0,4,0,16"
+                       Foreground="{StaticResource HintBrush}" FontSize="12"/>
+
+            <!-- Update channel -->
+            <StackPanel Width="420" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{loc:Str Info.UpdateChannel}"
+                               Foreground="{StaticResource TextBrush}"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Column="1"
+                              Width="190"
+                              Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                              ItemsSource="{Binding UpdateChannelOptions}"
+                              SelectedValue="{Binding SelectedUpdateChannel, Mode=TwoWay}"
+                              SelectedValuePath="Value"
+                              DisplayMemberPath="DisplayName"/>
+                </Grid>
+
+                <TextBlock Text="{Binding SelectedUpdateChannelDescription}"
+                           Foreground="{StaticResource HintBrush}"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Margin="0,8,0,0"/>
+            </StackPanel>
 
             <!-- Update check -->
             <StackPanel HorizontalAlignment="Center" Margin="0,0,0,16">

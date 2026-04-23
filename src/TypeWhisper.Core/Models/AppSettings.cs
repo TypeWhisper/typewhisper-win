@@ -77,6 +77,9 @@ public record AppSettings
     // UI Language (null = auto-detect from system)
     public string? UiLanguage { get; init; }
 
+    // Update channel preference (null = infer from installed version)
+    public string? UpdateChannel { get; init; }
+
     public static AppSettings Default => new();
 }
 

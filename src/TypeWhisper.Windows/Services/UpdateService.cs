@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using TypeWhisper.Core;
+using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Windows.Services.Localization;
 using Velopack;
 using Velopack.Sources;
@@ -9,7 +10,12 @@ namespace TypeWhisper.Windows.Services;
 
 public sealed class UpdateService
 {
+    internal const string StableChannelSetting = "stable";
+    internal const string ReleaseCandidateChannelSetting = "release-candidate";
+    internal const string DailyChannelSetting = "daily";
+
     private readonly TrayIconService _trayIcon;
+    private readonly ISettingsService _settings;
     private UpdateManager? _updateManager;
     private UpdateInfo? _pendingUpdate;
 
@@ -41,15 +47,18 @@ public sealed class UpdateService
 
     public event EventHandler? UpdateAvailable;
 
-    public UpdateService(TrayIconService trayIcon)
+    public UpdateService(TrayIconService trayIcon, ISettingsService settings)
     {
         _trayIcon = trayIcon;
+        _settings = settings;
     }
 
     public void Initialize(ReleaseChannel? channel = null)
     {
-        var resolvedChannel = channel ?? InferReleaseChannel(CurrentVersion);
+        var resolvedChannel = channel ?? ResolveReleaseChannel(_settings.Current.UpdateChannel, CurrentVersion);
         Channel = resolvedChannel;
+        _pendingUpdate = null;
+        _updateManager = null;
         try
         {
             _updateManager = new UpdateManager(
@@ -102,6 +111,32 @@ public sealed class UpdateService
             _trayIcon.ShowBalloon(Loc.Instance["Update.BalloonFailedTitle"],
                 Loc.Instance["Update.BalloonFailedMessage"]);
         }
+    }
+
+    internal static ReleaseChannel ResolveReleaseChannel(string? configuredChannel, string? installedVersion)
+    {
+        return ParseReleaseChannel(configuredChannel) ?? InferReleaseChannel(installedVersion);
+    }
+
+    internal static ReleaseChannel? ParseReleaseChannel(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            StableChannelSetting => ReleaseChannel.Stable,
+            ReleaseCandidateChannelSetting or "rc" => ReleaseChannel.ReleaseCandidate,
+            DailyChannelSetting => ReleaseChannel.Daily,
+            _ => null
+        };
+    }
+
+    internal static string ToSettingsValue(ReleaseChannel channel)
+    {
+        return channel switch
+        {
+            ReleaseChannel.ReleaseCandidate => ReleaseCandidateChannelSetting,
+            ReleaseChannel.Daily => DailyChannelSetting,
+            _ => StableChannelSetting
+        };
     }
 
     internal static ReleaseChannel InferReleaseChannel(string? version)
