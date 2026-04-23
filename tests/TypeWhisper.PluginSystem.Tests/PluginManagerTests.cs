@@ -12,7 +12,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class PluginManagerTests : IDisposable
 {
     private readonly Mock<IActiveWindowService> _activeWindow = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
@@ -23,7 +23,7 @@ public class PluginManagerTests : IDisposable
     {
         _pluginSearchDir = Path.Combine(Path.GetTempPath(), "TypeWhisper.PluginManagerTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_pluginSearchDir);
-        _profiles.Setup(p => p.Profiles).Returns(new List<Profile>());
+        _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
         _settings.Setup(s => s.Current).Returns(new AppSettings());
     }
 
@@ -33,7 +33,7 @@ public class PluginManagerTests : IDisposable
             _loader,
             _eventBus,
             _activeWindow.Object,
-            _profiles.Object,
+            _workflows.Object,
             _settings.Object,
             [_pluginSearchDir]);
         return _manager;
@@ -185,14 +185,14 @@ public class PluginManagerTests : IDisposable
 public class PluginManagerWithFakePluginTests : IDisposable
 {
     private readonly Mock<IActiveWindowService> _activeWindow = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly PluginEventBus _eventBus = new();
     private PluginManager? _manager;
 
     public PluginManagerWithFakePluginTests()
     {
-        _profiles.Setup(p => p.Profiles).Returns(new List<Profile>());
+        _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
         _settings.Setup(s => s.Current).Returns(new AppSettings());
     }
 
@@ -215,7 +215,7 @@ public class PluginManagerWithFakePluginTests : IDisposable
             new PluginLoader(),
             _eventBus,
             _activeWindow.Object,
-            _profiles.Object,
+            _workflows.Object,
             _settings.Object);
 
         Assert.False(_manager.IsEnabled("com.test.fake"));
@@ -236,7 +236,7 @@ public class PluginManagerWithFakePluginTests : IDisposable
             new PluginLoader(),
             _eventBus,
             _activeWindow.Object,
-            _profiles.Object,
+            _workflows.Object,
             _settings.Object);
 
         // DisablePluginAsync for unknown plugin - plugin is null, returns early

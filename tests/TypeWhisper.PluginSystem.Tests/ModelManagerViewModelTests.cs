@@ -13,13 +13,13 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class ModelManagerViewModelTests
 {
     private readonly Mock<IActiveWindowService> _activeWindow = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
 
     public ModelManagerViewModelTests()
     {
-        _profiles.Setup(p => p.Profiles).Returns([]);
+        _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class ModelManagerViewModelTests
             _loader,
             _eventBus,
             _activeWindow.Object,
-            _profiles.Object,
+            _workflows.Object,
             settings,
             []);
 

@@ -216,6 +216,7 @@
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="CaretBrush" Value="{StaticResource TextBrush}"/>
         <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -226,7 +227,7 @@
                             CornerRadius="8">
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Margin="{TemplateBinding Padding}"
-                                      VerticalAlignment="Center"/>
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">

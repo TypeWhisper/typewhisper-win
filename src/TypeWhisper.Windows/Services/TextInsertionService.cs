@@ -9,7 +9,7 @@ public sealed class TextInsertionService
 {
     private readonly InputSimulator _inputSimulator = new();
 
-    public async Task<InsertionResult> InsertTextAsync(string text, bool autoPaste = true)
+    public async Task<InsertionResult> InsertTextAsync(string text, bool autoPaste = true, bool autoEnter = false)
     {
         if (string.IsNullOrEmpty(text))
             return InsertionResult.NoText;
@@ -52,6 +52,12 @@ public sealed class TextInsertionService
         // Simulate Ctrl+V using InputSimulator (same as old version)
         _inputSimulator.Keyboard.ModifiedKeyStroke(
             VirtualKeyCode.CONTROL, VirtualKeyCode.VK_V);
+
+        if (autoEnter)
+        {
+            await Task.Delay(50);
+            _inputSimulator.Keyboard.KeyPress(VirtualKeyCode.RETURN);
+        }
 
         // Restore previous clipboard after a short delay
         await Task.Delay(200);

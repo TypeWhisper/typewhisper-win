@@ -23,10 +23,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public HistoryViewModel History { get; }
     public DictionaryViewModel Dictionary { get; }
     public SnippetsViewModel Snippets { get; }
-    public ProfilesViewModel Profiles { get; }
+    public WorkflowsViewModel Workflows { get; }
     public DashboardViewModel Dashboard { get; }
     public PluginsViewModel Plugins { get; }
-    public PromptsViewModel Prompts { get; }
     public AudioRecorderViewModel Recorder { get; }
     public FileTranscriptionViewModel FileTranscription { get; }
 
@@ -61,10 +60,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         HistoryViewModel history,
         DictionaryViewModel dictionary,
         SnippetsViewModel snippets,
-        ProfilesViewModel profiles,
+        WorkflowsViewModel workflows,
         DashboardViewModel dashboard,
         PluginsViewModel plugins,
-        PromptsViewModel prompts,
         AudioRecorderViewModel recorder,
         FileTranscriptionViewModel fileTranscription,
         UpdateService updateService,
@@ -75,10 +73,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         History = history;
         Dictionary = dictionary;
         Snippets = snippets;
-        Profiles = profiles;
+        Workflows = workflows;
         Dashboard = dashboard;
         Plugins = plugins;
-        Prompts = prompts;
         Recorder = recorder;
         FileTranscription = fileTranscription;
         _updateService = updateService;
@@ -272,13 +269,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         [
             new SettingsNavigationItem(SettingsRoute.History, Loc.Instance["Nav.History"], "\uE81C"),
             new SettingsNavigationItem(SettingsRoute.Dictionary, Loc.Instance["Nav.Dictionary"], "\uE8D2"),
-            new SettingsNavigationItem(SettingsRoute.Snippets, Loc.Instance["Nav.Snippets"], "\uE8C8"),
-            new SettingsNavigationItem(SettingsRoute.Profiles, Loc.Instance["Nav.Profiles"], "\uE77B")
+            new SettingsNavigationItem(SettingsRoute.Snippets, Loc.Instance["Nav.Snippets"], "\uE8C8")
         ]));
 
         NavigationGroups.Add(CreateGroup(SettingsGroup.AI, Loc.Instance["SettingsGroup.AI"],
         [
-            new SettingsNavigationItem(SettingsRoute.Prompts, Loc.Instance["Nav.Prompts"], "\uE8FD"),
+            new SettingsNavigationItem(SettingsRoute.Workflows, Loc.Instance["Nav.Workflows"], "\uE8F1"),
             new SettingsNavigationItem(SettingsRoute.Integrations, Loc.Instance["Nav.Plugins"], "\uE943")
         ]));
 
@@ -310,8 +306,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     {
         CurrentPageMetadata = route switch
         {
-            SettingsRoute.Profiles => new SettingsPageMetadata(SettingsPageKind.GuidedEditorPage, 1180, true, true),
-            SettingsRoute.Prompts => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1040),
+            SettingsRoute.Workflows => new SettingsPageMetadata(SettingsPageKind.GuidedEditorPage, 1180, true, true),
             SettingsRoute.Snippets => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1040),
             SettingsRoute.Integrations => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1120),
             SettingsRoute.History => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1100),
@@ -328,8 +323,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.History => Loc.Instance["Nav.History"],
             SettingsRoute.Dictionary => Loc.Instance["Nav.Dictionary"],
             SettingsRoute.Snippets => Loc.Instance["Nav.Snippets"],
-            SettingsRoute.Profiles => Loc.Instance["Nav.Profiles"],
-            SettingsRoute.Prompts => Loc.Instance["Nav.Prompts"],
+            SettingsRoute.Workflows => Loc.Instance["Nav.Workflows"],
             SettingsRoute.Integrations => Loc.Instance["Nav.Plugins"],
             SettingsRoute.General => Loc.Instance["Nav.General"],
             SettingsRoute.Appearance => Loc.Instance["Nav.Appearance"],
@@ -349,8 +343,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.History => Loc.Instance["Page.HistorySubtitle"],
             SettingsRoute.Dictionary => Loc.Instance["Page.DictionarySubtitle"],
             SettingsRoute.Snippets => Loc.Instance["Page.SnippetsSubtitle"],
-            SettingsRoute.Profiles => Loc.Instance["Page.ProfilesSubtitle"],
-            SettingsRoute.Prompts => Loc.Instance["Page.PromptsSubtitle"],
+            SettingsRoute.Workflows => Loc.Instance["Page.WorkflowsSubtitle"],
             SettingsRoute.Integrations => Loc.Instance["Page.IntegrationsSubtitle"],
             SettingsRoute.General => Loc.Instance["Page.GeneralSubtitle"],
             SettingsRoute.Appearance => Loc.Instance["Page.AppearanceSubtitle"],

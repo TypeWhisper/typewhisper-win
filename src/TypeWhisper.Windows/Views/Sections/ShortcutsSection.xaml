@@ -115,33 +115,6 @@
                         </Grid>
                     </Border>
 
-                    <Border Height="1"
-                            Background="#16FFFFFF"
-                            Margin="18,0"/>
-
-                    <Border Style="{StaticResource SettingsRowBorderStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Margin="0,0,16,0">
-                                <TextBlock Text="{loc:Str General.PromptPalette}"
-                                           Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <TextBlock Text="{loc:Str Shortcuts.PromptPaletteHint}"
-                                           Style="{StaticResource PageSubtitleStyle}"
-                                           FontSize="12"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
-
-                            <controls:HotkeyRecorderControl Grid.Column="1"
-                                                            Hotkey="{Binding Settings.PromptPaletteHotkey}"
-                                                            AllowModifierOnly="True"
-                                                            Width="240"
-                                                            VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
                 </StackPanel>
             </Border>
         </StackPanel>

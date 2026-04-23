@@ -36,9 +36,9 @@
             </ComboBox>
         </StackPanel>
 
-        <!-- Profile Filter -->
+        <!-- Workflow Filter -->
         <StackPanel Grid.Row="3" Margin="0,0,0,4">
-            <TextBlock Text="Profil-Filter" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="Workflow-Filter" FontWeight="SemiBold" Margin="0,0,0,4" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
