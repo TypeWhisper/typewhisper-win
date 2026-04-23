@@ -45,40 +45,40 @@
 
 ### 2.1 Basis-Status
 ```bash
-curl http://localhost:9876/v1/status
+curl http://localhost:8978/v1/status
 ```
 → JSON mit `version`, `is_recording`, `supports_streaming`, `supports_translation`
 
 ### 2.2 History
 ```bash
 # Alle Einträge
-curl "http://localhost:9876/v1/history?limit=5"
+curl "http://localhost:8978/v1/history?limit=5"
 # Suche
-curl "http://localhost:9876/v1/history?q=test"
+curl "http://localhost:8978/v1/history?q=test"
 # Löschen (mit echter ID)
-curl -X DELETE "http://localhost:9876/v1/history?id=SOME_ID"
+curl -X DELETE "http://localhost:8978/v1/history?id=SOME_ID"
 ```
 
 ### 2.3 Profile
 ```bash
 # Alle Profile
-curl http://localhost:9876/v1/profiles
+curl http://localhost:8978/v1/profiles
 ```
 
 ### 2.4 Dictation Control
 ```bash
 # Status prüfen
-curl http://localhost:9876/v1/dictation/status
+curl http://localhost:8978/v1/dictation/status
 # Starten
-curl -X POST http://localhost:9876/v1/dictation/start
+curl -X POST http://localhost:8978/v1/dictation/start
 # Stoppen
-curl -X POST http://localhost:9876/v1/dictation/stop
+curl -X POST http://localhost:8978/v1/dictation/stop
 ```
 
 ### 2.5 Transcribe
 ```bash
 # Audio-Datei senden
-curl -X POST http://localhost:9876/v1/transcribe \
+curl -X POST http://localhost:8978/v1/transcribe \
   -F "file=@test.wav" \
   -F "language=de"
 ```

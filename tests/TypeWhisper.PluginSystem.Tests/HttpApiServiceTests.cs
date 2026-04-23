@@ -22,12 +22,14 @@ public class HttpApiServiceTests : IDisposable
     private readonly Mock<IActiveWindowService> _activeWindow = new();
     private readonly Mock<IProfileService> _profiles = new();
     private readonly Mock<ISettingsService> _settings = new();
+    private readonly Mock<IHistoryService> _history = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
 
     public HttpApiServiceTests()
     {
         _profiles.Setup(p => p.Profiles).Returns([]);
+        _history.Setup(h => h.Records).Returns([]);
     }
 
     [Fact]
@@ -123,6 +125,82 @@ public class HttpApiServiceTests : IDisposable
         Assert.Single(json["segments"].EnumerateArray());
     }
 
+    [Fact]
+    public async Task HistorySearch_IncludesRaycastCompatibleAliases()
+    {
+        var record = new TranscriptionRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            Timestamp = new DateTime(2026, 4, 23, 10, 15, 0, DateTimeKind.Utc),
+            RawText = "raw transcript",
+            FinalText = "final transcript",
+            AppName = "Notepad",
+            AppProcessName = "notepad.exe",
+            AppUrl = "https://example.com",
+            DurationSeconds = 2.5,
+            Language = "en",
+            ProfileName = "Writing",
+            EngineUsed = "mock",
+            ModelUsed = "tiny"
+        };
+        _history.Setup(h => h.Records).Returns([record]);
+
+        var service = CreateService();
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/history",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var json = JsonObject(response);
+        var records = json["records"].EnumerateArray().ToList();
+        var entries = json["entries"].EnumerateArray().ToList();
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Single(records);
+        Assert.Single(entries);
+        Assert.Equal("Notepad", entries[0].GetProperty("app_name").GetString());
+        Assert.Equal("notepad.exe", entries[0].GetProperty("app_process_name").GetString());
+        Assert.Equal(JsonValueKind.Null, entries[0].GetProperty("app_bundle_id").ValueKind);
+        Assert.Equal("https://example.com", entries[0].GetProperty("app_url").GetString());
+        Assert.Equal(2, entries[0].GetProperty("words_count").GetInt32());
+        Assert.Equal(2, records[0].GetProperty("words").GetInt32());
+    }
+
+    [Fact]
+    public async Task ProfilesList_IncludesRaycastCompatibleAliases()
+    {
+        _profiles.Setup(p => p.Profiles).Returns([
+            new Profile
+            {
+                Id = "profile-1",
+                Name = "Browser",
+                IsEnabled = true,
+                Priority = 10,
+                ProcessNames = ["chrome.exe"],
+                UrlPatterns = ["*.example.com"],
+                InputLanguage = "de",
+                TranslationTarget = "en"
+            }
+        ]);
+
+        var service = CreateService();
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/profiles",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var json = JsonObject(response);
+        var profile = json["profiles"].EnumerateArray().Single();
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("chrome.exe", profile.GetProperty("process_names").EnumerateArray().Single().GetString());
+        Assert.Equal("chrome.exe", profile.GetProperty("bundle_identifiers").EnumerateArray().Single().GetString());
+        Assert.Equal("en", profile.GetProperty("translation_target").GetString());
+        Assert.Equal("en", profile.GetProperty("translation_target_language").GetString());
+    }
+
     private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -148,8 +226,6 @@ public class HttpApiServiceTests : IDisposable
         var dictionary = new DictionaryService(_dictionaryPath);
         var vocabulary = new Mock<IVocabularyBoostingService>();
         vocabulary.Setup(v => v.Apply(It.IsAny<string>())).Returns((string text) => text);
-        var history = new Mock<IHistoryService>();
-        history.Setup(h => h.Records).Returns([]);
         var translation = new Mock<ITranslationService>();
         translation.Setup(t => t.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string text, string _, string _, CancellationToken _) => text);
@@ -158,7 +234,7 @@ public class HttpApiServiceTests : IDisposable
             modelManager,
             _settings.Object,
             new AudioFileService(),
-            history.Object,
+            _history.Object,
             _profiles.Object,
             dictionary,
             vocabulary.Object,

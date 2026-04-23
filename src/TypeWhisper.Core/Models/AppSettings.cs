@@ -45,7 +45,7 @@ public record AppSettings
 
     // API Server
     public bool ApiServerEnabled { get; init; }
-    public int ApiServerPort { get; init; } = 9876;
+    public int ApiServerPort { get; init; } = 8978;
 
     // Dictionary
     public string[] EnabledPackIds { get; init; } = [];

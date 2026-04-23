@@ -114,7 +114,7 @@ Cloud providers are available as plugins and can be configured in Settings > Ext
 
 ## HTTP API
 
-TypeWhisper can run a local HTTP server (default port 9876, configurable in Settings) for integration with external tools.
+TypeWhisper can run a local HTTP server (default port 8978, configurable in Settings) for integration with external tools.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -144,15 +144,15 @@ TypeWhisper can run a local HTTP server (default port 9876, configurable in Sett
 Raw audio requests can pass the same options with headers: `X-Language`, `X-Language-Hints`, `X-Task`, `X-Target-Language`, `X-Response-Format`, `X-Prompt`, `X-Engine`, and `X-Model`. Add `?await_download=1` to wait for a local model download/restore when supported.
 
 ```bash
-curl -X POST http://localhost:9876/v1/transcribe \
+curl -X POST http://localhost:8978/v1/transcribe \
   -F "file=@recording.wav" \
   -F "language_hint=de" \
   -F "language_hint=en" \
   -F "response_format=verbose_json"
 
-curl -X POST http://localhost:9876/v1/dictation/start
-curl -X POST http://localhost:9876/v1/dictation/stop
-curl "http://localhost:9876/v1/dictation/transcription?id=<session-id>"
+curl -X POST http://localhost:8978/v1/dictation/start
+curl -X POST http://localhost:8978/v1/dictation/stop
+curl "http://localhost:8978/v1/dictation/transcription?id=<session-id>"
 ```
 
 ## CLI

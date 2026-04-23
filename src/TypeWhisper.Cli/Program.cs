@@ -9,7 +9,7 @@ namespace TypeWhisper.Cli;
 /// </summary>
 static class Program
 {
-    private const int DefaultPort = 9876;
+    private const int DefaultPort = 8978;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
 
     static async Task<int> Main(string[] args)
@@ -187,7 +187,7 @@ static class Program
               transcribe <file|->       Transcribe an audio file, or - for stdin
 
             Global options:
-              --port <N>                API server port (default: 9876)
+              --port <N>                API server port (default: 8978)
               --json                    Output as JSON
               --version                 Show version
               --help, -h                Show this help

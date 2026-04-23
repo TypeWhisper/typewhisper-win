@@ -1,8 +1,10 @@
 using System.IO;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
+using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.ViewModels;
@@ -25,6 +27,7 @@ public sealed class HttpApiService : IDisposable
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+    private int? _runningPort;
     private bool _disposed;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -58,26 +61,73 @@ public sealed class HttpApiService : IDisposable
         _pipeline = pipeline;
         _translation = translation;
         _dictation = dictation;
+        _settings.SettingsChanged += OnSettingsChanged;
     }
 
     public void Start(int port)
     {
-        if (_listener is { IsListening: true }) return;
+        if (_listener is { IsListening: true } && _runningPort == port) return;
+        if (_listener is { IsListening: true }) Stop();
 
         _cts = new CancellationTokenSource();
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://localhost:{port}/");
+        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
         _listener.Start();
+        _runningPort = port;
+        WriteApiPortFile(port);
 
         _listenTask = Task.Run(() => ListenLoop(_cts.Token));
     }
 
+    public void ApplySettings(AppSettings settings)
+    {
+        if (_disposed) return;
+
+        if (settings.ApiServerEnabled)
+            Start(settings.ApiServerPort);
+        else
+            Stop();
+    }
+
     public void Stop()
     {
-        _cts?.Cancel();
+        var cts = _cts;
+        _cts = null;
+        cts?.Cancel();
         _listener?.Stop();
         _listener?.Close();
         _listener = null;
+        _listenTask = null;
+        _runningPort = null;
+        cts?.Dispose();
+    }
+
+    private void OnSettingsChanged(AppSettings settings)
+    {
+        try
+        {
+            ApplySettings(settings);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to apply settings: {ex.Message}");
+        }
+    }
+
+    private static void WriteApiPortFile(int port)
+    {
+        try
+        {
+            Directory.CreateDirectory(TypeWhisperEnvironment.BasePath);
+            File.WriteAllText(
+                TypeWhisperEnvironment.ApiPortFilePath,
+                port.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to write API port file: {ex.Message}");
+        }
     }
 
     private async Task ListenLoop(CancellationToken ct)
@@ -335,20 +385,26 @@ public sealed class HttpApiService : IDisposable
             text = r.FinalText,
             raw_text = r.RawText,
             app = r.AppProcessName,
+            app_name = r.AppName ?? r.AppProcessName,
+            app_process_name = r.AppProcessName,
+            app_bundle_id = (string?)null,
+            app_url = r.AppUrl,
             duration = r.DurationSeconds,
             language = r.Language,
             engine = r.EngineUsed,
             model = r.ModelUsed,
             profile = r.ProfileName,
-            words = r.WordCount
-        });
+            words = r.WordCount,
+            words_count = r.WordCount
+        }).ToList();
 
         return Json(new
         {
             total = records.Count,
             offset,
             limit,
-            records = paged
+            records = paged,
+            entries = paged
         });
     }
 
@@ -371,9 +427,11 @@ public sealed class HttpApiService : IDisposable
             is_enabled = p.IsEnabled,
             priority = p.Priority,
             process_names = p.ProcessNames,
+            bundle_identifiers = p.ProcessNames,
             url_patterns = p.UrlPatterns,
             input_language = p.InputLanguage,
             translation_target = p.TranslationTarget,
+            translation_target_language = p.TranslationTarget,
             selected_task = p.SelectedTask,
             model_override = p.TranscriptionModelOverride,
             prompt_action_id = p.PromptActionId
@@ -451,6 +509,8 @@ public sealed class HttpApiService : IDisposable
                 timestamp = session.Transcription.Timestamp,
                 app_name = session.Transcription.AppName,
                 app_process_name = session.Transcription.AppProcessName,
+                app_bundle_id = (string?)null,
+                app_url = session.Transcription.AppUrl,
                 duration = session.Transcription.Duration,
                 language = session.Transcription.Language,
                 engine = session.Transcription.Engine,
@@ -515,8 +575,8 @@ public sealed class HttpApiService : IDisposable
     {
         if (!_disposed)
         {
+            _settings.SettingsChanged -= OnSettingsChanged;
             Stop();
-            _cts?.Dispose();
             _disposed = true;
         }
     }

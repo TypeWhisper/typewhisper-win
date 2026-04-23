@@ -41,7 +41,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _autostartEnabled;
     [ObservableProperty] private string? _translationTargetLanguage;
     [ObservableProperty] private bool _apiServerEnabled;
-    [ObservableProperty] private int _apiServerPort = 9876;
+    [ObservableProperty] private int _apiServerPort = 8978;
     [ObservableProperty] private OverlayWidget _overlayLeftWidget = OverlayWidget.Waveform;
     [ObservableProperty] private OverlayWidget _overlayRightWidget = OverlayWidget.Timer;
     [ObservableProperty] private string _promptPaletteHotkey = "";

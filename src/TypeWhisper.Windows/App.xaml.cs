@@ -153,12 +153,9 @@ public partial class App : Application
         if (!audio.WarmUp())
             System.Diagnostics.Debug.WriteLine("No audio input device available at startup. Polling for device...");
 
-        // Start API server if enabled
-        if (settings.Current.ApiServerEnabled)
-        {
-            var api = _serviceProvider.GetRequiredService<HttpApiService>();
-            api.Start(settings.Current.ApiServerPort);
-        }
+        // Initialize API server so settings changes can start, stop, or restart it immediately.
+        var api = _serviceProvider.GetRequiredService<HttpApiService>();
+        api.ApplySettings(settings.Current);
 
         // Show onboarding if first run (skip when started minimized)
         if (!settings.Current.HasCompletedOnboarding && !Program.StartMinimized)

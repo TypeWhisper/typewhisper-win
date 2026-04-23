@@ -22,6 +22,7 @@ public sealed record ApiDictationTranscription(
     DateTime Timestamp,
     string? AppName,
     string? AppProcessName,
+    string? AppUrl,
     double Duration,
     string? Language,
     string Engine,
@@ -86,6 +87,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private string? _profileHotkeyOverrideId;
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
+    private string? _capturedUrl;
 
     // Live transcription
     private readonly StreamingHandler _streamingHandler;
@@ -343,6 +345,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 record.Timestamp,
                 record.AppName,
                 record.AppProcessName,
+                record.AppUrl,
                 record.DurationSeconds,
                 record.Language,
                 record.EngineUsed,
@@ -365,6 +368,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _activeProfile = null;
         _capturedProcessName = null;
         _capturedWindowTitle = null;
+        _capturedUrl = null;
     }
 
     private void ClearPartialPreview()
@@ -524,7 +528,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         // Capture active window context at recording start
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
         _capturedWindowTitle = _activeWindow.GetActiveWindowTitle();
-        var url = _activeWindow.GetBrowserUrl();
+        _capturedUrl = _activeWindow.GetBrowserUrl();
         if (_profileHotkeyOverrideId is not null)
         {
             _activeProfile = _profiles.Profiles.FirstOrDefault(p => p.Id == _profileHotkeyOverrideId);
@@ -532,7 +536,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
         else
         {
-            _activeProfile = _profiles.MatchProfile(_capturedProcessName, url);
+            _activeProfile = _profiles.MatchProfile(_capturedProcessName, _capturedUrl);
         }
 
         var desiredModelId = EffectiveModelId ?? _settings.Current.SelectedModelId;
@@ -707,6 +711,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _activeProfile,
             _capturedProcessName,
             _capturedWindowTitle,
+            _capturedUrl,
             EffectiveLanguage,
             EffectiveTask,
             _modelManager.ActiveModelId,
@@ -977,6 +982,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 timestamp,
                 job.CapturedWindowTitle,
                 job.CapturedProcessName,
+                job.CapturedUrl,
                 audioDuration,
                 detectedLanguage,
                 engineUsed,
@@ -1007,6 +1013,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     FinalText = finalText,
                     AppName = job.CapturedWindowTitle,
                     AppProcessName = job.CapturedProcessName,
+                    AppUrl = job.CapturedUrl,
                     DurationSeconds = audioDuration,
                     Language = detectedLanguage,
                     ProfileName = job.ActiveProfile?.Name,
@@ -1219,6 +1226,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         Profile? ActiveProfile,
         string? CapturedProcessName,
         string? CapturedWindowTitle,
+        string? CapturedUrl,
         string? EffectiveLanguage,
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,

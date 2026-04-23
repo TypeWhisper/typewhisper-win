@@ -15,6 +15,7 @@ public static class TypeWhisperEnvironment
     public static string PluginsPath => Path.Combine(_basePath, "Plugins");
     public static string AudioPath => Path.Combine(_basePath, "Audio");
     public static string PluginDataPath => Path.Combine(_basePath, "PluginData");
+    public static string ApiPortFilePath => Path.Combine(_basePath, "api-port");
     public static string SettingsFilePath => Path.Combine(_basePath, "settings.json");
     public static string DatabasePath => Path.Combine(DataPath, "typewhisper.db");
 
