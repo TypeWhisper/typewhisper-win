@@ -49,6 +49,8 @@ public class SettingsServiceTests : IDisposable
             WatchFolderLanguage = "en",
             WatchFolderEngineOverride = "mock",
             WatchFolderModelOverride = "tiny",
+            RecentTranscriptionsHotkey = "Ctrl+Alt+H",
+            CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             TranscribeShortQuietClipsAggressively = true
         };
 
@@ -68,7 +70,24 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("en", sut2.Current.WatchFolderLanguage);
         Assert.Equal("mock", sut2.Current.WatchFolderEngineOverride);
         Assert.Equal("tiny", sut2.Current.WatchFolderModelOverride);
+        Assert.Equal("Ctrl+Alt+H", sut2.Current.RecentTranscriptionsHotkey);
+        Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
+    }
+
+    [Fact]
+    public void Load_LegacySettings_UsesEmptyRecentTranscriptionHotkeyDefaults()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal("", sut.Current.RecentTranscriptionsHotkey);
+        Assert.Equal("", sut.Current.CopyLastTranscriptionHotkey);
     }
 
     [Fact]

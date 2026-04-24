@@ -117,6 +117,66 @@
 
                 </StackPanel>
             </Border>
+
+            <TextBlock Text="{loc:Str Shortcuts.RecentSection}"
+                       Style="{StaticResource NavGroupLabelStyle}"
+                       Margin="0,0,0,8"/>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                <StackPanel>
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Shortcuts.RecentTranscriptions}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.RecentTranscriptionsHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.RecentTranscriptionsHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Height="1"
+                            Background="#16FFFFFF"
+                            Margin="18,0"/>
+
+                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Shortcuts.CopyLastTranscription}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Shortcuts.CopyLastTranscriptionHint}"
+                                           Style="{StaticResource PageSubtitleStyle}"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <controls:HotkeyRecorderControl Grid.Column="1"
+                                                            Hotkey="{Binding Settings.CopyLastTranscriptionHotkey}"
+                                                            AllowModifierOnly="True"
+                                                            Width="240"
+                                                            VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

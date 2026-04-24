@@ -313,6 +313,15 @@ public class HotkeyInputTests
         Assert.False(HotkeyParser.Parse("Ctrl+UnknownKey", out _, out _));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Ctrl+UnknownKey")]
+    public void Parser_NormalizesInvalidRecentActionDefaultsToEmpty(string hotkey)
+    {
+        Assert.Equal("", HotkeyParser.Normalize(hotkey));
+    }
+
     private static HotkeyMatchStateMachine CreateStateMachine(uint modifiers, uint vk = 0)
     {
         var sut = new HotkeyMatchStateMachine();
