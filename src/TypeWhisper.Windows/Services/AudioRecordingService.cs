@@ -48,6 +48,7 @@ public sealed class AudioRecordingService : IDisposable
     public bool NormalizationEnabled { get; set; } = true;
     public bool IsRecording => _isRecording;
     public float PeakRmsLevel => _peakRmsLevel;
+    public float PreGainPeakRmsLevel => _preGainPeakRms;
     public float CurrentRmsLevel => _currentRmsLevel;
     public bool HasSpeechEnergy => _preGainPeakRms >= SpeechEnergyThreshold;
     public TimeSpan RecordingDuration => _isRecording ? DateTime.UtcNow - _recordingStartTime : TimeSpan.Zero;

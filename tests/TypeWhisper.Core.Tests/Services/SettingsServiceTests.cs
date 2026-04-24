@@ -48,7 +48,8 @@ public class SettingsServiceTests : IDisposable
             WatchFolderDeleteSource = true,
             WatchFolderLanguage = "en",
             WatchFolderEngineOverride = "mock",
-            WatchFolderModelOverride = "tiny"
+            WatchFolderModelOverride = "tiny",
+            TranscribeShortQuietClipsAggressively = true
         };
 
         sut.Save(settings);
@@ -67,6 +68,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("en", sut2.Current.WatchFolderLanguage);
         Assert.Equal("mock", sut2.Current.WatchFolderEngineOverride);
         Assert.Equal("tiny", sut2.Current.WatchFolderModelOverride);
+        Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
     }
 
     [Fact]

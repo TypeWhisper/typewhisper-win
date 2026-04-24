@@ -664,7 +664,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audio.SamplesAvailable -= OnSamplesAvailable;
 
         var samples = _audio.StopRecording();
-        _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = _audio.RecordingDuration.TotalSeconds });
+        var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
+        var rawDuration = samples is null ? 0 : samples.Length / 16000.0;
+        _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration });
         _durationTimer?.Stop();
         _durationTimer?.Dispose();
         _durationTimer = null;
@@ -688,20 +690,28 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             ? [streamingText]
             : [.. _partialSegments];
 
-        if (samples is null || samples.Length < 1600) // < 100ms
+        var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
+        var shortSpeechDecision = DictationShortSpeechPolicy.Classify(
+            rawDuration,
+            rawPeakRmsLevel,
+            partialSnapshot.Count > 0,
+            aggressiveShortQuietHandling);
+
+        if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
         {
             FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
             ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
             return;
         }
 
-        // Skip transcription if audio is essentially silence (prevents cloud model hallucinations)
-        if (!_audio.HasSpeechEnergy && partialSnapshot.Count == 0)
+        if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
         {
             FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
             ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
             return;
         }
+
+        samples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(samples ?? [], rawDuration);
 
         var apiSessionId = _activeApiDictationSessionId;
         if (apiSessionId is not null)
@@ -721,7 +731,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             EffectiveLanguage,
             EffectiveTask,
             _modelManager.ActiveModelId,
-            apiSessionId);
+            apiSessionId,
+            aggressiveShortQuietHandling);
 
         Interlocked.Increment(ref _pendingJobCount);
         await _jobChannel.Writer.WriteAsync(job);
@@ -790,7 +801,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 var result = await _modelManager.Engine.TranscribeAsync(
                     job.Samples, language, job.EffectiveTask, ct);
 
-                if (result.NoSpeechProbability is > 0.8f)
+                if (string.IsNullOrWhiteSpace(result.Text))
                 {
                     FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
                     await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -798,7 +809,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(result.Text))
+                if (result.NoSpeechProbability is > 0.8f && !job.TranscribeShortQuietClipsAggressively)
                 {
                     FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
                     await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1248,7 +1259,84 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         string? EffectiveLanguage,
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
-        Guid? ApiSessionId);
+        Guid? ApiSessionId,
+        bool TranscribeShortQuietClipsAggressively);
+}
+
+internal enum ShortSpeechDecision
+{
+    DiscardTooShort,
+    DiscardNoSpeech,
+    Transcribe
+}
+
+internal static class DictationShortSpeechPolicy
+{
+    private const int SampleRate = 16000;
+    private const double UltraShortTapSeconds = 0.04;
+    private const double ShortClipSeconds = 1.0;
+    private const double MinimumTranscriptionSeconds = 0.75;
+    private const double TailPaddingSeconds = 0.3;
+    private const float ShortClipQuietPeakThreshold = 0.003f;
+    private const float LongClipQuietPeakThreshold = 0.006f;
+
+    public static ShortSpeechDecision Classify(
+        double rawDuration,
+        float peakLevel,
+        bool hasConfirmedText,
+        bool transcribeShortQuietClipsAggressively = false)
+    {
+        if (rawDuration < UltraShortTapSeconds)
+            return ShortSpeechDecision.DiscardTooShort;
+
+        if (hasConfirmedText)
+            return ShortSpeechDecision.Transcribe;
+
+        if (rawDuration < ShortClipSeconds)
+        {
+            if (peakLevel < ShortClipQuietPeakThreshold)
+            {
+                return transcribeShortQuietClipsAggressively
+                    ? ShortSpeechDecision.Transcribe
+                    : ShortSpeechDecision.DiscardNoSpeech;
+            }
+
+            return ShortSpeechDecision.Transcribe;
+        }
+
+        if (peakLevel < LongClipQuietPeakThreshold)
+        {
+            return transcribeShortQuietClipsAggressively
+                ? ShortSpeechDecision.Transcribe
+                : ShortSpeechDecision.DiscardNoSpeech;
+        }
+
+        return ShortSpeechDecision.Transcribe;
+    }
+
+    public static float[] PadSamplesForFinalTranscription(float[] samples, double rawDuration)
+    {
+        if (rawDuration < MinimumTranscriptionSeconds)
+        {
+            var targetSampleCount = (int)(MinimumTranscriptionSeconds * SampleRate);
+            return PadToSampleCount(samples, targetSampleCount);
+        }
+
+        var tailPadCount = (int)(TailPaddingSeconds * SampleRate);
+        var paddedSamples = new float[samples.Length + tailPadCount];
+        Array.Copy(samples, paddedSamples, samples.Length);
+        return paddedSamples;
+    }
+
+    private static float[] PadToSampleCount(float[] samples, int targetSampleCount)
+    {
+        if (samples.Length >= targetSampleCount)
+            return samples;
+
+        var paddedSamples = new float[targetSampleCount];
+        Array.Copy(samples, paddedSamples, samples.Length);
+        return paddedSamples;
+    }
 }
 
 public enum DictationState
