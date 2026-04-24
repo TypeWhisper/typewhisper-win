@@ -15,6 +15,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
 {
     private const string WatchFolderDefaultSelectionId = "__default__";
 
+    private readonly IFileTranscriptionProcessor _processor;
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
     private readonly AudioFileService _audioFile;
@@ -23,15 +24,14 @@ public partial class FileTranscriptionViewModel : ObservableObject
     private readonly IPostProcessingPipeline _pipeline;
     private readonly WatchFolderService _watchFolder;
     private readonly SemaphoreSlim _transcriptionGate = new(1, 1);
+    private bool _isProcessingQueue;
     private bool _isLoadingFileTranscriptionSettings;
     private bool _isLoadingWatchSettings;
-
-    private CancellationTokenSource? _cts;
-    private TranscriptionResult? _lastResult;
 
     [ObservableProperty] private string? _filePath;
     [ObservableProperty] private string _statusText = Loc.Instance["FileTranscription.StatusDefault"];
     [ObservableProperty] private bool _isProcessing;
+    [ObservableProperty] private FileTranscriptionQueueItemViewModel? _selectedItem;
     [ObservableProperty] private string _resultText = "";
     [ObservableProperty] private bool _hasResult;
     [ObservableProperty] private string? _detectedLanguage;
@@ -54,6 +54,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
     [ObservableProperty] private bool _isWatchFolderRunning;
     [ObservableProperty] private string? _currentlyProcessingWatchFile;
 
+    public ObservableCollection<FileTranscriptionQueueItemViewModel> Items { get; } = [];
     public ObservableCollection<WatchFolderOutputFormatOption> WatchFolderOutputFormatOptions { get; } = [];
     public ObservableCollection<WatchFolderLanguageOption> WatchFolderLanguageOptions { get; } = [];
     public ObservableCollection<WatchFolderEngineOption> FileTranscriptionEngineOptions { get; } = [];
@@ -61,13 +62,13 @@ public partial class FileTranscriptionViewModel : ObservableObject
     public ObservableCollection<WatchFolderEngineOption> WatchFolderEngineOptions { get; } = [];
     public ObservableCollection<WatchFolderModelOption> WatchFolderModelOptions { get; } = [];
     public ObservableCollection<WatchFolderHistoryItem> WatchFolderHistory { get; } = [];
+    public bool HasItems => Items.Count > 0;
     public bool HasWatchFolderPath => !string.IsNullOrWhiteSpace(WatchFolderPath);
     public bool HasWatchFolderOutputPath => !string.IsNullOrWhiteSpace(WatchFolderOutputPath);
     public bool HasWatchFolderHistory => WatchFolderHistory.Count > 0;
     public bool CanChooseFileTranscriptionModel => !string.IsNullOrWhiteSpace(FileTranscriptionEngineOverride);
     public bool IsWatchFolderStopped => !IsWatchFolderRunning;
     public bool CanChooseWatchFolderModel => !string.IsNullOrWhiteSpace(WatchFolderEngineOverride);
-    public bool CanExportSubtitles => HasResult && _lastResult?.Segments is { Count: > 0 };
     public string WatchFolderOutputPathDisplay => HasWatchFolderOutputPath
         ? WatchFolderOutputPath!
         : Loc.Instance["WatchFolder.OutputSameAsWatch"];
@@ -85,6 +86,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
     }
 
     public FileTranscriptionViewModel(
+        IFileTranscriptionProcessor processor,
         ModelManagerService modelManager,
         ISettingsService settings,
         AudioFileService audioFile,
@@ -93,6 +95,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
         IPostProcessingPipeline pipeline,
         WatchFolderService watchFolder)
     {
+        _processor = processor;
         _modelManager = modelManager;
         _settings = settings;
         _audioFile = audioFile;
@@ -100,6 +103,34 @@ public partial class FileTranscriptionViewModel : ObservableObject
         _vocabularyBoosting = vocabularyBoosting;
         _pipeline = pipeline;
         _watchFolder = watchFolder;
+
+        Initialize(subscribeModelManager: true);
+    }
+
+    internal FileTranscriptionViewModel(
+        IFileTranscriptionProcessor processor,
+        ISettingsService settings,
+        WatchFolderService watchFolder)
+    {
+        _processor = processor;
+        _modelManager = null!;
+        _settings = settings;
+        _audioFile = null!;
+        _dictionary = null!;
+        _vocabularyBoosting = null!;
+        _pipeline = null!;
+        _watchFolder = watchFolder;
+
+        Initialize(subscribeModelManager: false);
+    }
+
+    private void Initialize(bool subscribeModelManager)
+    {
+        Items.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasItems));
+            RefreshStatusText();
+        };
 
         RefreshWatchFolderOptionLists();
         LoadFileTranscriptionSettings(_settings.Current);
@@ -112,139 +143,208 @@ public partial class FileTranscriptionViewModel : ObservableObject
             LoadFileTranscriptionSettings(s);
             LoadWatchFolderSettings(s);
         });
-        _modelManager.PluginManager.PluginStateChanged += (_, _) => InvokeOnUiThread(RefreshTranscriptionEnginesAndModels);
+        if (subscribeModelManager && _modelManager is not null)
+            _modelManager.PluginManager.PluginStateChanged += (_, _) => InvokeOnUiThread(RefreshTranscriptionEnginesAndModels);
         Loc.Instance.LanguageChanged += (_, _) => InvokeOnUiThread(OnLocalizationChanged);
     }
 
     [RelayCommand]
-    private async Task TranscribeFile(string? path)
+    private void AddFiles(IEnumerable<string>? paths)
     {
-        var filePath = path ?? FilePath;
-        if (string.IsNullOrEmpty(filePath)) return;
-
-        if (!AudioFileService.IsSupported(filePath))
-        {
-            StatusText = Loc.Instance["FileTranscription.UnsupportedFormat"];
+        if (paths is null)
             return;
-        }
 
-        FilePath = filePath;
-        IsProcessing = true;
-        HasResult = false;
-        SetLastResult(null);
-        ResultText = "";
-        StatusText = Loc.Instance["FileTranscription.LoadingAudio"];
-
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        var gateHeld = false;
-
-        try
+        var addedSupported = false;
+        foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            await _transcriptionGate.WaitAsync(_cts.Token);
-            gateHeld = true;
-
-            var engine = CleanSettingValue(FileTranscriptionEngineOverride);
-            var model = CleanSettingValue(FileTranscriptionModelOverride);
-            await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(engine, model, false, _cts.Token);
-
-            var samples = await _audioFile.LoadAudioAsync(filePath, _cts.Token);
-
-            StatusText = Loc.Instance["FileTranscription.Transcribing"];
-
-            var s = _settings.Current;
-            var language = s.Language == "auto" ? null : s.Language;
-            var task = s.TranscriptionTask == "translate"
-                ? TranscriptionTask.Translate
-                : TranscriptionTask.Transcribe;
-
-            var activeResult = await _modelManager.TranscribeActiveAsync(
-                samples,
-                language,
-                task,
-                prompt: null,
-                cancellationToken: _cts.Token);
-            var result = activeResult.Result;
-            var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
-            {
-                VocabularyBooster = GetVocabularyBooster(),
-                DictionaryCorrector = _dictionary.ApplyCorrections
-            }, _cts.Token);
-
-            _modelManager.ScheduleAutoUnload();
-            SetLastResult(result);
-
-            ResultText = pipelineResult.Text;
-            DetectedLanguage = result.DetectedLanguage;
-            ProcessingTime = result.ProcessingTime;
-            AudioDuration = result.Duration;
-            HasResult = true;
-            StatusText = Loc.Instance.GetString("FileTranscription.DoneFormat", result.ProcessingTime, result.Duration);
+            var status = AudioFileService.IsSupported(path)
+                ? FileTranscriptionQueueItemStatus.Queued
+                : FileTranscriptionQueueItemStatus.Unsupported;
+            var item = new FileTranscriptionQueueItemViewModel(path, status);
+            Items.Add(item);
+            SelectedItem ??= item;
+            addedSupported |= status == FileTranscriptionQueueItemStatus.Queued;
         }
-        catch (OperationCanceledException)
-        {
-            StatusText = Loc.Instance["Status.Cancelled"];
-        }
-        catch (Exception ex)
-        {
-            StatusText = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
-        }
-        finally
-        {
-            if (gateHeld)
-                _transcriptionGate.Release();
 
-            IsProcessing = false;
-        }
+        if (addedSupported)
+            _ = ProcessQueueAsync();
+    }
+
+    [RelayCommand]
+    private void TranscribeFile(string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(path))
+            AddFiles([path]);
     }
 
     [RelayCommand]
     private void Cancel()
     {
-        _cts?.Cancel();
+        foreach (var item in Items.Where(item => item.CanCancel).ToList())
+            CancelItem(item);
     }
 
     [RelayCommand]
-    private void CopyToClipboard()
+    private void CancelItem(FileTranscriptionQueueItemViewModel? item)
     {
-        if (!string.IsNullOrEmpty(ResultText))
-            System.Windows.Clipboard.SetText(ResultText);
-    }
+        if (item is null || !item.CanCancel)
+            return;
 
-    [RelayCommand(CanExecute = nameof(CanExportSubtitles))]
-    private void ExportSrt()
-    {
-        if (_lastResult?.Segments is not { Count: > 0 })
+        if (item.Status == FileTranscriptionQueueItemStatus.Queued)
         {
-            StatusText = Loc.Instance["FileTranscription.SubtitleUnavailable"];
+            SetStatus(item, FileTranscriptionQueueItemStatus.Cancelled, Loc.Instance["Status.Cancelled"]);
+            RefreshStatusText();
             return;
         }
 
-        ExportFile("srt", SubtitleExporter.ToSrt(_lastResult.Segments));
-    }
-
-    [RelayCommand(CanExecute = nameof(CanExportSubtitles))]
-    private void ExportWebVtt()
-    {
-        if (_lastResult?.Segments is not { Count: > 0 })
-        {
-            StatusText = Loc.Instance["FileTranscription.SubtitleUnavailable"];
-            return;
-        }
-
-        ExportFile("vtt", SubtitleExporter.ToWebVtt(_lastResult.Segments));
+        item.Cancellation?.Cancel();
     }
 
     [RelayCommand]
-    private void ExportText()
+    private void CopyItem(FileTranscriptionQueueItemViewModel? item)
     {
-        if (string.IsNullOrEmpty(ResultText)) return;
-        ExportFile("txt", ResultText);
+        if (item?.HasResult == true)
+            Clipboard.SetText(item.ResultText);
     }
 
-    private void ExportFile(string extension, string content)
+    [RelayCommand]
+    private void ExportItemSrt(FileTranscriptionQueueItemViewModel? item)
     {
-        var baseName = FilePath is not null ? Path.GetFileNameWithoutExtension(FilePath) : "transcription";
+        if (item?.RawResult?.Segments is not { Count: > 0 })
+            return;
+
+        ExportFile(item, "srt", SubtitleExporter.ToSrt(item.RawResult.Segments));
+    }
+
+    [RelayCommand]
+    private void ExportItemWebVtt(FileTranscriptionQueueItemViewModel? item)
+    {
+        if (item?.RawResult?.Segments is not { Count: > 0 })
+            return;
+
+        ExportFile(item, "vtt", SubtitleExporter.ToWebVtt(item.RawResult.Segments));
+    }
+
+    [RelayCommand]
+    private void ExportItemText(FileTranscriptionQueueItemViewModel? item)
+    {
+        if (item?.HasResult != true)
+            return;
+
+        ExportFile(item, "txt", item.ResultText);
+    }
+
+    public void HandleFileDrop(string[] files)
+    {
+        AddFiles(files);
+    }
+
+    private async Task ProcessQueueAsync()
+    {
+        if (_isProcessingQueue)
+            return;
+
+        _isProcessingQueue = true;
+        IsProcessing = true;
+
+        try
+        {
+            while (Items.FirstOrDefault(item => item.Status == FileTranscriptionQueueItemStatus.Queued) is { } item)
+            {
+                SelectedItem = item;
+                item.Cancellation = new CancellationTokenSource();
+                var gateHeld = false;
+
+                try
+                {
+                    await _transcriptionGate.WaitAsync(item.Cancellation.Token);
+                    gateHeld = true;
+
+                    var result = await _processor.ProcessAsync(
+                        item.FilePath,
+                        progress => SetStatus(item, progress.Status, progress.StatusText),
+                        BuildFileTranscriptionOptions(),
+                        item.Cancellation.Token);
+                    item.RawResult = result.RawResult;
+                    item.ResultText = result.ProcessedText;
+                    item.DetectedLanguage = result.RawResult.DetectedLanguage;
+                    item.ProcessingTime = result.RawResult.ProcessingTime;
+                    item.AudioDuration = result.RawResult.Duration;
+                    item.RefreshExportState();
+
+                    SetStatus(item, FileTranscriptionQueueItemStatus.Completed,
+                        Loc.Instance.GetString("FileTranscription.DoneFormat", result.RawResult.ProcessingTime, result.RawResult.Duration));
+                }
+                catch (OperationCanceledException)
+                {
+                    SetStatus(item, FileTranscriptionQueueItemStatus.Cancelled, Loc.Instance["Status.Cancelled"]);
+                }
+                catch (Exception ex)
+                {
+                    item.ErrorText = ex.Message;
+                    SetStatus(item, FileTranscriptionQueueItemStatus.Error,
+                        Loc.Instance.GetString("Status.ErrorFormat", ex.Message));
+                }
+                finally
+                {
+                    if (gateHeld)
+                        _transcriptionGate.Release();
+
+                    item.Cancellation?.Dispose();
+                    item.Cancellation = null;
+                }
+            }
+        }
+        finally
+        {
+            _isProcessingQueue = false;
+            IsProcessing = Items.Any(item => item.IsProcessing);
+            RefreshStatusText();
+        }
+    }
+
+    private FileTranscriptionProcessOptions BuildFileTranscriptionOptions()
+    {
+        var s = _settings.Current;
+        var language = s.Language == "auto" ? null : s.Language;
+        var task = s.TranscriptionTask == "translate"
+            ? TranscriptionTask.Translate
+            : TranscriptionTask.Transcribe;
+
+        return new FileTranscriptionProcessOptions(
+            CleanSettingValue(FileTranscriptionEngineOverride),
+            CleanSettingValue(FileTranscriptionModelOverride),
+            language,
+            task);
+    }
+
+    private void SetStatus(FileTranscriptionQueueItemViewModel item, FileTranscriptionQueueItemStatus status, string statusText)
+    {
+        item.Status = status;
+        item.StatusText = statusText;
+        RefreshStatusText();
+    }
+
+    private void RefreshStatusText()
+    {
+        var total = Items.Count;
+        if (total == 0)
+        {
+            StatusText = Loc.Instance["FileTranscription.StatusDefault"];
+            return;
+        }
+
+        var completed = Items.Count(item => item.Status == FileTranscriptionQueueItemStatus.Completed);
+        var failed = Items.Count(item => item.Status is FileTranscriptionQueueItemStatus.Error or FileTranscriptionQueueItemStatus.Unsupported);
+        var cancelled = Items.Count(item => item.Status == FileTranscriptionQueueItemStatus.Cancelled);
+        var queued = Items.Count(item => item.Status == FileTranscriptionQueueItemStatus.Queued);
+
+        StatusText = Loc.Instance.GetString("FileTranscription.QueueStatusFormat", completed, failed, cancelled, queued, total);
+    }
+
+    private void ExportFile(FileTranscriptionQueueItemViewModel item, string extension, string content)
+    {
+        var baseName = Path.GetFileNameWithoutExtension(item.FilePath);
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             FileName = $"{baseName}.{extension}",
@@ -254,23 +354,8 @@ public partial class FileTranscriptionViewModel : ObservableObject
         if (dialog.ShowDialog() == true)
         {
             File.WriteAllText(dialog.FileName, content);
-            StatusText = Loc.Instance.GetString("FileTranscription.ExportedFormat", Path.GetFileName(dialog.FileName));
-        }
-    }
-
-    private void SetLastResult(TranscriptionResult? result)
-    {
-        _lastResult = result;
-        OnPropertyChanged(nameof(CanExportSubtitles));
-        ExportSrtCommand.NotifyCanExecuteChanged();
-        ExportWebVttCommand.NotifyCanExecuteChanged();
-    }
-
-    public void HandleFileDrop(string[] files)
-    {
-        if (files.Length > 0 && AudioFileService.IsSupported(files[0]))
-        {
-            TranscribeFileCommand.Execute(files[0]);
+            item.StatusText = Loc.Instance.GetString("FileTranscription.ExportedFormat", Path.GetFileName(dialog.FileName));
+            StatusText = item.StatusText;
         }
     }
 
@@ -340,13 +425,6 @@ public partial class FileTranscriptionViewModel : ObservableObject
 
     partial void OnWatchFolderLanguageChanged(string value) =>
         SaveWatchFolderSettings(restartIfRunning: false);
-
-    partial void OnHasResultChanged(bool value)
-    {
-        OnPropertyChanged(nameof(CanExportSubtitles));
-        ExportSrtCommand.NotifyCanExecuteChanged();
-        ExportWebVttCommand.NotifyCanExecuteChanged();
-    }
 
     partial void OnFileTranscriptionEngineOverrideChanged(string? value)
     {
@@ -606,6 +684,13 @@ public partial class FileTranscriptionViewModel : ObservableObject
             new(WatchFolderDefaultSelectionId, Loc.Instance["FileTranscription.DefaultEngine"])
         };
 
+        if (_modelManager is null)
+        {
+            ReplaceCollection(FileTranscriptionEngineOptions, options);
+            RebuildFileTranscriptionModels();
+            return;
+        }
+
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines
             .DistinctBy(engine => engine.ProviderId, StringComparer.OrdinalIgnoreCase))
         {
@@ -625,6 +710,12 @@ public partial class FileTranscriptionViewModel : ObservableObject
         {
             new(WatchFolderDefaultSelectionId, Loc.Instance["FileTranscription.DefaultModel"])
         };
+
+        if (_modelManager is null)
+        {
+            ReplaceCollection(FileTranscriptionModelOptions, options);
+            return;
+        }
 
         var engine = string.IsNullOrWhiteSpace(FileTranscriptionEngineOverride)
             ? null
@@ -649,6 +740,13 @@ public partial class FileTranscriptionViewModel : ObservableObject
             new(WatchFolderDefaultSelectionId, Loc.Instance["WatchFolder.DefaultEngine"])
         };
 
+        if (_modelManager is null)
+        {
+            ReplaceCollection(WatchFolderEngineOptions, options);
+            RebuildWatchFolderModels();
+            return;
+        }
+
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines
             .DistinctBy(engine => engine.ProviderId, StringComparer.OrdinalIgnoreCase))
         {
@@ -668,6 +766,12 @@ public partial class FileTranscriptionViewModel : ObservableObject
         {
             new(WatchFolderDefaultSelectionId, Loc.Instance["WatchFolder.DefaultModel"])
         };
+
+        if (_modelManager is null)
+        {
+            ReplaceCollection(WatchFolderModelOptions, options);
+            return;
+        }
 
         var engine = string.IsNullOrWhiteSpace(WatchFolderEngineOverride)
             ? null

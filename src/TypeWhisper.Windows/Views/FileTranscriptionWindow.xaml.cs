@@ -35,12 +35,13 @@ public partial class FileTranscriptionWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
+            Multiselect = true,
             Filter = "Audio/Video|*.wav;*.mp3;*.m4a;*.aac;*.ogg;*.flac;*.wma;*.mp4;*.mkv;*.avi;*.mov;*.webm|All Files|*.*"
         };
 
         if (dialog.ShowDialog() == true)
         {
-            _viewModel.TranscribeFileCommand.Execute(dialog.FileName);
+            _viewModel.AddFilesCommand.Execute(dialog.FileNames);
         }
     }
 }

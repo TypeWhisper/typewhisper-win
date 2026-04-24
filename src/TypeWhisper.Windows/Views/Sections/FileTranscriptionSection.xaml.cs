@@ -131,6 +131,7 @@ public partial class FileTranscriptionSection : UserControl
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
+            Multiselect = true,
             Filter = "Audio/Video|*.wav;*.mp3;*.m4a;*.aac;*.ogg;*.flac;*.wma;*.mp4;*.mkv;*.avi;*.mov;*.webm|All Files|*.*"
         };
 
@@ -140,6 +141,6 @@ public partial class FileTranscriptionSection : UserControl
             : dialog.ShowDialog();
 
         if (accepted == true)
-            _viewModel?.FileTranscription.TranscribeFileCommand.Execute(dialog.FileName);
+            _viewModel?.FileTranscription.AddFilesCommand.Execute(dialog.FileNames);
     }
 }

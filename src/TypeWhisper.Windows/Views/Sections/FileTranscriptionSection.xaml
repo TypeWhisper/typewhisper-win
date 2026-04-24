@@ -133,53 +133,118 @@
             </StackPanel>
 
             <StackPanel Style="{StaticResource SettingsSectionStyle}">
-                <TextBlock Text="{loc:Str FileTranscription.Result}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <TextBlock Text="{loc:Str FileTranscription.Queue}" Style="{StaticResource SettingsGroupTitleStyle}"/>
                 <Border Style="{StaticResource SettingsGroupPanelStyle}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="1"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
-                            <DockPanel>
-                                <StackPanel DockPanel.Dock="Right"
-                                            Orientation="Horizontal"
-                                            Visibility="{Binding FileTranscription.HasResult, Converter={StaticResource BoolToVis}}">
-                                    <Button Content="{loc:Str FileTranscription.Copy}" Command="{Binding FileTranscription.CopyToClipboardCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"/>
-                                    <Button Content="{loc:Str FileTranscription.TextExportShort}" Command="{Binding FileTranscription.ExportTextCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"/>
-                                    <Button Content="SRT"
-                                            Command="{Binding FileTranscription.ExportSrtCommand}"
-                                            ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
-                                            ToolTipService.ShowOnDisabled="True"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Margin="0,0,8,0"/>
-                                    <Button Content="WebVTT"
-                                            Command="{Binding FileTranscription.ExportWebVttCommand}"
-                                            ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
-                                            ToolTipService.ShowOnDisabled="True"
-                                            Style="{StaticResource SecondaryButtonStyle}"/>
-                                </StackPanel>
-                                <TextBlock Style="{StaticResource HintStyle}" Margin="0">
-                                    <Run Text="{loc:Str FileTranscription.DetectedLanguage}"/>
-                                    <Run Text="{Binding FileTranscription.DetectedLanguage}"/>
-                                </TextBlock>
-                            </DockPanel>
+                    <StackPanel>
+                        <Border Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding FileTranscription.StatusText}"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0"/>
+                                <Button Grid.Column="1"
+                                        Content="{loc:Str FileTranscription.CancelAll}"
+                                        Command="{Binding FileTranscription.CancelCommand}"
+                                        Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Padding="14,8"/>
+                            </Grid>
                         </Border>
+                        <Border Height="1" Background="#18FFFFFF"/>
+                        <ListBox ItemsSource="{Binding FileTranscription.Items}"
+                                 SelectedItem="{Binding FileTranscription.SelectedItem, Mode=TwoWay}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource QueueListBoxItemStyle}"
+                                 Visibility="{Binding FileTranscription.HasItems, Converter={StaticResource BoolToVis}}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
 
-                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+                                            <StackPanel Margin="0,0,14,0">
+                                                <TextBlock Text="{Binding FileName}"
+                                                           Style="{StaticResource SettingsRowLabelStyle}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding StatusText}"
+                                                           Style="{StaticResource HintStyle}"
+                                                           Margin="0,5,0,0"/>
+                                            </StackPanel>
 
-                        <Border Grid.Row="2" Padding="18">
-                            <TextBox Text="{Binding FileTranscription.ResultText, Mode=OneWay}"
-                                     IsReadOnly="True"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto"
-                                     MinHeight="260"
-                                     Style="{StaticResource InputTextBoxStyle}"/>
-                        </Border>
-                    </Grid>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button Content="{loc:Str FileTranscription.Copy}"
+                                                        Command="{Binding DataContext.FileTranscription.CopyItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding HasResult}"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Margin="0,0,8,0"/>
+                                                <Button Content="{loc:Str FileTranscription.TextExportShort}"
+                                                        Command="{Binding DataContext.FileTranscription.ExportItemTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding HasResult}"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Margin="0,0,8,0"/>
+                                                <Button Content="SRT"
+                                                        Command="{Binding DataContext.FileTranscription.ExportItemSrtCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding CanExportSubtitles}"
+                                                        ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
+                                                        ToolTipService.ShowOnDisabled="True"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Margin="0,0,8,0"/>
+                                                <Button Content="WebVTT"
+                                                        Command="{Binding DataContext.FileTranscription.ExportItemWebVttCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding CanExportSubtitles}"
+                                                        ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
+                                                        ToolTipService.ShowOnDisabled="True"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Margin="0,0,8,0"/>
+                                                <Button Content="{loc:Str FileTranscription.Cancel}"
+                                                        Command="{Binding DataContext.FileTranscription.CancelItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding CanCancel}"
+                                                        Style="{StaticResource SecondaryButtonStyle}"/>
+                                            </StackPanel>
+
+                                            <ProgressBar Grid.Row="1"
+                                                         Grid.ColumnSpan="2"
+                                                         IsIndeterminate="{Binding IsProcessing}"
+                                                         Height="4"
+                                                         Margin="0,10,0,0"
+                                                         Visibility="{Binding IsProcessing, Converter={StaticResource BoolToVis}}"/>
+
+                                            <TextBox Grid.Row="2"
+                                                     Grid.ColumnSpan="2"
+                                                     Text="{Binding ResultText, Mode=OneWay}"
+                                                     IsReadOnly="True"
+                                                     TextWrapping="Wrap"
+                                                     AcceptsReturn="True"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     MinHeight="120"
+                                                     Margin="0,10,0,0"
+                                                     Style="{StaticResource InputTextBoxStyle}"
+                                                     Visibility="{Binding HasResult, Converter={StaticResource BoolToVis}}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
                 </Border>
             </StackPanel>
 

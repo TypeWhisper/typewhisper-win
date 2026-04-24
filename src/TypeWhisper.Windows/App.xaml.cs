@@ -313,6 +313,7 @@ public partial class App : Application
 
         // Model manager (plugin-based)
         services.AddSingleton<ModelManagerService>();
+        services.AddSingleton<IFileTranscriptionProcessor, FileTranscriptionProcessor>();
 
         // Audio
         services.AddSingleton<AudioRecordingService>();
@@ -351,10 +352,10 @@ public partial class App : Application
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
         services.AddSingleton<SoundService>();
         services.AddSingleton<HttpApiService>();
+        services.AddSingleton<WatchFolderService>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<UpdateService>();
         services.AddSingleton<PromptProcessingService>();
-        services.AddSingleton<WatchFolderService>();
 
         // License
         services.AddSingleton<LicenseService>();
