@@ -1,6 +1,7 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.FileTranscriptionSection"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
              xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
     <UserControl.Resources>
@@ -53,8 +54,6 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="1"/>
-                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -76,12 +75,58 @@
                             </Grid>
                         </Border>
 
+                        <ProgressBar Grid.Row="0"
+                                     IsIndeterminate="{Binding FileTranscription.IsProcessing}"
+                                     Height="3"
+                                     VerticalAlignment="Bottom"
+                                     Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str FileTranscription.ModelSettings}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str FileTranscription.Engine}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.FileTranscriptionEngineOptions}"
+                                          SelectedValue="{Binding FileTranscription.FileTranscriptionEngineSelection}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
+                        </Border>
+
                         <Border Grid.Row="1" Background="#18FFFFFF"/>
 
                         <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
-                            <ProgressBar IsIndeterminate="{Binding FileTranscription.IsProcessing}"
-                                         Height="4"
-                                         Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str FileTranscription.Model}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.FileTranscriptionModelOptions}"
+                                          SelectedValue="{Binding FileTranscription.FileTranscriptionModelSelection}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          IsEnabled="{Binding FileTranscription.CanChooseFileTranscriptionModel}"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
                         </Border>
                     </Grid>
                 </Border>
@@ -104,8 +149,17 @@
                                             Visibility="{Binding FileTranscription.HasResult, Converter={StaticResource BoolToVis}}">
                                     <Button Content="{loc:Str FileTranscription.Copy}" Command="{Binding FileTranscription.CopyToClipboardCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"/>
                                     <Button Content="{loc:Str FileTranscription.TextExportShort}" Command="{Binding FileTranscription.ExportTextCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"/>
-                                    <Button Content="SRT" Command="{Binding FileTranscription.ExportSrtCommand}" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0"/>
-                                    <Button Content="WebVTT" Command="{Binding FileTranscription.ExportWebVttCommand}" Style="{StaticResource SecondaryButtonStyle}"/>
+                                    <Button Content="SRT"
+                                            Command="{Binding FileTranscription.ExportSrtCommand}"
+                                            ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
+                                            ToolTipService.ShowOnDisabled="True"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="WebVTT"
+                                            Command="{Binding FileTranscription.ExportWebVttCommand}"
+                                            ToolTip="{loc:Str FileTranscription.SubtitleUnavailable}"
+                                            ToolTipService.ShowOnDisabled="True"
+                                            Style="{StaticResource SecondaryButtonStyle}"/>
                                 </StackPanel>
                                 <TextBlock Style="{StaticResource HintStyle}" Margin="0">
                                     <Run Text="{loc:Str FileTranscription.DetectedLanguage}"/>
@@ -126,6 +180,296 @@
                                      Style="{StaticResource InputTextBoxStyle}"/>
                         </Border>
                     </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str WatchFolder.Title}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,14,0">
+                                    <TextBlock Text="{loc:Str WatchFolder.WatchFolder}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{Binding FileTranscription.WatchFolderPath, TargetNullValue=''}"
+                                               Style="{StaticResource HintStyle}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="{loc:Str WatchFolder.SelectFolder}"
+                                        Click="OnSelectWatchFolder"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Padding="14,8"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,14,0">
+                                    <TextBlock Text="{loc:Str WatchFolder.OutputFolder}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{Binding FileTranscription.WatchFolderOutputPathDisplay}"
+                                               Style="{StaticResource HintStyle}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="{loc:Str WatchFolder.Clear}"
+                                            Command="{Binding FileTranscription.ClearWatchFolderOutputPathCommand}"
+                                            Visibility="{Binding FileTranscription.HasWatchFolderOutputPath, Converter={StaticResource BoolToVis}}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="{loc:Str WatchFolder.SelectFolder}"
+                                            Click="OnSelectWatchFolderOutput"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.OutputFormat}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.WatchFolderOutputFormatOptions}"
+                                          SelectedValue="{Binding FileTranscription.WatchFolderOutputFormat}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="5" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.AutoStart}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding FileTranscription.WatchFolderAutoStart}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="7" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.DeleteSource}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding FileTranscription.WatchFolderDeleteSource}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="9" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="10" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,14,0">
+                                    <TextBlock Text="{Binding FileTranscription.WatchFolderStatusText}"
+                                               Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str WatchFolder.Description}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="{loc:Str WatchFolder.Start}"
+                                            Command="{Binding FileTranscription.StartWatchFolderCommand}"
+                                            IsEnabled="{Binding FileTranscription.HasWatchFolderPath}"
+                                            Visibility="{Binding FileTranscription.IsWatchFolderStopped, Converter={StaticResource BoolToVis}}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="{loc:Str WatchFolder.Stop}"
+                                            Command="{Binding FileTranscription.StopWatchFolderCommand}"
+                                            Visibility="{Binding FileTranscription.IsWatchFolderRunning, Converter={StaticResource BoolToVis}}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str WatchFolder.ModelSettings}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.Engine}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.WatchFolderEngineOptions}"
+                                          SelectedValue="{Binding FileTranscription.WatchFolderEngineSelection}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.Model}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.WatchFolderModelOptions}"
+                                          SelectedValue="{Binding FileTranscription.WatchFolderModelSelection}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          IsEnabled="{Binding FileTranscription.CanChooseWatchFolderModel}"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.Language}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding FileTranscription.WatchFolderLanguageOptions}"
+                                          SelectedValue="{Binding FileTranscription.WatchFolderLanguage}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str WatchFolder.History}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <StackPanel>
+                        <Border Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str WatchFolder.HistoryHint}" Style="{StaticResource HintStyle}" Margin="0"/>
+                                <Button Grid.Column="1"
+                                        Content="{loc:Str WatchFolder.ClearHistory}"
+                                        Command="{Binding FileTranscription.ClearWatchFolderHistoryCommand}"
+                                        Visibility="{Binding FileTranscription.HasWatchFolderHistory, Converter={StaticResource BoolToVis}}"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Padding="14,8"/>
+                            </Grid>
+                        </Border>
+                        <Border Height="1" Background="#18FFFFFF"/>
+                        <ItemsControl ItemsSource="{Binding FileTranscription.WatchFolderHistory}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingsRowBorderStyle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="38"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Foreground="{StaticResource SuccessBrush}"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Top">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="OK"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Success}" Value="False">
+                                                                <Setter Property="Text" Value="!"/>
+                                                                <Setter Property="Foreground" Value="#F87171"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding FileName}"
+                                                           Style="{StaticResource SettingsRowLabelStyle}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding OutputPath}"
+                                                           Style="{StaticResource HintStyle}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Margin="0,5,0,0"/>
+                                                <TextBlock Text="{Binding ErrorMessage}"
+                                                           Foreground="#F87171"
+                                                           FontSize="12"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </StackPanel>

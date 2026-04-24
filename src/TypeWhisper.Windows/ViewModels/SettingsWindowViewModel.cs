@@ -131,8 +131,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenFileImporter()
     {
-        PendingFileImporterRequestId++;
         Open(SettingsRoute.FileTranscription);
+        PendingFileImporterRequestId++;
     }
 
     [RelayCommand]

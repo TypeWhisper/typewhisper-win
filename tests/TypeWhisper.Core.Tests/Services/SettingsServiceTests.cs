@@ -38,7 +38,17 @@ public class SettingsServiceTests : IDisposable
         {
             Language = "de",
             HasCompletedOnboarding = true,
-            VocabularyBoostingEnabled = true
+            VocabularyBoostingEnabled = true,
+            FileTranscriptionEngineOverride = "groq",
+            FileTranscriptionModelOverride = "whisper-large-v3",
+            WatchFolderPath = @"C:\Watch",
+            WatchFolderOutputPath = @"C:\Output",
+            WatchFolderOutputFormat = "srt",
+            WatchFolderAutoStart = true,
+            WatchFolderDeleteSource = true,
+            WatchFolderLanguage = "en",
+            WatchFolderEngineOverride = "mock",
+            WatchFolderModelOverride = "tiny"
         };
 
         sut.Save(settings);
@@ -47,6 +57,16 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("de", sut2.Current.Language);
         Assert.True(sut2.Current.HasCompletedOnboarding);
         Assert.True(sut2.Current.VocabularyBoostingEnabled);
+        Assert.Equal("groq", sut2.Current.FileTranscriptionEngineOverride);
+        Assert.Equal("whisper-large-v3", sut2.Current.FileTranscriptionModelOverride);
+        Assert.Equal(@"C:\Watch", sut2.Current.WatchFolderPath);
+        Assert.Equal(@"C:\Output", sut2.Current.WatchFolderOutputPath);
+        Assert.Equal("srt", sut2.Current.WatchFolderOutputFormat);
+        Assert.True(sut2.Current.WatchFolderAutoStart);
+        Assert.True(sut2.Current.WatchFolderDeleteSource);
+        Assert.Equal("en", sut2.Current.WatchFolderLanguage);
+        Assert.Equal("mock", sut2.Current.WatchFolderEngineOverride);
+        Assert.Equal("tiny", sut2.Current.WatchFolderModelOverride);
     }
 
     [Fact]

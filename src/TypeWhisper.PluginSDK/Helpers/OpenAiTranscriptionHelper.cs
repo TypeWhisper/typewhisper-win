@@ -24,6 +24,14 @@ public static class OpenAiTranscriptionHelper
     /// <param name="responseFormat">Response format (e.g. "verbose_json", "json", "text").</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Transcription result with text, detected language, and duration.</returns>
+    public static Task<PluginTranscriptionResult> TranscribeAsync(
+        HttpClient httpClient, string baseUrl, string apiKey,
+        string model, byte[] wavAudio, string? language, bool translate,
+        string responseFormat, CancellationToken ct) =>
+        TranscribeAsync(
+            httpClient, baseUrl, apiKey, model, wavAudio, language, translate,
+            responseFormat, ct, prompt: null);
+
     public static async Task<PluginTranscriptionResult> TranscribeAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, byte[] wavAudio, string? language, bool translate,

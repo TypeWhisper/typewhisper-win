@@ -16,6 +16,10 @@ public record AppSettings
     // Model
     public string? SelectedModelId { get; init; }
 
+    // Manual file transcription
+    public string? FileTranscriptionEngineOverride { get; init; }
+    public string? FileTranscriptionModelOverride { get; init; }
+
     // Cloud Provider API Keys
     public string? GroqApiKey { get; init; }
     public string? OpenAiApiKey { get; init; }
@@ -42,6 +46,16 @@ public record AppSettings
     // Translation
     public string TranscriptionTask { get; init; } = "transcribe";
     public string? TranslationTargetLanguage { get; init; }
+
+    // Watch folder automation
+    public string? WatchFolderPath { get; init; }
+    public string? WatchFolderOutputPath { get; init; }
+    public string WatchFolderOutputFormat { get; init; } = "md";
+    public bool WatchFolderAutoStart { get; init; }
+    public bool WatchFolderDeleteSource { get; init; }
+    public string WatchFolderLanguage { get; init; } = "auto";
+    public string? WatchFolderEngineOverride { get; init; }
+    public string? WatchFolderModelOverride { get; init; }
 
     // API Server
     public bool ApiServerEnabled { get; init; }
