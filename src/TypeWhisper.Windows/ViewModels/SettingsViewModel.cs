@@ -24,6 +24,8 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _pushToTalkHotkey = "";
     [ObservableProperty] private string _toggleOnlyHotkey = "";
     [ObservableProperty] private string _holdOnlyHotkey = "";
+    [ObservableProperty] private string _recentTranscriptionsHotkey = "";
+    [ObservableProperty] private string _copyLastTranscriptionHotkey = "";
     [ObservableProperty] private string _language = "auto";
     [ObservableProperty] private bool _autoPaste = true;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
@@ -285,6 +287,8 @@ public partial class SettingsViewModel : ObservableObject
             ApiServerPort = ApiServerPort,
             ToggleOnlyHotkey = HotkeyParser.Normalize(ToggleOnlyHotkey),
             HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
+            RecentTranscriptionsHotkey = HotkeyParser.Normalize(RecentTranscriptionsHotkey),
+            CopyLastTranscriptionHotkey = HotkeyParser.Normalize(CopyLastTranscriptionHotkey),
             AudioDuckingEnabled = AudioDuckingEnabled,
             AudioDuckingLevel = AudioDuckingLevel,
             PauseMediaDuringRecording = PauseMediaDuringRecording,
@@ -353,6 +357,8 @@ public partial class SettingsViewModel : ObservableObject
         ApiServerPort = s.ApiServerPort;
         ToggleOnlyHotkey = HotkeyParser.Normalize(s.ToggleOnlyHotkey);
         HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
+        RecentTranscriptionsHotkey = HotkeyParser.Normalize(s.RecentTranscriptionsHotkey);
+        CopyLastTranscriptionHotkey = HotkeyParser.Normalize(s.CopyLastTranscriptionHotkey);
         AudioDuckingEnabled = s.AudioDuckingEnabled;
         AudioDuckingLevel = s.AudioDuckingLevel;
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;

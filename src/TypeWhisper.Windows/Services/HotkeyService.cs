@@ -8,7 +8,7 @@ using TypeWhisper.Windows.Native;
 namespace TypeWhisper.Windows.Services;
 
 /// <summary>
-/// Manages three independent hotkeys for dictation:
+/// Manages independent hotkeys for dictation and standalone actions:
 /// - Hybrid: short press = toggle, long hold = push-to-talk
 /// - Toggle-only: press to start, press again to stop
 /// - Hold-only: hold to record, release to stop
@@ -23,6 +23,8 @@ public sealed class HotkeyService : IDisposable
     private readonly KeyboardHook _toggleOnlyHook;
     private readonly KeyboardHook _holdOnlyHook;
     private readonly KeyboardHook _cancelHook;
+    private readonly KeyboardHook _recentTranscriptionsHook;
+    private readonly KeyboardHook _copyLastTranscriptionHook;
     private readonly List<(KeyboardHook Hook, string WorkflowId)> _workflowHooks = [];
 
     private bool _disposed;
@@ -32,6 +34,8 @@ public sealed class HotkeyService : IDisposable
     public event EventHandler? DictationStartRequested;
     public event EventHandler? DictationStopRequested;
     public event EventHandler? CancelRequested;
+    public event EventHandler? RecentTranscriptionsRequested;
+    public event EventHandler? CopyLastTranscriptionRequested;
     public event EventHandler<string>? WorkflowDictationRequested;
     public HotkeyMode? CurrentMode { get; private set; }
 
@@ -76,6 +80,12 @@ public sealed class HotkeyService : IDisposable
         _cancelHook = new KeyboardHook();
         _cancelHook.SetHotkey("Escape");
         _cancelHook.KeyDown += OnCancelKeyDown;
+
+        _recentTranscriptionsHook = new KeyboardHook();
+        _recentTranscriptionsHook.KeyDown += OnRecentTranscriptionsKeyDown;
+
+        _copyLastTranscriptionHook = new KeyboardHook();
+        _copyLastTranscriptionHook.KeyDown += OnCopyLastTranscriptionKeyDown;
     }
 
     public void Initialize(Window window)
@@ -109,6 +119,18 @@ public sealed class HotkeyService : IDisposable
         {
             _holdOnlyHook.SetHotkey(s.HoldOnlyHotkey);
             _holdOnlyHook.Start();
+        }
+
+        if (!string.IsNullOrWhiteSpace(s.RecentTranscriptionsHotkey))
+        {
+            _recentTranscriptionsHook.SetHotkey(s.RecentTranscriptionsHotkey);
+            _recentTranscriptionsHook.Start();
+        }
+
+        if (!string.IsNullOrWhiteSpace(s.CopyLastTranscriptionHotkey))
+        {
+            _copyLastTranscriptionHook.SetHotkey(s.CopyLastTranscriptionHotkey);
+            _copyLastTranscriptionHook.Start();
         }
 
         _cancelHook.Start();
@@ -162,6 +184,8 @@ public sealed class HotkeyService : IDisposable
         _toggleOnlyHook.IsEnabled = _isEnabled;
         _holdOnlyHook.IsEnabled = _isEnabled;
         _cancelHook.IsEnabled = _isEnabled && IsCancelShortcutEnabled;
+        _recentTranscriptionsHook.IsEnabled = _isEnabled;
+        _copyLastTranscriptionHook.IsEnabled = _isEnabled;
 
         foreach (var (hook, _) in _workflowHooks)
             hook.IsEnabled = _isEnabled;
@@ -272,6 +296,18 @@ public sealed class HotkeyService : IDisposable
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnRecentTranscriptionsKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled) return;
+        RecentTranscriptionsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnCopyLastTranscriptionKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled) return;
+        CopyLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- Common ---
 
     private void StopAllHooks()
@@ -280,6 +316,8 @@ public sealed class HotkeyService : IDisposable
         _toggleOnlyHook.Stop();
         _holdOnlyHook.Stop();
         _cancelHook.Stop();
+        _recentTranscriptionsHook.Stop();
+        _copyLastTranscriptionHook.Stop();
         _isActive = false;
         CurrentMode = null;
     }
@@ -303,6 +341,8 @@ public sealed class HotkeyService : IDisposable
             _toggleOnlyHook.Dispose();
             _holdOnlyHook.Dispose();
             _cancelHook.Dispose();
+            _recentTranscriptionsHook.Dispose();
+            _copyLastTranscriptionHook.Dispose();
             _disposed = true;
         }
     }

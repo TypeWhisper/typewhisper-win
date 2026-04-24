@@ -123,6 +123,10 @@ public partial class App : Application
         _trayIcon.Initialize();
         _trayIcon.ShowSettingsRequested += (_, _) => ShowSettingsWindow();
         _trayIcon.ShowFileTranscriptionRequested += (_, _) => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true);
+        _trayIcon.ShowRecentTranscriptionsRequested += (_, _) =>
+            _serviceProvider.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette();
+        _trayIcon.CopyLastTranscriptionRequested += async (_, _) =>
+            await _serviceProvider.GetRequiredService<DictationViewModel>().CopyLastTranscriptionToClipboardAsync();
         _trayIcon.ReadBackLastTranscriptionRequested += (_, _) =>
             _serviceProvider.GetRequiredService<DictationViewModel>().ReadBackLastTranscription();
         _trayIcon.ExitRequested += (_, _) => Shutdown();
@@ -325,6 +329,7 @@ public partial class App : Application
             new ErrorLogService(dataPath));
         services.AddSingleton<IHistoryService>(
             new HistoryService(Path.Combine(dataPath, "history.json"), TypeWhisperEnvironment.AudioPath));
+        services.AddSingleton<RecentTranscriptionStore>();
         services.AddSingleton<IDictionaryService>(
             new DictionaryService(Path.Combine(dataPath, "dictionary.json")));
         services.AddSingleton<IVocabularyBoostingService, VocabularyBoostingService>();
@@ -345,6 +350,7 @@ public partial class App : Application
         services.AddSingleton<HistoryRetentionCoordinator>();
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
+        services.AddSingleton<RecentTranscriptionsService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
         services.AddSingleton<WindowsAppDiscoveryService>();
         services.AddSingleton<SoundService>();

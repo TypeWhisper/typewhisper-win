@@ -15,6 +15,8 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? ShowSettingsRequested;
     public event EventHandler? ShowFileTranscriptionRequested;
+    public event EventHandler? ShowRecentTranscriptionsRequested;
+    public event EventHandler? CopyLastTranscriptionRequested;
     public event EventHandler? ReadBackLastTranscriptionRequested;
     public event EventHandler? UpdateCheckRequested;
     public event EventHandler? ExitRequested;
@@ -63,6 +65,12 @@ public sealed class TrayIconService : IDisposable
         var fileItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.TranscribeFile"] };
         fileItem.Click += (_, _) => ShowFileTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
+        var recentItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.RecentTranscriptions"] };
+        recentItem.Click += (_, _) => ShowRecentTranscriptionsRequested?.Invoke(this, EventArgs.Empty);
+
+        var copyLastItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.CopyLastTranscription"] };
+        copyLastItem.Click += (_, _) => CopyLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
+
         var readBackItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.ReadBackLast"] };
         readBackItem.Click += (_, _) => ReadBackLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
@@ -76,6 +84,8 @@ public sealed class TrayIconService : IDisposable
 
         menu.Items.Add(settingsItem);
         menu.Items.Add(fileItem);
+        menu.Items.Add(recentItem);
+        menu.Items.Add(copyLastItem);
         menu.Items.Add(readBackItem);
         menu.Items.Add(updateItem);
         menu.Items.Add(separatorItem);

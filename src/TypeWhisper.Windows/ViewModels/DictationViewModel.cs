@@ -65,6 +65,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly IPostProcessingPipeline _pipeline;
     private readonly IErrorLogService _errorLog;
     private readonly SpeechFeedbackService _speechFeedback;
+    private readonly RecentTranscriptionsService _recentTranscriptions;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -134,7 +135,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         PromptProcessingService promptProcessing,
         IPostProcessingPipeline pipeline,
         IErrorLogService errorLog,
-        SpeechFeedbackService speechFeedback)
+        SpeechFeedbackService speechFeedback,
+        RecentTranscriptionsService recentTranscriptions)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -156,6 +158,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _pipeline = pipeline;
         _errorLog = errorLog;
         _speechFeedback = speechFeedback;
+        _recentTranscriptions = recentTranscriptions;
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
         _streamingHandler.OnPartialTextUpdate = text =>
@@ -207,11 +210,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
             await AbortActiveOperation());
+        _hotkey.RecentTranscriptionsRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(ShowRecentTranscriptionsPalette);
+        _hotkey.CopyLastTranscriptionRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await CopyLastTranscriptionToClipboardAsync());
         _hotkey.WorkflowDictationRequested += (_, workflowId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             _workflowHotkeyOverrideId = workflowId;
             await StartRecording();
         });
+        _recentTranscriptions.FeedbackRequested += (message, isError) =>
+            Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
     }
 
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
@@ -275,6 +283,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         _speechFeedback.ReadBack(LastTranscribedText, LastTranscriptionLanguage);
     }
+
+    public void ShowRecentTranscriptionsPalette()
+    {
+        if (State != DictationState.Idle)
+            return;
+
+        _recentTranscriptions.TogglePalette();
+    }
+
+    public Task CopyLastTranscriptionToClipboardAsync() =>
+        _recentTranscriptions.CopyLastTranscriptionToClipboardAsync();
 
     // Effective settings: workflow override -> global setting
     private string? EffectiveLanguage =>
@@ -463,6 +482,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             ShowFeedback = false;
 
         ShowFeedback = true;
+    }
+
+    private void ShowRecentTranscriptionFeedback(string text, bool isError)
+    {
+        if (_isRecording || _pendingJobCount > 0)
+        {
+            ShowTransientFeedback(text, isError);
+            return;
+        }
+
+        ApplyTransientIdleFeedback(text, isError);
     }
 
     private void ResetSessionToIdle(bool clearFeedback = false, bool forceHotkeyStop = false)
@@ -989,11 +1019,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var timestamp = DateTime.UtcNow;
             var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
             var wordsCount = CountWords(finalText);
+            var recordId = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 LastTranscribedText = finalText;
                 LastTranscriptionLanguage = detectedLanguage;
             });
+            _recentTranscriptions.RecordTranscription(
+                recordId,
+                finalText,
+                timestamp,
+                job.CapturedWindowTitle,
+                job.CapturedProcessName);
             CompleteApiDictationSession(job.ApiSessionId, new ApiDictationTranscription(
                 finalText,
                 rawText,
@@ -1025,7 +1062,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
                 _history.AddRecord(new TranscriptionRecord
                 {
-                    Id = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString(),
+                    Id = recordId,
                     Timestamp = timestamp,
                     RawText = rawText,
                     FinalText = finalText,
