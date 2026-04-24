@@ -297,18 +297,17 @@
                         <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="{loc:Str Recording.AutoStopSilence}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SilenceAutoStopEnabled}" OnContent="" OffContent=""/>
-                            </Grid>
-                        </Border>
-                        <Border Grid.Row="7" Background="#18FFFFFF"/>
-                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="{loc:Str Dictation.SilenceTimeout}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <TextBox Grid.Column="1"
-                                         Text="{Binding Settings.SilenceAutoStopSeconds}"
-                                         Style="{StaticResource SettingsNumericTextBoxStyle}"/>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str Dictation.ShortQuietAggressive}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str Dictation.ShortQuietAggressiveHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,4,18,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.TranscribeShortQuietClipsAggressively}"
+                                                 OnContent=""
+                                                 OffContent=""/>
                             </Grid>
                         </Border>
                     </Grid>

@@ -34,13 +34,10 @@ public record AppSettings
     public float AudioDuckingLevel { get; init; } = 0.2f;
     public bool PauseMediaDuringRecording { get; init; }
     public bool SoundFeedbackEnabled { get; init; } = true;
+    public bool TranscribeShortQuietClipsAggressively { get; init; }
 
     // Live transcription (streaming preview while recording)
     public bool LiveTranscriptionEnabled { get; init; } = true;
-
-    // Silence detection
-    public bool SilenceAutoStopEnabled { get; init; }
-    public int SilenceAutoStopSeconds { get; init; } = 10;
 
     // Overlay
     public OverlayPosition OverlayPosition { get; init; } = OverlayPosition.Bottom;

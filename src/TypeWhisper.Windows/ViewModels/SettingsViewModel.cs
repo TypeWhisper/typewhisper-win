@@ -34,8 +34,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _audioDuckingEnabled;
     [ObservableProperty] private float _audioDuckingLevel = 0.2f;
     [ObservableProperty] private bool _pauseMediaDuringRecording;
-    [ObservableProperty] private bool _silenceAutoStopEnabled;
-    [ObservableProperty] private int _silenceAutoStopSeconds = 10;
+    [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
     [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
     [ObservableProperty] private string _transcriptionTask = "transcribe";
@@ -275,8 +274,7 @@ public partial class SettingsViewModel : ObservableObject
             Mode = Mode,
             WhisperModeEnabled = WhisperModeEnabled,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
-            SilenceAutoStopEnabled = SilenceAutoStopEnabled,
-            SilenceAutoStopSeconds = SilenceAutoStopSeconds,
+            TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
             OverlayPosition = OverlayPosition,
             HistoryRetentionMode = SelectedHistoryRetentionOption?.Mode ?? AppSettings.Default.HistoryRetentionMode,
             HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
@@ -346,8 +344,7 @@ public partial class SettingsViewModel : ObservableObject
         Mode = s.Mode;
         WhisperModeEnabled = s.WhisperModeEnabled;
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
-        SilenceAutoStopEnabled = s.SilenceAutoStopEnabled;
-        SilenceAutoStopSeconds = s.SilenceAutoStopSeconds;
+        TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
         OverlayPosition = s.OverlayPosition;
         SelectedHistoryRetentionOption = MatchHistoryRetentionOption(s.HistoryRetentionMode, s.HistoryRetentionMinutes);
         TranscriptionTask = s.TranscriptionTask;
