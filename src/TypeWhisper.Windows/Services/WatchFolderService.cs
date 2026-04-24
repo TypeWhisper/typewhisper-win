@@ -160,9 +160,9 @@ public sealed class WatchFolderService : IDisposable
         {
             ScanEventFolder(filePath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedFolderScanException(ex))
         {
-            Debug.WriteLine($"WatchFolder event scan failed: {ex.Message}");
+            Debug.WriteLine($"WatchFolder event scan failed: {ex}");
         }
     }
 
@@ -183,9 +183,9 @@ public sealed class WatchFolderService : IDisposable
             foreach (var filePath in Directory.EnumerateFiles(folderPath).Where(AudioFileService.IsSupported).OrderBy(Path.GetFileName))
                 EnqueueFile(filePath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        catch (Exception ex) when (IsExpectedFolderScanException(ex))
         {
-            Debug.WriteLine($"WatchFolder scan failed: {ex.Message}");
+            Debug.WriteLine($"WatchFolder scan failed: {ex}");
         }
     }
 
@@ -248,9 +248,9 @@ public sealed class WatchFolderService : IDisposable
             {
                 break;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsExpectedFolderScanException(ex))
             {
-                Debug.WriteLine($"WatchFolder rescan failed: {ex.Message}");
+                Debug.WriteLine($"WatchFolder rescan failed: {ex}");
             }
         }
     }
@@ -463,9 +463,9 @@ public sealed class WatchFolderService : IDisposable
             foreach (var fingerprint in loaded)
                 _processedFingerprints.Add(fingerprint);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            Debug.WriteLine($"Failed to load watch folder fingerprints: {ex.Message}");
+            Debug.WriteLine($"Failed to load watch folder fingerprints: {ex}");
         }
     }
 
@@ -477,9 +477,9 @@ public sealed class WatchFolderService : IDisposable
             var json = JsonSerializer.Serialize(_processedFingerprints, JsonOptions);
             File.WriteAllText(_processedFingerprintsPath, json);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            Debug.WriteLine($"Failed to save watch folder fingerprints: {ex.Message}");
+            Debug.WriteLine($"Failed to save watch folder fingerprints: {ex}");
         }
     }
 
@@ -498,9 +498,9 @@ public sealed class WatchFolderService : IDisposable
             _history.Clear();
             _history.AddRange(loaded.Take(100));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            Debug.WriteLine($"Failed to load watch folder history: {ex.Message}");
+            Debug.WriteLine($"Failed to load watch folder history: {ex}");
         }
     }
 
@@ -518,13 +518,23 @@ public sealed class WatchFolderService : IDisposable
             var json = JsonSerializer.Serialize(snapshot, JsonOptions);
             File.WriteAllText(_historyPath, json);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            Debug.WriteLine($"Failed to save watch folder history: {ex.Message}");
+            Debug.WriteLine($"Failed to save watch folder history: {ex}");
         }
     }
 
     private void OnStateChanged() => StateChanged?.Invoke(this, EventArgs.Empty);
+
+    private static bool IsExpectedFolderScanException(Exception ex) =>
+        ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException;
+
+    private static bool IsExpectedPersistenceException(Exception ex) =>
+        ex is IOException
+            or UnauthorizedAccessException
+            or DirectoryNotFoundException
+            or JsonException
+            or NotSupportedException;
 
     private void ThrowIfDisposed()
     {
