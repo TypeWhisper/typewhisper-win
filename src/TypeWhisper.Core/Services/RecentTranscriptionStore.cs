@@ -81,19 +81,10 @@ public sealed class RecentTranscriptionStore
             .ToList();
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<RecentTranscriptionEntry>(Math.Min(limit, merged.Count));
-
-        foreach (var entry in merged)
-        {
-            if (!seen.Add(entry.Id))
-                continue;
-
-            result.Add(entry);
-            if (result.Count == limit)
-                break;
-        }
-
-        return result;
+        return merged
+            .Where(entry => seen.Add(entry.Id))
+            .Take(limit)
+            .ToList();
     }
 
     public RecentTranscriptionEntry? LatestEntry(IReadOnlyList<TranscriptionRecord> historyRecords) =>

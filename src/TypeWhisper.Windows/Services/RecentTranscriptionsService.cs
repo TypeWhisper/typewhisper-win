@@ -85,9 +85,13 @@ public sealed class RecentTranscriptionsService
             var result = await _textInsertion.InsertTextAsync(entry.FinalText, autoPaste: false);
             FeedbackRequested?.Invoke(StatusTextFor(result), false);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            FeedbackRequested?.Invoke(Loc.Instance.GetString("Status.ErrorFormat", ex.Message), true);
+            ReportError(ex);
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            ReportError(ex);
         }
     }
 
@@ -107,9 +111,13 @@ public sealed class RecentTranscriptionsService
                 autoEnter: false);
             FeedbackRequested?.Invoke(StatusTextFor(result), false);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            FeedbackRequested?.Invoke(Loc.Instance.GetString("Status.ErrorFormat", ex.Message), true);
+            ReportError(ex);
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            ReportError(ex);
         }
     }
 
@@ -121,4 +129,7 @@ public sealed class RecentTranscriptionsService
             InsertionResult.NoText => Loc.Instance["RecentTranscriptions.Empty"],
             _ => Loc.Instance["Status.Done"]
         };
+
+    private void ReportError(Exception ex) =>
+        FeedbackRequested?.Invoke(Loc.Instance.GetString("Status.ErrorFormat", ex.Message), true);
 }
