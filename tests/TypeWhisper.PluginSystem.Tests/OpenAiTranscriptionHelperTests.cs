@@ -1,9 +1,30 @@
+using System.Net.Http;
 using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
 public class OpenAiTranscriptionHelperTests
 {
+    [Fact]
+    public void TranscribeAsync_ExposesLegacyBinaryCompatibleSignature()
+    {
+        var method = typeof(OpenAiTranscriptionHelper).GetMethod(
+            nameof(OpenAiTranscriptionHelper.TranscribeAsync),
+            [
+                typeof(HttpClient),
+                typeof(string),
+                typeof(string),
+                typeof(string),
+                typeof(byte[]),
+                typeof(string),
+                typeof(bool),
+                typeof(string),
+                typeof(CancellationToken)
+            ]);
+
+        Assert.NotNull(method);
+    }
+
     [Fact]
     public void ParseTranscriptionResponse_VerboseJson_ExtractsNoSpeechProb()
     {

@@ -188,6 +188,13 @@ public partial class App : Application
             }
         }
 
+        if (settings.Current.WatchFolderAutoStart
+            && !string.IsNullOrWhiteSpace(settings.Current.WatchFolderPath))
+        {
+            var fileTranscription = _serviceProvider.GetRequiredService<FileTranscriptionViewModel>();
+            fileTranscription.StartWatchFolderFromSettings();
+        }
+
         // Check for updates in background
         var updateService = _serviceProvider.GetRequiredService<UpdateService>();
         updateService.Initialize();
@@ -247,6 +254,12 @@ public partial class App : Application
 
     private void ShowSettingsWindow(SettingsRoute? route = null, bool presentFileImporter = false)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => ShowSettingsWindow(route, presentFileImporter));
+            return;
+        }
+
         if (_settingsWindow is { IsLoaded: true })
         {
             if (_settingsWindow.DataContext is SettingsWindowViewModel existingViewModel)
@@ -341,6 +354,7 @@ public partial class App : Application
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<UpdateService>();
         services.AddSingleton<PromptProcessingService>();
+        services.AddSingleton<WatchFolderService>();
 
         // License
         services.AddSingleton<LicenseService>();

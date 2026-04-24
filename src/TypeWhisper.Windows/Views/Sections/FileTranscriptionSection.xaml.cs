@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
@@ -8,6 +9,7 @@ namespace TypeWhisper.Windows.Views.Sections;
 public partial class FileTranscriptionSection : UserControl
 {
     private SettingsWindowViewModel? _viewModel;
+    private bool _isPresentingImporter;
 
     public FileTranscriptionSection()
     {
@@ -55,7 +57,21 @@ public partial class FileTranscriptionSection : UserControl
         if (_viewModel?.TryConsumePendingFileImporterRequest() != true)
             return;
 
-        PresentImporter();
+        if (_isPresentingImporter)
+            return;
+
+        _isPresentingImporter = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                PresentImporter();
+            }
+            finally
+            {
+                _isPresentingImporter = false;
+            }
+        }), DispatcherPriority.ApplicationIdle);
     }
 
     private void OnDrop(object sender, DragEventArgs e)
@@ -80,6 +96,37 @@ public partial class FileTranscriptionSection : UserControl
         PresentImporter();
     }
 
+    private void OnSelectWatchFolder(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select watch folder"
+        };
+
+        var current = _viewModel?.FileTranscription.WatchFolderPath;
+        if (!string.IsNullOrWhiteSpace(current) && System.IO.Directory.Exists(current))
+            dialog.InitialDirectory = current;
+
+        if (dialog.ShowDialog() == true)
+            _viewModel?.FileTranscription.SetWatchFolderPath(dialog.FolderName);
+    }
+
+    private void OnSelectWatchFolderOutput(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select output folder"
+        };
+
+        var current = _viewModel?.FileTranscription.WatchFolderOutputPath
+            ?? _viewModel?.FileTranscription.WatchFolderPath;
+        if (!string.IsNullOrWhiteSpace(current) && System.IO.Directory.Exists(current))
+            dialog.InitialDirectory = current;
+
+        if (dialog.ShowDialog() == true)
+            _viewModel?.FileTranscription.SetWatchFolderOutputPath(dialog.FolderName);
+    }
+
     private void PresentImporter()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
@@ -87,7 +134,12 @@ public partial class FileTranscriptionSection : UserControl
             Filter = "Audio/Video|*.wav;*.mp3;*.m4a;*.aac;*.ogg;*.flac;*.wma;*.mp4;*.mkv;*.avi;*.mov;*.webm|All Files|*.*"
         };
 
-        if (dialog.ShowDialog() == true)
+        var owner = Window.GetWindow(this);
+        var accepted = owner is not null
+            ? dialog.ShowDialog(owner)
+            : dialog.ShowDialog();
+
+        if (accepted == true)
             _viewModel?.FileTranscription.TranscribeFileCommand.Execute(dialog.FileName);
     }
 }
