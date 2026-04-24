@@ -9,7 +9,7 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Services;
 
-public sealed class HttpApiService : IDisposable
+public sealed class HttpApiService : ILocalApiServer, IDisposable
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;

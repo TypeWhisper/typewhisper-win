@@ -19,6 +19,32 @@
     <ProjectReference Include="..\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
 
+  <Target Name="BuildBundledCli" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="..\TypeWhisper.Cli\TypeWhisper.Cli.csproj"
+             Targets="Restore;Build"
+             Properties="Configuration=$(Configuration);Version=$(Version)" />
+    <ItemGroup>
+      <BundledCliBinary Include="..\TypeWhisper.Cli\bin\$(Configuration)\net10.0\typewhisper.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BundledCliBinary)"
+          DestinationFolder="$(OutputPath)Cli\"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(BundledCliBinary.Identity)')" />
+  </Target>
+
+  <Target Name="PublishBundledCli" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="..\TypeWhisper.Cli\TypeWhisper.Cli.csproj"
+             Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);Version=$(Version);PublishDir=$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\;SelfContained=false" />
+    <ItemGroup>
+      <PublishedCliBinary Include="$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\typewhisper.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PublishedCliBinary)"
+          DestinationFolder="$(PublishDir)Cli\"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(PublishedCliBinary.Identity)')" />
+  </Target>
+
   <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Update="App.xaml">
