@@ -163,6 +163,192 @@
                     </Grid>
                 </Border>
             </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Advanced.ApiSection}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.ApiEnable}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.ApiServerEnabled, Mode=TwoWay}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.ApiPort}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.ApiServerPort, Mode=TwoWay}"
+                                         Style="{StaticResource SettingsNumericTextBoxStyle}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Settings.ApiServerStatusText}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{Binding Settings.ApiServerErrorText}"
+                                           Style="{StaticResource HintStyle}"
+                                           Foreground="#FF6B6B"
+                                           FontSize="12"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="5" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
+                            <TextBlock Text="{loc:Str Advanced.ApiHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="12"
+                                       Margin="0"/>
+                        </Border>
+
+                        <Border Grid.Row="7" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Advanced.CurlExamples}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ItemsControl ItemsSource="{Binding Settings.CurlExamples}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Command}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           TextWrapping="Wrap"/>
+                                                <Button Grid.Column="1"
+                                                        Content="{loc:Str Advanced.Copy}"
+                                                        Margin="12,0,0,0"
+                                                        Padding="10,4"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding DataContext.Settings.CopyCommandExampleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding Command}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Advanced.CliSection}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Settings.CliStatusText}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{Binding Settings.CliBundledPathText}"
+                                               Style="{StaticResource HintStyle}"
+                                               FontSize="12"
+                                               Margin="0,4,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="{loc:Str Advanced.Refresh}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Command="{Binding Settings.RefreshCliStateCommand}"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="{loc:Str Advanced.InstallCli}"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            IsEnabled="{Binding Settings.CliBundledAvailable}"
+                                            Command="{Binding Settings.InstallCliCommand}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <TextBlock Text="{loc:Str Advanced.CliHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="12"
+                                       Margin="0"/>
+                        </Border>
+
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Advanced.CliExamples}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ItemsControl ItemsSource="{Binding Settings.CliExamples}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Command}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           TextWrapping="Wrap"/>
+                                                <Button Grid.Column="1"
+                                                        Content="{loc:Str Advanced.Copy}"
+                                                        Margin="12,0,0,0"
+                                                        Padding="10,4"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        Command="{Binding DataContext.Settings.CopyCommandExampleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding Command}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

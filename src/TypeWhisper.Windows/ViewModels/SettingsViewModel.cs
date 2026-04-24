@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,6 +16,8 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settings;
     private readonly AudioRecordingService _audio;
+    private readonly ApiServerController _apiServer;
+    private readonly CliInstallService _cliInstall;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -46,9 +50,18 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private OverlayWidget _overlayRightWidget = OverlayWidget.Timer;
     [ObservableProperty] private string _promptPaletteHotkey = "";
     [ObservableProperty] private string? _uiLanguage;
+    [ObservableProperty] private string _apiServerStatusText = "";
+    [ObservableProperty] private string _apiServerErrorText = "";
+    [ObservableProperty] private bool _apiServerHasError;
+    [ObservableProperty] private string _cliStatusText = "";
+    [ObservableProperty] private string _cliBundledPathText = "";
+    [ObservableProperty] private bool _cliBundledAvailable;
+    [ObservableProperty] private bool _cliInstalled;
 
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
     public ObservableCollection<HistoryRetentionOption> HistoryRetentionOptions { get; } = [];
+    public ObservableCollection<CommandExample> CurlExamples { get; } = [];
+    public ObservableCollection<CommandExample> CliExamples { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -100,11 +113,18 @@ public partial class SettingsViewModel : ObservableObject
         StopMicrophonePreview();
     }
 
-    public SettingsViewModel(ISettingsService settings, AudioRecordingService audio)
+    public SettingsViewModel(
+        ISettingsService settings,
+        AudioRecordingService audio,
+        ApiServerController apiServer,
+        CliInstallService cliInstall)
     {
         _settings = settings;
         _audio = audio;
+        _apiServer = apiServer;
+        _cliInstall = cliInstall;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
+        _apiServer.StateChanged += OnApiServerStateChanged;
 
         _isLoading = true;
         RefreshLocalizedCollections();
@@ -112,6 +132,9 @@ public partial class SettingsViewModel : ObservableObject
         AutostartEnabled = StartupService.IsEnabled;
         RefreshMicrophones();
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
+        RefreshApiServerStatus();
+        RefreshCliState();
+        RefreshApiExamples();
         _isLoading = false;
 
         _settings.SettingsChanged += OnSettingsChanged;
@@ -138,6 +161,50 @@ public partial class SettingsViewModel : ObservableObject
         foreach (var (number, name) in AudioRecordingService.GetAvailableDevices())
         {
             Microphones.Add(new MicrophoneItem(number, name));
+        }
+    }
+
+    [RelayCommand]
+    private void CopyCommandExample(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+            return;
+
+        try
+        {
+            Clipboard.SetText(command);
+        }
+        catch (COMException)
+        {
+            // Clipboard may be temporarily locked by another process.
+        }
+        catch (ExternalException)
+        {
+            // Clipboard may be temporarily locked by another process.
+        }
+    }
+
+    [RelayCommand]
+    private void RefreshCliState() => ApplyCliState(_cliInstall.GetState());
+
+    [RelayCommand]
+    private void InstallCli()
+    {
+        try
+        {
+            ApplyCliState(_cliInstall.Install());
+        }
+        catch (InvalidOperationException ex)
+        {
+            CliStatusText = ex.Message;
+        }
+        catch (IOException ex)
+        {
+            CliStatusText = ex.Message;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            CliStatusText = ex.Message;
         }
     }
 
@@ -260,6 +327,8 @@ public partial class SettingsViewModel : ObservableObject
         MemoryEnabled = s.MemoryEnabled;
         AutoUnloadMinutes = s.ModelAutoUnloadSeconds / 60;
         UiLanguage = s.UiLanguage;
+        RefreshApiExamples();
+        RefreshApiServerStatus();
     }
 
     private void OnSettingsChanged(AppSettings updatedSettings)
@@ -269,8 +338,47 @@ public partial class SettingsViewModel : ObservableObject
             _isLoading = true;
             LoadFromSettings(updatedSettings);
             AutostartEnabled = StartupService.IsEnabled;
+            RefreshApiServerStatus();
             _isLoading = false;
         });
+    }
+
+    private void OnApiServerStateChanged()
+    {
+        Application.Current?.Dispatcher.InvokeAsync(RefreshApiServerStatus);
+    }
+
+    private void RefreshApiServerStatus()
+    {
+        var port = _apiServer.ActivePort ?? ApiServerPort;
+        ApiServerStatusText = ApiServerEnabled
+            ? _apiServer.IsRunning
+                ? Loc.Instance.GetString("Advanced.ApiRunningFormat", port)
+                : Loc.Instance["Advanced.ApiNotRunning"]
+            : Loc.Instance["Advanced.ApiDisabled"];
+
+        ApiServerErrorText = _apiServer.ErrorMessage ?? "";
+        ApiServerHasError = !string.IsNullOrWhiteSpace(ApiServerErrorText);
+    }
+
+    private void RefreshApiExamples()
+    {
+        ReplaceCollection(CurlExamples, CliInstallService.BuildCurlExamples(ApiServerPort)
+            .Select(command => new CommandExample(command))
+            .ToList());
+        ReplaceCollection(CliExamples, CliInstallService.BuildCliExamples(ApiServerPort)
+            .Select(command => new CommandExample(command))
+            .ToList());
+    }
+
+    private void ApplyCliState(CliInstallState state)
+    {
+        CliBundledAvailable = state.BundledCliAvailable;
+        CliInstalled = state.Installed;
+        CliStatusText = state.StatusText;
+        CliBundledPathText = state.BundledPath is null
+            ? Loc.Instance["Advanced.CliBundledMissing"]
+            : Loc.Instance.GetString("Advanced.CliBundledPathFormat", state.BundledPath);
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -315,3 +423,4 @@ public partial class SettingsViewModel : ObservableObject
 public sealed record MicrophoneItem(int? DeviceNumber, string Name);
 public sealed record OverlayWidgetOption(OverlayWidget Value, string DisplayName);
 public sealed record HistoryRetentionOption(HistoryRetentionMode Mode, int? Minutes, string DisplayName);
+public sealed record CommandExample(string Command);

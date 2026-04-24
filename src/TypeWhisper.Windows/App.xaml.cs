@@ -153,9 +153,9 @@ public partial class App : Application
         if (!audio.WarmUp())
             System.Diagnostics.Debug.WriteLine("No audio input device available at startup. Polling for device...");
 
-        // Initialize API server so settings changes can start, stop, or restart it immediately.
-        var api = _serviceProvider.GetRequiredService<HttpApiService>();
-        api.ApplySettings(settings.Current);
+        // Start and keep the API server aligned with settings.
+        var apiServer = _serviceProvider.GetRequiredService<ApiServerController>();
+        apiServer.Initialize();
 
         // Show onboarding if first run (skip when started minimized)
         if (!settings.Current.HasCompletedOnboarding && !Program.StartMinimized)
@@ -352,6 +352,9 @@ public partial class App : Application
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
         services.AddSingleton<SoundService>();
         services.AddSingleton<HttpApiService>();
+        services.AddSingleton<ILocalApiServer>(sp => sp.GetRequiredService<HttpApiService>());
+        services.AddSingleton<ApiServerController>();
+        services.AddSingleton<CliInstallService>();
         services.AddSingleton<WatchFolderService>();
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<UpdateService>();

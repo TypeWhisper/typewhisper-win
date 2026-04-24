@@ -11,7 +11,7 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Services;
 
-public sealed class HttpApiService : IDisposable
+public sealed class HttpApiService : ILocalApiServer, IDisposable
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
@@ -61,7 +61,6 @@ public sealed class HttpApiService : IDisposable
         _pipeline = pipeline;
         _translation = translation;
         _dictation = dictation;
-        _settings.SettingsChanged += OnSettingsChanged;
     }
 
     public void Start(int port)
@@ -80,16 +79,6 @@ public sealed class HttpApiService : IDisposable
         _listenTask = Task.Run(() => ListenLoop(_cts.Token));
     }
 
-    public void ApplySettings(AppSettings settings)
-    {
-        if (_disposed) return;
-
-        if (settings.ApiServerEnabled)
-            Start(settings.ApiServerPort);
-        else
-            Stop();
-    }
-
     public void Stop()
     {
         var cts = _cts;
@@ -101,18 +90,6 @@ public sealed class HttpApiService : IDisposable
         _listenTask = null;
         _runningPort = null;
         cts?.Dispose();
-    }
-
-    private void OnSettingsChanged(AppSettings settings)
-    {
-        try
-        {
-            ApplySettings(settings);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to apply settings: {ex.Message}");
-        }
     }
 
     private static void WriteApiPortFile(int port)
@@ -575,7 +552,6 @@ public sealed class HttpApiService : IDisposable
     {
         if (!_disposed)
         {
-            _settings.SettingsChanged -= OnSettingsChanged;
             Stop();
             _disposed = true;
         }
