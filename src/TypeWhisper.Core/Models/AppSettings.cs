@@ -2,6 +2,8 @@ namespace TypeWhisper.Core.Models;
 
 public record AppSettings
 {
+    public const string DefaultSpokenFeedbackProviderId = "windows-sapi";
+
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
     public string ToggleOnlyHotkey { get; init; } = "";
@@ -84,6 +86,8 @@ public record AppSettings
 
     // Spoken feedback (TTS readback after transcription)
     public bool SpokenFeedbackEnabled { get; init; }
+    public string SpokenFeedbackProviderId { get; init; } = DefaultSpokenFeedbackProviderId;
+    public string? SpokenFeedbackVoiceId { get; init; }
 
     // Memory extraction
     public bool MemoryEnabled { get; init; }

@@ -111,8 +111,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string? _feedbackText;
     [ObservableProperty] private bool _feedbackIsError;
     [ObservableProperty] private bool _showFeedback;
+    [ObservableProperty] private string? _lastTranscribedText;
+    [ObservableProperty] private string? _lastTranscriptionLanguage;
 
     public PromptPaletteViewModel PromptPalette { get; }
+    public bool CanReadBackLastTranscription => !string.IsNullOrWhiteSpace(LastTranscribedText);
 
     public DictationViewModel(
         ISettingsService settings,
@@ -268,7 +271,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
     }
 
+    partial void OnLastTranscribedTextChanged(string? value) =>
+        OnPropertyChanged(nameof(CanReadBackLastTranscription));
+
     partial void OnIsOverlayVisibleChanged(bool value) => RaiseOverlayPresentationChanged();
+
+    public void ReadBackLastTranscription()
+    {
+        if (string.IsNullOrWhiteSpace(LastTranscribedText))
+            return;
+
+        _speechFeedback.ReadBack(LastTranscribedText, LastTranscriptionLanguage);
+    }
 
     // Effective settings: profile override → global setting
     private string? EffectiveLanguage =>
@@ -976,6 +990,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var timestamp = DateTime.UtcNow;
             var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
             var wordsCount = CountWords(finalText);
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                LastTranscribedText = finalText;
+                LastTranscriptionLanguage = detectedLanguage;
+            });
             CompleteApiDictationSession(job.ApiSessionId, new ApiDictationTranscription(
                 finalText,
                 rawText,
@@ -1024,7 +1043,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             }
 
             _sound.PlaySuccessSound();
-            _speechFeedback.AnnounceTranscriptionComplete(finalText);
+            _speechFeedback.AnnounceTranscriptionComplete(finalText, detectedLanguage);
             _modelManager.ScheduleAutoUnload();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {

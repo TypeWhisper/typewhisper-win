@@ -9,6 +9,7 @@ using Microsoft.Win32;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -17,6 +18,7 @@ public partial class HistoryViewModel : ObservableObject
 {
     private readonly IHistoryService _history;
     private readonly IDictionaryService _dictionary;
+    private readonly SpeechFeedbackService _speechFeedback;
     private bool _suppressRefresh;
     private bool _hasLoaded;
 
@@ -31,10 +33,14 @@ public partial class HistoryViewModel : ObservableObject
     public int TotalRecords => _history.TotalRecords;
     public int TotalWords => _history.TotalWords;
 
-    public HistoryViewModel(IHistoryService history, IDictionaryService dictionary)
+    public HistoryViewModel(
+        IHistoryService history,
+        IDictionaryService dictionary,
+        SpeechFeedbackService speechFeedback)
     {
         _history = history;
         _dictionary = dictionary;
+        _speechFeedback = speechFeedback;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
 
         GroupedEntries = CollectionViewSource.GetDefaultView(Entries);
@@ -183,6 +189,9 @@ public partial class HistoryViewModel : ObservableObject
     internal void DeleteEntry(HistoryEntryViewModel entry) =>
         _history.DeleteRecord(entry.Record.Id);
 
+    internal void ReadBackEntry(HistoryEntryViewModel entry) =>
+        _speechFeedback.ReadBack(entry.Record.FinalText, entry.Record.Language);
+
     internal void SaveEdit(HistoryEntryViewModel entry, string newText)
     {
         var originalText = entry.Record.FinalText;
@@ -284,6 +293,9 @@ public partial class HistoryEntryViewModel : ObservableObject
 
     [RelayCommand]
     private void Copy() => Clipboard.SetText(Record.FinalText);
+
+    [RelayCommand]
+    private void ReadBack() => _parent.ReadBackEntry(this);
 
     [RelayCommand]
     private void Delete() => _parent.DeleteEntry(this);

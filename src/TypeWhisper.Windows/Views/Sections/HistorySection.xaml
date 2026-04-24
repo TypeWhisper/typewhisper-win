@@ -294,6 +294,8 @@
                                                 Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
                                         <Button Content="{loc:Str History.Edit}" Command="{Binding StartEditCommand}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
+                                        <Button Content="{loc:Str History.ReadBack}" Command="{Binding ReadBackCommand}"
+                                                Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
                                         <Button Content="{loc:Str History.Copy}" Command="{Binding CopyCommand}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
                                         <Button Content="{loc:Str History.DeleteEntry}" Command="{Binding DeleteCommand}"

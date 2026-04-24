@@ -15,6 +15,7 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? ShowSettingsRequested;
     public event EventHandler? ShowFileTranscriptionRequested;
+    public event EventHandler? ReadBackLastTranscriptionRequested;
     public event EventHandler? UpdateCheckRequested;
     public event EventHandler? ExitRequested;
 
@@ -62,6 +63,9 @@ public sealed class TrayIconService : IDisposable
         var fileItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.TranscribeFile"] };
         fileItem.Click += (_, _) => ShowFileTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
+        var readBackItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.ReadBackLast"] };
+        readBackItem.Click += (_, _) => ReadBackLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
+
         var updateItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.CheckUpdates"] };
         updateItem.Click += (_, _) => UpdateCheckRequested?.Invoke(this, EventArgs.Empty);
 
@@ -72,6 +76,7 @@ public sealed class TrayIconService : IDisposable
 
         menu.Items.Add(settingsItem);
         menu.Items.Add(fileItem);
+        menu.Items.Add(readBackItem);
         menu.Items.Add(updateItem);
         menu.Items.Add(separatorItem);
         menu.Items.Add(exitItem);

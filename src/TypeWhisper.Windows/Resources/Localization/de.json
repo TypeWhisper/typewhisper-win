@@ -218,6 +218,7 @@
   "History.Dismiss": "Verwerfen",
   "History.WordsFormat": "{0} W\u00f6rter",
   "History.Edit": "Bearbeiten",
+  "History.ReadBack": "Vorlesen",
   "History.Copy": "Kopieren",
   "History.DeleteEntry": "L\u00f6schen",
   "History.SaveEdit": "Speichern",
@@ -420,7 +421,11 @@
   "Advanced.AutoUnload30": "Nach 30 Minuten",
   "Advanced.AutoUnload60": "Nach 1 Stunde",
   "Advanced.SpokenFeedback": "Sprachausgabe",
+  "Advanced.SpokenFeedbackProvider": "Sprachanbieter",
+  "Advanced.SpokenFeedbackVoice": "Stimme",
   "Advanced.RecordingHint": "Lokale Modelle können nach Inaktivität entladen werden, und die Sprachausgabe liest die fertige Transkription vor.",
+  "Tts.WindowsSapiProvider": "Windows-Systemstimme",
+  "Tts.SystemDefaultVoice": "Systemstandard",
   "Advanced.DataSection": "Daten",
   "Advanced.SaveToHistory": "Transkriptionen im Verlauf speichern",
   "Advanced.HistoryRetention": "Aufbewahrung im Verlauf",
@@ -511,6 +516,7 @@
 
   "Tray.Settings": "Einstellungen...",
   "Tray.TranscribeFile": "Datei transkribieren...",
+  "Tray.ReadBackLast": "Letzte Transkription vorlesen",
   "Tray.CheckUpdates": "Nach Updates suchen...",
   "Tray.Exit": "Beenden",
 

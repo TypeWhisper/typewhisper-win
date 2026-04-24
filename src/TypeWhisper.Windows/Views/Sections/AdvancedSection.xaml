@@ -2,12 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:converters="clr-namespace:TypeWhisper.Windows.Converters"
              xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -59,6 +61,10 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -99,7 +105,51 @@
 
                         <Border Grid.Row="3" Background="#18FFFFFF"/>
 
-                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="4"
+                                Style="{StaticResource SettingsRowBorderStyle}"
+                                Visibility="{Binding Settings.SpokenFeedbackEnabled, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.SpokenFeedbackProvider}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                          ItemsSource="{Binding Settings.SpokenFeedbackProviders}"
+                                          SelectedValue="{Binding Settings.SelectedSpokenFeedbackProviderId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="5"
+                                Background="#18FFFFFF"
+                                Visibility="{Binding Settings.SpokenFeedbackEnabled, Converter={StaticResource BoolToVis}}"/>
+
+                        <Border Grid.Row="6"
+                                Style="{StaticResource SettingsRowBorderStyle}"
+                                Visibility="{Binding Settings.SpokenFeedbackEnabled, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Advanced.SpokenFeedbackVoice}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                          ItemsSource="{Binding Settings.SpokenFeedbackVoices}"
+                                          SelectedValue="{Binding Settings.SelectedSpokenFeedbackVoiceId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          SelectedValuePath="Id"
+                                          DisplayMemberPath="DisplayName"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="7"
+                                Background="#18FFFFFF"
+                                Visibility="{Binding Settings.SpokenFeedbackEnabled, Converter={StaticResource BoolToVis}}"/>
+
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
                             <TextBlock Text="{loc:Str Advanced.RecordingHint}"
                                        Style="{StaticResource HintStyle}"
                                        FontSize="12"

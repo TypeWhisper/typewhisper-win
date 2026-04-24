@@ -218,6 +218,7 @@
   "History.Dismiss": "Dismiss",
   "History.WordsFormat": "{0} words",
   "History.Edit": "Edit",
+  "History.ReadBack": "Read back",
   "History.Copy": "Copy",
   "History.DeleteEntry": "Delete",
   "History.SaveEdit": "Save",
@@ -420,7 +421,11 @@
   "Advanced.AutoUnload30": "After 30 minutes",
   "Advanced.AutoUnload60": "After 1 hour",
   "Advanced.SpokenFeedback": "Spoken feedback",
+  "Advanced.SpokenFeedbackProvider": "Speech provider",
+  "Advanced.SpokenFeedbackVoice": "Voice",
   "Advanced.RecordingHint": "Local models can be unloaded after inactivity, and spoken feedback reads the final transcription aloud.",
+  "Tts.WindowsSapiProvider": "Windows system voice",
+  "Tts.SystemDefaultVoice": "System default",
   "Advanced.DataSection": "Data",
   "Advanced.SaveToHistory": "Save transcriptions to history",
   "Advanced.HistoryRetention": "History retention",
@@ -511,6 +516,7 @@
 
   "Tray.Settings": "Settings...",
   "Tray.TranscribeFile": "Transcribe file...",
+  "Tray.ReadBackLast": "Read back last transcription",
   "Tray.CheckUpdates": "Check for updates...",
   "Tray.Exit": "Exit",
 

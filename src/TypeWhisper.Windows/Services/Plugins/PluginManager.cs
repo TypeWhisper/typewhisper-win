@@ -8,7 +8,7 @@ namespace TypeWhisper.Windows.Services.Plugins;
 /// <summary>
 /// Central plugin registry and lifecycle manager. Discovers plugins, maintains
 /// enabled/disabled state, and provides typed capability indices for LLM providers,
-/// transcription engines, and post-processors.
+/// transcription engines, TTS providers, and post-processors.
 /// </summary>
 public sealed class PluginManager : IDisposable
 {
@@ -26,6 +26,7 @@ public sealed class PluginManager : IDisposable
 
     private List<ILlmProviderPlugin> _llmProviders = [];
     private List<ITranscriptionEnginePlugin> _transcriptionEngines = [];
+    private List<ITtsProviderPlugin> _ttsProviders = [];
     private List<IPostProcessorPlugin> _postProcessors = [];
     private List<IActionPlugin> _actionPlugins = [];
 
@@ -71,6 +72,12 @@ public sealed class PluginManager : IDisposable
     public IReadOnlyList<ITranscriptionEnginePlugin> TranscriptionEngines
     {
         get { lock (_lock) return [.. _transcriptionEngines]; }
+    }
+
+    /// <summary>Active text-to-speech provider plugins.</summary>
+    public IReadOnlyList<ITtsProviderPlugin> TtsProviders
+    {
+        get { lock (_lock) return [.. _ttsProviders]; }
     }
 
     /// <summary>Active post-processor plugins, ordered by priority.</summary>
@@ -188,6 +195,16 @@ public sealed class PluginManager : IDisposable
         }
     }
 
+    /// <summary>Finds an active TTS provider plugin by provider ID, or null if not found.</summary>
+    public ITtsProviderPlugin? GetTtsProvider(string providerId)
+    {
+        lock (_lock)
+        {
+            return _ttsProviders.FirstOrDefault(p =>
+                string.Equals(p.ProviderId, providerId, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     private async Task ActivatePluginAsync(LoadedPlugin plugin)
     {
         try
@@ -248,6 +265,7 @@ public sealed class PluginManager : IDisposable
 
             _llmProviders = activePlugins.OfType<ILlmProviderPlugin>().ToList();
             _transcriptionEngines = activePlugins.OfType<ITranscriptionEnginePlugin>().ToList();
+            _ttsProviders = activePlugins.OfType<ITtsProviderPlugin>().ToList();
             _postProcessors = activePlugins.OfType<IPostProcessorPlugin>()
                 .OrderBy(p => p.Priority)
                 .ToList();
@@ -422,6 +440,7 @@ public sealed class PluginManager : IDisposable
             _activatedPlugins.Clear();
             _llmProviders.Clear();
             _transcriptionEngines.Clear();
+            _ttsProviders.Clear();
             _postProcessors.Clear();
             _actionPlugins.Clear();
         }

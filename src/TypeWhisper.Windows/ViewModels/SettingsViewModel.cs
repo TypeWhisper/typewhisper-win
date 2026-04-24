@@ -18,6 +18,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly AudioRecordingService _audio;
     private readonly ApiServerController _apiServer;
     private readonly CliInstallService _cliInstall;
+    private readonly SpeechFeedbackService _speechFeedback;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -57,11 +58,15 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _cliBundledPathText = "";
     [ObservableProperty] private bool _cliBundledAvailable;
     [ObservableProperty] private bool _cliInstalled;
+    [ObservableProperty] private string _selectedSpokenFeedbackProviderId = AppSettings.DefaultSpokenFeedbackProviderId;
+    [ObservableProperty] private string? _selectedSpokenFeedbackVoiceId;
 
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
     public ObservableCollection<HistoryRetentionOption> HistoryRetentionOptions { get; } = [];
     public ObservableCollection<CommandExample> CurlExamples { get; } = [];
     public ObservableCollection<CommandExample> CliExamples { get; } = [];
+    public ObservableCollection<TtsProviderOption> SpokenFeedbackProviders { get; } = [];
+    public ObservableCollection<TtsVoiceOption> SpokenFeedbackVoices { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -113,22 +118,38 @@ public partial class SettingsViewModel : ObservableObject
         StopMicrophonePreview();
     }
 
+    partial void OnSelectedSpokenFeedbackProviderIdChanged(string value)
+    {
+        if (_isLoading) return;
+        RefreshSpokenFeedbackVoices();
+    }
+
+    partial void OnSelectedSpokenFeedbackVoiceIdChanged(string? value)
+    {
+        if (_isLoading) return;
+        _speechFeedback.SelectVoice(SelectedSpokenFeedbackProviderId, value);
+    }
+
     public SettingsViewModel(
         ISettingsService settings,
         AudioRecordingService audio,
         ApiServerController apiServer,
-        CliInstallService cliInstall)
+        CliInstallService cliInstall,
+        SpeechFeedbackService speechFeedback)
     {
         _settings = settings;
         _audio = audio;
         _apiServer = apiServer;
         _cliInstall = cliInstall;
+        _speechFeedback = speechFeedback;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
+        _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
 
         _isLoading = true;
         RefreshLocalizedCollections();
         LoadFromSettings(_settings.Current);
+        RefreshSpokenFeedbackProviders();
         AutostartEnabled = StartupService.IsEnabled;
         RefreshMicrophones();
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
@@ -146,6 +167,12 @@ public partial class SettingsViewModel : ObservableObject
             if (args.PropertyName == nameof(AutostartEnabled))
             {
                 ApplyAutostartSetting();
+                return;
+            }
+
+            if (args.PropertyName == nameof(SelectedSpokenFeedbackVoiceId))
+            {
+                Save();
                 return;
             }
 
@@ -234,6 +261,9 @@ public partial class SettingsViewModel : ObservableObject
     private void Save()
     {
         var mainDictationHotkey = HotkeyParser.Normalize(PushToTalkHotkey);
+        var selectedVoiceId = SpeechFeedbackService.IsDefaultVoiceOptionId(SelectedSpokenFeedbackVoiceId)
+            ? null
+            : SelectedSpokenFeedbackVoiceId;
 
         var updated = _settings.Current with
         {
@@ -264,6 +294,15 @@ public partial class SettingsViewModel : ObservableObject
             PromptPaletteHotkey = HotkeyParser.Normalize(PromptPaletteHotkey),
             SaveToHistoryEnabled = SaveToHistoryEnabled,
             SpokenFeedbackEnabled = SpokenFeedbackEnabled,
+            SpokenFeedbackProviderId = string.IsNullOrWhiteSpace(SelectedSpokenFeedbackProviderId)
+                ? AppSettings.DefaultSpokenFeedbackProviderId
+                : SelectedSpokenFeedbackProviderId,
+            SpokenFeedbackVoiceId = string.Equals(
+                SelectedSpokenFeedbackProviderId,
+                AppSettings.DefaultSpokenFeedbackProviderId,
+                StringComparison.OrdinalIgnoreCase)
+                    ? selectedVoiceId
+                    : _settings.Current.SpokenFeedbackVoiceId,
             MemoryEnabled = MemoryEnabled,
             ModelAutoUnloadSeconds = AutoUnloadMinutes * 60,
             UiLanguage = UiLanguage
@@ -324,6 +363,10 @@ public partial class SettingsViewModel : ObservableObject
         PromptPaletteHotkey = HotkeyParser.Normalize(s.PromptPaletteHotkey);
         SaveToHistoryEnabled = s.SaveToHistoryEnabled;
         SpokenFeedbackEnabled = s.SpokenFeedbackEnabled;
+        SelectedSpokenFeedbackProviderId = string.IsNullOrWhiteSpace(s.SpokenFeedbackProviderId)
+            ? AppSettings.DefaultSpokenFeedbackProviderId
+            : s.SpokenFeedbackProviderId;
+        SelectedSpokenFeedbackVoiceId = s.SpokenFeedbackVoiceId;
         MemoryEnabled = s.MemoryEnabled;
         AutoUnloadMinutes = s.ModelAutoUnloadSeconds / 60;
         UiLanguage = s.UiLanguage;
@@ -337,6 +380,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             _isLoading = true;
             LoadFromSettings(updatedSettings);
+            RefreshSpokenFeedbackProviders();
             AutostartEnabled = StartupService.IsEnabled;
             RefreshApiServerStatus();
             _isLoading = false;
@@ -390,6 +434,7 @@ public partial class SettingsViewModel : ObservableObject
             SelectedHistoryRetentionOption = MatchHistoryRetentionOption(
                 _settings.Current.HistoryRetentionMode,
                 _settings.Current.HistoryRetentionMinutes);
+            RefreshSpokenFeedbackProviders();
             _isLoading = false;
         });
     }
@@ -400,6 +445,39 @@ public partial class SettingsViewModel : ObservableObject
         ReplaceCollection(HistoryRetentionOptions, BuildHistoryRetentionOptions());
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
         RefreshMicrophones();
+    }
+
+    private void OnTtsProvidersChanged(object? sender, EventArgs e)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            RefreshSpokenFeedbackProviders();
+            _isLoading = wasLoading;
+        });
+    }
+
+    private void RefreshSpokenFeedbackProviders()
+    {
+        ReplaceCollection(SpokenFeedbackProviders, _speechFeedback.AvailableProviders);
+
+        if (SpokenFeedbackProviders.All(p =>
+                !string.Equals(p.Id, SelectedSpokenFeedbackProviderId, StringComparison.OrdinalIgnoreCase)))
+        {
+            SelectedSpokenFeedbackProviderId = AppSettings.DefaultSpokenFeedbackProviderId;
+        }
+
+        RefreshSpokenFeedbackVoices();
+    }
+
+    private void RefreshSpokenFeedbackVoices()
+    {
+        var wasLoading = _isLoading;
+        _isLoading = true;
+        ReplaceCollection(SpokenFeedbackVoices, _speechFeedback.GetVoiceOptions(SelectedSpokenFeedbackProviderId));
+        SelectedSpokenFeedbackVoiceId = _speechFeedback.GetSelectedVoiceId(SelectedSpokenFeedbackProviderId);
+        _isLoading = wasLoading;
     }
 
     private HistoryRetentionOption MatchHistoryRetentionOption(HistoryRetentionMode mode, int minutes)

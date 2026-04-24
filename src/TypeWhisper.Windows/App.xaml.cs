@@ -127,6 +127,8 @@ public partial class App : Application
         _trayIcon.Initialize();
         _trayIcon.ShowSettingsRequested += (_, _) => ShowSettingsWindow();
         _trayIcon.ShowFileTranscriptionRequested += (_, _) => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true);
+        _trayIcon.ReadBackLastTranscriptionRequested += (_, _) =>
+            _serviceProvider.GetRequiredService<DictationViewModel>().ReadBackLastTranscription();
         _trayIcon.ExitRequested += (_, _) => Shutdown();
 
         // Manual update check from tray menu
