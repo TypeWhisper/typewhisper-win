@@ -17,7 +17,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly ISettingsService _settings;
     private readonly AudioFileService _audioFile;
     private readonly IHistoryService _history;
-    private readonly IProfileService _profiles;
     private readonly IDictionaryService _dictionary;
     private readonly IVocabularyBoostingService _vocabularyBoosting;
     private readonly IPostProcessingPipeline _pipeline;
@@ -44,7 +43,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         ISettingsService settings,
         AudioFileService audioFile,
         IHistoryService history,
-        IProfileService profiles,
         IDictionaryService dictionary,
         IVocabularyBoostingService vocabularyBoosting,
         IPostProcessingPipeline pipeline,
@@ -55,7 +53,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _settings = settings;
         _audioFile = audioFile;
         _history = history;
-        _profiles = profiles;
         _dictionary = dictionary;
         _vocabularyBoosting = vocabularyBoosting;
         _pipeline = pipeline;
@@ -170,8 +167,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/transcribe", "POST") => await HandleTranscribe(request, ct),
                 ("/v1/history", "GET") => HandleHistorySearch(request),
                 ("/v1/history", "DELETE") => HandleHistoryDelete(request),
-                ("/v1/profiles", "GET") => HandleProfilesList(),
-                ("/v1/profiles/toggle", "PUT") => HandleProfileToggle(request),
                 ("/v1/dictation/start", "POST") => await HandleDictationStart(),
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
@@ -395,42 +390,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { deleted = true, id });
     }
 
-    private HttpApiResponse HandleProfilesList()
-    {
-        var profiles = _profiles.Profiles.Select(p => new
-        {
-            id = p.Id,
-            name = p.Name,
-            is_enabled = p.IsEnabled,
-            priority = p.Priority,
-            process_names = p.ProcessNames,
-            bundle_identifiers = p.ProcessNames,
-            url_patterns = p.UrlPatterns,
-            input_language = p.InputLanguage,
-            translation_target = p.TranslationTarget,
-            translation_target_language = p.TranslationTarget,
-            selected_task = p.SelectedTask,
-            model_override = p.TranscriptionModelOverride,
-            prompt_action_id = p.PromptActionId
-        });
-
-        return Json(new { profiles });
-    }
-
-    private HttpApiResponse HandleProfileToggle(HttpApiRequest request)
-    {
-        var id = request.QueryString["id"];
-        if (string.IsNullOrEmpty(id))
-            return Error(400, "Missing id parameter");
-
-        var profile = _profiles.Profiles.FirstOrDefault(p => p.Id == id);
-        if (profile is null)
-            return Error(404, "Profile not found");
-
-        _profiles.UpdateProfile(profile with { IsEnabled = !profile.IsEnabled });
-        return Json(new { id, is_enabled = !profile.IsEnabled });
-    }
-
     private async Task<HttpApiResponse> HandleDictationStart()
     {
         if (_dictation.IsRecording)
@@ -463,7 +422,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             state = _dictation.State.ToString().ToLowerInvariant(),
             is_recording = _dictation.IsRecording,
             active_model = _modelManager.ActiveModelId,
-            active_profile = _dictation.ActiveProfileName
+            active_workflow = _dictation.ActiveWorkflowName
         });
     }
 

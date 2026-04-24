@@ -10,19 +10,19 @@ public class PluginHostServicesTests : IDisposable
 {
     private readonly Mock<IActiveWindowService> _activeWindow = new();
     private readonly Mock<IPluginEventBus> _eventBus = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly string _tempDir;
 
     public PluginHostServicesTests()
     {
-        _profiles.Setup(p => p.Profiles).Returns(new List<TypeWhisper.Core.Models.Profile>());
+        _workflows.Setup(w => w.Workflows).Returns(new List<TypeWhisper.Core.Models.Workflow>());
         _tempDir = Path.Combine(Path.GetTempPath(), $"tw-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
     private PluginHostServices CreateServices(Action? onCapabilitiesChanged = null) =>
         new("test-plugin", _tempDir, _activeWindow.Object, _eventBus.Object,
-            _profiles.Object, onCapabilitiesChanged);
+            _workflows.Object, onCapabilitiesChanged);
 
     [Fact]
     public void NotifyCapabilitiesChanged_InvokesCallback()

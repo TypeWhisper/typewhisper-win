@@ -48,7 +48,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private int _apiServerPort = 8978;
     [ObservableProperty] private OverlayWidget _overlayLeftWidget = OverlayWidget.Waveform;
     [ObservableProperty] private OverlayWidget _overlayRightWidget = OverlayWidget.Timer;
-    [ObservableProperty] private string _promptPaletteHotkey = "";
     [ObservableProperty] private string? _uiLanguage;
     [ObservableProperty] private string _apiServerStatusText = "";
     [ObservableProperty] private string _apiServerErrorText = "";
@@ -78,7 +77,7 @@ public partial class SettingsViewModel : ObservableObject
         new(OverlayWidget.Timer, Loc.Instance["Widget.Timer"]),
         new(OverlayWidget.Waveform, Loc.Instance["Widget.Waveform"]),
         new(OverlayWidget.Clock, Loc.Instance["Widget.Clock"]),
-        new(OverlayWidget.Profile, Loc.Instance["Widget.Profile"]),
+        new(OverlayWidget.Profile, Loc.Instance["Widget.Workflow"]),
         new(OverlayWidget.HotkeyMode, Loc.Instance["Widget.HotkeyMode"]),
         new(OverlayWidget.AppName, Loc.Instance["Widget.AppName"]),
     ];
@@ -261,7 +260,6 @@ public partial class SettingsViewModel : ObservableObject
             PauseMediaDuringRecording = PauseMediaDuringRecording,
             OverlayLeftWidget = OverlayLeftWidget,
             OverlayRightWidget = OverlayRightWidget,
-            PromptPaletteHotkey = HotkeyParser.Normalize(PromptPaletteHotkey),
             SaveToHistoryEnabled = SaveToHistoryEnabled,
             SpokenFeedbackEnabled = SpokenFeedbackEnabled,
             MemoryEnabled = MemoryEnabled,
@@ -321,7 +319,6 @@ public partial class SettingsViewModel : ObservableObject
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;
         OverlayLeftWidget = s.OverlayLeftWidget;
         OverlayRightWidget = s.OverlayRightWidget;
-        PromptPaletteHotkey = HotkeyParser.Normalize(s.PromptPaletteHotkey);
         SaveToHistoryEnabled = s.SaveToHistoryEnabled;
         SpokenFeedbackEnabled = s.SpokenFeedbackEnabled;
         MemoryEnabled = s.MemoryEnabled;

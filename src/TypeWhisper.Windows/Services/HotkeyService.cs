@@ -18,13 +18,12 @@ public sealed class HotkeyService : IDisposable
     private const double PushToTalkThresholdMs = 600;
 
     private readonly ISettingsService _settings;
-    private readonly IProfileService _profiles;
+    private readonly IWorkflowService _workflows;
     private readonly KeyboardHook _hybridHook;
     private readonly KeyboardHook _toggleOnlyHook;
     private readonly KeyboardHook _holdOnlyHook;
-    private readonly KeyboardHook _promptPaletteHook;
     private readonly KeyboardHook _cancelHook;
-    private readonly List<(KeyboardHook Hook, string ProfileId)> _profileHooks = [];
+    private readonly List<(KeyboardHook Hook, string WorkflowId)> _workflowHooks = [];
 
     private bool _disposed;
     private DateTime _keyDownTime;
@@ -32,9 +31,8 @@ public sealed class HotkeyService : IDisposable
 
     public event EventHandler? DictationStartRequested;
     public event EventHandler? DictationStopRequested;
-    public event EventHandler? PromptPaletteRequested;
     public event EventHandler? CancelRequested;
-    public event EventHandler<string>? ProfileDictationRequested;
+    public event EventHandler<string>? WorkflowDictationRequested;
     public HotkeyMode? CurrentMode { get; private set; }
 
     private bool _isCancelShortcutEnabled;
@@ -59,10 +57,10 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
-    public HotkeyService(ISettingsService settings, IProfileService profiles)
+    public HotkeyService(ISettingsService settings, IWorkflowService workflows)
     {
         _settings = settings;
-        _profiles = profiles;
+        _workflows = workflows;
 
         _hybridHook = new KeyboardHook();
         _hybridHook.KeyDown += OnHybridKeyDown;
@@ -75,9 +73,6 @@ public sealed class HotkeyService : IDisposable
         _holdOnlyHook.KeyDown += OnHoldOnlyKeyDown;
         _holdOnlyHook.KeyUp += OnHoldOnlyKeyUp;
 
-        _promptPaletteHook = new KeyboardHook();
-        _promptPaletteHook.KeyDown += OnPromptPaletteKeyDown;
-
         _cancelHook = new KeyboardHook();
         _cancelHook.SetHotkey("Escape");
         _cancelHook.KeyDown += OnCancelKeyDown;
@@ -87,7 +82,7 @@ public sealed class HotkeyService : IDisposable
     {
         ApplySettings();
         _settings.SettingsChanged += _ => Application.Current?.Dispatcher.Invoke(ApplySettings);
-        _profiles.ProfilesChanged += () => Application.Current?.Dispatcher.Invoke(ApplyProfileHotkeys);
+        _workflows.WorkflowsChanged += () => Application.Current?.Dispatcher.Invoke(ApplyWorkflowHotkeys);
     }
 
     public void ApplySettings()
@@ -95,7 +90,7 @@ public sealed class HotkeyService : IDisposable
         var s = _settings.Current;
 
         StopAllHooks();
-        StopProfileHooks();
+        StopWorkflowHooks();
 
         var hybridKey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey) ? s.PushToTalkHotkey : s.ToggleHotkey;
         if (!string.IsNullOrWhiteSpace(hybridKey))
@@ -116,50 +111,48 @@ public sealed class HotkeyService : IDisposable
             _holdOnlyHook.Start();
         }
 
-        if (!string.IsNullOrWhiteSpace(s.PromptPaletteHotkey))
-        {
-            _promptPaletteHook.SetHotkey(s.PromptPaletteHotkey);
-            _promptPaletteHook.Start();
-        }
-
         _cancelHook.Start();
 
-        ApplyProfileHotkeys();
+        ApplyWorkflowHotkeys();
         ApplyEnabledState();
     }
 
-    private void ApplyProfileHotkeys()
+    private void ApplyWorkflowHotkeys()
     {
-        StopProfileHooks();
+        StopWorkflowHooks();
 
-        foreach (var profile in _profiles.Profiles)
+        foreach (var workflow in _workflows.Workflows)
         {
-            if (!profile.IsEnabled || string.IsNullOrWhiteSpace(profile.HotkeyData)) continue;
+            if (!workflow.IsEnabled || workflow.Trigger.Kind != WorkflowTriggerKind.Hotkey)
+                continue;
 
-            var hook = new KeyboardHook();
-            var profileId = profile.Id;
-            hook.KeyDown += (_, _) =>
+            foreach (var hotkey in workflow.Trigger.Hotkeys.Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey)))
             {
-                if (!IsEnabled) return;
+                var hook = new KeyboardHook();
+                var workflowId = workflow.Id;
+                hook.KeyDown += (_, _) =>
+                {
+                    if (!IsEnabled) return;
 
-                if (_isActive)
-                {
-                    _isActive = false;
-                    CurrentMode = null;
-                    DictationStopRequested?.Invoke(this, EventArgs.Empty);
-                }
-                else
-                {
-                    _isActive = true;
-                    CurrentMode = HotkeyMode.Toggle;
-                    ProfileDictationRequested?.Invoke(this, profileId);
-                }
-            };
-            hook.SetHotkey(profile.HotkeyData);
-            hook.Start();
-            hook.IsEnabled = _isEnabled;
-            _profileHooks.Add((hook, profileId));
-            Debug.WriteLine($"Registered profile hotkey: {profile.HotkeyData} for {profile.Name}");
+                    if (_isActive)
+                    {
+                        _isActive = false;
+                        CurrentMode = null;
+                        DictationStopRequested?.Invoke(this, EventArgs.Empty);
+                    }
+                    else
+                    {
+                        _isActive = true;
+                        CurrentMode = HotkeyMode.Toggle;
+                        WorkflowDictationRequested?.Invoke(this, workflowId);
+                    }
+                };
+                hook.SetHotkey(hotkey);
+                hook.Start();
+                hook.IsEnabled = _isEnabled;
+                _workflowHooks.Add((hook, workflowId));
+                Debug.WriteLine($"Registered workflow hotkey: {hotkey} for {workflow.Name}");
+            }
         }
     }
 
@@ -168,21 +161,20 @@ public sealed class HotkeyService : IDisposable
         _hybridHook.IsEnabled = _isEnabled;
         _toggleOnlyHook.IsEnabled = _isEnabled;
         _holdOnlyHook.IsEnabled = _isEnabled;
-        _promptPaletteHook.IsEnabled = _isEnabled;
         _cancelHook.IsEnabled = _isEnabled && IsCancelShortcutEnabled;
 
-        foreach (var (hook, _) in _profileHooks)
+        foreach (var (hook, _) in _workflowHooks)
             hook.IsEnabled = _isEnabled;
     }
 
-    private void StopProfileHooks()
+    private void StopWorkflowHooks()
     {
-        foreach (var (hook, _) in _profileHooks)
+        foreach (var (hook, _) in _workflowHooks)
         {
             hook.Stop();
             hook.Dispose();
         }
-        _profileHooks.Clear();
+        _workflowHooks.Clear();
     }
 
     // --- Hybrid: short press = toggle, long hold = PTT ---
@@ -274,14 +266,6 @@ public sealed class HotkeyService : IDisposable
         DictationStopRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    // --- Prompt Palette: single press = toggle ---
-
-    private void OnPromptPaletteKeyDown(object? sender, EventArgs e)
-    {
-        if (!IsEnabled) return;
-        PromptPaletteRequested?.Invoke(this, EventArgs.Empty);
-    }
-
     private void OnCancelKeyDown(object? sender, EventArgs e)
     {
         if (!IsEnabled || !IsCancelShortcutEnabled) return;
@@ -295,7 +279,6 @@ public sealed class HotkeyService : IDisposable
         _hybridHook.Stop();
         _toggleOnlyHook.Stop();
         _holdOnlyHook.Stop();
-        _promptPaletteHook.Stop();
         _cancelHook.Stop();
         _isActive = false;
         CurrentMode = null;
@@ -315,11 +298,10 @@ public sealed class HotkeyService : IDisposable
         if (!_disposed)
         {
             StopAllHooks();
-            StopProfileHooks();
+            StopWorkflowHooks();
             _hybridHook.Dispose();
             _toggleOnlyHook.Dispose();
             _holdOnlyHook.Dispose();
-            _promptPaletteHook.Dispose();
             _cancelHook.Dispose();
             _disposed = true;
         }

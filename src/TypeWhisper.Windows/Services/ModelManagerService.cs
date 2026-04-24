@@ -576,7 +576,7 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
         CancellationToken cancellationToken = default)
     {
         var wavBytes = WavEncoder.Encode(audioSamples);
-        var translate = task == TranscriptionTask.Translate;
+        var translate = task == TranscriptionTask.Translate && _plugin.SupportsTranslation;
         var result = await _plugin.TranscribeAsync(wavBytes, language, translate, null, cancellationToken);
         return new TranscriptionResult
         {

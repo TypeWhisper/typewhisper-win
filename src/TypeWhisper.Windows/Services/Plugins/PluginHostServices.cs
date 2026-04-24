@@ -25,7 +25,7 @@ public sealed class PluginHostServices : IPluginHostServices
     private readonly string _pluginId;
     private readonly IActiveWindowService _activeWindow;
     private readonly IPluginEventBus _eventBus;
-    private readonly IProfileService _profiles;
+    private readonly IWorkflowService _workflows;
     private readonly Action? _onCapabilitiesChanged;
     private readonly PluginLocalization _localization;
     private readonly string _settingsFilePath;
@@ -39,13 +39,13 @@ public sealed class PluginHostServices : IPluginHostServices
         string pluginDirectory,
         IActiveWindowService activeWindow,
         IPluginEventBus eventBus,
-        IProfileService profiles,
+        IWorkflowService workflows,
         Action? onCapabilitiesChanged = null)
     {
         _pluginId = pluginId;
         _activeWindow = activeWindow;
         _eventBus = eventBus;
-        _profiles = profiles;
+        _workflows = workflows;
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
         _pluginDataDirectory = Path.Combine(Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
@@ -69,7 +69,7 @@ public sealed class PluginHostServices : IPluginHostServices
     public IPluginLocalization Localization => _localization;
 
     public IReadOnlyList<string> AvailableProfileNames =>
-        _profiles.Profiles.Select(p => p.Name).ToList();
+        _workflows.Workflows.Select(w => w.Name).ToList();
 
     public void Log(PluginLogLevel level, string message)
     {

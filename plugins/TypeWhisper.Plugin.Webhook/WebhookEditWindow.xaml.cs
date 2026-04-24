@@ -47,7 +47,7 @@ public partial class WebhookEditWindow : Window
         var selected = _profileItems.Count(p => p.IsSelected);
         FilterHint.Text = selected == 0
             ? "Aktiv für alle Transkriptionen"
-            : "Nur aktiv für ausgewählte Profile";
+            : "Nur aktiv für ausgewählte Workflows";
     }
 
     private void OnSave(object sender, RoutedEventArgs e)

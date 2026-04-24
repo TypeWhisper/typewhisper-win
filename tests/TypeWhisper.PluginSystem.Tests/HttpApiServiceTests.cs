@@ -20,7 +20,7 @@ public class HttpApiServiceTests : IDisposable
 {
     private readonly string _dictionaryPath = Path.GetTempFileName();
     private readonly Mock<IActiveWindowService> _activeWindow = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly Mock<IHistoryService> _history = new();
     private readonly PluginEventBus _eventBus = new();
@@ -28,7 +28,7 @@ public class HttpApiServiceTests : IDisposable
 
     public HttpApiServiceTests()
     {
-        _profiles.Setup(p => p.Profiles).Returns([]);
+        _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
         _history.Setup(h => h.Records).Returns([]);
     }
 
@@ -168,22 +168,8 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ProfilesList_IncludesRaycastCompatibleAliases()
+    public async Task ProfilesList_ReturnsNotFoundAfterWorkflowMigration()
     {
-        _profiles.Setup(p => p.Profiles).Returns([
-            new Profile
-            {
-                Id = "profile-1",
-                Name = "Browser",
-                IsEnabled = true,
-                Priority = 10,
-                ProcessNames = ["chrome.exe"],
-                UrlPatterns = ["*.example.com"],
-                InputLanguage = "de",
-                TranslationTarget = "en"
-            }
-        ]);
-
         var service = CreateService();
         var response = await service.HandleRequestAsync(new HttpApiRequest(
             "GET",
@@ -191,14 +177,8 @@ public class HttpApiServiceTests : IDisposable
             new NameValueCollection(),
             new Dictionary<string, string>(),
             []), CancellationToken.None);
-        var json = JsonObject(response);
-        var profile = json["profiles"].EnumerateArray().Single();
 
-        Assert.Equal(200, response.StatusCode);
-        Assert.Equal("chrome.exe", profile.GetProperty("process_names").EnumerateArray().Single().GetString());
-        Assert.Equal("chrome.exe", profile.GetProperty("bundle_identifiers").EnumerateArray().Single().GetString());
-        Assert.Equal("en", profile.GetProperty("translation_target").GetString());
-        Assert.Equal("en", profile.GetProperty("translation_target_language").GetString());
+        Assert.Equal(404, response.StatusCode);
     }
 
     private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins)
@@ -217,7 +197,7 @@ public class HttpApiServiceTests : IDisposable
             _loader,
             _eventBus,
             _activeWindow.Object,
-            _profiles.Object,
+            _workflows.Object,
             _settings.Object,
             []);
         SetPrivateField(pluginManager, "_transcriptionEngines", plugins.ToList());
@@ -235,7 +215,6 @@ public class HttpApiServiceTests : IDisposable
             _settings.Object,
             new AudioFileService(),
             _history.Object,
-            _profiles.Object,
             dictionary,
             vocabulary.Object,
             new PostProcessingPipeline(),

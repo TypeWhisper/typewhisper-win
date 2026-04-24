@@ -34,7 +34,7 @@ public interface IPluginHostServices
     /// <summary>Event bus for publishing and subscribing to plugin events.</summary>
     IPluginEventBus EventBus { get; }
 
-    /// <summary>Names of all available dictation profiles.</summary>
+    /// <summary>Names of all available workflows. Kept as an SDK property name for existing plugins.</summary>
     IReadOnlyList<string> AvailableProfileNames { get; }
 
     /// <summary>Logs a message through the host logging system.</summary>

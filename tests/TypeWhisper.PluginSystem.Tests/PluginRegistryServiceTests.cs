@@ -12,7 +12,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class PluginRegistryServiceTests : IDisposable
 {
     private readonly Mock<IActiveWindowService> _activeWindow = new();
-    private readonly Mock<IProfileService> _profiles = new();
+    private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
@@ -20,13 +20,13 @@ public class PluginRegistryServiceTests : IDisposable
 
     public PluginRegistryServiceTests()
     {
-        _profiles.Setup(p => p.Profiles).Returns(new List<Profile>());
+        _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
         _settings.Setup(s => s.Current).Returns(new AppSettings());
     }
 
     private PluginManager CreateManager()
     {
-        _manager = new PluginManager(_loader, _eventBus, _activeWindow.Object, _profiles.Object, _settings.Object);
+        _manager = new PluginManager(_loader, _eventBus, _activeWindow.Object, _workflows.Object, _settings.Object);
         return _manager;
     }
 

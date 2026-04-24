@@ -65,10 +65,6 @@ public partial class App : Application
         _serviceProvider = services.BuildServiceProvider();
         Services = _serviceProvider;
 
-        // Seed prompt presets
-        var promptActions = _serviceProvider.GetRequiredService<IPromptActionService>();
-        promptActions.SeedPresets();
-
         // Load settings
         var settings = _serviceProvider.GetRequiredService<ISettingsService>();
         settings.Load();
@@ -172,7 +168,7 @@ public partial class App : Application
         // Migrate old local model IDs to plugin-prefixed format
         var modelManager = _serviceProvider.GetRequiredService<ModelManagerService>();
         modelManager.MigrateSettings();
-        MigrateProfileModelOverrides(_serviceProvider);
+        MigrateWorkflowModelOverrides(_serviceProvider);
 
         // Auto-load previously selected model (after plugin initialization)
         if (!string.IsNullOrEmpty(settings.Current.SelectedModelId))
@@ -332,10 +328,8 @@ public partial class App : Application
         services.AddSingleton<IVocabularyBoostingService, VocabularyBoostingService>();
         services.AddSingleton<ISnippetService>(
             new SnippetService(Path.Combine(dataPath, "snippets.json")));
-        services.AddSingleton<IProfileService>(
-            new ProfileService(Path.Combine(dataPath, "profiles.json")));
-        services.AddSingleton<IPromptActionService>(
-            new PromptActionService(Path.Combine(dataPath, "prompt-actions.json")));
+        services.AddSingleton<IWorkflowService>(
+            new WorkflowService(Path.Combine(dataPath, "workflows.json")));
 
         // Post-processing pipeline
         services.AddSingleton<IPostProcessingPipeline, PostProcessingPipeline>();
@@ -350,6 +344,7 @@ public partial class App : Application
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
+        services.AddSingleton<WindowsAppDiscoveryService>();
         services.AddSingleton<SoundService>();
         services.AddSingleton<HttpApiService>();
         services.AddSingleton<ILocalApiServer>(sp => sp.GetRequiredService<HttpApiService>());
@@ -372,10 +367,8 @@ public partial class App : Application
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<DictionaryViewModel>();
         services.AddSingleton<SnippetsViewModel>();
-        services.AddSingleton<ProfilesViewModel>();
+        services.AddSingleton<WorkflowsViewModel>();
         services.AddSingleton<PluginsViewModel>();
-        services.AddSingleton<PromptsViewModel>();
-        services.AddSingleton<PromptPaletteViewModel>();
         services.AddSingleton<SettingsWindowViewModel>();
         services.AddSingleton<FileTranscriptionViewModel>();
         services.AddSingleton<DashboardViewModel>();
@@ -424,21 +417,26 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static void MigrateProfileModelOverrides(ServiceProvider sp)
+    private static void MigrateWorkflowModelOverrides(ServiceProvider sp)
     {
         try
         {
-            var profileService = sp.GetRequiredService<IProfileService>();
-            foreach (var profile in profileService.Profiles)
+            var workflowService = sp.GetRequiredService<IWorkflowService>();
+            foreach (var workflow in workflowService.Workflows)
             {
-                var migrated = ModelManagerService.MigrateModelId(profile.TranscriptionModelOverride);
-                if (migrated != profile.TranscriptionModelOverride)
-                    profileService.UpdateProfile(profile with { TranscriptionModelOverride = migrated });
+                var migrated = ModelManagerService.MigrateModelId(workflow.Behavior.TranscriptionModelOverride);
+                if (migrated != workflow.Behavior.TranscriptionModelOverride)
+                {
+                    workflowService.UpdateWorkflow(workflow with
+                    {
+                        Behavior = workflow.Behavior with { TranscriptionModelOverride = migrated }
+                    });
+                }
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Profile model migration failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Workflow model migration failed: {ex.Message}");
         }
     }
 

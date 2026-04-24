@@ -10,8 +10,8 @@
     <Grid>
         <!-- Active profile -->
         <Border Background="#1A3A6B" CornerRadius="6" Padding="5,2"
-                Visibility="{Binding ActiveProfileName, Converter={StaticResource NonEmptyToVis}}">
-            <TextBlock Text="{Binding ActiveProfileName}"
+                Visibility="{Binding ActiveWorkflowName, Converter={StaticResource NonEmptyToVis}}">
+            <TextBlock Text="{Binding ActiveWorkflowName}"
                        Foreground="#5B9FFF" FontSize="10"
                        MaxWidth="80" TextTrimming="CharacterEllipsis"
                        VerticalAlignment="Center"/>
@@ -22,13 +22,13 @@
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Visible"/>
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding ActiveProfileName, Converter={StaticResource NonEmptyToVis}}" Value="Visible">
+                        <DataTrigger Binding="{Binding ActiveWorkflowName, Converter={StaticResource NonEmptyToVis}}" Value="Visible">
                             <Setter Property="Visibility" Value="Collapsed"/>
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <TextBlock Text="{loc:Str Profiles.NoProfile}"
+            <TextBlock Text="{loc:Str Workflows.NoActiveWorkflow}"
                        Foreground="#555" FontSize="10"
                        VerticalAlignment="Center"/>
         </Border>

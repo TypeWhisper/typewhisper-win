@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using TypeWhisper.Core.Interfaces;
-using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
@@ -21,23 +20,28 @@ public sealed class PromptProcessingService
     public bool IsAnyProviderAvailable =>
         _pluginManager.LlmProviders.Any(p => p.IsAvailable);
 
-    public async Task<string> ProcessAsync(PromptAction action, string inputText, CancellationToken ct)
+    public async Task<string> ProcessAsync(
+        string systemPrompt,
+        string inputText,
+        string? providerOverride,
+        string? modelOverride,
+        CancellationToken ct)
     {
-        var (provider, modelId) = ResolveProvider(action);
+        var (provider, modelId) = ResolveProvider(providerOverride, modelOverride);
         if (provider is null)
             throw new InvalidOperationException(Loc.Instance["Error.NoLlmProvider"]);
 
-        Debug.WriteLine($"[PromptProcessing] Using provider '{provider.ProviderName}' model '{modelId}' for action '{action.Name}'");
+        Debug.WriteLine($"[PromptProcessing] Using provider '{provider.ProviderName}' model '{modelId}' for workflow prompt");
 
-        return await provider.ProcessAsync(action.SystemPrompt, inputText, modelId, ct);
+        return await provider.ProcessAsync(systemPrompt, inputText, modelId, ct);
     }
 
-    private (ILlmProviderPlugin? Provider, string ModelId) ResolveProvider(PromptAction action)
+    private (ILlmProviderPlugin? Provider, string ModelId) ResolveProvider(string? providerOverride, string? modelOverride)
     {
-        // 1. Per-prompt override
-        if (!string.IsNullOrEmpty(action.ProviderOverride))
+        // 1. Per-workflow override.
+        if (!string.IsNullOrEmpty(providerOverride))
         {
-            var result = ResolvePluginModelId(action.ProviderOverride);
+            var result = ResolvePluginModelId(providerOverride, modelOverride);
             if (result.Provider is not null) return result;
         }
 
@@ -45,7 +49,7 @@ public sealed class PromptProcessingService
         var defaultProvider = _settings.Current.DefaultLlmProvider;
         if (!string.IsNullOrEmpty(defaultProvider))
         {
-            var result = ResolvePluginModelId(defaultProvider);
+            var result = ResolvePluginModelId(defaultProvider, null);
             if (result.Provider is not null) return result;
         }
 
@@ -61,21 +65,41 @@ public sealed class PromptProcessingService
         return (null, "");
     }
 
-    private (ILlmProviderPlugin? Provider, string ModelId) ResolvePluginModelId(string pluginModelId)
+    private (ILlmProviderPlugin? Provider, string ModelId) ResolvePluginModelId(string pluginModelId, string? modelOverride)
     {
-        // Format: plugin:{pluginId}:{modelId}
+        // Preferred format: plugin:{pluginId}:{modelId}
         var parts = pluginModelId.Split(':', 3);
-        if (parts.Length < 3 || parts[0] != "plugin")
-            return (null, "");
+        if (parts.Length >= 2 && parts[0] == "plugin")
+        {
+            var pluginId = parts[1];
+            var modelId = parts.Length == 3 ? parts[2] : modelOverride;
 
-        var pluginId = parts[1];
-        var modelId = parts[2];
+            var provider = _pluginManager.LlmProviders
+                .FirstOrDefault(p => p is ITypeWhisperPlugin twp &&
+                    _pluginManager.GetPlugin(pluginId)?.Instance == twp &&
+                    p.IsAvailable);
 
-        var provider = _pluginManager.LlmProviders
-            .FirstOrDefault(p => p is ITypeWhisperPlugin twp &&
-                _pluginManager.GetPlugin(pluginId)?.Instance == twp &&
-                p.IsAvailable);
+            if (provider is null)
+                return (null, "");
 
-        return provider is not null ? (provider, modelId) : (null, "");
+            var resolvedModel = !string.IsNullOrWhiteSpace(modelId)
+                ? modelId
+                : provider.SupportedModels.FirstOrDefault()?.Id;
+
+            return !string.IsNullOrWhiteSpace(resolvedModel)
+                ? (provider, resolvedModel)
+                : (null, "");
+        }
+
+        if (!string.IsNullOrWhiteSpace(modelOverride))
+        {
+            foreach (var provider in _pluginManager.LlmProviders.Where(p => p.IsAvailable))
+            {
+                if (provider.SupportedModels.Any(model => model.Id == modelOverride))
+                    return (provider, modelOverride);
+            }
+        }
+
+        return (null, "");
     }
 }

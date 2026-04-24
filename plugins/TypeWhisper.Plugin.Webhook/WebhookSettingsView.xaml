@@ -43,10 +43,10 @@
                                 <Run Text="{Binding Url, Mode=OneWay}" />
                             </TextBlock>
 
-                            <!-- Profile Filter Info -->
+                            <!-- Workflow Filter Info -->
                             <TextBlock Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Center"
                                        Foreground="Gray" FontSize="12" Margin="8,0"
-                                       Text="{Binding ProfileFilter.Count, StringFormat='{}{0} Profile', Mode=OneWay}" />
+                                       Text="{Binding ProfileFilter.Count, StringFormat='{}{0} Workflow', Mode=OneWay}" />
 
                             <!-- Edit Button -->
                             <Button Grid.Column="3" Grid.RowSpan="2" Content="Bearbeiten"

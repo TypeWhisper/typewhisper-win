@@ -242,7 +242,7 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         {
             sb.Append("<start_of_turn>system\n");
             sb.Append(systemPrompt).Append('\n');
-            sb.Append("IMPORTANT: Respond ONLY in the same language as the user's input. Output ONLY the requested result, nothing else. No explanations, no extra text.");
+            sb.Append("IMPORTANT: Follow the requested output language exactly. Output ONLY the requested result, nothing else. No explanations, no extra text.");
             sb.Append("<end_of_turn>\n");
         }
 

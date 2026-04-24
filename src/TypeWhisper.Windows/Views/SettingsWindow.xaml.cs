@@ -19,8 +19,7 @@ public partial class SettingsWindow : FluentWindow
         viewModel.RegisterSection(SettingsRoute.History, () => new HistorySection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Dictionary, () => new DictionarySection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Snippets, () => new SnippetsSection { DataContext = viewModel });
-        viewModel.RegisterSection(SettingsRoute.Profiles, () => new ProfilesSection { DataContext = viewModel });
-        viewModel.RegisterSection(SettingsRoute.Prompts, () => new PromptsSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Workflows, () => new WorkflowsSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Integrations, () => new PluginsSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.General, () => new GeneralSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Appearance, () => new AppearanceSection { DataContext = viewModel });
