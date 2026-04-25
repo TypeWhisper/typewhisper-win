@@ -12,6 +12,7 @@ public sealed class AudioRecordingService : IDisposable
     private const float AgcMaxGain = 20f;
     private const float AgcMinGain = 1f;
     private const float NormalizationTarget = 0.707f;
+    private static readonly TimeSpan StopDrainDuration = TimeSpan.FromMilliseconds(120);
 
     /// <summary>
     /// Minimum per-chunk RMS level to consider as containing speech.
@@ -168,6 +169,23 @@ public sealed class AudioRecordingService : IDisposable
             NormalizeAudio(samples);
 
         return samples;
+    }
+
+    public async Task<float[]?> StopRecordingAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_isRecording || _waveIn is null)
+            return null;
+
+        try
+        {
+            await Task.Delay(StopDrainDuration, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Still stop and return the samples captured so far.
+        }
+
+        return StopRecording();
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)

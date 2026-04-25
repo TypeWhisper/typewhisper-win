@@ -109,3 +109,58 @@ public class DictationShortSpeechPolicyTests
     private static float[] MakeSamples(double durationSeconds) =>
         Enumerable.Repeat(0.1f, (int)(durationSeconds * 16000)).ToArray();
 }
+
+public class DictationFinalTextPolicyTests
+{
+    [Fact]
+    public void SelectRawText_FinalTextWinsOverStalePreview()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Das ist der komplette Satz mit Ende.");
+
+        Assert.Equal("Das ist der komplette Satz mit Ende.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_DoesNotUsePreviewWhenFinalTextIsEmpty()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("");
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void ShouldRejectAsNoSpeech_RejectsEmptyFinalTextEvenWhenPreviewExists()
+    {
+        var reject = DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+            "",
+            noSpeechProbability: null,
+            hasPreviewText: true,
+            transcribeShortQuietClipsAggressively: false);
+
+        Assert.True(reject);
+    }
+
+    [Fact]
+    public void ShouldRejectAsNoSpeech_RejectsHighNoSpeechFinalTextWithoutPreview()
+    {
+        var reject = DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+            "Thank you.",
+            noSpeechProbability: 0.95f,
+            hasPreviewText: false,
+            transcribeShortQuietClipsAggressively: false);
+
+        Assert.True(reject);
+    }
+
+    [Fact]
+    public void ShouldRejectAsNoSpeech_AllowsHighNoSpeechFinalTextWhenPreviewConfirmsSpeech()
+    {
+        var reject = DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+            "This is the final transcript.",
+            noSpeechProbability: 0.95f,
+            hasPreviewText: true,
+            transcribeShortQuietClipsAggressively: false);
+
+        Assert.False(reject);
+    }
+}

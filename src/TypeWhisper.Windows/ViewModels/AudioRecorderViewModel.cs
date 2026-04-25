@@ -78,11 +78,11 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         _timer?.Dispose();
         _timer = null;
 
-        var samples = _audio.StopRecording();
+        var samples = await _audio.StopRecordingAsync();
         IsRecording = false;
         var duration = DateTime.UtcNow - _recordingStart;
 
-        if (samples.Length == 0)
+        if (samples is null || samples.Length == 0)
         {
             SetLocalizedStatus("Recorder.NoAudioCaptured");
             return;

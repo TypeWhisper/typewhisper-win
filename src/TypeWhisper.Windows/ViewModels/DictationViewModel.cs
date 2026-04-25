@@ -71,6 +71,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private Task? _consumerTask;
     private System.Timers.Timer? _durationTimer;
     private bool _isRecording;
+    private bool _isStoppingRecording;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
     private readonly object _apiSessionLock = new();
@@ -555,7 +556,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     private async Task StartRecording()
     {
-        if (_isRecording) return;
+        if (_isRecording || _isStoppingRecording) return;
         _isRecording = true;
         FeedbackText = null;
         FeedbackIsError = false;
@@ -687,90 +688,104 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task StopRecording()
     {
-        if (!_isRecording) return;
-        _isRecording = false;
+        if (!_isRecording || _isStoppingRecording) return;
+        _isStoppingRecording = true;
 
-        var streamingText = _streamingHandler.Stop();
-        _audio.SamplesAvailable -= OnSamplesAvailable;
-
-        var samples = _audio.StopRecording();
-        var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
-        var rawDuration = samples is null ? 0 : samples.Length / 16000.0;
-        _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration });
-        _durationTimer?.Stop();
-        _durationTimer?.Dispose();
-        _durationTimer = null;
-        _audioDucking.RestoreAudio();
-        _mediaPause.ResumeMedia();
-        RecordingSeconds = 0;
-        CurrentHotkeyMode = null;
-
-        // Flush remaining VAD segments
-        List<string> partialSnapshot;
-        if (_vad is not null)
+        try
         {
-            _vad.Flush();
-            await ProcessVadSegments();
-            _vad.Dispose();
-            _vad = null;
+            var streamingText = _streamingHandler.Stop();
+            _audio.SamplesAvailable -= OnSamplesAvailable;
+
+            var samples = await _audio.StopRecordingAsync();
+            _isRecording = false;
+            var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
+            var rawDuration = samples is null ? 0 : samples.Length / 16000.0;
+            _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration });
+            _durationTimer?.Stop();
+            _durationTimer?.Dispose();
+            _durationTimer = null;
+            _audioDucking.RestoreAudio();
+            _mediaPause.ResumeMedia();
+            RecordingSeconds = 0;
+            CurrentHotkeyMode = null;
+
+            // Flush remaining VAD segments
+            List<string> partialSnapshot;
+            if (_vad is not null)
+            {
+                _vad.Flush();
+                await ProcessVadSegments();
+                _vad.Dispose();
+                _vad = null;
+            }
+
+            // Preview text is useful to confirm speech, but the pasted transcript
+            // must come from the full captured buffer so it is not constrained by
+            // the live preview polling cadence.
+            partialSnapshot = !string.IsNullOrWhiteSpace(streamingText)
+                ? [streamingText]
+                : [.. _partialSegments];
+
+            var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
+            var shortSpeechDecision = DictationShortSpeechPolicy.Classify(
+                rawDuration,
+                rawPeakRmsLevel,
+                partialSnapshot.Count > 0,
+                aggressiveShortQuietHandling);
+
+            if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
+            {
+                FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
+                ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
+                return;
+            }
+
+            if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
+            {
+                FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
+                ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
+                return;
+            }
+
+            samples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(samples ?? [], rawDuration);
+
+            var apiSessionId = _activeApiDictationSessionId;
+            if (apiSessionId is not null)
+            {
+                MarkApiDictationSessionProcessing(apiSessionId.Value);
+                _activeApiDictationSessionId = null;
+            }
+
+            // Snapshot all context and enqueue — returns immediately
+            var job = new TranscriptionJob(
+                samples,
+                partialSnapshot,
+                _activeWorkflow,
+                _capturedProcessName,
+                _capturedWindowTitle,
+                _capturedUrl,
+                EffectiveLanguage,
+                EffectiveTask,
+                _modelManager.ActiveModelId,
+                apiSessionId,
+                aggressiveShortQuietHandling);
+
+            Interlocked.Increment(ref _pendingJobCount);
+            await _jobChannel.Writer.WriteAsync(job);
+            UpdateVisualState();
         }
-
-        // Use streaming result if available, otherwise fall back to VAD partials
-        partialSnapshot = !string.IsNullOrWhiteSpace(streamingText)
-            ? [streamingText]
-            : [.. _partialSegments];
-
-        var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
-        var shortSpeechDecision = DictationShortSpeechPolicy.Classify(
-            rawDuration,
-            rawPeakRmsLevel,
-            partialSnapshot.Count > 0,
-            aggressiveShortQuietHandling);
-
-        if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
+        finally
         {
-            FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
-            ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
-            return;
+            _isRecording = false;
+            _isStoppingRecording = false;
         }
-
-        if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
-        {
-            FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
-            ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
-            return;
-        }
-
-        samples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(samples ?? [], rawDuration);
-
-        var apiSessionId = _activeApiDictationSessionId;
-        if (apiSessionId is not null)
-        {
-            MarkApiDictationSessionProcessing(apiSessionId.Value);
-            _activeApiDictationSessionId = null;
-        }
-
-        // Snapshot all context and enqueue — returns immediately
-        var job = new TranscriptionJob(
-            samples,
-            partialSnapshot,
-            _activeWorkflow,
-            _capturedProcessName,
-            _capturedWindowTitle,
-            _capturedUrl,
-            EffectiveLanguage,
-            EffectiveTask,
-            _modelManager.ActiveModelId,
-            apiSessionId,
-            aggressiveShortQuietHandling);
-
-        Interlocked.Increment(ref _pendingJobCount);
-        await _jobChannel.Writer.WriteAsync(job);
-        UpdateVisualState();
     }
 
     private Task AbortActiveOperation()
     {
+        if (_isStoppingRecording)
+            return Task.CompletedTask;
+
         if (_isRecording)
         {
             _isRecording = false;
@@ -821,35 +836,25 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             string? detectedLanguage = null;
             double audioDuration = job.Samples.Length / 16000.0;
 
-            if (job.PartialSegments.Count > 0)
+            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+            var result = await _modelManager.Engine.TranscribeAsync(
+                job.Samples, language, job.EffectiveTask, ct);
+            var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
+
+            if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+                    result.Text,
+                    result.NoSpeechProbability,
+                    hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
+                    job.TranscribeShortQuietClipsAggressively))
             {
-                rawText = string.Join(" ", job.PartialSegments);
+                FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                    ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
+                return;
             }
-            else
-            {
-                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
-                var result = await _modelManager.Engine.TranscribeAsync(
-                    job.Samples, language, job.EffectiveTask, ct);
 
-                if (string.IsNullOrWhiteSpace(result.Text))
-                {
-                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                    return;
-                }
-
-                if (result.NoSpeechProbability is > 0.8f && !job.TranscribeShortQuietClipsAggressively)
-                {
-                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                    return;
-                }
-
-                rawText = result.Text;
-                detectedLanguage = result.DetectedLanguage;
-            }
+            rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+            detectedLanguage = result.DetectedLanguage;
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
@@ -1305,6 +1310,31 @@ internal enum ShortSpeechDecision
     DiscardTooShort,
     DiscardNoSpeech,
     Transcribe
+}
+
+internal static class DictationFinalTextPolicy
+{
+    private const float NoSpeechProbabilityThreshold = 0.8f;
+
+    public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
+        string.Join(" ", previewSegments.Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
+
+    public static bool ShouldRejectAsNoSpeech(
+        string? finalText,
+        float? noSpeechProbability,
+        bool hasPreviewText,
+        bool transcribeShortQuietClipsAggressively)
+    {
+        if (string.IsNullOrWhiteSpace(finalText))
+            return true;
+
+        return noSpeechProbability is > NoSpeechProbabilityThreshold
+            && !transcribeShortQuietClipsAggressively
+            && !hasPreviewText;
+    }
+
+    public static string SelectRawText(string? finalText) =>
+        finalText?.Trim() ?? "";
 }
 
 internal static class DictationShortSpeechPolicy
