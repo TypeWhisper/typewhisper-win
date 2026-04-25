@@ -42,6 +42,7 @@ jobs:
             'webhook'            = 'TypeWhisper.Plugin.Webhook'
             'deepgram'           = 'TypeWhisper.Plugin.Deepgram'
             'assemblyai'         = 'TypeWhisper.Plugin.AssemblyAi'
+            'elevenlabs'         = 'TypeWhisper.Plugin.ElevenLabs'
             'gemini'             = 'TypeWhisper.Plugin.Gemini'
             'linear'             = 'TypeWhisper.Plugin.Linear'
             'obsidian'           = 'TypeWhisper.Plugin.Obsidian'

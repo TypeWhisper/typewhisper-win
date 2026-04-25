@@ -203,6 +203,7 @@ The built-in marketplace provides the following plugins:
 | Google Gemini | LLM | Gemini 2.5 Flash, Pro, and Flash Lite |
 | AssemblyAI | Transcription | AssemblyAI speech-to-text |
 | Deepgram | Transcription | Deepgram Nova ASR |
+| ElevenLabs | Transcription | ElevenLabs Scribe speech-to-text |
 | OpenAI Compatible | Transcription + LLM | Any OpenAI-compatible server (Ollama, LM Studio, vLLM) |
 | Linear | Action | Create Linear issues from transcriptions |
 | Obsidian | Action | Create Obsidian notes from transcriptions |
@@ -258,6 +259,7 @@ typewhisper-win/
 │   ├── TypeWhisper.Plugin.SherpaOnnx/       # Local ASR (Parakeet, Canary)
 │   ├── TypeWhisper.Plugin.AssemblyAi/       # AssemblyAI transcription
 │   ├── TypeWhisper.Plugin.Deepgram/         # Deepgram transcription
+│   ├── TypeWhisper.Plugin.ElevenLabs/       # ElevenLabs Scribe transcription
 │   ├── TypeWhisper.Plugin.Linear/           # Linear issue creation
 │   ├── TypeWhisper.Plugin.Obsidian/         # Obsidian note creation
 │   ├── TypeWhisper.Plugin.Script/           # Custom script execution
