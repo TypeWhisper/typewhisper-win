@@ -374,5 +374,33 @@
     "descriptions": {
       "de": "Cloud-Transkription ueber ElevenLabs Scribe mit Echtzeit-WebSocket-Streaming"
     }
+  },
+  {
+    "id": "com.typewhisper.assemblyai",
+    "name": "AssemblyAI",
+    "version": "1.1.2",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "AssemblyAI Universal-2 transcription engine",
+    "category": "Transcription",
+    "size": 16776,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-assemblyai-v1.1.2/com.typewhisper.assemblyai-1.1.2.zip",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": null
+  },
+  {
+    "id": "com.typewhisper.deepgram",
+    "name": "Deepgram",
+    "version": "1.0.2",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Deepgram Nova transcription engine",
+    "category": "Transcription",
+    "size": 14989,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-deepgram-v1.0.2/com.typewhisper.deepgram-1.0.2.zip",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": null
   }
 ]
