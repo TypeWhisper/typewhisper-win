@@ -176,6 +176,26 @@ public class StabilizeTextTests
 public class StreamingTranscriptStateTests
 {
     [Fact]
+    public void StopSession_UsesOnlyConfirmedRealtimeText()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        var interimApplied = sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello world", false),
+            text => text,
+            out var interimDisplay);
+
+        Assert.True(interimApplied);
+        Assert.Equal("Hello world", interimDisplay);
+
+        var finalText = sut.StopSession();
+
+        Assert.Equal("", finalText);
+    }
+
+    [Fact]
     public void StopSession_InvalidatesLateRealtimeEvents()
     {
         var sut = new StreamingTranscriptState();
@@ -183,7 +203,7 @@ public class StreamingTranscriptStateTests
 
         var appliedBeforeStop = sut.TryApplyRealtime(
             sessionVersion,
-            new StreamingTranscriptEvent("Hello world", false),
+            new StreamingTranscriptEvent("Hello world", true),
             text => text,
             out var displayBeforeStop);
 
@@ -202,6 +222,29 @@ public class StreamingTranscriptStateTests
 
         Assert.False(appliedAfterStop);
         Assert.Equal("", displayAfterStop);
+    }
+
+    [Fact]
+    public void StopSession_FallsBackWhenTrailingRealtimeInterimAfterConfirmedText()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Confirmed", true),
+            text => text,
+            out var confirmedDisplay));
+        Assert.Equal("Confirmed", confirmedDisplay);
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("still changing", false),
+            text => text,
+            out var interimDisplay));
+        Assert.Equal("Confirmed still changing", interimDisplay);
+
+        Assert.Equal("", sut.StopSession());
     }
 
     [Fact]

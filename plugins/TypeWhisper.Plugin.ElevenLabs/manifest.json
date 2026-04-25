@@ -1,0 +1,16 @@
+{
+  "id": "com.typewhisper.elevenlabs",
+  "name": "ElevenLabs",
+  "version": "1.0.0",
+  "author": "TypeWhisper",
+  "description": "Cloud transcription via ElevenLabs Scribe with real-time WebSocket streaming",
+  "category": "transcription",
+  "isLocal": false,
+  "requiresApiKey": true,
+  "iconSystemName": "waveform.badge.mic",
+  "descriptions": {
+    "de": "Cloud-Transkription ueber ElevenLabs Scribe mit Echtzeit-WebSocket-Streaming"
+  },
+  "assemblyName": "TypeWhisper.Plugin.ElevenLabs.dll",
+  "pluginClass": "TypeWhisper.Plugin.ElevenLabs.ElevenLabsPlugin"
+}

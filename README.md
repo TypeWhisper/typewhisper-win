@@ -22,7 +22,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 ### Transcription
 
 - **On-device models:** Parakeet TDT 0.6B, Canary 180M Flash, whisper.cpp models, and Granite Speech run locally through plugins. Recommended local models run on CPU, with no GPU required.
-- **Cloud transcription:** Groq Whisper, OpenAI Whisper, AssemblyAI, Deepgram, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
+- **Cloud transcription:** Groq Whisper, OpenAI Whisper, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
 - **Streaming preview:** Silero VAD detects speech segments during recording and shows partial transcription results in the overlay before recording stops.
 - **Short-clip handling:** Brief utterances are padded and retained more reliably across local and cloud engines.
 - **File transcription:** Drag and drop audio/video files. Supports WAV, MP3, M4A, AAC, OGG, FLAC, WMA, MP4, MKV, AVI, MOV, and WebM.
@@ -235,7 +235,7 @@ Bundled plugin families include:
 | Type | Plugins |
 |------|---------|
 | Local transcription | SherpaOnnx, whisper.cpp, Granite Speech |
-| Cloud transcription | OpenAI, Groq, AssemblyAI, Deepgram, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
+| Cloud transcription | OpenAI, Groq, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
 | Server-backed transcription | Qwen3 STT |
 | LLM providers | OpenAI, Groq, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Gemma Local |
 | Actions | Linear, Obsidian, Script, LiveTranscript, Webhook |

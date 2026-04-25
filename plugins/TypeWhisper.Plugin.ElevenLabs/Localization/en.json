@@ -1,0 +1,12 @@
+{
+  "Settings.Test": "Test",
+  "Settings.Saved": "Saved",
+  "Settings.EnterApiKey": "Please enter an API key first",
+  "Settings.ApiKeyHint": "Stored securely and used for ElevenLabs Scribe transcription.",
+  "Settings.Testing": "Testing...",
+  "Settings.ApiKeyValid": "API key valid!",
+  "Settings.ApiKeyInvalid": "Invalid API key",
+  "Settings.TranscriptionModel": "Transcription Model",
+  "Settings.ModelHint": "Scribe v2 is used for file transcription; live dictation uses Scribe v2 Realtime.",
+  "Settings.Error": "Error: {0}"
+}
