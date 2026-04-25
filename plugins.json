@@ -344,5 +344,19 @@
     "requiresApiKey": true,
     "size": 0,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-vector-memory-v1.0.0/com.typewhisper.openai-vector-memory-1.0.0.zip"
+  },
+  {
+    "id": "com.typewhisper.whisper-cpp",
+    "name": "whisper.cpp (Local)",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Offline transcription via whisper.cpp using Whisper.net",
+    "category": "transcription",
+    "size": 2138767,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.0.0/com.typewhisper.whisper-cpp-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": null
   }
 ]
