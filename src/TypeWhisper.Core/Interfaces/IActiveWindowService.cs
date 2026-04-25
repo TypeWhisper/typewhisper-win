@@ -2,6 +2,7 @@ namespace TypeWhisper.Core.Interfaces;
 
 public interface IActiveWindowService
 {
+    IntPtr GetActiveWindowHandle();
     string? GetActiveWindowProcessName();
     string? GetActiveWindowTitle();
     string? GetBrowserUrl();

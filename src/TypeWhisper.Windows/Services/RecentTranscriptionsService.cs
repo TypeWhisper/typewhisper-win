@@ -108,7 +108,8 @@ public sealed class RecentTranscriptionsService
             var result = await _textInsertion.InsertTextAsync(
                 entry.FinalText,
                 _settings.Current.AutoPaste,
-                autoEnter: false);
+                autoEnter: false,
+                targetHwnd);
             FeedbackRequested?.Invoke(StatusTextFor(result), false);
         }
         catch (InvalidOperationException ex)

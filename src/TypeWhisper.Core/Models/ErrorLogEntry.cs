@@ -23,4 +23,5 @@ public static class ErrorCategory
     public const string Recording = "recording";
     public const string Prompt = "prompt";
     public const string Plugin = "plugin";
+    public const string Insertion = "insertion";
 }

@@ -19,6 +19,15 @@ public sealed class ActiveWindowService : IActiveWindowService
     private string? _lastTitle;
     private string? _cachedUrl;
 
+    public IntPtr GetActiveWindowHandle()
+    {
+        var hwnd = NativeMethods.GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
+
+        NativeMethods.GetWindowThreadProcessId(hwnd, out var processId);
+        return processId == 0 || processId == OwnProcessId ? IntPtr.Zero : hwnd;
+    }
+
     public IReadOnlyList<string> GetRunningAppProcessNames()
     {
         try

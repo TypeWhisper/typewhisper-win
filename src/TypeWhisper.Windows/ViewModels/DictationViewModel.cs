@@ -86,6 +86,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     // Captured at recording start for the current session
     private Workflow? _activeWorkflow;
     private string? _workflowHotkeyOverrideId;
+    private IntPtr _capturedWindowHandle;
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
     private string? _capturedUrl;
@@ -392,6 +393,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         ActiveProcessName = null;
         ActiveWorkflowName = null;
         _activeWorkflow = null;
+        _capturedWindowHandle = IntPtr.Zero;
         _capturedProcessName = null;
         _capturedWindowTitle = null;
         _capturedUrl = null;
@@ -563,6 +565,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         ShowFeedback = false;
 
         // Capture active window context at recording start
+        _capturedWindowHandle = _activeWindow.GetActiveWindowHandle();
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
         _capturedWindowTitle = _activeWindow.GetActiveWindowTitle();
         _capturedUrl = _activeWindow.GetBrowserUrl();
@@ -761,6 +764,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 samples,
                 partialSnapshot,
                 _activeWorkflow,
+                _capturedWindowHandle,
                 _capturedProcessName,
                 _capturedWindowTitle,
                 _capturedUrl,
@@ -1001,7 +1005,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     insertResult = await _textInsertion.InsertTextAsync(
                         finalText,
                         _settings.Current.AutoPaste,
-                        job.ActiveWorkflow?.Output.AutoEnter == true);
+                        job.ActiveWorkflow?.Output.AutoEnter == true,
+                        job.CapturedWindowHandle);
                 }
             }
             else
@@ -1015,7 +1020,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 insertResult = await _textInsertion.InsertTextAsync(
                     finalText,
                     _settings.Current.AutoPaste,
-                    job.ActiveWorkflow?.Output.AutoEnter == true);
+                    job.ActiveWorkflow?.Output.AutoEnter == true,
+                    job.CapturedWindowHandle);
             }
 
             _eventBus.Publish(new TextInsertedEvent
@@ -1295,6 +1301,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         float[] Samples,
         List<string> PartialSegments,
         Workflow? ActiveWorkflow,
+        IntPtr CapturedWindowHandle,
         string? CapturedProcessName,
         string? CapturedWindowTitle,
         string? CapturedUrl,
