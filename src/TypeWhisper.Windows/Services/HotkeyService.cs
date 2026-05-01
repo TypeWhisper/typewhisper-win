@@ -133,6 +133,7 @@ public sealed class HotkeyService : IDisposable
             _copyLastTranscriptionHook.Start();
         }
 
+        _cancelHook.SetHotkey("Escape");
         _cancelHook.Start();
 
         ApplyWorkflowHotkeys();
