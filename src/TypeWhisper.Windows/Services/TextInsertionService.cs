@@ -244,8 +244,7 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
                 ki = new NativeMethods.KEYBDINPUT
                 {
                     wVk = (ushort)virtualKey,
-                    dwFlags = keyUp ? NativeMethods.KEYEVENTF_KEYUP : 0,
-                    dwExtraInfo = NativeMethods.SelfInjectedInputMarker
+                    dwFlags = keyUp ? NativeMethods.KEYEVENTF_KEYUP : 0
                 }
             }
         };
