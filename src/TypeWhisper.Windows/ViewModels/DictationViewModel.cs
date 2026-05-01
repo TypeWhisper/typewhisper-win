@@ -676,6 +676,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscribedText = "";
         IsOverlayVisible = true;
         RecordingSeconds = 0;
+        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
 
         _durationTimer?.Dispose();
         _durationTimer = new System.Timers.Timer(100);
