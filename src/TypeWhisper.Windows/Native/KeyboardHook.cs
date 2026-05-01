@@ -59,7 +59,7 @@ public sealed class KeyboardHook : IDisposable
         if (nCode >= 0 && IsEnabled && _stateMachine.HasHotkey)
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
-            if ((hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0)
+            if (ShouldIgnoreInjectedInput(hookStruct))
                 return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
             var vkCode = hookStruct.vkCode;
@@ -83,6 +83,10 @@ public sealed class KeyboardHook : IDisposable
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
+    internal static bool ShouldIgnoreInjectedInput(in NativeMethods.KBDLLHOOKSTRUCT hookStruct) =>
+        (hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0
+        && hookStruct.dwExtraInfo == NativeMethods.SelfInjectedInputMarker;
+
     private static void SendSyntheticKeyTap(ushort vk)
     {
         var inputs = new[]
@@ -94,7 +98,8 @@ public sealed class KeyboardHook : IDisposable
                 {
                     ki = new NativeMethods.KEYBDINPUT
                     {
-                        wVk = vk
+                        wVk = vk,
+                        dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                     }
                 }
             },
@@ -106,7 +111,8 @@ public sealed class KeyboardHook : IDisposable
                     ki = new NativeMethods.KEYBDINPUT
                     {
                         wVk = vk,
-                        dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                        dwFlags = NativeMethods.KEYEVENTF_KEYUP,
+                        dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                     }
                 }
             }
@@ -125,7 +131,8 @@ public sealed class KeyboardHook : IDisposable
                 ki = new NativeMethods.KEYBDINPUT
                 {
                     wVk = vk,
-                    dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                    dwFlags = NativeMethods.KEYEVENTF_KEYUP,
+                    dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                 }
             }
         };
