@@ -518,7 +518,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (forceHotkeyStop)
             _hotkey.ForceStop();
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = _isRecording;
     }
 
     private void ApplyTransientIdleFeedback(string feedbackText, bool feedbackIsError = false)
@@ -537,7 +537,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (resetOutcome.ForceHotkeyStop)
             _hotkey.ForceStop();
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = _isRecording;
     }
 
     private void StopActiveRecordingInfrastructure()
@@ -676,7 +676,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscribedText = "";
         IsOverlayVisible = true;
         RecordingSeconds = 0;
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = _isRecording;
 
         _durationTimer?.Dispose();
         _durationTimer = new System.Timers.Timer(100);
@@ -1168,7 +1168,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = _isRecording;
     }
 
     private async void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs e)
