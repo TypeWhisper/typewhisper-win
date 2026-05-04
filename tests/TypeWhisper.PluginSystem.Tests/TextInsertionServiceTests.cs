@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -134,6 +135,18 @@ public sealed class TextInsertionServiceTests
         Assert.Contains(errorLog.Entries, entry =>
             entry.Category == ErrorCategory.Insertion
             && entry.Message.Contains("Enter", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WindowsTextInsertionPlatform_KeyInput_MarksAppGeneratedInput()
+    {
+        var keyDown = WindowsTextInsertionPlatform.KeyInput(NativeMethods.VK_V, keyUp: false);
+        var keyUp = WindowsTextInsertionPlatform.KeyInput(NativeMethods.VK_V, keyUp: true);
+
+        Assert.Equal(NativeMethods.SelfInjectedInputMarker, keyDown.u.ki.dwExtraInfo);
+        Assert.Equal(NativeMethods.SelfInjectedInputMarker, keyUp.u.ki.dwExtraInfo);
+        Assert.Equal(0u, keyDown.u.ki.dwFlags);
+        Assert.Equal(NativeMethods.KEYEVENTF_KEYUP, keyUp.u.ki.dwFlags);
     }
 
     private sealed class FakeTextInsertionPlatform : ITextInsertionPlatform
