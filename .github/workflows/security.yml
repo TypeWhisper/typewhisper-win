@@ -161,11 +161,23 @@ jobs:
             throw "One or more .NET projects have vulnerable packages."
           }
 
+      - name: Compress NuGet audit reports
+        if: always()
+        shell: pwsh
+        run: |
+          $reports = @(Get-ChildItem artifacts/security -Filter *.json -File -ErrorAction SilentlyContinue)
+          if ($reports.Count -eq 0) {
+            Write-Host "No NuGet audit reports to archive."
+            return
+          }
+
+          Compress-Archive -Path $reports.FullName -DestinationPath artifacts/security/dotnet-package-audit.zip -Force
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dotnet-package-audit
-          path: artifacts/security/*.json
+          path: artifacts/security/dotnet-package-audit.zip
           if-no-files-found: ignore
 
   python-package-audit:

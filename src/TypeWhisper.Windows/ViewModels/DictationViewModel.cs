@@ -420,6 +420,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal static bool ShouldEnableCancelShortcut(bool isRecording, int pendingJobCount) =>
+        isRecording || pendingJobCount > 0;
+
     private void StoreApiDictationSession(ApiDictationSessionSnapshot session)
     {
         lock (_apiSessionLock)
@@ -518,7 +521,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (forceHotkeyStop)
             _hotkey.ForceStop();
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = ShouldEnableCancelShortcut(_isRecording, _pendingJobCount);
     }
 
     private void ApplyTransientIdleFeedback(string feedbackText, bool feedbackIsError = false)
@@ -537,7 +540,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (resetOutcome.ForceHotkeyStop)
             _hotkey.ForceStop();
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = ShouldEnableCancelShortcut(_isRecording, _pendingJobCount);
     }
 
     private void StopActiveRecordingInfrastructure()
@@ -676,7 +679,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscribedText = "";
         IsOverlayVisible = true;
         RecordingSeconds = 0;
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = ShouldEnableCancelShortcut(_isRecording, _pendingJobCount);
 
         _durationTimer?.Dispose();
         _durationTimer = new System.Timers.Timer(100);
@@ -1168,7 +1171,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _hotkey.IsCancelShortcutEnabled = _isRecording || _pendingJobCount > 0;
+        _hotkey.IsCancelShortcutEnabled = ShouldEnableCancelShortcut(_isRecording, _pendingJobCount);
     }
 
     private async void OnSamplesAvailable(object? sender, SamplesAvailableEventArgs e)

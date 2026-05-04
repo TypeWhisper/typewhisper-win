@@ -56,10 +56,10 @@ public sealed class KeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && IsEnabled && _stateMachine.HasHotkey)
+        if (nCode >= 0 && _stateMachine.HasHotkey)
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
-            if ((hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0)
+            if (ShouldIgnoreInjectedInput(hookStruct))
                 return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
             var vkCode = hookStruct.vkCode;
@@ -68,20 +68,27 @@ public sealed class KeyboardHook : IDisposable
             var isKeyUp = wParam == NativeMethods.WM_KEYUP || wParam == NativeMethods.WM_SYSKEYUP;
 
             var result = _stateMachine.ProcessKeyEvent(vkCode, isKeyDown, isKeyUp);
-            if (result.SyntheticKeyTapVk != 0)
-                SendSyntheticKeyTap((ushort)result.SyntheticKeyTapVk);
-            if (result.SyntheticKeyUpVk != 0)
-                SendSyntheticKeyUp((ushort)result.SyntheticKeyUpVk);
-            if (result.RaiseKeyDown)
-                KeyDown?.Invoke(this, EventArgs.Empty);
-            if (result.RaiseKeyUp)
-                KeyUp?.Invoke(this, EventArgs.Empty);
-            if (result.Swallow)
-                return (IntPtr)1;
+            if (IsEnabled)
+            {
+                if (result.SyntheticKeyTapVk != 0)
+                    SendSyntheticKeyTap((ushort)result.SyntheticKeyTapVk);
+                if (result.SyntheticKeyUpVk != 0)
+                    SendSyntheticKeyUp((ushort)result.SyntheticKeyUpVk);
+                if (result.RaiseKeyDown)
+                    KeyDown?.Invoke(this, EventArgs.Empty);
+                if (result.RaiseKeyUp)
+                    KeyUp?.Invoke(this, EventArgs.Empty);
+                if (result.Swallow)
+                    return (IntPtr)1;
+            }
         }
 
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
+
+    internal static bool ShouldIgnoreInjectedInput(in NativeMethods.KBDLLHOOKSTRUCT hookStruct) =>
+        (hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0
+        && hookStruct.dwExtraInfo == NativeMethods.SelfInjectedInputMarker;
 
     private static void SendSyntheticKeyTap(ushort vk)
     {
@@ -94,7 +101,8 @@ public sealed class KeyboardHook : IDisposable
                 {
                     ki = new NativeMethods.KEYBDINPUT
                     {
-                        wVk = vk
+                        wVk = vk,
+                        dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                     }
                 }
             },
@@ -106,7 +114,8 @@ public sealed class KeyboardHook : IDisposable
                     ki = new NativeMethods.KEYBDINPUT
                     {
                         wVk = vk,
-                        dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                        dwFlags = NativeMethods.KEYEVENTF_KEYUP,
+                        dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                     }
                 }
             }
@@ -125,7 +134,8 @@ public sealed class KeyboardHook : IDisposable
                 ki = new NativeMethods.KEYBDINPUT
                 {
                     wVk = vk,
-                    dwFlags = NativeMethods.KEYEVENTF_KEYUP
+                    dwFlags = NativeMethods.KEYEVENTF_KEYUP,
+                    dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                 }
             }
         };

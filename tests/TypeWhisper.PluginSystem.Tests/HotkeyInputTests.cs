@@ -230,6 +230,32 @@ public class HotkeyInputTests
     }
 
     [Fact]
+    public void KeyboardHook_OnlyIgnoresSelfInjectedInput()
+    {
+        var selfInjected = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            flags = NativeMethods.LLKHF_INJECTED,
+            dwExtraInfo = NativeMethods.SelfInjectedInputMarker
+        };
+
+        var externalInjected = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            flags = NativeMethods.LLKHF_INJECTED,
+            dwExtraInfo = IntPtr.Zero
+        };
+
+        var hardwareInput = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            flags = 0,
+            dwExtraInfo = IntPtr.Zero
+        };
+
+        Assert.True(KeyboardHook.ShouldIgnoreInjectedInput(selfInjected));
+        Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(externalInjected));
+        Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(hardwareInput));
+    }
+
+    [Fact]
     public void RecorderSession_DoesNotRecordSingleModifierRelease()
     {
         var sut = new HotkeyRecorderSession();

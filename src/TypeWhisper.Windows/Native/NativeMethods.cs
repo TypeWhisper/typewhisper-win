@@ -19,6 +19,7 @@ internal static partial class NativeMethods
     public const int WM_SYSKEYDOWN = 0x0104;
     public const int WM_SYSKEYUP = 0x0105;
     public const uint LLKHF_INJECTED = 0x00000010;
+    public static readonly IntPtr SelfInjectedInputMarker = new(unchecked((nint)0x54574853));
 
     // Hook types
     public const int WH_KEYBOARD_LL = 13;
