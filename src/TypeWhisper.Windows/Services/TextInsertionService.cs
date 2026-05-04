@@ -235,7 +235,7 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             ],
             Marshal.SizeOf<NativeMethods.INPUT>());
 
-    private static NativeMethods.INPUT KeyInput(int virtualKey, bool keyUp) =>
+    internal static NativeMethods.INPUT KeyInput(int virtualKey, bool keyUp) =>
         new()
         {
             type = NativeMethods.INPUT_KEYBOARD,
@@ -244,7 +244,8 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
                 ki = new NativeMethods.KEYBDINPUT
                 {
                     wVk = (ushort)virtualKey,
-                    dwFlags = keyUp ? NativeMethods.KEYEVENTF_KEYUP : 0
+                    dwFlags = keyUp ? NativeMethods.KEYEVENTF_KEYUP : 0,
+                    dwExtraInfo = NativeMethods.SelfInjectedInputMarker
                 }
             }
         };
