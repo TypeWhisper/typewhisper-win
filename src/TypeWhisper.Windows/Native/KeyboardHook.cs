@@ -56,7 +56,7 @@ public sealed class KeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && IsEnabled && _stateMachine.HasHotkey)
+        if (nCode >= 0 && _stateMachine.HasHotkey)
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
             if (ShouldIgnoreInjectedInput(hookStruct))
@@ -68,16 +68,19 @@ public sealed class KeyboardHook : IDisposable
             var isKeyUp = wParam == NativeMethods.WM_KEYUP || wParam == NativeMethods.WM_SYSKEYUP;
 
             var result = _stateMachine.ProcessKeyEvent(vkCode, isKeyDown, isKeyUp);
-            if (result.SyntheticKeyTapVk != 0)
-                SendSyntheticKeyTap((ushort)result.SyntheticKeyTapVk);
-            if (result.SyntheticKeyUpVk != 0)
-                SendSyntheticKeyUp((ushort)result.SyntheticKeyUpVk);
-            if (result.RaiseKeyDown)
-                KeyDown?.Invoke(this, EventArgs.Empty);
-            if (result.RaiseKeyUp)
-                KeyUp?.Invoke(this, EventArgs.Empty);
-            if (result.Swallow)
-                return (IntPtr)1;
+            if (IsEnabled)
+            {
+                if (result.SyntheticKeyTapVk != 0)
+                    SendSyntheticKeyTap((ushort)result.SyntheticKeyTapVk);
+                if (result.SyntheticKeyUpVk != 0)
+                    SendSyntheticKeyUp((ushort)result.SyntheticKeyUpVk);
+                if (result.RaiseKeyDown)
+                    KeyDown?.Invoke(this, EventArgs.Empty);
+                if (result.RaiseKeyUp)
+                    KeyUp?.Invoke(this, EventArgs.Empty);
+                if (result.Swallow)
+                    return (IntPtr)1;
+            }
         }
 
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
