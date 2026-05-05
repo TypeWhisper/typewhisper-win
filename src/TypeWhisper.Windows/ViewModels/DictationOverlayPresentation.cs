@@ -18,6 +18,9 @@ internal static class DictationOverlayPresentation
     public static bool HasVisibleContent(bool isOverlayVisible, bool showFeedback) =>
         isOverlayVisible || ShowDetachedFeedback(isOverlayVisible, showFeedback);
 
+    public static bool ShowBuiltInPartialPreview(string? partialText, bool externalLivePreviewActive) =>
+        !externalLivePreviewActive && !string.IsNullOrWhiteSpace(partialText);
+
     public static DictationResetOutcome CreateTransientIdleFeedback(bool feedbackIsError = false) =>
         new(
             DictationState.Idle,
