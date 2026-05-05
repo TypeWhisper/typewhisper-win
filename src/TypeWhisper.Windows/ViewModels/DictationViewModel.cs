@@ -74,6 +74,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private bool _isStoppingRecording;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
+    private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
     private readonly object _apiSessionLock = new();
     private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _apiDictationSessions = [];
     private readonly List<Guid> _apiDictationSessionOrder = [];
@@ -222,6 +223,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         });
         _recentTranscriptions.FeedbackRequested += (message, isError) =>
             Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
+        _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
@@ -232,10 +234,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         DictationOverlayPresentation.ShowDetachedFeedback(IsOverlayVisible, ShowFeedback);
     public bool HasOverlayContentVisible =>
         DictationOverlayPresentation.HasVisibleContent(IsOverlayVisible, ShowFeedback);
+    public bool ExternalLivePreviewActive =>
+        _modelManager.PluginManager.IsEnabled(ExternalLiveTranscriptPluginId);
+    public bool ShowBuiltInPartialPreview =>
+        DictationOverlayPresentation.ShowBuiltInPartialPreview(PartialText, ExternalLivePreviewActive);
 
     partial void OnPartialTextChanged(string value)
     {
-        IsExpanded = !string.IsNullOrEmpty(value);
+        RefreshPartialPreviewPresentation();
     }
 
     partial void OnCurrentHotkeyModeChanged(HotkeyMode? value)
@@ -277,6 +283,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanReadBackLastTranscription));
 
     partial void OnIsOverlayVisibleChanged(bool value) => RaiseOverlayPresentationChanged();
+
+    private void OnPluginStateChanged(object? sender, EventArgs e)
+    {
+        if (Application.Current is { } app)
+        {
+            app.Dispatcher.InvokeAsync(RefreshPartialPreviewPresentation);
+            return;
+        }
+
+        RefreshPartialPreviewPresentation();
+    }
+
+    private void RefreshPartialPreviewPresentation()
+    {
+        IsExpanded = ShowBuiltInPartialPreview;
+        OnPropertyChanged(nameof(ExternalLivePreviewActive));
+        OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
+    }
 
     public void ReadBackLastTranscription()
     {
@@ -726,11 +750,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 _vad = null;
             }
 
-            // Preview text is useful to confirm speech, but the pasted transcript
-            // must come from the full captured buffer so it is not constrained by
-            // the live preview polling cadence.
-            partialSnapshot = !string.IsNullOrWhiteSpace(streamingText)
-                ? [streamingText]
+            // Confirmed live text can skip the second full-buffer transcription;
+            // unconfirmed preview still falls back to the final transcription path.
+            var trustedLiveText = DictationFinalTextPolicy.SelectTrustedLiveText(streamingText);
+            partialSnapshot = trustedLiveText is not null
+                ? [trustedLiveText]
                 : [.. _partialSegments];
 
             var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
@@ -776,6 +800,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 EffectiveTask,
                 _modelManager.ActiveModelId,
                 apiSessionId,
+                trustedLiveText,
                 aggressiveShortQuietHandling);
 
             Interlocked.Increment(ref _pendingJobCount);
@@ -844,25 +869,32 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             string? detectedLanguage = null;
             double audioDuration = job.Samples.Length / 16000.0;
 
-            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
-            var result = await _modelManager.Engine.TranscribeAsync(
-                job.Samples, language, job.EffectiveTask, ct);
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-
-            if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
-                    result.Text,
-                    result.NoSpeechProbability,
-                    hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
-                    job.TranscribeShortQuietClipsAggressively))
+            if (job.TrustedLiveText is not null)
             {
-                FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                    ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                return;
+                rawText = DictationFinalTextPolicy.SelectRawText(null, job.TrustedLiveText);
             }
+            else
+            {
+                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+                var result = await _modelManager.Engine.TranscribeAsync(
+                    job.Samples, language, job.EffectiveTask, ct);
 
-            rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
-            detectedLanguage = result.DetectedLanguage;
+                if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+                        result.Text,
+                        result.NoSpeechProbability,
+                        hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
+                        job.TranscribeShortQuietClipsAggressively))
+                {
+                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
+                    return;
+                }
+
+                rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+                detectedLanguage = result.DetectedLanguage;
+            }
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
@@ -1295,6 +1327,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _streamingHandler.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
+            _modelManager.PluginManager.PluginStateChanged -= OnPluginStateChanged;
             _audio.AudioLevelChanged -= OnAudioLevelChanged;
             _audio.SamplesAvailable -= OnSamplesAvailable;
             _disposed = true;
@@ -1313,6 +1346,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,
+        string? TrustedLiveText,
         bool TranscribeShortQuietClipsAggressively);
 }
 
@@ -1346,6 +1380,18 @@ internal static class DictationFinalTextPolicy
 
     public static string SelectRawText(string? finalText) =>
         finalText?.Trim() ?? "";
+
+    public static string? SelectTrustedLiveText(string? liveText)
+    {
+        var text = liveText?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    public static string SelectRawText(string? finalText, string? trustedLiveText)
+    {
+        var trusted = SelectTrustedLiveText(trustedLiveText);
+        return trusted ?? SelectRawText(finalText);
+    }
 }
 
 internal static class DictationShortSpeechPolicy
