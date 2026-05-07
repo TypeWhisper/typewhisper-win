@@ -30,6 +30,38 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void AddWorkflow_GlobalTrigger_PersistsAndLoads()
+    {
+        _sut.AddWorkflow(NewWorkflow("Always", WorkflowTrigger.Global()));
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+        Assert.Equal(WorkflowTriggerKind.Global, loaded.Trigger.Kind);
+        Assert.True(loaded.Trigger.HasValues);
+    }
+
+    [Fact]
+    public void AddWorkflow_ManualTrigger_PersistsAndLoads()
+    {
+        _sut.AddWorkflow(NewWorkflow("Manual", WorkflowTrigger.Manual()));
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+        Assert.Equal(WorkflowTriggerKind.Manual, loaded.Trigger.Kind);
+        Assert.True(loaded.Trigger.HasValues);
+    }
+
+    [Fact]
+    public void AddWorkflow_HotkeyBehavior_PersistsAndLoads()
+    {
+        _sut.AddWorkflow(NewWorkflow("Rewrite", WorkflowTrigger.Hotkey(WorkflowHotkeyBehavior.ProcessSelectedText, "Ctrl+Alt+R")));
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+        Assert.Equal(WorkflowHotkeyBehavior.ProcessSelectedText, loaded.Trigger.HotkeyBehavior);
+    }
+
+    [Fact]
     public void ToggleWorkflow_UpdatesEnabledState()
     {
         var workflow = NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK"));
@@ -57,16 +89,81 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void MatchWorkflow_AppAndWebsiteWinsOverWebsiteAndApp()
+    {
+        _sut.AddWorkflow(NewWorkflow("App", WorkflowTrigger.App("chrome"), sortOrder: 3));
+        _sut.AddWorkflow(NewWorkflow("Website", WorkflowTrigger.Website("github.com"), sortOrder: 2));
+        _sut.AddWorkflow(NewWorkflow(
+            "Combined",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"]
+            },
+            sortOrder: 1));
+
+        var match = _sut.MatchWorkflow("chrome", "https://github.com/TypeWhisper/typewhisper-win");
+
+        Assert.NotNull(match);
+        Assert.Equal("Combined", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.AppAndWebsite, match.Kind);
+    }
+
+    [Fact]
     public void MatchWorkflow_WebsiteWinsOverApp()
     {
         _sut.AddWorkflow(NewWorkflow("App", WorkflowTrigger.App("chrome"), sortOrder: 0));
         _sut.AddWorkflow(NewWorkflow("Website", WorkflowTrigger.Website("github.com"), sortOrder: 9));
+        _sut.AddWorkflow(NewWorkflow("Always", WorkflowTrigger.Global(), sortOrder: 99));
 
         var match = _sut.MatchWorkflow("chrome", "https://github.com/TypeWhisper/typewhisper-win");
 
         Assert.NotNull(match);
         Assert.Equal("Website", match.Workflow.Name);
         Assert.Equal(WorkflowMatchKind.Website, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_CombinedWorkflowDoesNotMatchWebsiteOnlyContext()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Combined",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"]
+            },
+            sortOrder: 0));
+        _sut.AddWorkflow(NewWorkflow("Website", WorkflowTrigger.Website("github.com"), sortOrder: 1));
+
+        var match = _sut.MatchWorkflow("firefox", "https://github.com/typewhisper");
+
+        Assert.NotNull(match);
+        Assert.Equal("Website", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.Website, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_CombinedWorkflowDoesNotMatchAppOnlyContext()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Combined",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"]
+            },
+            sortOrder: 0));
+        _sut.AddWorkflow(NewWorkflow("App", WorkflowTrigger.App("chrome"), sortOrder: 1));
+
+        var match = _sut.MatchWorkflow("chrome", "https://example.com");
+
+        Assert.NotNull(match);
+        Assert.Equal("App", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.App, match.Kind);
     }
 
     [Fact]
@@ -89,6 +186,62 @@ public sealed class WorkflowServiceTests : IDisposable
         _sut.AddWorkflow(NewWorkflow("Disabled", WorkflowTrigger.App("notepad"), isEnabled: false));
 
         Assert.Null(_sut.MatchWorkflow("notepad", null));
+    }
+
+    [Fact]
+    public void MatchWorkflow_AppWinsOverGlobalFallback()
+    {
+        _sut.AddWorkflow(NewWorkflow("Always", WorkflowTrigger.Global(), sortOrder: 0));
+        _sut.AddWorkflow(NewWorkflow("Notepad", WorkflowTrigger.App("notepad"), sortOrder: 5));
+
+        var match = _sut.MatchWorkflow("notepad", null);
+
+        Assert.NotNull(match);
+        Assert.Equal("Notepad", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.App, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_UsesGlobalFallbackWhenNothingMoreSpecificMatches()
+    {
+        _sut.AddWorkflow(NewWorkflow("Always", WorkflowTrigger.Global(), sortOrder: 4));
+
+        var match = _sut.MatchWorkflow("wordpad", null);
+
+        Assert.NotNull(match);
+        Assert.Equal("Always", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.GlobalFallback, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_IgnoresDisabledGlobalFallbacks()
+    {
+        _sut.AddWorkflow(NewWorkflow("Disabled", WorkflowTrigger.Global(), isEnabled: false));
+
+        Assert.Null(_sut.MatchWorkflow("wordpad", null));
+    }
+
+    [Fact]
+    public void MatchWorkflow_ManualWorkflowsAreNeverMatchedAutomatically()
+    {
+        _sut.AddWorkflow(NewWorkflow("Manual", WorkflowTrigger.Manual()));
+
+        Assert.Null(_sut.MatchWorkflow("notepad", null));
+    }
+
+    [Fact]
+    public void MatchWorkflow_UsesLowestSortOrderAmongGlobalFallbacks()
+    {
+        _sut.AddWorkflow(NewWorkflow("Later", WorkflowTrigger.Global(), sortOrder: 7));
+        _sut.AddWorkflow(NewWorkflow("Earlier", WorkflowTrigger.Global(), sortOrder: 2));
+
+        var match = _sut.MatchWorkflow("wordpad", null);
+
+        Assert.NotNull(match);
+        Assert.Equal("Earlier", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.GlobalFallback, match.Kind);
+        Assert.Equal(1, match.CompetingWorkflowCount);
+        Assert.True(match.WonBySortOrder);
     }
 
     [Fact]

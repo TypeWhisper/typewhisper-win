@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -61,11 +62,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly IAudioDuckingService _audioDucking;
     private readonly IMediaPauseService _mediaPause;
     private readonly PluginEventBus _eventBus;
-    private readonly PromptProcessingService _promptProcessing;
+    private readonly IWorkflowTextProcessor _workflowTextProcessor;
     private readonly IPostProcessingPipeline _pipeline;
     private readonly IErrorLogService _errorLog;
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly RecentTranscriptionsService _recentTranscriptions;
+    private readonly WorkflowPaletteService _workflowPalette;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -74,6 +76,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private bool _isStoppingRecording;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
+    private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
     private readonly object _apiSessionLock = new();
     private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _apiDictationSessions = [];
     private readonly List<Guid> _apiDictationSessionOrder = [];
@@ -134,11 +137,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         ITranslationService translation,
         IAudioDuckingService audioDucking,
         IMediaPauseService mediaPause,
-        PromptProcessingService promptProcessing,
+        IWorkflowTextProcessor workflowTextProcessor,
         IPostProcessingPipeline pipeline,
         IErrorLogService errorLog,
         SpeechFeedbackService speechFeedback,
-        RecentTranscriptionsService recentTranscriptions)
+        RecentTranscriptionsService recentTranscriptions,
+        WorkflowPaletteService workflowPalette)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -156,11 +160,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audioDucking = audioDucking;
         _mediaPause = mediaPause;
         _eventBus = modelManager.PluginManager.EventBus;
-        _promptProcessing = promptProcessing;
+        _workflowTextProcessor = workflowTextProcessor;
         _pipeline = pipeline;
         _errorLog = errorLog;
         _speechFeedback = speechFeedback;
         _recentTranscriptions = recentTranscriptions;
+        _workflowPalette = workflowPalette;
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
         _streamingHandler.OnPartialTextUpdate = text =>
@@ -215,13 +220,20 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _hotkey.RecentTranscriptionsRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(ShowRecentTranscriptionsPalette);
         _hotkey.CopyLastTranscriptionRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
             await CopyLastTranscriptionToClipboardAsync());
+        _hotkey.WorkflowPaletteRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await ShowWorkflowPaletteAsync());
         _hotkey.WorkflowDictationRequested += (_, workflowId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             _workflowHotkeyOverrideId = workflowId;
             await StartRecording();
         });
+        _hotkey.WorkflowTextProcessingRequested += (_, workflowId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await ProcessWorkflowHotkeyTextAsync(workflowId));
         _recentTranscriptions.FeedbackRequested += (message, isError) =>
             Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
+        _workflowPalette.FeedbackRequested += (message, isError) =>
+            Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
+        _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
@@ -232,10 +244,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         DictationOverlayPresentation.ShowDetachedFeedback(IsOverlayVisible, ShowFeedback);
     public bool HasOverlayContentVisible =>
         DictationOverlayPresentation.HasVisibleContent(IsOverlayVisible, ShowFeedback);
+    public bool ExternalLivePreviewActive =>
+        _modelManager.PluginManager.IsEnabled(ExternalLiveTranscriptPluginId);
+    public bool ShowBuiltInPartialPreview =>
+        DictationOverlayPresentation.ShowBuiltInPartialPreview(PartialText, ExternalLivePreviewActive);
 
     partial void OnPartialTextChanged(string value)
     {
-        IsExpanded = !string.IsNullOrEmpty(value);
+        RefreshPartialPreviewPresentation();
     }
 
     partial void OnCurrentHotkeyModeChanged(HotkeyMode? value)
@@ -278,6 +294,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     partial void OnIsOverlayVisibleChanged(bool value) => RaiseOverlayPresentationChanged();
 
+    private void OnPluginStateChanged(object? sender, EventArgs e)
+    {
+        if (Application.Current is { } app)
+        {
+            app.Dispatcher.InvokeAsync(RefreshPartialPreviewPresentation);
+            return;
+        }
+
+        RefreshPartialPreviewPresentation();
+    }
+
+    private void RefreshPartialPreviewPresentation()
+    {
+        IsExpanded = ShowBuiltInPartialPreview;
+        OnPropertyChanged(nameof(ExternalLivePreviewActive));
+        OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
+    }
+
     public void ReadBackLastTranscription()
     {
         if (string.IsNullOrWhiteSpace(LastTranscribedText))
@@ -296,6 +330,26 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     public Task CopyLastTranscriptionToClipboardAsync() =>
         _recentTranscriptions.CopyLastTranscriptionToClipboardAsync();
+
+    public async Task ShowWorkflowPaletteAsync()
+    {
+        if (State != DictationState.Idle)
+            return;
+
+        await _workflowPalette.TogglePaletteAsync();
+    }
+
+    public async Task ProcessWorkflowHotkeyTextAsync(string workflowId)
+    {
+        if (State != DictationState.Idle)
+            return;
+
+        var workflow = _workflows.GetWorkflow(workflowId);
+        if (workflow is null)
+            return;
+
+        await _workflowPalette.ExecuteWorkflowAsync(workflow);
+    }
 
     // Effective settings: workflow override -> global setting
     private string? EffectiveLanguage =>
@@ -726,11 +780,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 _vad = null;
             }
 
-            // Preview text is useful to confirm speech, but the pasted transcript
-            // must come from the full captured buffer so it is not constrained by
-            // the live preview polling cadence.
-            partialSnapshot = !string.IsNullOrWhiteSpace(streamingText)
-                ? [streamingText]
+            // Confirmed live text can skip the second full-buffer transcription;
+            // unconfirmed preview still falls back to the final transcription path.
+            var trustedLiveText = DictationFinalTextPolicy.SelectTrustedLiveText(streamingText);
+            partialSnapshot = trustedLiveText is not null
+                ? [trustedLiveText]
                 : [.. _partialSegments];
 
             var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
@@ -776,6 +830,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 EffectiveTask,
                 _modelManager.ActiveModelId,
                 apiSessionId,
+                trustedLiveText,
                 aggressiveShortQuietHandling);
 
             Interlocked.Increment(ref _pendingJobCount);
@@ -844,25 +899,32 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             string? detectedLanguage = null;
             double audioDuration = job.Samples.Length / 16000.0;
 
-            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
-            var result = await _modelManager.Engine.TranscribeAsync(
-                job.Samples, language, job.EffectiveTask, ct);
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-
-            if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
-                    result.Text,
-                    result.NoSpeechProbability,
-                    hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
-                    job.TranscribeShortQuietClipsAggressively))
+            if (job.TrustedLiveText is not null)
             {
-                FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                    ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                return;
+                rawText = DictationFinalTextPolicy.SelectRawText(null, job.TrustedLiveText);
             }
+            else
+            {
+                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+                var result = await _modelManager.Engine.TranscribeAsync(
+                    job.Samples, language, job.EffectiveTask, ct);
 
-            rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
-            detectedLanguage = result.DetectedLanguage;
+                if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+                        result.Text,
+                        result.NoSpeechProbability,
+                        hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
+                        job.TranscribeShortQuietClipsAggressively))
+                {
+                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
+                    return;
+                }
+
+                rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+                detectedLanguage = result.DetectedLanguage;
+            }
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
@@ -901,10 +963,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     detectedLanguage: detectedLanguage,
                     configuredLanguage: job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage) is { } systemPrompt)
             {
-                if (_promptProcessing.IsAnyProviderAvailable)
+                if (_workflowTextProcessor.IsAnyProviderAvailable)
                 {
                     var behavior = job.ActiveWorkflow.Behavior;
-                    llmHandler = (text, token) => _promptProcessing.ProcessAsync(
+                    llmHandler = (text, token) => _workflowTextProcessor.ProcessAsync(
                         systemPrompt,
                         text,
                         behavior.ProviderOverride,
@@ -1298,6 +1360,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _streamingHandler.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
+            _modelManager.PluginManager.PluginStateChanged -= OnPluginStateChanged;
             _audio.AudioLevelChanged -= OnAudioLevelChanged;
             _audio.SamplesAvailable -= OnSamplesAvailable;
             _disposed = true;
@@ -1316,6 +1379,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,
+        string? TrustedLiveText,
         bool TranscribeShortQuietClipsAggressively);
 }
 
@@ -1329,6 +1393,9 @@ internal enum ShortSpeechDecision
 internal static class DictationFinalTextPolicy
 {
     private const float NoSpeechProbabilityThreshold = 0.8f;
+    private const int MinimumRepeatedPhraseWords = 5;
+    private const int MinimumRepeatedPhraseCharacters = 20;
+    private const int MaximumRepeatReductionPasses = 8;
 
     public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
         string.Join(" ", previewSegments.Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
@@ -1348,7 +1415,157 @@ internal static class DictationFinalTextPolicy
     }
 
     public static string SelectRawText(string? finalText) =>
-        finalText?.Trim() ?? "";
+        ReduceAdjacentRepeatedPhrases(finalText?.Trim() ?? "");
+
+    public static string? SelectTrustedLiveText(string? liveText)
+    {
+        var text = liveText?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    public static string SelectRawText(string? finalText, string? trustedLiveText)
+    {
+        var trusted = SelectTrustedLiveText(trustedLiveText);
+        return trusted is not null
+            ? ReduceAdjacentRepeatedPhrases(trusted)
+            : SelectRawText(finalText);
+    }
+
+    private static string ReduceAdjacentRepeatedPhrases(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "";
+
+        var reduced = text;
+        for (var pass = 0; pass < MaximumRepeatReductionPasses; pass++)
+        {
+            var tokens = TokenizeWords(reduced);
+            if (tokens.Count < MinimumRepeatedPhraseWords * 2)
+                return reduced.Trim();
+
+            if (!TryFindAdjacentRepeatedPhrase(reduced, tokens, out var removalStart, out var removalEnd))
+                return reduced.Trim();
+
+            reduced = string.Concat(reduced.AsSpan(0, removalStart), reduced.AsSpan(removalEnd)).Trim();
+        }
+
+        return reduced.Trim();
+    }
+
+    private static bool TryFindAdjacentRepeatedPhrase(
+        string text,
+        IReadOnlyList<WordToken> tokens,
+        out int removalStart,
+        out int removalEnd)
+    {
+        removalStart = 0;
+        removalEnd = 0;
+
+        for (var boundary = MinimumRepeatedPhraseWords; boundary <= tokens.Count - MinimumRepeatedPhraseWords; boundary++)
+        {
+            var maxLength = Math.Min(boundary, tokens.Count - boundary);
+            for (var length = maxLength; length >= MinimumRepeatedPhraseWords; length--)
+            {
+                if (!HasMinimumRepeatedPhraseLength(tokens, boundary, length)
+                    || !TokensMatch(tokens, boundary - length, boundary, length))
+                {
+                    continue;
+                }
+
+                if (RightMatchContinuesPhrase(text, tokens, boundary, length))
+                {
+                    removalStart = tokens[boundary - length].Start;
+                    removalEnd = tokens[boundary].Start;
+                }
+                else
+                {
+                    removalStart = tokens[boundary].Start;
+                    removalEnd = boundary + length < tokens.Count
+                        ? tokens[boundary + length].Start
+                        : text.Length;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasMinimumRepeatedPhraseLength(IReadOnlyList<WordToken> tokens, int boundary, int length)
+    {
+        var characterCount = 0;
+        for (var i = boundary; i < boundary + length; i++)
+            characterCount += tokens[i].Normalized.Length;
+
+        return characterCount >= MinimumRepeatedPhraseCharacters;
+    }
+
+    private static bool TokensMatch(IReadOnlyList<WordToken> tokens, int leftStart, int rightStart, int length)
+    {
+        for (var offset = 0; offset < length; offset++)
+        {
+            if (!string.Equals(
+                    tokens[leftStart + offset].Normalized,
+                    tokens[rightStart + offset].Normalized,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool RightMatchContinuesPhrase(string text, IReadOnlyList<WordToken> tokens, int boundary, int length)
+    {
+        var rightLastIndex = boundary + length - 1;
+        if (rightLastIndex >= tokens.Count - 1)
+            return false;
+
+        var separator = text.AsSpan(tokens[rightLastIndex].End, tokens[rightLastIndex + 1].Start - tokens[rightLastIndex].End);
+        foreach (var ch in separator)
+        {
+            if (ch is '.' or '!' or '?' or '\r' or '\n')
+                return false;
+        }
+
+        return true;
+    }
+
+    private static List<WordToken> TokenizeWords(string text)
+    {
+        var tokens = new List<WordToken>();
+        var index = 0;
+
+        while (index < text.Length)
+        {
+            while (index < text.Length && !char.IsLetterOrDigit(text[index]))
+                index++;
+
+            var start = index;
+            while (index < text.Length && char.IsLetterOrDigit(text[index]))
+                index++;
+
+            if (start == index)
+                continue;
+
+            tokens.Add(new WordToken(start, index, NormalizeWord(text[start..index])));
+        }
+
+        return tokens;
+    }
+
+    private static string NormalizeWord(string word)
+    {
+        var builder = new StringBuilder(word.Length);
+        foreach (var ch in word)
+            builder.Append(char.ToLowerInvariant(ch));
+
+        return builder.ToString();
+    }
+
+    private readonly record struct WordToken(int Start, int End, string Normalized);
 }
 
 internal static class DictationShortSpeechPolicy

@@ -21,7 +21,16 @@ public enum WorkflowTriggerKind
 {
     App,
     Website,
-    Hotkey
+    Hotkey,
+    Global,
+    Manual
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<WorkflowHotkeyBehavior>))]
+public enum WorkflowHotkeyBehavior
+{
+    StartDictation,
+    ProcessSelectedText
 }
 
 public sealed record WorkflowTemplateDefinition(
@@ -55,12 +64,31 @@ public sealed record WorkflowTrigger
     public IReadOnlyList<string> ProcessNames { get; init; } = [];
     public IReadOnlyList<string> WebsitePatterns { get; init; } = [];
     public IReadOnlyList<string> Hotkeys { get; init; } = [];
+    public WorkflowHotkeyBehavior HotkeyBehavior { get; init; } = WorkflowHotkeyBehavior.StartDictation;
+
+    [JsonIgnore]
+    public bool IsAutomatic =>
+        Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Hotkey;
+
+    [JsonIgnore]
+    public bool HasAppBindings => ProcessNames.Count > 0;
+
+    [JsonIgnore]
+    public bool HasWebsiteBindings => WebsitePatterns.Count > 0;
+
+    [JsonIgnore]
+    public bool HasHotkeyBindings => Hotkeys.Count > 0;
+
+    [JsonIgnore]
+    public bool HasAutomaticValues => HasAppBindings || HasWebsiteBindings || HasHotkeyBindings;
 
     public bool HasValues => Kind switch
     {
-        WorkflowTriggerKind.App => ProcessNames.Count > 0,
-        WorkflowTriggerKind.Website => WebsitePatterns.Count > 0,
-        WorkflowTriggerKind.Hotkey => Hotkeys.Count > 0,
+        WorkflowTriggerKind.App => HasAutomaticValues,
+        WorkflowTriggerKind.Website => HasAutomaticValues,
+        WorkflowTriggerKind.Hotkey => HasAutomaticValues,
+        WorkflowTriggerKind.Global => true,
+        WorkflowTriggerKind.Manual => true,
         _ => false
     };
 
@@ -70,8 +98,24 @@ public sealed record WorkflowTrigger
     public static WorkflowTrigger Website(params string[] patterns) =>
         new() { Kind = WorkflowTriggerKind.Website, WebsitePatterns = Clean(patterns) };
 
+    public static WorkflowTrigger Hotkey(
+        IEnumerable<string> hotkeys,
+        WorkflowHotkeyBehavior behavior = WorkflowHotkeyBehavior.StartDictation) =>
+        new() { Kind = WorkflowTriggerKind.Hotkey, Hotkeys = Clean(hotkeys), HotkeyBehavior = behavior };
+
     public static WorkflowTrigger Hotkey(params string[] hotkeys) =>
-        new() { Kind = WorkflowTriggerKind.Hotkey, Hotkeys = Clean(hotkeys) };
+        Hotkey(hotkeys.AsEnumerable());
+
+    public static WorkflowTrigger Hotkey(
+        WorkflowHotkeyBehavior behavior,
+        params string[] hotkeys) =>
+        Hotkey(hotkeys.AsEnumerable(), behavior);
+
+    public static WorkflowTrigger Global() =>
+        new() { Kind = WorkflowTriggerKind.Global };
+
+    public static WorkflowTrigger Manual() =>
+        new() { Kind = WorkflowTriggerKind.Manual };
 
     private static IReadOnlyList<string> Clean(IEnumerable<string> values) =>
         values.Select(static value => value.Trim())
@@ -115,6 +159,10 @@ public sealed record Workflow
 
     [JsonIgnore]
     public WorkflowTemplateDefinition Definition => WorkflowTemplateCatalog.DefinitionFor(Template);
+
+    [JsonIgnore]
+    public bool IsManuallyRunnable =>
+        SystemPrompt() is not null || !string.IsNullOrWhiteSpace(Output.TargetActionPluginId);
 
     public string? SystemPrompt(
         string? fallbackTranslationTarget = null,

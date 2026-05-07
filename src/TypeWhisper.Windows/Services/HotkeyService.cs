@@ -25,6 +25,7 @@ public sealed class HotkeyService : IDisposable
     private readonly KeyboardHook _cancelHook;
     private readonly KeyboardHook _recentTranscriptionsHook;
     private readonly KeyboardHook _copyLastTranscriptionHook;
+    private readonly KeyboardHook _workflowPaletteHook;
     private readonly List<(KeyboardHook Hook, string WorkflowId)> _workflowHooks = [];
 
     private bool _disposed;
@@ -36,7 +37,9 @@ public sealed class HotkeyService : IDisposable
     public event EventHandler? CancelRequested;
     public event EventHandler? RecentTranscriptionsRequested;
     public event EventHandler? CopyLastTranscriptionRequested;
+    public event EventHandler? WorkflowPaletteRequested;
     public event EventHandler<string>? WorkflowDictationRequested;
+    public event EventHandler<string>? WorkflowTextProcessingRequested;
     public HotkeyMode? CurrentMode { get; private set; }
 
     private bool _isCancelShortcutEnabled;
@@ -86,6 +89,9 @@ public sealed class HotkeyService : IDisposable
 
         _copyLastTranscriptionHook = new KeyboardHook();
         _copyLastTranscriptionHook.KeyDown += OnCopyLastTranscriptionKeyDown;
+
+        _workflowPaletteHook = new KeyboardHook();
+        _workflowPaletteHook.KeyDown += OnWorkflowPaletteKeyDown;
     }
 
     public void Initialize(Window window)
@@ -133,6 +139,12 @@ public sealed class HotkeyService : IDisposable
             _copyLastTranscriptionHook.Start();
         }
 
+        if (!string.IsNullOrWhiteSpace(s.WorkflowPaletteHotkey))
+        {
+            _workflowPaletteHook.SetHotkey(s.WorkflowPaletteHotkey);
+            _workflowPaletteHook.Start();
+        }
+
         _cancelHook.SetHotkey("Escape");
         _cancelHook.Start();
 
@@ -144,38 +156,55 @@ public sealed class HotkeyService : IDisposable
     {
         StopWorkflowHooks();
 
-        foreach (var workflow in _workflows.Workflows)
+        foreach (var binding in BuildWorkflowHotkeyBindings(_workflows.Workflows))
         {
-            if (!workflow.IsEnabled || workflow.Trigger.Kind != WorkflowTriggerKind.Hotkey)
-                continue;
+            var hook = new KeyboardHook();
+            var workflowId = binding.WorkflowId;
+            hook.KeyDown += (_, _) => HandleWorkflowHotkeyKeyDown(workflowId, binding.Behavior);
+            hook.SetHotkey(binding.Hotkey);
+            hook.Start();
+            hook.IsEnabled = _isEnabled;
+            _workflowHooks.Add((hook, workflowId));
+            Debug.WriteLine($"Registered workflow hotkey: {binding.Hotkey} for {workflowId}");
+        }
+    }
 
-            foreach (var hotkey in workflow.Trigger.Hotkeys.Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey)))
-            {
-                var hook = new KeyboardHook();
-                var workflowId = workflow.Id;
-                hook.KeyDown += (_, _) =>
-                {
-                    if (!IsEnabled) return;
+    internal static IReadOnlyList<WorkflowHotkeyBinding> BuildWorkflowHotkeyBindings(
+        IReadOnlyList<Workflow> workflows) =>
+        workflows
+            .Where(workflow => workflow.IsEnabled
+                               && workflow.Trigger.IsAutomatic
+                               && workflow.Trigger.HasHotkeyBindings)
+            .SelectMany(workflow => workflow.Trigger.Hotkeys
+                .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey))
+                .Select(hotkey => new WorkflowHotkeyBinding(
+                    workflow.Id,
+                    hotkey,
+                    workflow.Trigger.HotkeyBehavior)))
+            .ToList();
 
-                    if (_isActive)
-                    {
-                        _isActive = false;
-                        CurrentMode = null;
-                        DictationStopRequested?.Invoke(this, EventArgs.Empty);
-                    }
-                    else
-                    {
-                        _isActive = true;
-                        CurrentMode = HotkeyMode.Toggle;
-                        WorkflowDictationRequested?.Invoke(this, workflowId);
-                    }
-                };
-                hook.SetHotkey(hotkey);
-                hook.Start();
-                hook.IsEnabled = _isEnabled;
-                _workflowHooks.Add((hook, workflowId));
-                Debug.WriteLine($"Registered workflow hotkey: {hotkey} for {workflow.Name}");
-            }
+    private void HandleWorkflowHotkeyKeyDown(string workflowId, WorkflowHotkeyBehavior behavior)
+    {
+        if (!IsEnabled)
+            return;
+
+        if (behavior == WorkflowHotkeyBehavior.ProcessSelectedText)
+        {
+            WorkflowTextProcessingRequested?.Invoke(this, workflowId);
+            return;
+        }
+
+        if (_isActive)
+        {
+            _isActive = false;
+            CurrentMode = null;
+            DictationStopRequested?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            _isActive = true;
+            CurrentMode = HotkeyMode.Toggle;
+            WorkflowDictationRequested?.Invoke(this, workflowId);
         }
     }
 
@@ -187,6 +216,7 @@ public sealed class HotkeyService : IDisposable
         _cancelHook.IsEnabled = _isEnabled && IsCancelShortcutEnabled;
         _recentTranscriptionsHook.IsEnabled = _isEnabled;
         _copyLastTranscriptionHook.IsEnabled = _isEnabled;
+        _workflowPaletteHook.IsEnabled = _isEnabled;
 
         foreach (var (hook, _) in _workflowHooks)
             hook.IsEnabled = _isEnabled;
@@ -309,6 +339,12 @@ public sealed class HotkeyService : IDisposable
         CopyLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnWorkflowPaletteKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled) return;
+        WorkflowPaletteRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- Common ---
 
     private void StopAllHooks()
@@ -319,6 +355,7 @@ public sealed class HotkeyService : IDisposable
         _cancelHook.Stop();
         _recentTranscriptionsHook.Stop();
         _copyLastTranscriptionHook.Stop();
+        _workflowPaletteHook.Stop();
         _isActive = false;
         CurrentMode = null;
     }
@@ -344,6 +381,7 @@ public sealed class HotkeyService : IDisposable
             _cancelHook.Dispose();
             _recentTranscriptionsHook.Dispose();
             _copyLastTranscriptionHook.Dispose();
+            _workflowPaletteHook.Dispose();
             _disposed = true;
         }
     }
@@ -354,3 +392,8 @@ public enum HotkeyMode
     Toggle,
     PushToTalk
 }
+
+internal sealed record WorkflowHotkeyBinding(
+    string WorkflowId,
+    string Hotkey,
+    WorkflowHotkeyBehavior Behavior);

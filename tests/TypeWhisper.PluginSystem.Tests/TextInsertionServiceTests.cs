@@ -149,6 +149,56 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(NativeMethods.KEYEVENTF_KEYUP, keyUp.u.ki.dwFlags);
     }
 
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_ReturnsCopiedSelectionAndRestoresPreviousClipboard()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            CapturedSelectionText = "selected text",
+            MarkerReadsBeforeSelection = 1
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.TryCaptureSelectedTextAsync(new IntPtr(321));
+
+        Assert.Equal("selected text", result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(1, platform.CopyInputCalls);
+        Assert.Equal(new IntPtr(321), platform.LastSetForegroundWindow);
+        Assert.Contains(platform.ClipboardWrites, value => value.StartsWith("__typewhisper-selection-", StringComparison.Ordinal));
+        Assert.Equal("previous", platform.ClipboardWrites[^1]);
+    }
+
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_ReturnsNullWhenClipboardNeverChanges()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous"
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.TryCaptureSelectedTextAsync(new IntPtr(44));
+
+        Assert.Null(result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(1, platform.CopyInputCalls);
+    }
+
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_ClearsClipboardWhenNoPreviousClipboardExists()
+    {
+        var platform = new FakeTextInsertionPlatform();
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.TryCaptureSelectedTextAsync();
+
+        Assert.Null(result);
+        Assert.Null(platform.ClipboardText);
+        Assert.Equal(1, platform.ClearClipboardCalls);
+    }
+
     private sealed class FakeTextInsertionPlatform : ITextInsertionPlatform
     {
         public string? ClipboardText { get; set; }
@@ -160,16 +210,62 @@ public sealed class TextInsertionServiceTests
         public IntPtr LastSetForegroundWindow { get; private set; }
         public uint PasteInputResult { get; set; } = 4;
         public uint EnterInputResult { get; set; } = 2;
+        public uint CopyInputResult { get; set; } = 4;
+        public string? CapturedSelectionText { get; set; }
+        public int MarkerReadsBeforeSelection { get; set; }
         public int PasteInputCalls { get; private set; }
         public int EnterInputCalls { get; private set; }
+        public int CopyInputCalls { get; private set; }
+        public int ClearClipboardCalls { get; private set; }
         public int DelayCalls { get; private set; }
+        private string? SelectionMarker { get; set; }
+        private int MarkerReadsCompleted { get; set; }
 
-        public Task<string?> TryGetClipboardTextAsync() => Task.FromResult(ClipboardText);
+        public Task<string?> TryGetClipboardTextAsync()
+        {
+            if (SelectionMarker is not null && CopyInputCalls > 0)
+            {
+                if (CapturedSelectionText is null)
+                {
+                    ClipboardText = SelectionMarker;
+                    return Task.FromResult<string?>(ClipboardText);
+                }
+
+                if (MarkerReadsCompleted < MarkerReadsBeforeSelection)
+                {
+                    MarkerReadsCompleted++;
+                    ClipboardText = SelectionMarker;
+                    return Task.FromResult<string?>(ClipboardText);
+                }
+
+                ClipboardText = CapturedSelectionText;
+                SelectionMarker = null;
+            }
+
+            return Task.FromResult<string?>(ClipboardText);
+        }
 
         public Task SetClipboardTextAsync(string text)
         {
             ClipboardText = text;
             ClipboardWrites.Add(text);
+            if (text.StartsWith("__typewhisper-selection-", StringComparison.Ordinal))
+            {
+                SelectionMarker = text;
+                MarkerReadsCompleted = 0;
+            }
+            else
+            {
+                SelectionMarker = null;
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task ClearClipboardTextAsync()
+        {
+            ClipboardText = null;
+            SelectionMarker = null;
+            ClearClipboardCalls++;
             return Task.CompletedTask;
         }
 
@@ -197,6 +293,12 @@ public sealed class TextInsertionServiceTests
         {
             PasteInputCalls++;
             return PasteInputResult;
+        }
+
+        public uint SendCopyInput()
+        {
+            CopyInputCalls++;
+            return CopyInputResult;
         }
 
         public uint SendEnterInput()
