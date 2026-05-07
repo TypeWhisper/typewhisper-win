@@ -98,6 +98,7 @@ public sealed class Loc : INotifyPropertyChanged
         {
             ["en"] = "English",
             ["de"] = "Deutsch",
+            ["ja"] = "日本語",
         };
 
         var options = new List<UiLanguageOption>
