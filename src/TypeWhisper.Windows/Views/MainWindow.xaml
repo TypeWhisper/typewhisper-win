@@ -1,8 +1,6 @@
 <Window x:Class="TypeWhisper.Windows.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
-        xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
         xmlns:overlay="clr-namespace:TypeWhisper.Windows.Controls.Overlay"
         Title="TypeWhisper"
         SizeToContent="WidthAndHeight"
@@ -20,129 +18,15 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
-        <conv:HotkeyModeToOverlayBorderConverter x:Key="HotkeyModeBorder"/>
     </Window.Resources>
 
     <Grid Margin="8"
           Visibility="{Binding HasOverlayContentVisible, Converter={StaticResource BoolToVis}}">
 
-        <Border x:Name="IslandBorder"
-                CornerRadius="22"
-                Background="#F0181818"
-                BorderBrush="#25FFFFFF"
-                BorderThickness="1"
-                HorizontalAlignment="Center"
-                MinWidth="280"
-                Padding="14,10"
-                Visibility="{Binding IsOverlayVisible, Converter={StaticResource BoolToVis}}">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
-            </Border.Effect>
+        <overlay:DictationOverlayView
+            Visibility="{Binding IsOverlayVisible, Converter={StaticResource BoolToVis}}"/>
 
-            <StackPanel>
-                <!-- Main compact row: LeftWidget | StatusText | RightWidget -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Left widget -->
-                    <overlay:OverlayWidgetHost
-                        Grid.Column="0"
-                        WidgetType="{Binding LeftWidget}"
-                        VerticalAlignment="Center"
-                        Margin="0,0,10,0"/>
-
-                    <!-- Status text -->
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding StatusText}"
-                               Foreground="#CCFFFFFF" FontSize="13"
-                               FontWeight="SemiBold"
-                               VerticalAlignment="Center"
-                               HorizontalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"/>
-
-                    <!-- Right widget -->
-                    <overlay:OverlayWidgetHost
-                        Grid.Column="2"
-                        WidgetType="{Binding RightWidget}"
-                        VerticalAlignment="Center"
-                        Margin="10,0,0,0"/>
-                </Grid>
-
-                <!-- Partial text area (expands pill) -->
-                <Border MaxHeight="120"
-                        Margin="0,8,0,0"
-                        Visibility="{Binding ShowBuiltInPartialPreview, Converter={StaticResource BoolToVis}}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
-                        <TextBlock Text="{Binding PartialText}"
-                                   TextWrapping="Wrap"
-                                   Foreground="#99FFFFFF" FontSize="12"/>
-                    </ScrollViewer>
-                </Border>
-
-                <!-- Inline feedback while overlay is already visible -->
-                <Border CornerRadius="0,0,22,22"
-                        Padding="16,4,16,6"
-                        Visibility="{Binding ShowInlineFeedback, Converter={StaticResource BoolToVis}}">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Background" Value="#1AFF4444"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
-                                    <Setter Property="Background" Value="#1A33D17A"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <TextBlock Text="{Binding FeedbackText}"
-                               FontSize="11"
-                               HorizontalAlignment="Center"
-                               TextTrimming="CharacterEllipsis">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="#FF6666"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
-                                        <Setter Property="Foreground" Value="#66E3A2"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Border>
-            </StackPanel>
-        </Border>
-
-        <Border CornerRadius="18"
-                Padding="14,7"
-                HorizontalAlignment="Center"
-                Background="#F0181818"
-                BorderBrush="#25FFFFFF"
-                BorderThickness="1"
-                Visibility="{Binding ShowDetachedFeedback, Converter={StaticResource BoolToVis}}">
-            <Border.Effect>
-                <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
-            </Border.Effect>
-            <TextBlock Text="{Binding FeedbackText}"
-                       FontSize="11"
-                       HorizontalAlignment="Center"
-                       TextTrimming="CharacterEllipsis">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="#FF6666"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
-                                <Setter Property="Foreground" Value="#66E3A2"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-        </Border>
+        <overlay:DetachedFeedbackView
+            Visibility="{Binding ShowDetachedFeedback, Converter={StaticResource BoolToVis}}"/>
     </Grid>
 </Window>
