@@ -52,7 +52,8 @@ public class SettingsServiceTests : IDisposable
             RecentTranscriptionsHotkey = "Ctrl+Alt+H",
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
-            TranscribeShortQuietClipsAggressively = true
+            TranscribeShortQuietClipsAggressively = true,
+            PreviewBubbleAutoHideMilliseconds = 3750
         };
 
         sut.Save(settings);
@@ -75,6 +76,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
+        Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
     }
 
     [Fact]

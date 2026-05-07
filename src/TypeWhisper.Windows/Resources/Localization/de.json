@@ -418,6 +418,8 @@
   "Appearance.PreviewTitle": "Overlay-Anzeige",
   "Appearance.PreviewStatus": "Aufnahme",
   "Appearance.PreviewHint": "Dunkler Hintergrund, klarer Fokus und kompaktere Laufzeitinformationen.",
+  "Appearance.AutoHideDelay": "Auto-Hide-Verzögerung",
+  "Appearance.AutoHideSecondsFormat": "{0:0.##} s",
   "Advanced.MemorySection": "Speicher",
   "Advanced.EnableMemory": "Speicher aktivieren",
   "Advanced.MemoryHint": "Extrahiert automatisch Fakten aus Transkriptionen mit dem konfigurierten KI-Anbieter und fügt sie dem Prompt-Kontext hinzu.",

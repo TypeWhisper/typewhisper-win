@@ -3,6 +3,9 @@ namespace TypeWhisper.Core.Models;
 public record AppSettings
 {
     public const string DefaultSpokenFeedbackProviderId = "windows-sapi";
+    public const int MinPreviewBubbleAutoHideMilliseconds = 0;
+    public const int DefaultPreviewBubbleAutoHideMilliseconds = 1500;
+    public const int MaxPreviewBubbleAutoHideMilliseconds = 5000;
 
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
@@ -44,6 +47,7 @@ public record AppSettings
     public OverlayPosition OverlayPosition { get; init; } = OverlayPosition.Bottom;
     public OverlayWidget OverlayLeftWidget { get; init; } = OverlayWidget.Waveform;
     public OverlayWidget OverlayRightWidget { get; init; } = OverlayWidget.Timer;
+    public int PreviewBubbleAutoHideMilliseconds { get; init; } = DefaultPreviewBubbleAutoHideMilliseconds;
 
     // Translation
     public string TranscriptionTask { get; init; } = "transcribe";
@@ -97,6 +101,12 @@ public record AppSettings
     public string? UpdateChannel { get; init; }
 
     public static AppSettings Default => new();
+
+    public static int NormalizePreviewBubbleAutoHideMilliseconds(int milliseconds) =>
+        Math.Clamp(
+            milliseconds,
+            MinPreviewBubbleAutoHideMilliseconds,
+            MaxPreviewBubbleAutoHideMilliseconds);
 }
 
 public enum RecordingMode

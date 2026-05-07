@@ -405,6 +405,8 @@
   "Appearance.PreviewTitle": "オーバーレイインジケーター",
   "Appearance.PreviewStatus": "録音中",
   "Appearance.PreviewHint": "グラファイトのボディ、明るいアズールのフォーカス、高密度のランタイムメタデータ。",
+  "Appearance.AutoHideDelay": "自動非表示の遅延",
+  "Appearance.AutoHideSecondsFormat": "{0:0.##} 秒",
   "Advanced.MemorySection": "メモリ",
   "Advanced.EnableMemory": "メモリを有効化",
   "Advanced.MemoryHint": "設定されたAIプロバイダーを使用して文字起こしからファクトを自動抽出し、プロンプトコンテキストに注入します。",
