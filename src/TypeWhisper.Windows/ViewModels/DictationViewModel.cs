@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -101,6 +102,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
     private bool _disposed;
+    private int _lastVadFlushedSegmentCount;
+    private int _lastVadDiscardedShortSegmentCount;
+    private int _lastVadSegmentLength;
 
     [ObservableProperty] private DictationState _state = DictationState.Idle;
     [ObservableProperty] private float _audioLevel;
@@ -754,13 +758,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         try
         {
+            var stopRequestedAtUtc = DateTime.UtcNow;
             var streamingText = _streamingHandler.Stop();
             _audio.SamplesAvailable -= OnSamplesAvailable;
 
             var samples = await _audio.StopRecordingAsync();
             _isRecording = false;
+            var audioTailSnapshot = _audio.CaptureTailSnapshot();
+            var originalSamples = samples ?? [];
             var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
-            var rawDuration = samples is null ? 0 : samples.Length / 16000.0;
+            var rawDuration = originalSamples.Length / 16000.0;
             _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration });
             _durationTimer?.Stop();
             _durationTimer?.Dispose();
@@ -771,13 +778,26 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             CurrentHotkeyMode = null;
 
             // Flush remaining VAD segments
+            _lastVadFlushedSegmentCount = 0;
+            _lastVadDiscardedShortSegmentCount = 0;
+            _lastVadSegmentLength = 0;
+            var vadWasContendedOnStop = false;
             List<string> partialSnapshot;
             if (_vad is not null)
             {
-                _vad.Flush();
-                await ProcessVadSegments();
-                _vad.Dispose();
-                _vad = null;
+                vadWasContendedOnStop = _vadLock.CurrentCount == 0;
+                await _vadLock.WaitAsync();
+                try
+                {
+                    _vad.Flush();
+                    await ProcessVadSegments();
+                    _vad.Dispose();
+                    _vad = null;
+                }
+                finally
+                {
+                    _vadLock.Release();
+                }
             }
 
             // Confirmed live text can skip the second full-buffer transcription;
@@ -808,8 +828,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            samples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(samples ?? [], rawDuration);
-
             var apiSessionId = _activeApiDictationSessionId;
             if (apiSessionId is not null)
             {
@@ -818,8 +836,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             }
 
             // Snapshot all context and enqueue — returns immediately
+            var transcriptionSamples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(originalSamples, rawDuration);
             var job = new TranscriptionJob(
-                samples,
+                transcriptionSamples,
+                originalSamples,
                 partialSnapshot,
                 _activeWorkflow,
                 _capturedWindowHandle,
@@ -831,7 +851,29 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 _modelManager.ActiveModelId,
                 apiSessionId,
                 trustedLiveText,
-                aggressiveShortQuietHandling);
+                aggressiveShortQuietHandling,
+                new RecordingTailDiagnosticSnapshot(
+                    _modelManager.ActiveModelId,
+                    "local",
+                    stopRequestedAtUtc,
+                    rawDuration,
+                    originalSamples.Length,
+                    audioTailSnapshot.LastSamplesAvailableUtc,
+                    audioTailSnapshot.RecentChunks,
+                    _settings.Current.SilenceAutoStopEnabled,
+                    _lastVadFlushedSegmentCount,
+                    _lastVadDiscardedShortSegmentCount,
+                    _lastVadSegmentLength,
+                    vadWasContendedOnStop,
+                    false,
+                    0,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null));
 
             Interlocked.Increment(ref _pendingJobCount);
             await _jobChannel.Writer.WriteAsync(job);
@@ -897,41 +939,123 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             string rawText;
             string? detectedLanguage = null;
-            double audioDuration = job.Samples.Length / 16000.0;
+            double audioDuration = job.OriginalSamples.Length / 16000.0;
+            var diagnosticsEnabled = _settings.Current.InternalParakeetTailDiagnosticsEnabled;
+            var tailHardeningEnabled = _settings.Current.InternalParakeetTailHardeningEnabled;
+            var isParakeetJob = ParakeetTailHelper.IsParakeetModel(job.ActiveModelIdAtCapture);
+            var decodeSamples = isParakeetJob && tailHardeningEnabled
+                ? ParakeetTailHelper.AppendTailGuard(job.Samples)
+                : job.Samples;
+            var tailGuardApplied = !ReferenceEquals(decodeSamples, job.Samples);
+            var tailSamplesAdded = decodeSamples.Length - job.Samples.Length;
+            string fullDecodeText = "";
+            string? fullDecodeDetectedLanguage = null;
+            long? fullDecodeDurationMs = null;
 
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-            if (job.TrustedLiveText is not null)
+            if (!isParakeetJob && job.TrustedLiveText is not null)
             {
                 rawText = DictationFinalTextPolicy.SelectRawText(null, job.TrustedLiveText);
+                job = job with
+                {
+                    Diagnostic = job.Diagnostic with
+                    {
+                        FinalTextSource = "trusted_live",
+                        PartialTextLength = previewText.Length
+                    }
+                };
             }
             else
             {
                 var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+                var decodeStartedAt = DateTime.UtcNow;
                 var result = await _modelManager.Engine.TranscribeAsync(
-                    job.Samples, language, job.EffectiveTask, ct);
+                    decodeSamples, language, job.EffectiveTask, ct);
+                fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
+                fullDecodeText = result.Text ?? "";
+                fullDecodeDetectedLanguage = result.DetectedLanguage;
 
-                if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
-                        result.Text,
-                        result.NoSpeechProbability,
-                        hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
-                        job.TranscribeShortQuietClipsAggressively))
+                if (isParakeetJob)
                 {
-                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                    return;
+                    var selection = ParakeetTailHelper.SelectResult(
+                        job.ActiveModelIdAtCapture,
+                        fullDecodeText,
+                        job.PartialSegments);
+                    rawText = DictationFinalTextPolicy.SelectRawText(selection.Text);
+                    detectedLanguage = fullDecodeDetectedLanguage;
+                    job = job with
+                    {
+                        Diagnostic = job.Diagnostic with
+                        {
+                            TailGuardApplied = tailGuardApplied,
+                            TailSamplesAdded = tailSamplesAdded,
+                            FinalTextSource = selection.Source,
+                            FullDecodeTextLength = selection.FullDecodeTextLength,
+                            PartialTextLength = selection.PartialTextLength,
+                            DivergedFromPartials = selection.DivergedFromPartials,
+                            FullDecodeDurationMs = fullDecodeDurationMs
+                        }
+                    };
                 }
+                else
+                {
+                    if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+                            result.Text,
+                            result.NoSpeechProbability,
+                            hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
+                            job.TranscribeShortQuietClipsAggressively))
+                    {
+                        FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                            ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
+                        return;
+                    }
 
-                rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
-                detectedLanguage = result.DetectedLanguage;
+                    rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+                    detectedLanguage = result.DetectedLanguage;
+                    job = job with
+                    {
+                        Diagnostic = job.Diagnostic with
+                        {
+                            FinalTextSource = string.IsNullOrWhiteSpace(fullDecodeText) ? "empty" : "full_decode",
+                            FullDecodeTextLength = fullDecodeText.Length,
+                            PartialTextLength = previewText.Length,
+                            FullDecodeDurationMs = fullDecodeDurationMs
+                        }
+                    };
+                }
             }
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
                 FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                LogParakeetTailDiagnostics(job.Diagnostic);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                 return;
+            }
+
+            if (diagnosticsEnabled && isParakeetJob)
+            {
+                if (!tailHardeningEnabled)
+                {
+                    var compareStartedAt = DateTime.UtcNow;
+                    var compareResult = await _modelManager.Engine.TranscribeAsync(
+                        ParakeetTailHelper.AppendTailGuard(job.Samples),
+                        job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                        job.EffectiveTask,
+                        ct);
+                    job = job with
+                    {
+                        Diagnostic = job.Diagnostic with
+                        {
+                            CompareDecodeTextLength = compareResult.Text?.Length ?? 0,
+                            CompareDecodeDurationMs = (long)(DateTime.UtcNow - compareStartedAt).TotalMilliseconds
+                        }
+                    };
+                }
+
+                LogParakeetTailDiagnostics(job.Diagnostic);
             }
 
             _eventBus.Publish(new TranscriptionCompletedEvent
@@ -1140,7 +1264,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 {
                     audioFileName = $"{Guid.NewGuid():N}.wav";
                     var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, audioFileName);
-                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.Samples);
+                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
                     await File.WriteAllBytesAsync(audioPath, wav, ct);
                 }
                 catch
@@ -1267,8 +1391,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         {
             var segment = _vad.Front();
             _vad.Pop();
+            _lastVadSegmentLength = segment.Samples.Length;
 
-            if (segment.Samples.Length < 1600) continue; // Skip very short segments
+            if (segment.Samples.Length < 1600)
+            {
+                _lastVadDiscardedShortSegmentCount++;
+                continue; // Skip very short segments
+            }
 
             try
             {
@@ -1276,6 +1405,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 if (!string.IsNullOrWhiteSpace(result.Text))
                 {
                     _partialSegments.Add(result.Text);
+                    _lastVadFlushedSegmentCount++;
                     PartialText = string.Join(" ", _partialSegments);
                 }
             }
@@ -1367,8 +1497,50 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void LogParakeetTailDiagnostics(RecordingTailDiagnosticSnapshot diagnostic)
+    {
+        if (!_settings.Current.InternalParakeetTailDiagnosticsEnabled ||
+            !ParakeetTailHelper.IsParakeetModel(diagnostic.ModelId))
+            return;
+
+        var payload = new
+        {
+            model_id = diagnostic.ModelId,
+            engine_type = diagnostic.EngineType,
+            stop_requested_at_utc = diagnostic.StopRequestedAtUtc.ToString("o"),
+            recording_duration_seconds = diagnostic.RecordingDurationSeconds,
+            sample_count = diagnostic.SampleCount,
+            last_samples_available_utc = diagnostic.LastSamplesAvailableUtc?.ToString("o"),
+            silence_auto_stop_enabled = diagnostic.SilenceAutoStopEnabled,
+            vad_flushed_segments = diagnostic.VadFlushedSegmentCount,
+            vad_discarded_short_segments = diagnostic.VadDiscardedShortSegmentCount,
+            last_vad_segment_length = diagnostic.LastVadSegmentLength,
+            vad_contended_on_stop = diagnostic.VadWasContendedOnStop,
+            tail_guard_applied = diagnostic.TailGuardApplied,
+            tail_samples_added = diagnostic.TailSamplesAdded,
+            final_text_source = diagnostic.FinalTextSource,
+            full_decode_text_length = diagnostic.FullDecodeTextLength,
+            partial_text_length = diagnostic.PartialTextLength,
+            diverged_from_partials = diagnostic.DivergedFromPartials,
+            full_decode_duration_ms = diagnostic.FullDecodeDurationMs,
+            compare_decode_text_length = diagnostic.CompareDecodeTextLength,
+            compare_decode_duration_ms = diagnostic.CompareDecodeDurationMs,
+            recent_chunks = diagnostic.RecentChunks.Select(chunk => new
+            {
+                timestamp_utc = chunk.TimestampUtc.ToString("o"),
+                peak = chunk.Peak,
+                rms = chunk.Rms,
+                pre_gain_rms = chunk.PreGainRms,
+                sample_count = chunk.SampleCount
+            })
+        };
+
+        _errorLog.AddEntry(JsonSerializer.Serialize(payload), "parakeet-tail");
+    }
+
     private sealed record TranscriptionJob(
         float[] Samples,
+        float[] OriginalSamples,
         List<string> PartialSegments,
         Workflow? ActiveWorkflow,
         IntPtr CapturedWindowHandle,
@@ -1380,7 +1552,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,
         string? TrustedLiveText,
-        bool TranscribeShortQuietClipsAggressively);
+        bool TranscribeShortQuietClipsAggressively,
+        RecordingTailDiagnosticSnapshot Diagnostic);
 }
 
 internal enum ShortSpeechDecision
@@ -1636,6 +1809,29 @@ internal static class DictationShortSpeechPolicy
         return paddedSamples;
     }
 }
+
+internal sealed record RecordingTailDiagnosticSnapshot(
+    string? ModelId,
+    string EngineType,
+    DateTime StopRequestedAtUtc,
+    double RecordingDurationSeconds,
+    int SampleCount,
+    DateTime? LastSamplesAvailableUtc,
+    IReadOnlyList<AudioChunkTelemetry> RecentChunks,
+    bool SilenceAutoStopEnabled,
+    int VadFlushedSegmentCount,
+    int VadDiscardedShortSegmentCount,
+    int LastVadSegmentLength,
+    bool VadWasContendedOnStop,
+    bool TailGuardApplied,
+    int TailSamplesAdded,
+    string? FinalTextSource,
+    int? FullDecodeTextLength,
+    int? PartialTextLength,
+    bool? DivergedFromPartials,
+    long? FullDecodeDurationMs,
+    int? CompareDecodeTextLength,
+    long? CompareDecodeDurationMs);
 
 public enum DictationState
 {

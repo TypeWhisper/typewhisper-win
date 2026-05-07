@@ -36,6 +36,9 @@ public sealed class AudioRecordingService : IDisposable
     private float _currentRmsLevel;
     private System.Timers.Timer? _devicePollTimer;
     private int _lastKnownDeviceCount;
+    private const int TailDiagnosticChunkLimit = 8;
+    private readonly Queue<AudioChunkTelemetry> _recentChunks = new();
+    private DateTime? _lastSamplesAvailableUtc;
 
     public event EventHandler<AudioLevelEventArgs>? AudioLevelChanged;
     public event EventHandler<AudioLevelEventArgs>? PreviewLevelChanged;
@@ -138,6 +141,12 @@ public sealed class AudioRecordingService : IDisposable
         _sampleBuffer = new List<float>(SampleRate * 60); // Pre-alloc ~1 min
         _peakRmsLevel = 0;
         _preGainPeakRms = 0;
+        _currentRmsLevel = 0;
+        lock (_bufferLock)
+        {
+            _recentChunks.Clear();
+            _lastSamplesAvailableUtc = null;
+        }
         _recordingStartTime = DateTime.UtcNow;
         _isRecording = true;
     }
@@ -188,6 +197,16 @@ public sealed class AudioRecordingService : IDisposable
         return StopRecording();
     }
 
+    internal AudioTailSnapshot CaptureTailSnapshot()
+    {
+        lock (_bufferLock)
+        {
+            return new AudioTailSnapshot(
+                _lastSamplesAvailableUtc,
+                [.. _recentChunks]);
+        }
+    }
+
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
     {
         if (!_isRecording) return;
@@ -229,12 +248,22 @@ public sealed class AudioRecordingService : IDisposable
             sumSquares += sample * sample;
         }
 
+        var rms = MathF.Sqrt(sumSquares / sampleCount);
+
         lock (_bufferLock)
         {
             _sampleBuffer?.AddRange(chunkBuffer);
+            _lastSamplesAvailableUtc = DateTime.UtcNow;
+            _recentChunks.Enqueue(new AudioChunkTelemetry(
+                _lastSamplesAvailableUtc.Value,
+                peak,
+                rms,
+                preGainRms,
+                sampleCount));
+            while (_recentChunks.Count > TailDiagnosticChunkLimit)
+                _recentChunks.Dequeue();
         }
 
-        var rms = MathF.Sqrt(sumSquares / sampleCount);
         _currentRmsLevel = rms;
         if (rms > _peakRmsLevel) _peakRmsLevel = rms;
 
@@ -427,3 +456,14 @@ public sealed class SamplesAvailableEventArgs(float[] samples) : EventArgs
 {
     public float[] Samples { get; } = samples;
 }
+
+public sealed record AudioTailSnapshot(
+    DateTime? LastSamplesAvailableUtc,
+    IReadOnlyList<AudioChunkTelemetry> RecentChunks);
+
+public sealed record AudioChunkTelemetry(
+    DateTime TimestampUtc,
+    float Peak,
+    float Rms,
+    float PreGainRms,
+    int SampleCount);
