@@ -43,4 +43,28 @@ public class DictationOverlayPresentationTests
             isOverlayVisible: false,
             showFeedback: false));
     }
+
+    [Fact]
+    public void BuiltInPartialPreview_ShowsWhenExternalPreviewIsInactive()
+    {
+        Assert.True(DictationOverlayPresentation.ShowBuiltInPartialPreview(
+            "confirmed live text",
+            externalLivePreviewActive: false));
+    }
+
+    [Fact]
+    public void BuiltInPartialPreview_HidesWhenExternalPreviewIsActive()
+    {
+        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
+            "confirmed live text",
+            externalLivePreviewActive: true));
+    }
+
+    [Fact]
+    public void BuiltInPartialPreview_HidesBlankText()
+    {
+        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
+            "   ",
+            externalLivePreviewActive: false));
+    }
 }

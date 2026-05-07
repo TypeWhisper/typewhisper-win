@@ -51,7 +51,7 @@
 
             <Border MaxHeight="120"
                     Margin="0,8,0,0"
-                    Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                    Visibility="{Binding ShowBuiltInPartialPreview, Converter={StaticResource BoolToVis}}">
                 <ScrollViewer x:Name="PartialPreviewScrollViewer"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
