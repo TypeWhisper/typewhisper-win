@@ -1,9 +1,15 @@
 {
   "id": "com.typewhisper.openai",
-  "name": "OpenAI",
-  "version": "1.0.1",
+  "name": "OpenAI / ChatGPT",
+  "version": "1.1.1",
+  "minHostVersion": "1.4.0",
   "author": "TypeWhisper",
-  "description": "OpenAI Whisper transcription and GPT translation",
+  "description": "OpenAI transcription, ChatGPT/OpenAI prompt processing, and text-to-speech. Use an API key for STT/TTS or ChatGPT login for prompts.",
+  "descriptions": {
+    "de": "OpenAI-Transkription, ChatGPT-/OpenAI-Promptverarbeitung und Text-to-Speech. STT/TTS nutzen einen API-Key, Prompts funktionieren auch per ChatGPT-Login."
+  },
+  "category": "transcription",
+  "categories": ["transcription", "llm", "tts"],
   "assemblyName": "TypeWhisper.Plugin.OpenAi.dll",
   "pluginClass": "TypeWhisper.Plugin.OpenAi.OpenAiPlugin"
 }

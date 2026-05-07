@@ -241,6 +241,66 @@ public class SettingsViewModelTtsTests
         Assert.Equal("plugin-voice", pluginProvider.SelectedVoiceId);
     }
 
+    [Fact]
+    public void SelectingPluginProvider_DoesNotRebuildProviderOptionsDuringComboBoxSelection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        var pluginProvider = new FakeTtsProvider("plugin-tts", "Plugin TTS")
+        {
+            AvailableVoices = [new PluginVoiceInfo("plugin-voice", "Plugin Voice")]
+        };
+        var pluginManager = TestPluginManagerFactory.Create(settings);
+        TestPluginManagerFactory.SetTtsProviders(pluginManager, pluginProvider);
+        var system = new FakeTtsProvider("windows-sapi", "System Voice")
+        {
+            AvailableVoices = [new PluginVoiceInfo("system-voice", "System Voice")]
+        };
+        using var speech = new SpeechFeedbackService(settings, pluginManager, system);
+        using var audio = new AudioRecordingService();
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+        var providerCollectionChanges = 0;
+        sut.SpokenFeedbackProviders.CollectionChanged += (_, _) => providerCollectionChanges++;
+
+        sut.SelectedSpokenFeedbackProviderId = pluginProvider.ProviderId;
+
+        Assert.Equal(0, providerCollectionChanges);
+        Assert.Equal(pluginProvider.ProviderId, settings.Current.SpokenFeedbackProviderId);
+        Assert.Contains(sut.SpokenFeedbackVoices, v => v.Id == "plugin-voice");
+    }
+
+    [Fact]
+    public void SelectingPluginVoice_DoesNotRebuildVoiceOptionsDuringComboBoxSelection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SpokenFeedbackVoiceId = "system-voice"
+        });
+        var pluginProvider = new FakeTtsProvider("plugin-tts", "Plugin TTS")
+        {
+            AvailableVoices = [new PluginVoiceInfo("plugin-voice", "Plugin Voice")]
+        };
+        var pluginManager = TestPluginManagerFactory.Create(settings);
+        TestPluginManagerFactory.SetTtsProviders(pluginManager, pluginProvider);
+        var system = new FakeTtsProvider("windows-sapi", "System Voice")
+        {
+            AvailableVoices = [new PluginVoiceInfo("system-voice", "System Voice")]
+        };
+        using var speech = new SpeechFeedbackService(settings, pluginManager, system);
+        using var audio = new AudioRecordingService();
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+        sut.SelectedSpokenFeedbackProviderId = pluginProvider.ProviderId;
+        var saveCountAfterProviderSelection = settings.SaveCount;
+        var voiceCollectionChanges = 0;
+        sut.SpokenFeedbackVoices.CollectionChanged += (_, _) => voiceCollectionChanges++;
+
+        sut.SelectedSpokenFeedbackVoiceId = "plugin-voice";
+
+        Assert.Equal(0, voiceCollectionChanges);
+        Assert.Equal(saveCountAfterProviderSelection, settings.SaveCount);
+        Assert.Equal("system-voice", settings.Current.SpokenFeedbackVoiceId);
+        Assert.Equal("plugin-voice", pluginProvider.SelectedVoiceId);
+    }
+
     private static SettingsViewModel CreateSettingsViewModel(
         FakeSettingsService settings,
         AudioRecordingService audio,
@@ -302,6 +362,7 @@ internal sealed class FakeSettingsService : ISettingsService
     }
 
     public AppSettings Current { get; private set; }
+    public int SaveCount { get; private set; }
 
     public event Action<AppSettings>? SettingsChanged;
 
@@ -309,6 +370,7 @@ internal sealed class FakeSettingsService : ISettingsService
 
     public void Save(AppSettings settings)
     {
+        SaveCount++;
         Current = settings;
         SettingsChanged?.Invoke(settings);
     }
