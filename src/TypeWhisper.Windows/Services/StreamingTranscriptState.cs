@@ -8,11 +8,13 @@ internal sealed class StreamingTranscriptState
     private int _sessionVersion;
     private string _confirmedText = "";
     private string _lastDisplayedText = "";
+    private string _lastFinalSegment = "";
 
     public int StartSession()
     {
         _confirmedText = "";
         _lastDisplayedText = "";
+        _lastFinalSegment = "";
         return Interlocked.Increment(ref _sessionVersion);
     }
 
@@ -23,6 +25,7 @@ internal sealed class StreamingTranscriptState
         InvalidateSession();
         _confirmedText = "";
         _lastDisplayedText = "";
+        _lastFinalSegment = "";
         return finalText;
     }
 
@@ -51,9 +54,8 @@ internal sealed class StreamingTranscriptState
 
         if (evt.IsFinal)
         {
-            _confirmedText = string.IsNullOrEmpty(_confirmedText)
-                ? text
-                : _confirmedText + " " + text;
+            _confirmedText = MergeFinalSegment(_confirmedText, _lastFinalSegment, text);
+            _lastFinalSegment = text;
             _lastDisplayedText = _confirmedText;
             displayText = _confirmedText;
             return true;
@@ -89,5 +91,22 @@ internal sealed class StreamingTranscriptState
         _lastDisplayedText = stable;
         displayText = stable;
         return true;
+    }
+
+    private static string MergeFinalSegment(string confirmedText, string lastFinalSegment, string newText)
+    {
+        if (string.IsNullOrEmpty(confirmedText))
+            return newText;
+
+        if (string.Equals(newText, confirmedText, StringComparison.Ordinal)
+            || string.Equals(newText, lastFinalSegment, StringComparison.Ordinal))
+        {
+            return confirmedText;
+        }
+
+        if (newText.StartsWith(confirmedText, StringComparison.Ordinal))
+            return newText;
+
+        return confirmedText + " " + newText;
     }
 }

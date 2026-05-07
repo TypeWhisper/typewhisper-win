@@ -272,6 +272,75 @@ public class StreamingTranscriptStateTests
     }
 
     [Fact]
+    public void RealtimeFinalTranscript_ReplacesCumulativeFinalPrefix()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello world", true),
+            text => text,
+            out var firstDisplay));
+        Assert.Equal("Hello world", firstDisplay);
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello world from streaming", true),
+            text => text,
+            out var secondDisplay));
+
+        Assert.Equal("Hello world from streaming", secondDisplay);
+        Assert.Equal("Hello world from streaming", sut.StopSession());
+    }
+
+    [Fact]
+    public void RealtimeFinalTranscript_IgnoresDuplicateFinalSegment()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello world", true),
+            text => text,
+            out var firstDisplay));
+        Assert.Equal("Hello world", firstDisplay);
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello world", true),
+            text => text,
+            out var duplicateDisplay));
+
+        Assert.Equal("Hello world", duplicateDisplay);
+        Assert.Equal("Hello world", sut.StopSession());
+    }
+
+    [Fact]
+    public void RealtimeFinalTranscript_AppendsDistinctFinalChunks()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("Hello", true),
+            text => text,
+            out var firstDisplay));
+        Assert.Equal("Hello", firstDisplay);
+
+        Assert.True(sut.TryApplyRealtime(
+            sessionVersion,
+            new StreamingTranscriptEvent("world", true),
+            text => text,
+            out var secondDisplay));
+
+        Assert.Equal("Hello world", secondDisplay);
+        Assert.Equal("Hello world", sut.StopSession());
+    }
+
+    [Fact]
     public void PollingTranscript_UsesStabilizedCurrentSessionOnly()
     {
         var sut = new StreamingTranscriptState();
