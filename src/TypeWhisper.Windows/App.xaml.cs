@@ -351,6 +351,7 @@ public partial class App : Application
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
         services.AddSingleton<RecentTranscriptionsService>();
+        services.AddSingleton<WorkflowPaletteService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();
         services.AddSingleton<WindowsAppDiscoveryService>();
         services.AddSingleton<SoundService>();
@@ -362,6 +363,7 @@ public partial class App : Application
         services.AddSingleton<TrayIconService>();
         services.AddSingleton<UpdateService>();
         services.AddSingleton<PromptProcessingService>();
+        services.AddSingleton<IWorkflowTextProcessor>(sp => sp.GetRequiredService<PromptProcessingService>());
 
         // License
         services.AddSingleton<LicenseService>();
