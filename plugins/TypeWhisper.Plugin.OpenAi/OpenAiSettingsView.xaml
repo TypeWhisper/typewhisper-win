@@ -2,16 +2,99 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <StackPanel Margin="0,4">
-        <TextBlock Text="API Key" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock x:Name="ConnectionMethodLabel" Text="Connection Method" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <ComboBox x:Name="AuthModeComboBox"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Value"
+                  SelectionChanged="OnAuthModeSelectionChanged" />
+
+        <StackPanel x:Name="ApiKeySection" Margin="0,12,0,0">
+            <TextBlock x:Name="ApiKeyLabel" Text="API Key" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnPasswordChanged" />
+                <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,4"
+                        Click="OnTestClick" x:Name="TestButton" />
+            </Grid>
+        </StackPanel>
+
+        <StackPanel x:Name="ChatGptSection" Margin="0,12,0,0">
+            <TextBlock x:Name="ChatGptLabel" Text="ChatGPT Login" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock x:Name="ChatGptDescriptionText"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Opacity="0.75"
+                       Margin="0,0,0,8" />
+            <WrapPanel>
+                <Button x:Name="SignInBrowserButton"
+                        Padding="12,4"
+                        Margin="0,0,8,8"
+                        Click="OnSignInBrowserClick" />
+                <Button x:Name="ImportLoginButton"
+                        Padding="12,4"
+                        Margin="0,0,8,8"
+                        Click="OnImportLoginClick" />
+                <Button x:Name="RemoveLoginButton"
+                        Padding="12,4"
+                        Margin="0,0,8,8"
+                        Click="OnRemoveLoginClick" />
+            </WrapPanel>
+            <TextBlock x:Name="ChatGptStatusText" FontSize="12" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText" Margin="0,4,0,0" FontSize="12" />
+
+        <Separator Margin="0,12,0,10" />
+
+        <TextBlock x:Name="TranscriptionModelLabel" Text="Transcription Model" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <ComboBox x:Name="TranscriptionModelComboBox"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Id"
+                  SelectionChanged="OnTranscriptionModelSelectionChanged" />
+
+        <TextBlock x:Name="TranscriptionModelHelpText" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Opacity="0.75" />
+
+        <Separator Margin="0,12,0,10" />
+
+        <TextBlock x:Name="LlmModelLabel" Text="LLM Model" FontWeight="SemiBold" Margin="0,0,0,4" />
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnPasswordChanged" />
-            <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,4"
-                    Click="OnTestClick" x:Name="TestButton" />
+            <ComboBox x:Name="LlmModelComboBox"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Id"
+                      SelectionChanged="OnLlmModelSelectionChanged" />
+            <Button x:Name="RefreshLlmModelsButton"
+                    Grid.Column="1"
+                    Margin="8,0,0,0"
+                    Padding="12,4"
+                    Click="OnRefreshLlmModelsClick" />
         </Grid>
-        <TextBlock x:Name="StatusText" Margin="0,4,0,0" FontSize="12" />
+
+        <TextBlock x:Name="ReasoningEffortLabel" Text="Reasoning Effort" FontWeight="SemiBold" Margin="0,10,0,4" />
+        <ComboBox x:Name="ReasoningEffortComboBox"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Value"
+                  SelectionChanged="OnReasoningEffortSelectionChanged" />
+
+        <TextBlock x:Name="LlmHelpText" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Opacity="0.75" />
+
+        <Separator Margin="0,12,0,10" />
+
+        <TextBlock x:Name="VoiceLabel" Text="Text-to-Speech Voice" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <ComboBox x:Name="VoiceComboBox"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="Id"
+                  SelectionChanged="OnVoiceSelectionChanged" />
+
+        <TextBlock x:Name="InstructionsLabel" Text="Voice instructions" FontWeight="SemiBold" Margin="0,10,0,4" />
+        <TextBox x:Name="TtsInstructionsBox"
+                 MinHeight="28"
+                 TextChanged="OnTtsInstructionsChanged" />
     </StackPanel>
 </UserControl>

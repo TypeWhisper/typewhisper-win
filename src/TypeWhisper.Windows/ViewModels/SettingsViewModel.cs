@@ -109,6 +109,7 @@ public partial class SettingsViewModel : ObservableObject
         Loc.Instance.GetString("Appearance.AutoHideSecondsFormat", PreviewBubbleAutoHideSeconds);
 
     private bool _isLoading;
+    private bool _isSavingSettings;
 
     partial void OnUiLanguageChanged(string? value)
     {
@@ -180,7 +181,8 @@ public partial class SettingsViewModel : ObservableObject
 
             if (args.PropertyName == nameof(SelectedSpokenFeedbackVoiceId))
             {
-                Save();
+                if (IsBuiltInSpokenFeedbackProviderSelected())
+                    Save();
                 return;
             }
 
@@ -318,7 +320,16 @@ public partial class SettingsViewModel : ObservableObject
             ModelAutoUnloadSeconds = AutoUnloadMinutes * 60,
             UiLanguage = UiLanguage
         };
-        _settings.Save(updated);
+
+        _isSavingSettings = true;
+        try
+        {
+            _settings.Save(updated);
+        }
+        finally
+        {
+            _isSavingSettings = false;
+        }
     }
 
     private void ApplyAutostartSetting()
@@ -390,6 +401,9 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnSettingsChanged(AppSettings updatedSettings)
     {
+        if (_isSavingSettings)
+            return;
+
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
             _isLoading = true;
@@ -494,6 +508,13 @@ public partial class SettingsViewModel : ObservableObject
         SelectedSpokenFeedbackVoiceId = _speechFeedback.GetSelectedVoiceId(SelectedSpokenFeedbackProviderId);
         _isLoading = wasLoading;
     }
+
+    private bool IsBuiltInSpokenFeedbackProviderSelected() =>
+        string.IsNullOrWhiteSpace(SelectedSpokenFeedbackProviderId)
+        || string.Equals(
+            SelectedSpokenFeedbackProviderId,
+            AppSettings.DefaultSpokenFeedbackProviderId,
+            StringComparison.OrdinalIgnoreCase);
 
     private HistoryRetentionOption MatchHistoryRetentionOption(HistoryRetentionMode mode, int minutes)
     {
