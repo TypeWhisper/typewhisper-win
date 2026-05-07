@@ -97,7 +97,11 @@ public sealed class TextInsertionService
         {
             await _platform.SetClipboardTextAsync(marker);
         }
-        catch
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (ExternalException)
         {
             return null;
         }
@@ -184,7 +188,11 @@ public sealed class TextInsertionService
                 {
                     await _platform.ClearClipboardTextAsync();
                 }
-                catch
+                catch (COMException)
+                {
+                    // Best effort restore.
+                }
+                catch (ExternalException)
                 {
                     // Best effort restore.
                 }
@@ -196,7 +204,11 @@ public sealed class TextInsertionService
         {
             await _platform.SetClipboardTextAsync(previousClipboard);
         }
-        catch
+        catch (COMException)
+        {
+            // Best effort restore.
+        }
+        catch (ExternalException)
         {
             // Best effort restore.
         }
