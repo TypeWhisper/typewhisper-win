@@ -85,50 +85,82 @@
             <StackPanel Style="{StaticResource SettingsSectionStyle}">
                 <TextBlock Text="{loc:Str General.Preview}" Style="{StaticResource SettingsGroupTitleStyle}"/>
                 <Border Style="{StaticResource SettingsGroupPanelStyle}">
-                    <Border Background="#120C1118" CornerRadius="14" Padding="28" MinHeight="180" Margin="16">
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Str Appearance.PreviewTitle}"
+                    <StackPanel Margin="16">
+                        <Border Background="#120C1118" CornerRadius="14" Padding="28" MinHeight="180" Margin="0,0,0,18">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Str Appearance.PreviewTitle}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,14"/>
+                                <Border Background="#E6121822"
+                                        BorderBrush="#22507BAA"
+                                        BorderThickness="1"
+                                        CornerRadius="26"
+                                        Padding="16,12"
+                                        HorizontalAlignment="Center"
+                                        MinWidth="340">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <overlay:OverlayWidgetHost Grid.Column="0"
+                                                                   WidgetType="{Binding Settings.OverlayLeftWidget}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,12,0"/>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                            <TextBlock Text="{loc:Str Appearance.PreviewStatus}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{loc:Str Appearance.PreviewHint}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="11"
+                                                       TextAlignment="Center"
+                                                       TextWrapping="Wrap"
+                                                       MaxWidth="220"
+                                                       Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <overlay:OverlayWidgetHost Grid.Column="2"
+                                                                   WidgetType="{Binding Settings.OverlayRightWidget}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="12,0,0,0"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                        <Grid Margin="10,0,10,8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{loc:Str Appearance.AutoHideDelay}"
+                                       Style="{StaticResource SettingsRowLabelStyle}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Settings.PreviewBubbleAutoHideSecondsText}"
                                        Foreground="{StaticResource HintBrush}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,0,0,14"/>
-                            <Border Background="#E6121822"
-                                    BorderBrush="#22507BAA"
-                                    BorderThickness="1"
-                                    CornerRadius="26"
-                                    Padding="16,12"
-                                    HorizontalAlignment="Center"
-                                    MinWidth="340">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <overlay:OverlayWidgetHost Grid.Column="0"
-                                                               WidgetType="{Binding Settings.OverlayLeftWidget}"
-                                                               VerticalAlignment="Center"
-                                                               Margin="0,0,12,0"/>
-                                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                        <TextBlock Text="{loc:Str Appearance.PreviewStatus}"
-                                                   Foreground="{StaticResource TextBrush}"
-                                                   FontSize="14"
-                                                   HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str Appearance.PreviewHint}"
-                                                   Foreground="{StaticResource HintBrush}"
-                                                   FontSize="11"
-                                                   TextAlignment="Center"
-                                                   TextWrapping="Wrap"
-                                                   MaxWidth="220"
-                                                   Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                    <overlay:OverlayWidgetHost Grid.Column="2"
-                                                               WidgetType="{Binding Settings.OverlayRightWidget}"
-                                                               VerticalAlignment="Center"
-                                                               Margin="12,0,0,0"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
+                                       FontSize="12"
+                                       VerticalAlignment="Center"/>
+                            <Slider Grid.Row="1"
+                                    Grid.ColumnSpan="2"
+                                    Minimum="0"
+                                    Maximum="5"
+                                    SmallChange="0.25"
+                                    LargeChange="0.5"
+                                    TickFrequency="0.25"
+                                    IsSnapToTickEnabled="True"
+                                    IsMoveToPointEnabled="True"
+                                    Value="{Binding Settings.PreviewBubbleAutoHideSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    Style="{StaticResource SettingsSliderStyle}"
+                                    Margin="0,12,0,0"/>
+                        </Grid>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </StackPanel>

@@ -416,6 +416,8 @@
   "Appearance.PreviewTitle": "Overlay indicator",
   "Appearance.PreviewStatus": "Recording",
   "Appearance.PreviewHint": "Graphite body, brighter azure focus, and denser runtime metadata.",
+  "Appearance.AutoHideDelay": "Auto-hide delay",
+  "Appearance.AutoHideSecondsFormat": "{0:0.##} s",
   "Advanced.MemorySection": "Memory",
   "Advanced.EnableMemory": "Enable memory",
   "Advanced.MemoryHint": "Automatically extracts facts from transcriptions with the configured AI provider and injects them into prompt context.",

@@ -36,6 +36,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
+    [ObservableProperty] private double _previewBubbleAutoHideSeconds = AppSettings.DefaultPreviewBubbleAutoHideMilliseconds / 1000d;
     [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
     [ObservableProperty] private string _transcriptionTask = "transcribe";
     [ObservableProperty] private int? _selectedMicrophoneDevice;
@@ -103,6 +104,9 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
     public ObservableCollection<OverlayWidgetOption> WidgetOptions { get; } = [];
 
+    public string PreviewBubbleAutoHideSecondsText =>
+        Loc.Instance.GetString("Appearance.AutoHideSecondsFormat", PreviewBubbleAutoHideSeconds);
+
     private bool _isLoading;
 
     partial void OnUiLanguageChanged(string? value)
@@ -129,6 +133,9 @@ public partial class SettingsViewModel : ObservableObject
         if (_isLoading) return;
         _speechFeedback.SelectVoice(SelectedSpokenFeedbackProviderId, value);
     }
+
+    partial void OnPreviewBubbleAutoHideSecondsChanged(double value) =>
+        OnPropertyChanged(nameof(PreviewBubbleAutoHideSecondsText));
 
     public SettingsViewModel(
         ISettingsService settings,
@@ -276,6 +283,8 @@ public partial class SettingsViewModel : ObservableObject
             SoundFeedbackEnabled = SoundFeedbackEnabled,
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
             OverlayPosition = OverlayPosition,
+            PreviewBubbleAutoHideMilliseconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
+                (int)Math.Round(PreviewBubbleAutoHideSeconds * 1000, MidpointRounding.AwayFromZero)),
             HistoryRetentionMode = SelectedHistoryRetentionOption?.Mode ?? AppSettings.Default.HistoryRetentionMode,
             HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
             TranscriptionTask = TranscriptionTask,
@@ -346,6 +355,8 @@ public partial class SettingsViewModel : ObservableObject
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
         OverlayPosition = s.OverlayPosition;
+        PreviewBubbleAutoHideSeconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
+            s.PreviewBubbleAutoHideMilliseconds) / 1000d;
         SelectedHistoryRetentionOption = MatchHistoryRetentionOption(s.HistoryRetentionMode, s.HistoryRetentionMinutes);
         TranscriptionTask = s.TranscriptionTask;
         SelectedMicrophoneDevice = s.SelectedMicrophoneDevice;
@@ -434,6 +445,7 @@ public partial class SettingsViewModel : ObservableObject
             SelectedHistoryRetentionOption = MatchHistoryRetentionOption(
                 _settings.Current.HistoryRetentionMode,
                 _settings.Current.HistoryRetentionMinutes);
+            OnPropertyChanged(nameof(PreviewBubbleAutoHideSecondsText));
             RefreshSpokenFeedbackProviders();
             _isLoading = false;
         });

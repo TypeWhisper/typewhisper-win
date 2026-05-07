@@ -1120,7 +1120,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             // Delay only for the last job when not recording
             if (_pendingJobCount <= 1 && !_isRecording)
             {
-                await Task.Delay(1500, ct);
+                var autoHideMilliseconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
+                    _settings.Current.PreviewBubbleAutoHideMilliseconds);
+                if (autoHideMilliseconds > 0)
+                    await Task.Delay(autoHideMilliseconds, ct);
             }
         }
         catch (OperationCanceledException)
