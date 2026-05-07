@@ -79,11 +79,11 @@ internal sealed class OpenAiChatGptClient
         return body;
     }
 
-    internal static string? ParseResponseText(string body)
-    {
-        if (!body.TrimStart().StartsWith("data:", StringComparison.Ordinal))
-            return ParseJsonResponseText(body);
+    internal static string? ParseResponseText(string body) =>
+        ParseJsonResponseText(body) ?? ParseEventStreamResponseText(body);
 
+    private static string? ParseEventStreamResponseText(string body)
+    {
         var deltaBuffer = "";
         var completedParts = new List<string>();
 

@@ -253,6 +253,12 @@ public class OpenAiPluginTests
               "data": [
                 { "id": "whisper-1", "owned_by": "openai" },
                 { "id": "gpt-4o-mini-transcribe", "owned_by": "openai" },
+                { "id": "gpt-4o-mini-transcribe-2025-03-20", "owned_by": "openai" },
+                { "id": "gpt-4o-transcribe-diarize", "owned_by": "openai" },
+                { "id": "gpt-4o-realtime-preview-2024-12-17", "owned_by": "openai" },
+                { "id": "gpt-4o-search-preview", "owned_by": "openai" },
+                { "id": "gpt-audio-2025-08-28", "owned_by": "openai" },
+                { "id": "gpt-image-1", "owned_by": "openai" },
                 { "id": "o4-mini", "owned_by": "openai" },
                 { "id": "gpt-4.1-mini", "owned_by": "openai" },
                 { "id": "tts-1", "owned_by": "openai" }
@@ -374,7 +380,9 @@ public class OpenAiPluginTests
     public void ChatGptResponseParser_ExtractsServerSentEventText()
     {
         var stream = """
+        event: response.output_text.delta
         data: {"type":"response.output_text.delta","delta":"Hello"}
+        event: response.output_text.delta
         data: {"type":"response.output_text.delta","delta":" world"}
         data: [DONE]
 

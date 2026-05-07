@@ -311,8 +311,19 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         if (!hasChatPrefix)
             return false;
 
-        string[] excludeSuffixes = ["-transcribe", "-tts", "-embedding", "-realtime", "-search"];
-        string[] excludeContains = ["dall-e", "whisper", "tts-", "text-embedding", "audio-preview", "gpt-image"];
+        string[] excludeSuffixes = ["-tts", "-embedding"];
+        string[] excludeContains =
+        [
+            "dall-e",
+            "whisper",
+            "transcribe",
+            "tts-",
+            "text-embedding",
+            "audio",
+            "realtime",
+            "gpt-image",
+            "-search"
+        ];
         return !excludeSuffixes.Any(suffix => lowered.EndsWith(suffix, StringComparison.Ordinal))
             && !excludeContains.Any(fragment => lowered.Contains(fragment, StringComparison.Ordinal));
     }
