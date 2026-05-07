@@ -43,6 +43,14 @@ public record AppSettings
     // Live transcription (streaming preview while recording)
     public bool LiveTranscriptionEnabled { get; init; } = true;
 
+    // Silence detection
+    public bool SilenceAutoStopEnabled { get; init; }
+    public int SilenceAutoStopSeconds { get; init; } = 10;
+
+    // Internal diagnostics / experimental hardening
+    public bool InternalParakeetTailDiagnosticsEnabled { get; init; }
+    public bool InternalParakeetTailHardeningEnabled { get; init; }
+
     // Overlay
     public OverlayPosition OverlayPosition { get; init; } = OverlayPosition.Bottom;
     public OverlayWidget OverlayLeftWidget { get; init; } = OverlayWidget.Waveform;

@@ -379,3 +379,58 @@ public class StreamingTranscriptStateTests
         Assert.Equal("Fresh session text", currentDisplay);
     }
 }
+
+public class ParakeetTailHelperTests
+{
+    [Fact]
+    public void AppendTailGuard_AddsExpectedSilenceSamples()
+    {
+        var samples = new float[] { 0.1f, -0.2f, 0.3f };
+
+        var guarded = ParakeetTailHelper.AppendTailGuard(samples);
+
+        Assert.Equal(samples.Length + 3200, guarded.Length);
+        Assert.Equal(samples[0], guarded[0]);
+        Assert.Equal(samples[1], guarded[1]);
+        Assert.Equal(samples[2], guarded[2]);
+        Assert.All(guarded.Skip(samples.Length), sample => Assert.Equal(0f, sample));
+    }
+
+    [Fact]
+    public void SelectResult_ForParakeet_PrefersFullDecodeOverPartials()
+    {
+        var selection = ParakeetTailHelper.SelectResult(
+            ParakeetTailHelper.ParakeetModelId,
+            "final full decode",
+            ["partial text"]);
+
+        Assert.Equal("final full decode", selection.Text);
+        Assert.Equal("full_decode", selection.Source);
+        Assert.True(selection.DivergedFromPartials);
+    }
+
+    [Fact]
+    public void SelectResult_ForParakeet_FallsBackToPartialsWhenFullDecodeIsEmpty()
+    {
+        var selection = ParakeetTailHelper.SelectResult(
+            ParakeetTailHelper.ParakeetModelId,
+            "",
+            ["tail segment"]);
+
+        Assert.Equal("tail segment", selection.Text);
+        Assert.Equal("fallback_partials_after_empty_full_decode", selection.Source);
+        Assert.False(selection.DivergedFromPartials);
+    }
+
+    [Fact]
+    public void SelectResult_ForNonParakeet_KeepsExistingPartialPreference()
+    {
+        var selection = ParakeetTailHelper.SelectResult(
+            "plugin:other:model",
+            "full decode",
+            ["partial text"]);
+
+        Assert.Equal("partial text", selection.Text);
+        Assert.Equal("partials", selection.Source);
+    }
+}
