@@ -26,6 +26,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _holdOnlyHotkey = "";
     [ObservableProperty] private string _recentTranscriptionsHotkey = "";
     [ObservableProperty] private string _copyLastTranscriptionHotkey = "";
+    [ObservableProperty] private string _workflowPaletteHotkey = "";
     [ObservableProperty] private string _language = "auto";
     [ObservableProperty] private bool _autoPaste = true;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
@@ -287,6 +288,7 @@ public partial class SettingsViewModel : ObservableObject
             HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
             RecentTranscriptionsHotkey = HotkeyParser.Normalize(RecentTranscriptionsHotkey),
             CopyLastTranscriptionHotkey = HotkeyParser.Normalize(CopyLastTranscriptionHotkey),
+            WorkflowPaletteHotkey = HotkeyParser.Normalize(WorkflowPaletteHotkey),
             AudioDuckingEnabled = AudioDuckingEnabled,
             AudioDuckingLevel = AudioDuckingLevel,
             PauseMediaDuringRecording = PauseMediaDuringRecording,
@@ -356,6 +358,7 @@ public partial class SettingsViewModel : ObservableObject
         HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
         RecentTranscriptionsHotkey = HotkeyParser.Normalize(s.RecentTranscriptionsHotkey);
         CopyLastTranscriptionHotkey = HotkeyParser.Normalize(s.CopyLastTranscriptionHotkey);
+        WorkflowPaletteHotkey = HotkeyParser.Normalize(s.WorkflowPaletteHotkey);
         AudioDuckingEnabled = s.AudioDuckingEnabled;
         AudioDuckingLevel = s.AudioDuckingLevel;
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;

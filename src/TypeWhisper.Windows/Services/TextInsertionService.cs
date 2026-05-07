@@ -12,7 +12,10 @@ public sealed class TextInsertionService
     private static readonly TimeSpan FocusDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan EnterDelay = TimeSpan.FromMilliseconds(50);
     private static readonly TimeSpan ClipboardRestoreDelay = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ClipboardCapturePollInterval = TimeSpan.FromMilliseconds(50);
     private const int MaxModifierReleaseChecks = 32;
+    private const int MaxClipboardCaptureReadAttempts = 12;
+    private const uint ExpectedCopyInputCount = 4;
     private const uint ExpectedPasteInputCount = 4;
     private const uint ExpectedEnterInputCount = 2;
 
@@ -83,6 +86,52 @@ public sealed class TextInsertionService
         return InsertionResult.Pasted;
     }
 
+    public Task<string?> TryGetClipboardTextAsync() => _platform.TryGetClipboardTextAsync();
+
+    public async Task<string?> TryCaptureSelectedTextAsync(IntPtr targetHwnd = default)
+    {
+        var previousClipboard = await _platform.TryGetClipboardTextAsync();
+        var marker = $"__typewhisper-selection-{Guid.NewGuid():N}__";
+
+        try
+        {
+            await _platform.SetClipboardTextAsync(marker);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+        catch (ExternalException)
+        {
+            return null;
+        }
+
+        if (!await WaitForModifierKeysReleasedAsync())
+        {
+            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
+            return null;
+        }
+
+        if (!await FocusTargetWindowAsync(targetHwnd))
+        {
+            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
+            return null;
+        }
+
+        if (_platform.SendCopyInput() != ExpectedCopyInputCount)
+        {
+            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
+            return null;
+        }
+
+        var capturedText = await WaitForClipboardTextChangeAsync(marker);
+        await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
+
+        return string.IsNullOrWhiteSpace(capturedText) || string.Equals(capturedText, marker, StringComparison.Ordinal)
+            ? null
+            : capturedText;
+    }
+
     private async Task<bool> WaitForModifierKeysReleasedAsync()
     {
         for (var attempt = 0; attempt < MaxModifierReleaseChecks; attempt++)
@@ -115,17 +164,51 @@ public sealed class TextInsertionService
         return focusRequested || _platform.GetForegroundWindow() == targetHwnd;
     }
 
-    private async Task RestorePreviousClipboardAsync(string? previousClipboard)
+    private async Task<string?> WaitForClipboardTextChangeAsync(string marker)
+    {
+        for (var attempt = 0; attempt < MaxClipboardCaptureReadAttempts; attempt++)
+        {
+            await _platform.DelayAsync(ClipboardCapturePollInterval);
+            var clipboardText = await _platform.TryGetClipboardTextAsync();
+            if (!string.Equals(clipboardText, marker, StringComparison.Ordinal))
+                return clipboardText;
+        }
+
+        return null;
+    }
+
+    private async Task RestorePreviousClipboardAsync(string? previousClipboard, bool clearWhenMissing = false)
     {
         await _platform.DelayAsync(ClipboardRestoreDelay);
         if (previousClipboard is null)
+        {
+            if (clearWhenMissing)
+            {
+                try
+                {
+                    await _platform.ClearClipboardTextAsync();
+                }
+                catch (COMException)
+                {
+                    // Best effort restore.
+                }
+                catch (ExternalException)
+                {
+                    // Best effort restore.
+                }
+            }
             return;
+        }
 
         try
         {
             await _platform.SetClipboardTextAsync(previousClipboard);
         }
-        catch
+        catch (COMException)
+        {
+            // Best effort restore.
+        }
+        catch (ExternalException)
         {
             // Best effort restore.
         }
@@ -148,16 +231,19 @@ internal interface ITextInsertionPlatform
 {
     Task<string?> TryGetClipboardTextAsync();
     Task SetClipboardTextAsync(string text);
+    Task ClearClipboardTextAsync();
     Task DelayAsync(TimeSpan delay);
     bool IsAnyModifierKeyDown();
     IntPtr GetForegroundWindow();
     bool SetForegroundWindow(IntPtr hwnd);
+    uint SendCopyInput();
     uint SendPasteInput();
     uint SendEnterInput();
 }
 
 internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
 {
+    private const uint ExpectedCopyInputCount = 4;
     private const uint ExpectedPasteInputCount = 4;
     private const uint ExpectedEnterInputCount = 2;
 
@@ -206,6 +292,23 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             }
         }).Task;
 
+    public Task ClearClipboardTextAsync() =>
+        Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    Clipboard.Clear();
+                    return;
+                }
+                catch (COMException) when (attempt < 2)
+                {
+                    Thread.Sleep(50);
+                }
+            }
+        }).Task;
+
     public Task DelayAsync(TimeSpan delay) => Task.Delay(delay);
 
     public bool IsAnyModifierKeyDown() =>
@@ -214,6 +317,17 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
     public IntPtr GetForegroundWindow() => NativeMethods.GetForegroundWindow();
 
     public bool SetForegroundWindow(IntPtr hwnd) => NativeMethods.SetForegroundWindow(hwnd);
+
+    public uint SendCopyInput() =>
+        NativeMethods.SendInput(
+            ExpectedCopyInputCount,
+            [
+                KeyInput(NativeMethods.VK_CONTROL, keyUp: false),
+                KeyInput(NativeMethods.VK_C, keyUp: false),
+                KeyInput(NativeMethods.VK_C, keyUp: true),
+                KeyInput(NativeMethods.VK_CONTROL, keyUp: true)
+            ],
+            Marshal.SizeOf<NativeMethods.INPUT>());
 
     public uint SendPasteInput() =>
         NativeMethods.SendInput(

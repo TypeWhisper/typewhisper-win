@@ -51,6 +51,7 @@ public class SettingsServiceTests : IDisposable
             WatchFolderModelOverride = "tiny",
             RecentTranscriptionsHotkey = "Ctrl+Alt+H",
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
+            WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true
         };
 
@@ -72,6 +73,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("tiny", sut2.Current.WatchFolderModelOverride);
         Assert.Equal("Ctrl+Alt+H", sut2.Current.RecentTranscriptionsHotkey);
         Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
+        Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
     }
 
@@ -88,6 +90,7 @@ public class SettingsServiceTests : IDisposable
 
         Assert.Equal("", sut.Current.RecentTranscriptionsHotkey);
         Assert.Equal("", sut.Current.CopyLastTranscriptionHotkey);
+        Assert.Equal("", sut.Current.WorkflowPaletteHotkey);
     }
 
     [Fact]

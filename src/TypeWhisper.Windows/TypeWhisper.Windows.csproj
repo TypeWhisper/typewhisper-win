@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>TypeWhisper.Windows</RootNamespace>
     <AssemblyName>TypeWhisper</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -55,6 +56,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
   </ItemGroup>
 
   <ItemGroup>

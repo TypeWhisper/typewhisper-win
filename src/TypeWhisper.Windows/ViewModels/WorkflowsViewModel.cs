@@ -33,7 +33,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     [ObservableProperty] private string? _editorError;
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private WorkflowTemplate _editTemplate = WorkflowTemplate.CleanedText;
-    [ObservableProperty] private WorkflowTriggerKind _editTriggerKind = WorkflowTriggerKind.Hotkey;
+    [ObservableProperty] private WorkflowTriggerMode _editTriggerMode = WorkflowTriggerMode.Automatic;
+    [ObservableProperty] private bool _editAppTriggerEnabled;
+    [ObservableProperty] private bool _editWebsiteTriggerEnabled;
+    [ObservableProperty] private bool _editHotkeyTriggerEnabled = true;
+    [ObservableProperty] private WorkflowHotkeyBehavior _editHotkeyBehavior = WorkflowHotkeyBehavior.StartDictation;
     [ObservableProperty] private string _editName = "";
     [ObservableProperty] private bool _editIsEnabled = true;
     [ObservableProperty] private string _processNameInput = "";
@@ -62,7 +66,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     public ObservableCollection<WorkflowAppPickerOption> AppPickerOptions { get; } = [];
     public ObservableCollection<WorkflowDomainSuggestionOption> DomainSuggestions { get; } = [];
     public ObservableCollection<WorkflowTemplateOption> TemplateOptions { get; } = [];
-    public ObservableCollection<WorkflowTriggerKindOption> TriggerKindOptions { get; } = [];
+    public ObservableCollection<WorkflowTriggerModeOption> TriggerModeOptions { get; } = [];
+    public ObservableCollection<WorkflowHotkeyBehaviorOption> HotkeyBehaviorOptions { get; } = [];
     public ObservableCollection<SettingOption> LanguageOptions { get; } = [];
     public ObservableCollection<SettingOption> TaskOptions { get; } = [];
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
@@ -78,9 +83,12 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         : Loc.Instance["Workflows.EditTitle"];
     public bool HasWorkflows => Workflows.Count > 0;
     public bool HasFilteredWorkflows => FilteredWorkflows.Count > 0;
-    public bool IsAppTriggerSelected => EditTriggerKind == WorkflowTriggerKind.App;
-    public bool IsWebsiteTriggerSelected => EditTriggerKind == WorkflowTriggerKind.Website;
-    public bool IsHotkeyTriggerSelected => EditTriggerKind == WorkflowTriggerKind.Hotkey;
+    public bool IsAutomaticTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Automatic;
+    public bool IsGlobalTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Global;
+    public bool IsManualTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Manual;
+    public bool ShowAppTriggerEditor => IsAutomaticTriggerModeSelected && EditAppTriggerEnabled;
+    public bool ShowWebsiteTriggerEditor => IsAutomaticTriggerModeSelected && EditWebsiteTriggerEnabled;
+    public bool ShowHotkeyTriggerEditor => IsAutomaticTriggerModeSelected && EditHotkeyTriggerEnabled;
     public bool IsTranslationTemplate => EditTemplate == WorkflowTemplate.Translation;
     public bool IsCustomTemplate => EditTemplate == WorkflowTemplate.Custom;
     public bool CanChangeTemplate => IsCreatingNew;
@@ -92,7 +100,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     public string SelectedTemplateName => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Name;
     public string SelectedTemplateDescription => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Description;
     public string SelectedTemplateIconGlyph => TemplateIconGlyph(EditTemplate);
-    public string SelectedTriggerIconGlyph => TriggerIconGlyph(EditTriggerKind);
+    public string SelectedTriggerIconGlyph => SelectedTriggerGlyph();
+    public string SelectedTriggerLabel => SelectedTriggerText();
+    public string SelectedHotkeyBehaviorDescription => HotkeyBehaviorDescription(EditHotkeyBehavior);
     public string ReviewText => BuildReviewText();
 
     public string? DefaultLlmProvider
@@ -288,12 +298,12 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SelectTriggerKind(WorkflowTriggerKindOption? option)
+    private void SelectTriggerMode(WorkflowTriggerModeOption? option)
     {
         if (option is null)
             return;
 
-        EditTriggerKind = option.Kind;
+        EditTriggerMode = option.Mode;
     }
 
     [RelayCommand]
@@ -427,7 +437,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditName = workflow.Name;
         EditIsEnabled = workflow.IsEnabled;
         EditTemplate = workflow.Template;
-        EditTriggerKind = workflow.Trigger.Kind;
+        PopulateTriggerEditor(workflow.Trigger);
         EditLanguage = workflow.Behavior.InputLanguage;
         EditTask = workflow.Behavior.SelectedTask;
         EditTranslationTarget = workflow.Behavior.TranslationTarget;
@@ -474,13 +484,59 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         };
     }
 
-    private WorkflowTrigger BuildTrigger() => EditTriggerKind switch
+    private WorkflowTrigger BuildTrigger() => EditTriggerMode switch
     {
-        WorkflowTriggerKind.App => WorkflowTrigger.App([.. ProcessNameChips]),
-        WorkflowTriggerKind.Website => WorkflowTrigger.Website([.. WebsitePatternChips]),
-        WorkflowTriggerKind.Hotkey => WorkflowTrigger.Hotkey(HotkeyParser.Normalize(EditHotkey)),
-        _ => WorkflowTrigger.Hotkey()
+        WorkflowTriggerMode.Global => WorkflowTrigger.Global(),
+        WorkflowTriggerMode.Manual => WorkflowTrigger.Manual(),
+        _ => BuildAutomaticTrigger()
     };
+
+    private WorkflowTrigger BuildAutomaticTrigger()
+    {
+        IReadOnlyList<string> processNames = EditAppTriggerEnabled ? [.. ProcessNameChips] : [];
+        IReadOnlyList<string> websitePatterns = EditWebsiteTriggerEnabled ? [.. WebsitePatternChips] : [];
+        var hotkey = EditHotkeyTriggerEnabled ? HotkeyParser.Normalize(EditHotkey) : "";
+        IReadOnlyList<string> hotkeys = string.IsNullOrWhiteSpace(hotkey) ? [] : [hotkey];
+
+        var kind = processNames.Count > 0
+            ? WorkflowTriggerKind.App
+            : websitePatterns.Count > 0
+                ? WorkflowTriggerKind.Website
+                : WorkflowTriggerKind.Hotkey;
+
+        return new WorkflowTrigger
+        {
+            Kind = kind,
+            ProcessNames = processNames,
+            WebsitePatterns = websitePatterns,
+            Hotkeys = hotkeys,
+            HotkeyBehavior = EditHotkeyBehavior
+        };
+    }
+
+    private void PopulateTriggerEditor(WorkflowTrigger trigger)
+    {
+        EditTriggerMode = trigger.Kind switch
+        {
+            WorkflowTriggerKind.Global => WorkflowTriggerMode.Global,
+            WorkflowTriggerKind.Manual => WorkflowTriggerMode.Manual,
+            _ => WorkflowTriggerMode.Automatic
+        };
+
+        var hasAutomaticValues = trigger.HasAutomaticValues;
+        EditAppTriggerEnabled = trigger.HasAppBindings || (!hasAutomaticValues && trigger.Kind == WorkflowTriggerKind.App);
+        EditWebsiteTriggerEnabled = trigger.HasWebsiteBindings || (!hasAutomaticValues && trigger.Kind == WorkflowTriggerKind.Website);
+        EditHotkeyTriggerEnabled = trigger.HasHotkeyBindings || (!hasAutomaticValues && trigger.Kind == WorkflowTriggerKind.Hotkey);
+        EditHotkeyBehavior = trigger.HotkeyBehavior;
+
+        if (EditTriggerMode == WorkflowTriggerMode.Automatic
+            && !EditAppTriggerEnabled
+            && !EditWebsiteTriggerEnabled
+            && !EditHotkeyTriggerEnabled)
+        {
+            EditHotkeyTriggerEnabled = true;
+        }
+    }
 
     private WorkflowBehavior BuildBehavior(WorkflowTemplate template)
     {
@@ -506,13 +562,15 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
     private string? ValidateEditor()
     {
-        switch (EditTriggerKind)
+        switch (EditTriggerMode)
         {
-            case WorkflowTriggerKind.App when ProcessNameChips.Count == 0:
+            case WorkflowTriggerMode.Automatic when !EditAppTriggerEnabled && !EditWebsiteTriggerEnabled && !EditHotkeyTriggerEnabled:
+                return Loc.Instance["Workflows.ValidationAutomatic"];
+            case WorkflowTriggerMode.Automatic when EditAppTriggerEnabled && ProcessNameChips.Count == 0:
                 return Loc.Instance["Workflows.ValidationApp"];
-            case WorkflowTriggerKind.Website when WebsitePatternChips.Count == 0:
+            case WorkflowTriggerMode.Automatic when EditWebsiteTriggerEnabled && WebsitePatternChips.Count == 0:
                 return Loc.Instance["Workflows.ValidationWebsite"];
-            case WorkflowTriggerKind.Hotkey when string.IsNullOrWhiteSpace(HotkeyParser.Normalize(EditHotkey)):
+            case WorkflowTriggerMode.Automatic when EditHotkeyTriggerEnabled && string.IsNullOrWhiteSpace(HotkeyParser.Normalize(EditHotkey)):
                 return Loc.Instance["Workflows.ValidationHotkey"];
         }
 
@@ -531,15 +589,40 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     {
         var name = ResolvedEditName();
         var templateName = WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Name;
-        var trigger = EditTriggerKind switch
-        {
-            WorkflowTriggerKind.App => ProcessNameChips.Count == 0 ? Loc.Instance["Workflows.TriggerApp"] : string.Join(", ", ProcessNameChips),
-            WorkflowTriggerKind.Website => WebsitePatternChips.Count == 0 ? Loc.Instance["Workflows.TriggerWebsite"] : string.Join(", ", WebsitePatternChips),
-            WorkflowTriggerKind.Hotkey => string.IsNullOrWhiteSpace(EditHotkey) ? Loc.Instance["Workflows.TriggerHotkey"] : EditHotkey,
-            _ => ""
-        };
+        var trigger = BuildTriggerReviewText();
 
         return Loc.Instance.GetString("Workflows.ReviewFormat", name, templateName, trigger);
+    }
+
+    private string BuildTriggerReviewText()
+    {
+        if (EditTriggerMode == WorkflowTriggerMode.Global)
+            return TriggerModeDisplayName(WorkflowTriggerMode.Global);
+
+        if (EditTriggerMode == WorkflowTriggerMode.Manual)
+            return TriggerModeDisplayName(WorkflowTriggerMode.Manual);
+
+        var parts = new List<string>();
+
+        if (EditAppTriggerEnabled)
+            parts.Add(ProcessNameChips.Count == 0 ? TriggerDisplayName(WorkflowTriggerKind.App) : string.Join(", ", ProcessNameChips));
+
+        if (EditWebsiteTriggerEnabled)
+            parts.Add(WebsitePatternChips.Count == 0 ? TriggerDisplayName(WorkflowTriggerKind.Website) : string.Join(", ", WebsitePatternChips));
+
+        if (EditHotkeyTriggerEnabled)
+        {
+            var hotkey = string.IsNullOrWhiteSpace(EditHotkey)
+                ? TriggerDisplayName(WorkflowTriggerKind.Hotkey)
+                : EditHotkey;
+            parts.Add(EditHotkeyBehavior == WorkflowHotkeyBehavior.ProcessSelectedText
+                ? Loc.Instance.GetString("Workflows.ReviewHotkeyProcessFormat", hotkey)
+                : Loc.Instance.GetString("Workflows.ReviewHotkeyDictationFormat", hotkey));
+        }
+
+        return parts.Count == 0
+            ? TriggerModeDisplayName(WorkflowTriggerMode.Automatic)
+            : string.Join(" + ", parts);
     }
 
     private string ResolvedEditName()
@@ -665,11 +748,20 @@ public sealed partial class WorkflowsViewModel : ObservableObject
                 definition.Name,
                 definition.Description,
                 TemplateIconGlyph(definition.Template))));
-        ReplaceCollection(TriggerKindOptions,
+        ReplaceCollection(TriggerModeOptions,
         [
-            new WorkflowTriggerKindOption(WorkflowTriggerKind.App, Loc.Instance["Workflows.TriggerApp"], TriggerIconGlyph(WorkflowTriggerKind.App)),
-            new WorkflowTriggerKindOption(WorkflowTriggerKind.Website, Loc.Instance["Workflows.TriggerWebsite"], TriggerIconGlyph(WorkflowTriggerKind.Website)),
-            new WorkflowTriggerKindOption(WorkflowTriggerKind.Hotkey, Loc.Instance["Workflows.TriggerHotkey"], TriggerIconGlyph(WorkflowTriggerKind.Hotkey))
+            new WorkflowTriggerModeOption(WorkflowTriggerMode.Automatic, TriggerModeDisplayName(WorkflowTriggerMode.Automatic), TriggerModeIconGlyph(WorkflowTriggerMode.Automatic)),
+            new WorkflowTriggerModeOption(WorkflowTriggerMode.Global, TriggerModeDisplayName(WorkflowTriggerMode.Global), TriggerModeIconGlyph(WorkflowTriggerMode.Global)),
+            new WorkflowTriggerModeOption(WorkflowTriggerMode.Manual, TriggerModeDisplayName(WorkflowTriggerMode.Manual), TriggerModeIconGlyph(WorkflowTriggerMode.Manual))
+        ]);
+        ReplaceCollection(HotkeyBehaviorOptions,
+        [
+            new WorkflowHotkeyBehaviorOption(
+                WorkflowHotkeyBehavior.StartDictation,
+                Loc.Instance["Workflows.HotkeyBehaviorStartDictation"]),
+            new WorkflowHotkeyBehaviorOption(
+                WorkflowHotkeyBehavior.ProcessSelectedText,
+                Loc.Instance["Workflows.HotkeyBehaviorProcessSelectedText"])
         ]);
         ReplaceCollection(LanguageOptions,
         [
@@ -846,21 +938,66 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             : trimmed.ToLowerInvariant();
     }
 
-    public static string WorkflowTriggerSummary(Workflow workflow) => workflow.Trigger.Kind switch
+    public static string TriggerModeDisplayName(WorkflowTriggerMode mode) => mode switch
+    {
+        WorkflowTriggerMode.Automatic => Loc.Instance["Workflows.TriggerAutomatic"],
+        WorkflowTriggerMode.Global => Loc.Instance["Workflows.TriggerAlways"],
+        WorkflowTriggerMode.Manual => Loc.Instance["Workflows.TriggerManual"],
+        _ => ""
+    };
+
+    public static string TriggerDisplayName(WorkflowTriggerKind kind) => kind switch
     {
         WorkflowTriggerKind.App => Loc.Instance["Workflows.TriggerApp"],
         WorkflowTriggerKind.Website => Loc.Instance["Workflows.TriggerWebsite"],
         WorkflowTriggerKind.Hotkey => Loc.Instance["Workflows.TriggerHotkey"],
+        WorkflowTriggerKind.Global => Loc.Instance["Workflows.TriggerAlways"],
+        WorkflowTriggerKind.Manual => Loc.Instance["Workflows.TriggerManual"],
         _ => ""
     };
 
-    public static string WorkflowTriggerDetail(Workflow workflow) => workflow.Trigger.Kind switch
+    public static string WorkflowTriggerSummary(Workflow workflow)
     {
-        WorkflowTriggerKind.App => string.Join(", ", workflow.Trigger.ProcessNames),
-        WorkflowTriggerKind.Website => string.Join(", ", workflow.Trigger.WebsitePatterns),
-        WorkflowTriggerKind.Hotkey => string.Join(", ", workflow.Trigger.Hotkeys),
-        _ => ""
-    };
+        var trigger = workflow.Trigger;
+        if (trigger.Kind == WorkflowTriggerKind.Global)
+            return TriggerDisplayName(WorkflowTriggerKind.Global);
+
+        if (trigger.Kind == WorkflowTriggerKind.Manual)
+            return TriggerDisplayName(WorkflowTriggerKind.Manual);
+
+        var parts = AutomaticTriggerComponents(trigger)
+            .Select(TriggerDisplayName)
+            .ToList();
+
+        return parts.Count == 0
+            ? TriggerModeDisplayName(WorkflowTriggerMode.Automatic)
+            : string.Join(" + ", parts);
+    }
+
+    public static string WorkflowTriggerDetail(Workflow workflow)
+    {
+        var trigger = workflow.Trigger;
+        if (trigger.Kind == WorkflowTriggerKind.Global)
+            return Loc.Instance["Workflows.TriggerAlwaysDetail"];
+
+        if (trigger.Kind == WorkflowTriggerKind.Manual)
+            return Loc.Instance["Workflows.TriggerManualDetail"];
+
+        var parts = new List<string>();
+        if (trigger.HasAppBindings)
+            parts.Add(string.Join(", ", trigger.ProcessNames));
+        if (trigger.HasWebsiteBindings)
+            parts.Add(string.Join(", ", trigger.WebsitePatterns));
+        if (trigger.HasHotkeyBindings)
+        {
+            var hotkeys = string.Join(", ", trigger.Hotkeys);
+            parts.Add(trigger.HotkeyBehavior == WorkflowHotkeyBehavior.ProcessSelectedText
+                ? Loc.Instance.GetString("Workflows.TriggerHotkeyProcessDetailFormat", hotkeys)
+                : Loc.Instance.GetString("Workflows.TriggerHotkeyDictationDetailFormat", hotkeys));
+        }
+
+        return string.Join(" · ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
+    }
 
     public static string TemplateIconGlyph(WorkflowTemplate template) => template switch
     {
@@ -880,8 +1017,75 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         WorkflowTriggerKind.App => "\uE71D",
         WorkflowTriggerKind.Website => "\uE774",
         WorkflowTriggerKind.Hotkey => "\uE765",
+        WorkflowTriggerKind.Global => "\uE909",
+        WorkflowTriggerKind.Manual => "\uE70F",
         _ => "\uE8F1"
     };
+
+    public static string TriggerModeIconGlyph(WorkflowTriggerMode mode) => mode switch
+    {
+        WorkflowTriggerMode.Automatic => "\uE8B2",
+        WorkflowTriggerMode.Global => TriggerIconGlyph(WorkflowTriggerKind.Global),
+        WorkflowTriggerMode.Manual => TriggerIconGlyph(WorkflowTriggerKind.Manual),
+        _ => "\uE8F1"
+    };
+
+    public static string HotkeyBehaviorDescription(WorkflowHotkeyBehavior behavior) => behavior switch
+    {
+        WorkflowHotkeyBehavior.StartDictation => Loc.Instance["Workflows.HotkeyBehaviorStartDictationHint"],
+        WorkflowHotkeyBehavior.ProcessSelectedText => Loc.Instance["Workflows.HotkeyBehaviorProcessSelectedTextHint"],
+        _ => ""
+    };
+
+    private string SelectedTriggerGlyph()
+    {
+        if (EditTriggerMode == WorkflowTriggerMode.Global)
+            return TriggerModeIconGlyph(WorkflowTriggerMode.Global);
+
+        if (EditTriggerMode == WorkflowTriggerMode.Manual)
+            return TriggerModeIconGlyph(WorkflowTriggerMode.Manual);
+
+        if (EditAppTriggerEnabled)
+            return TriggerIconGlyph(WorkflowTriggerKind.App);
+
+        if (EditWebsiteTriggerEnabled)
+            return TriggerIconGlyph(WorkflowTriggerKind.Website);
+
+        if (EditHotkeyTriggerEnabled)
+            return TriggerIconGlyph(WorkflowTriggerKind.Hotkey);
+
+        return TriggerModeIconGlyph(WorkflowTriggerMode.Automatic);
+    }
+
+    private string SelectedTriggerText()
+    {
+        if (EditTriggerMode != WorkflowTriggerMode.Automatic)
+            return TriggerModeDisplayName(EditTriggerMode);
+
+        var parts = new List<string>();
+        if (EditAppTriggerEnabled)
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.App));
+        if (EditWebsiteTriggerEnabled)
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.Website));
+        if (EditHotkeyTriggerEnabled)
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.Hotkey));
+
+        return parts.Count == 0
+            ? TriggerModeDisplayName(WorkflowTriggerMode.Automatic)
+            : string.Join(" + ", parts);
+    }
+
+    private static IReadOnlyList<WorkflowTriggerKind> AutomaticTriggerComponents(WorkflowTrigger trigger)
+    {
+        var parts = new List<WorkflowTriggerKind>();
+        if (trigger.HasAppBindings)
+            parts.Add(WorkflowTriggerKind.App);
+        if (trigger.HasWebsiteBindings)
+            parts.Add(WorkflowTriggerKind.Website);
+        if (trigger.HasHotkeyBindings)
+            parts.Add(WorkflowTriggerKind.Hotkey);
+        return parts;
+    }
 
     partial void OnSearchTextChanged(string value) => RefreshFilteredWorkflows();
     partial void OnEditTemplateChanged(WorkflowTemplate value)
@@ -896,13 +1100,35 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         NotifyEditorStateChanged();
     }
 
-    partial void OnEditTriggerKindChanged(WorkflowTriggerKind value)
+    partial void OnEditTriggerModeChanged(WorkflowTriggerMode value)
     {
         OnPropertyChanged(nameof(SelectedTriggerIconGlyph));
-        if (value == WorkflowTriggerKind.App)
+        OnPropertyChanged(nameof(SelectedTriggerLabel));
+        if (value == WorkflowTriggerMode.Automatic && EditAppTriggerEnabled)
             RefreshAppPickerOptions();
-        if (value == WorkflowTriggerKind.Website)
+        if (value == WorkflowTriggerMode.Automatic && EditWebsiteTriggerEnabled)
             RefreshDomainSuggestions();
+        NotifyEditorStateChanged();
+    }
+    partial void OnEditAppTriggerEnabledChanged(bool value)
+    {
+        if (value)
+            RefreshAppPickerOptions();
+        else
+            IsAppPickerOpen = false;
+
+        NotifyEditorStateChanged();
+    }
+    partial void OnEditWebsiteTriggerEnabledChanged(bool value)
+    {
+        if (value)
+            RefreshDomainSuggestions();
+        NotifyEditorStateChanged();
+    }
+    partial void OnEditHotkeyTriggerEnabledChanged(bool value) => NotifyEditorStateChanged();
+    partial void OnEditHotkeyBehaviorChanged(WorkflowHotkeyBehavior value)
+    {
+        OnPropertyChanged(nameof(SelectedHotkeyBehaviorDescription));
         NotifyEditorStateChanged();
     }
     partial void OnAppPickerSearchTextChanged(string value) => RefreshAppPickerOptions();
@@ -923,11 +1149,17 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
     private void NotifyEditorStateChanged()
     {
-        OnPropertyChanged(nameof(IsAppTriggerSelected));
-        OnPropertyChanged(nameof(IsWebsiteTriggerSelected));
-        OnPropertyChanged(nameof(IsHotkeyTriggerSelected));
+        OnPropertyChanged(nameof(IsAutomaticTriggerModeSelected));
+        OnPropertyChanged(nameof(IsGlobalTriggerModeSelected));
+        OnPropertyChanged(nameof(IsManualTriggerModeSelected));
+        OnPropertyChanged(nameof(ShowAppTriggerEditor));
+        OnPropertyChanged(nameof(ShowWebsiteTriggerEditor));
+        OnPropertyChanged(nameof(ShowHotkeyTriggerEditor));
         OnPropertyChanged(nameof(IsTranslationTemplate));
         OnPropertyChanged(nameof(IsCustomTemplate));
+        OnPropertyChanged(nameof(SelectedTriggerIconGlyph));
+        OnPropertyChanged(nameof(SelectedTriggerLabel));
+        OnPropertyChanged(nameof(SelectedHotkeyBehaviorDescription));
         OnPropertyChanged(nameof(ReviewText));
     }
 
@@ -948,8 +1180,16 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     }
 }
 
+public enum WorkflowTriggerMode
+{
+    Automatic,
+    Global,
+    Manual
+}
+
 public sealed record WorkflowTemplateOption(WorkflowTemplate Template, string Name, string Description, string IconGlyph);
-public sealed record WorkflowTriggerKindOption(WorkflowTriggerKind Kind, string DisplayName, string IconGlyph);
+public sealed record WorkflowTriggerModeOption(WorkflowTriggerMode Mode, string DisplayName, string IconGlyph);
+public sealed record WorkflowHotkeyBehaviorOption(WorkflowHotkeyBehavior Behavior, string DisplayName);
 public sealed record WorkflowAppPickerOption(string ProcessName, string DisplayName, string Detail, ImageSource? Icon, bool IsSelected);
 public sealed record WorkflowDomainSuggestionOption(string Domain, string Detail, bool IsCurrent);
 public sealed record SettingOption(string? Value, string DisplayName);

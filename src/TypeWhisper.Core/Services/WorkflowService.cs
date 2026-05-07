@@ -130,10 +130,25 @@ public sealed class WorkflowService : IWorkflowService
         var enabled = _cache.Where(w => w.IsEnabled && w.Trigger.HasValues).ToList();
         var domain = ExtractHost(url);
 
+        if (!string.IsNullOrWhiteSpace(processName) && !string.IsNullOrWhiteSpace(domain))
+        {
+            var appAndWebsiteMatches = enabled
+                .Where(w => w.Trigger.IsAutomatic
+                            && w.Trigger.HasAppBindings
+                            && w.Trigger.HasWebsiteBindings
+                            && w.Trigger.ProcessNames.Any(name =>
+                                processName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                            && w.Trigger.WebsitePatterns.Any(pattern => MatchesUrlPattern(domain, pattern)))
+                .ToList();
+            if (BestMatch(appAndWebsiteMatches, WorkflowMatchKind.AppAndWebsite, domain) is { } appAndWebsiteResult)
+                return appAndWebsiteResult;
+        }
+
         if (!string.IsNullOrWhiteSpace(domain))
         {
             var websiteMatches = enabled
-                .Where(w => w.Trigger.Kind == WorkflowTriggerKind.Website
+                .Where(w => w.Trigger.IsAutomatic
+                            && !w.Trigger.HasAppBindings
                             && w.Trigger.WebsitePatterns.Any(pattern => MatchesUrlPattern(domain, pattern)))
                 .ToList();
             if (BestMatch(websiteMatches, WorkflowMatchKind.Website, domain) is { } websiteResult)
@@ -143,13 +158,20 @@ public sealed class WorkflowService : IWorkflowService
         if (!string.IsNullOrWhiteSpace(processName))
         {
             var appMatches = enabled
-                .Where(w => w.Trigger.Kind == WorkflowTriggerKind.App
+                .Where(w => w.Trigger.IsAutomatic
+                            && !w.Trigger.HasWebsiteBindings
                             && w.Trigger.ProcessNames.Any(name =>
                                 processName.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
             if (BestMatch(appMatches, WorkflowMatchKind.App, null) is { } appResult)
                 return appResult;
         }
+
+        var globalMatches = enabled
+            .Where(w => w.Trigger.Kind == WorkflowTriggerKind.Global)
+            .ToList();
+        if (BestMatch(globalMatches, WorkflowMatchKind.GlobalFallback, null) is { } globalResult)
+            return globalResult;
 
         return null;
     }
