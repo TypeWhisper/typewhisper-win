@@ -20,8 +20,10 @@ public interface IWorkflowService
 
 public enum WorkflowMatchKind
 {
+    AppAndWebsite,
     Website,
     App,
+    GlobalFallback,
     ManualOverride
 }
 

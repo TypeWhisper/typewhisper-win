@@ -61,11 +61,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly IAudioDuckingService _audioDucking;
     private readonly IMediaPauseService _mediaPause;
     private readonly PluginEventBus _eventBus;
-    private readonly PromptProcessingService _promptProcessing;
+    private readonly IWorkflowTextProcessor _workflowTextProcessor;
     private readonly IPostProcessingPipeline _pipeline;
     private readonly IErrorLogService _errorLog;
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly RecentTranscriptionsService _recentTranscriptions;
+    private readonly WorkflowPaletteService _workflowPalette;
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -135,11 +136,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         ITranslationService translation,
         IAudioDuckingService audioDucking,
         IMediaPauseService mediaPause,
-        PromptProcessingService promptProcessing,
+        IWorkflowTextProcessor workflowTextProcessor,
         IPostProcessingPipeline pipeline,
         IErrorLogService errorLog,
         SpeechFeedbackService speechFeedback,
-        RecentTranscriptionsService recentTranscriptions)
+        RecentTranscriptionsService recentTranscriptions,
+        WorkflowPaletteService workflowPalette)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -157,11 +159,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _audioDucking = audioDucking;
         _mediaPause = mediaPause;
         _eventBus = modelManager.PluginManager.EventBus;
-        _promptProcessing = promptProcessing;
+        _workflowTextProcessor = workflowTextProcessor;
         _pipeline = pipeline;
         _errorLog = errorLog;
         _speechFeedback = speechFeedback;
         _recentTranscriptions = recentTranscriptions;
+        _workflowPalette = workflowPalette;
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
         _streamingHandler.OnPartialTextUpdate = text =>
@@ -216,12 +219,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _hotkey.RecentTranscriptionsRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(ShowRecentTranscriptionsPalette);
         _hotkey.CopyLastTranscriptionRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
             await CopyLastTranscriptionToClipboardAsync());
+        _hotkey.WorkflowPaletteRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await ShowWorkflowPaletteAsync());
         _hotkey.WorkflowDictationRequested += (_, workflowId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             _workflowHotkeyOverrideId = workflowId;
             await StartRecording();
         });
+        _hotkey.WorkflowTextProcessingRequested += (_, workflowId) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+            await ProcessWorkflowHotkeyTextAsync(workflowId));
         _recentTranscriptions.FeedbackRequested += (message, isError) =>
+            Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
+        _workflowPalette.FeedbackRequested += (message, isError) =>
             Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
         _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
     }
@@ -320,6 +329,26 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     public Task CopyLastTranscriptionToClipboardAsync() =>
         _recentTranscriptions.CopyLastTranscriptionToClipboardAsync();
+
+    public async Task ShowWorkflowPaletteAsync()
+    {
+        if (State != DictationState.Idle)
+            return;
+
+        await _workflowPalette.TogglePaletteAsync();
+    }
+
+    public async Task ProcessWorkflowHotkeyTextAsync(string workflowId)
+    {
+        if (State != DictationState.Idle)
+            return;
+
+        var workflow = _workflows.GetWorkflow(workflowId);
+        if (workflow is null)
+            return;
+
+        await _workflowPalette.ExecuteWorkflowAsync(workflow);
+    }
 
     // Effective settings: workflow override -> global setting
     private string? EffectiveLanguage =>
@@ -933,10 +962,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     detectedLanguage: detectedLanguage,
                     configuredLanguage: job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage) is { } systemPrompt)
             {
-                if (_promptProcessing.IsAnyProviderAvailable)
+                if (_workflowTextProcessor.IsAnyProviderAvailable)
                 {
                     var behavior = job.ActiveWorkflow.Behavior;
-                    llmHandler = (text, token) => _promptProcessing.ProcessAsync(
+                    llmHandler = (text, token) => _workflowTextProcessor.ProcessAsync(
                         systemPrompt,
                         text,
                         behavior.ProviderOverride,

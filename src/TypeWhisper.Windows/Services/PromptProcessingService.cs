@@ -6,7 +6,19 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.Services;
 
-public sealed class PromptProcessingService
+public interface IWorkflowTextProcessor
+{
+    bool IsAnyProviderAvailable { get; }
+
+    Task<string> ProcessAsync(
+        string systemPrompt,
+        string inputText,
+        string? providerOverride,
+        string? modelOverride,
+        CancellationToken ct);
+}
+
+public sealed class PromptProcessingService : IWorkflowTextProcessor
 {
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
