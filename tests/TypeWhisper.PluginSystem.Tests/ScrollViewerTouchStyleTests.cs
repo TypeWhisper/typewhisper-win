@@ -54,10 +54,10 @@ public class ScrollViewerTouchStyleTests
     private static string ProjectFile(params string[] parts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "TypeWhisper.slnx")))
+        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
             directory = directory.Parent;
 
         Assert.NotNull(directory);
-        return Path.Combine([directory.FullName, .. parts]);
+        return Path.Join([directory.FullName, .. parts]);
     }
 }
