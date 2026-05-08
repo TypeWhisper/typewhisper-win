@@ -30,6 +30,11 @@
                 <Setter Property="FontSize" Value="12"/>
             </Style>
 
+            <Style TargetType="ScrollViewer">
+                <Setter Property="PanningMode" Value="VerticalFirst"/>
+                <Setter Property="PanningDeceleration" Value="15"/>
+            </Style>
+
             <!-- Accent color -->
             <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/>
             <SolidColorBrush x:Key="AccentHoverBrush" Color="#198EE8"/>
