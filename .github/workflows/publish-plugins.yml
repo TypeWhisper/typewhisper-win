@@ -162,6 +162,22 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $downloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/$tag/$env:ZIP_NAME"
+          $manifestPath = "plugins/$env:PROJECT_NAME/manifest.json"
+          $manifest = Get-Content $manifestPath | ConvertFrom-Json
+
+          function Set-RegistryProperty {
+            param(
+              [Parameter(Mandatory = $true)] $Plugin,
+              [Parameter(Mandatory = $true)] [string] $Name,
+              $Value
+            )
+
+            if ($Plugin.PSObject.Properties[$Name]) {
+              $Plugin.$Name = $Value
+            } else {
+              $Plugin | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+            }
+          }
 
           git fetch origin gh-pages
           git worktree add -B gh-pages gh-pages-work origin/gh-pages
@@ -180,9 +196,17 @@ jobs:
 
               for ($j = 0; $j -lt $registry.Count; $j++) {
                 if ($registry[$j].id -eq $env:PLUGIN_ID) {
-                  $registry[$j].version = $env:PLUGIN_VERSION
-                  $registry[$j].size = [long]$env:ZIP_SIZE
-                  $registry[$j].downloadUrl = $downloadUrl
+                  Set-RegistryProperty $registry[$j] 'name' $manifest.name
+                  Set-RegistryProperty $registry[$j] 'version' $env:PLUGIN_VERSION
+                  Set-RegistryProperty $registry[$j] 'minHostVersion' $manifest.minHostVersion
+                  Set-RegistryProperty $registry[$j] 'author' $manifest.author
+                  Set-RegistryProperty $registry[$j] 'description' $manifest.description
+                  Set-RegistryProperty $registry[$j] 'category' $manifest.category
+                  Set-RegistryProperty $registry[$j] 'size' ([long]$env:ZIP_SIZE)
+                  Set-RegistryProperty $registry[$j] 'downloadUrl' $downloadUrl
+                  Set-RegistryProperty $registry[$j] 'iconSystemName' $manifest.iconSystemName
+                  Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))
+                  Set-RegistryProperty $registry[$j] 'descriptions' $manifest.descriptions
                   $updated = $true
                   Write-Host "Updated $($registry[$j].id) to v$env:PLUGIN_VERSION"
                   break
@@ -190,9 +214,6 @@ jobs:
               }
 
               if (-not $updated) {
-                $manifestPath = Join-Path ".." "plugins/$env:PROJECT_NAME/manifest.json"
-                $manifest = Get-Content $manifestPath | ConvertFrom-Json
-
                 $registry += [pscustomobject]@{
                   id = $manifest.id
                   name = $manifest.name

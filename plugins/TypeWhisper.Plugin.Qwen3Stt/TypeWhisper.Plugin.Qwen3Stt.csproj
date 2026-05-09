@@ -6,9 +6,14 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.Qwen3Stt</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.1" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="manifest.json">
@@ -21,7 +26,13 @@
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.qwen3-stt\</PluginOutputDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />
+    <ItemGroup>
+      <_PluginDependencyDlls Include="$(TargetDir)*.dll" Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <_RuntimeFiles Include="$(TargetDir)runtimes\**\*.*" />
+    </ItemGroup>
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
+    <Copy SourceFiles="@(_PluginDependencyDlls)" DestinationFolder="$(PluginOutputDir)" />
+    <Copy SourceFiles="@(_RuntimeFiles)" DestinationFiles="@(_RuntimeFiles->'$(PluginOutputDir)runtimes\%(RecursiveDir)%(Filename)%(Extension)')" Condition="'@(_RuntimeFiles)' != ''" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
     <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
   </Target>

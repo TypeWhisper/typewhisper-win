@@ -1,9 +1,15 @@
 {
   "id": "com.typewhisper.qwen3-stt",
-  "name": "Qwen3 STT",
-  "version": "1.0.0",
+  "name": "Qwen3 ASR (ONNX)",
+  "version": "1.1.0",
   "author": "TypeWhisper",
-  "description": "Qwen3 ASR transcription via OpenAI-compatible endpoint",
+  "description": "Local Qwen3 ASR transcription via ONNX Runtime",
+  "category": "transcription",
+  "isLocal": true,
+  "requiresApiKey": false,
+  "descriptions": {
+    "de": "Lokale Qwen3-ASR-Transkription mit ONNX Runtime"
+  },
   "assemblyName": "TypeWhisper.Plugin.Qwen3Stt.dll",
   "pluginClass": "TypeWhisper.Plugin.Qwen3Stt.Qwen3SttPlugin"
 }

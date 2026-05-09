@@ -236,7 +236,7 @@ Bundled plugin families include:
 |------|---------|
 | Local transcription | SherpaOnnx, whisper.cpp, Granite Speech |
 | Cloud transcription | OpenAI, Groq, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
-| Server-backed transcription | Qwen3 STT |
+| Local ONNX transcription | Qwen3 ASR |
 | LLM providers | OpenAI, Groq, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Gemma Local |
 | Actions | Linear, Obsidian, Script, LiveTranscript, Webhook |
 | Memory | File Memory, OpenAI Vector Memory |

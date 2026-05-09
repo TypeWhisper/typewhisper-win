@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Groq\TypeWhisper.Plugin.Groq.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.ElevenLabs\TypeWhisper.Plugin.ElevenLabs.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Qwen3Stt\TypeWhisper.Plugin.Qwen3Stt.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Windows\TypeWhisper.Windows.csproj" />
   </ItemGroup>
