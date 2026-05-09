@@ -303,14 +303,19 @@
   },
   {
     "id": "com.typewhisper.qwen3-stt",
-    "name": "Qwen3 STT",
-    "version": "1.0.0",
+    "name": "Qwen3 ASR (ONNX)",
+    "version": "1.1.0",
     "author": "TypeWhisper",
-    "description": "Qwen3 ASR via OpenAI-compatible local endpoint",
-    "category": "Transcription",
+    "description": "Local Qwen3 ASR transcription via ONNX Runtime",
+    "category": "transcription",
     "requiresApiKey": false,
-    "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-qwen3-stt-v1.0.0/com.typewhisper.qwen3-stt-1.0.0.zip"
+    "size": 12811246,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-qwen3-stt-v1.1.0/com.typewhisper.qwen3-stt-1.1.0.zip",
+    "minHostVersion": null,
+    "iconSystemName": null,
+    "descriptions": {
+      "de": "Lokale Qwen3-ASR-Transkription mit ONNX Runtime"
+    }
   },
   {
     "id": "com.typewhisper.voxtral",
