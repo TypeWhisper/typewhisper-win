@@ -348,7 +348,7 @@
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
                 </ScrollViewer.Resources>
                 <ScrollViewer.Style>
-                    <Style TargetType="ScrollViewer">
+                    <Style TargetType="ScrollViewer" BasedOn="{StaticResource TouchScrollViewerStyle}">
                         <Setter Property="Visibility" Value="Visible"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
@@ -613,7 +613,7 @@
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
                 </ScrollViewer.Resources>
                 <ScrollViewer.Style>
-                    <Style TargetType="ScrollViewer">
+                    <Style TargetType="ScrollViewer" BasedOn="{StaticResource TouchScrollViewerStyle}">
                         <Setter Property="Visibility" Value="Collapsed"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
