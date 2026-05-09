@@ -5,7 +5,10 @@ using Moq;
 using Moq.Protected;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -149,6 +152,49 @@ public class PluginRegistryServiceTests : IDisposable
         };
 
         Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task RegistryPluginItem_RefreshInstallState_ReflectsUninstalledPlugin()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object);
+        var registryPlugin = new RegistryPlugin
+        {
+            Id = "com.test.plugin",
+            Name = "Test Plugin",
+            Version = "1.0.0",
+            Author = "A",
+            Description = "D",
+            Size = 100,
+            DownloadUrl = "u"
+        };
+
+        var plugin = new Mock<ITypeWhisperPlugin>();
+        plugin.Setup(p => p.PluginId).Returns(registryPlugin.Id);
+        plugin.Setup(p => p.PluginName).Returns(registryPlugin.Name);
+        plugin.Setup(p => p.PluginVersion).Returns(registryPlugin.Version);
+        plugin.Setup(p => p.DeactivateAsync()).Returns(Task.CompletedTask);
+
+        var manifest = new PluginManifest
+        {
+            Id = registryPlugin.Id,
+            Name = registryPlugin.Name,
+            Version = registryPlugin.Version,
+            AssemblyName = "TestPlugin.dll",
+            PluginClass = "TestPlugin"
+        };
+        var loadContext = new PluginAssemblyLoadContext(typeof(PluginRegistryServiceTests).Assembly.Location);
+        var loadedPlugin = new LoadedPlugin(manifest, plugin.Object, loadContext, AppContext.BaseDirectory);
+        TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { loadedPlugin });
+
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+        Assert.Equal(PluginInstallState.Installed, item.InstallState);
+
+        await manager.UnloadPluginAsync(registryPlugin.Id);
+        item.RefreshInstallState();
+
+        Assert.Equal(PluginInstallState.NotInstalled, item.InstallState);
     }
 
     [Fact]

@@ -38,7 +38,11 @@ public partial class PluginsViewModel : ObservableObject
         _pluginManager = pluginManager;
         _registryService = registryService;
         _pluginManager.PluginStateChanged += (_, _) =>
-            Application.Current.Dispatcher.Invoke(RefreshPlugins);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                RefreshPlugins();
+                RefreshMarketplaceInstallStates();
+            });
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         RefreshPlugins();
         _ = RefreshRegistryAsync();
@@ -60,6 +64,12 @@ public partial class PluginsViewModel : ObservableObject
         }
 
         NotifyStateChanged();
+    }
+
+    private void RefreshMarketplaceInstallStates()
+    {
+        foreach (var plugin in RegistryPlugins)
+            plugin.RefreshInstallState();
     }
 
     [RelayCommand]
