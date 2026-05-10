@@ -68,12 +68,23 @@ public partial class App : Application
         // Load settings
         var settings = _serviceProvider.GetRequiredService<ISettingsService>();
         settings.Load();
+        var licenseService = _serviceProvider.GetRequiredService<LicenseService>();
 
         // Restore enabled term packs into the dictionary on startup.
         var dictionary = _serviceProvider.GetRequiredService<IDictionaryService>();
         var enabledPackIds = settings.Current.EnabledPackIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var pack in TermPack.AllPacks.Where(pack => enabledPackIds.Contains(pack.Id)))
+        if (!licenseService.HasCommercialLicense)
+        {
+            foreach (var packId in enabledPackIds.Where(TermPack.IndustryPackIds.Contains).ToArray())
+                dictionary.DeactivatePack(packId);
+
+            enabledPackIds.RemoveWhere(TermPack.IndustryPackIds.Contains);
+            settings.Save(settings.Current with { EnabledPackIds = enabledPackIds.ToArray() });
+        }
+        foreach (var pack in TermPack.VisiblePacks(licenseService.HasCommercialLicense).Where(pack => enabledPackIds.Contains(pack.Id)))
             dictionary.ActivatePack(pack);
+        var termPackRegistry = _serviceProvider.GetRequiredService<TermPackRegistryService>();
+        _ = RestoreRemoteTermPacksAsync(termPackRegistry, dictionary, settings, licenseService);
 
         // Initialize localization
         Loc.Instance.Initialize();
@@ -85,7 +96,6 @@ public partial class App : Application
         pluginManager.InitializeAsync().GetAwaiter().GetResult();
 
         // Validate commercial/supporter licensing state in the background.
-        var licenseService = _serviceProvider.GetRequiredService<LicenseService>();
         var supporterDiscord = _serviceProvider.GetRequiredService<SupporterDiscordService>();
         _ = Task.Run(async () =>
         {
@@ -312,6 +322,7 @@ public partial class App : Application
         services.AddSingleton<PluginEventBus>();
         services.AddSingleton<PluginManager>();
         services.AddSingleton<PluginRegistryService>();
+        services.AddSingleton<TermPackRegistryService>();
 
         // Model manager (plugin-based)
         services.AddSingleton<ModelManagerService>();
@@ -415,6 +426,25 @@ public partial class App : Application
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Protocol registration failed: {ex.Message}");
+        }
+    }
+
+    private static async Task RestoreRemoteTermPacksAsync(
+        TermPackRegistryService termPackRegistry,
+        IDictionaryService dictionary,
+        ISettingsService settings,
+        LicenseService licenseService)
+    {
+        if (!licenseService.HasCommercialLicense || settings.Current.EnabledPackIds.Length == 0)
+            return;
+
+        var enabledPackIds = settings.Current.EnabledPackIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var remotePacks = await termPackRegistry.GetRemotePacksAsync();
+        foreach (var pack in remotePacks.Where(pack =>
+            enabledPackIds.Contains(pack.Id)
+            && (licenseService.HasCommercialLicense || !pack.RequiresCommercialLicense)))
+        {
+            dictionary.ActivatePack(pack);
         }
     }
 

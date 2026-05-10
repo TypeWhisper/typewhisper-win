@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -11,7 +12,7 @@ namespace TypeWhisper.Windows.Services;
 /// </summary>
 public sealed class TermPackRegistryService
 {
-    private const string RegistryUrl = "https://typewhisper.github.io/typewhisper-win/termpacks.json";
+    private const string RegistryUrl = "https://typewhisper.github.io/typewhisper-termpacks/termpacks.json";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -33,9 +34,23 @@ public sealed class TermPackRegistryService
             if (response?.Packs is not { Count: > 0 })
                 return _cachedPacks ?? [];
 
+            var builtInIds = TermPack.AllPacks
+                .Select(pack => pack.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             _cachedPacks = response.Packs
-                .Where(p => !string.IsNullOrEmpty(p.Id) && p.Terms is { Count: > 0 })
-                .Select(p => new TermPack(p.Id, p.Name ?? p.Id, p.Icon ?? "", p.Terms.ToArray()))
+                .Where(p => !string.IsNullOrWhiteSpace(p.Id)
+                    && !builtInIds.Contains(p.Id)
+                    && seenIds.Add(p.Id)
+                    && p.Terms is { Count: > 0 })
+                .Select(p => new TermPack(
+                    p.Id,
+                    p.LocalizedName(),
+                    p.Icon ?? "",
+                    p.Terms.ToArray(),
+                    p.RequiresCommercialLicense))
+                .OrderBy(pack => pack.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
             _lastFetch = DateTime.UtcNow;
             return _cachedPacks;
@@ -61,10 +76,28 @@ public sealed class TermPackRegistryService
         [JsonPropertyName("name")]
         public string? Name { get; init; }
 
+        [JsonPropertyName("names")]
+        public Dictionary<string, string>? Names { get; init; }
+
         [JsonPropertyName("icon")]
         public string? Icon { get; init; }
 
+        [JsonPropertyName("requiresCommercialLicense")]
+        public bool RequiresCommercialLicense { get; init; }
+
         [JsonPropertyName("terms")]
         public List<string> Terms { get; init; } = [];
+
+        public string LocalizedName()
+        {
+            var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            if (Names?.TryGetValue(language, out var localizedName) == true
+                && !string.IsNullOrWhiteSpace(localizedName))
+            {
+                return localizedName;
+            }
+
+            return string.IsNullOrWhiteSpace(Name) ? Id : Name;
+        }
     }
 }

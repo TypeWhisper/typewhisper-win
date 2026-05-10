@@ -53,7 +53,8 @@ public class SettingsServiceTests : IDisposable
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
-            PreviewBubbleAutoHideMilliseconds = 3750
+            PreviewBubbleAutoHideMilliseconds = 3750,
+            SelectedIndustryPresetId = "architecture"
         };
 
         sut.Save(settings);
@@ -77,6 +78,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
+        Assert.Equal("architecture", sut2.Current.SelectedIndustryPresetId);
     }
 
     [Fact]

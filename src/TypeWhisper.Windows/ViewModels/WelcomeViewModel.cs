@@ -27,6 +27,7 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly AudioRecordingService _audio;
     private readonly PluginRegistryService _registry;
     private readonly DictationViewModel _dictation;
+    private readonly DictionaryViewModel _dictionary;
     private bool _isInitializing;
     private bool _isMicTestRunning;
     private DictationState _lastObservedDictationState;
@@ -43,9 +44,11 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private string _trialText = "";
     [ObservableProperty] private bool _trialSuccess;
     [ObservableProperty] private string _trialInlineStatus = "";
+    [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
     public ObservableCollection<RegistryPluginItemViewModel> Plugins { get; } = [];
     public ObservableCollection<WelcomeModelItem> AvailableModels { get; } = [];
+    public ObservableCollection<IndustryPreset> IndustryPresets => _dictionary.IndustryPresets;
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
     public event EventHandler? Completed;
 
@@ -54,17 +57,20 @@ public partial class WelcomeViewModel : ObservableObject
         ISettingsService settings,
         AudioRecordingService audio,
         PluginRegistryService registry,
-        DictationViewModel dictation)
+        DictationViewModel dictation,
+        DictionaryViewModel dictionary)
     {
         _modelManager = modelManager;
         _settings = settings;
         _audio = audio;
         _registry = registry;
         _dictation = dictation;
+        _dictionary = dictionary;
         _lastObservedDictationState = dictation.State;
 
         _isInitializing = true;
         MainDictationHotkey = ResolveMainDictationHotkey(settings.Current);
+        SelectedIndustryPresetId = IndustryPreset.Resolve(settings.Current.SelectedIndustryPresetId).Id;
         _isInitializing = false;
 
         _modelManager.PluginManager.PluginStateChanged += (_, _) =>
@@ -408,6 +414,7 @@ public partial class WelcomeViewModel : ObservableObject
     {
         StopMicTest();
         PersistMainDictationHotkey(MainDictationHotkey);
+        _dictionary.ApplyIndustryPreset(SelectedIndustryPresetId);
 
         Completed?.Invoke(this, EventArgs.Empty);
     }
