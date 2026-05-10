@@ -1,5 +1,3 @@
-using System.IO;
-
 namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class StatusIslandLayoutTests
@@ -7,18 +5,18 @@ public sealed class StatusIslandLayoutTests
     [Fact]
     public void StatusIsland_AnchorsPartialTextByOverlayPositionWithoutWidthAnimation()
     {
-        var xaml = File.ReadAllText(ProjectFile(
+        var xaml = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml"));
-        var codeBehind = File.ReadAllText(ProjectFile(
+            "DictationOverlayView.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml.cs"));
+            "DictationOverlayView.xaml.cs");
 
         Assert.DoesNotContain("PartialTextHalf", xaml);
         Assert.DoesNotContain("ConverterParameter=top", xaml);
@@ -40,12 +38,12 @@ public sealed class StatusIslandLayoutTests
     [Fact]
     public void StatusIsland_UsesSettingsPreviewVisualStyle()
     {
-        var xaml = File.ReadAllText(ProjectFile(
+        var xaml = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml"));
+            "DictationOverlayView.xaml");
 
         Assert.Contains("CornerRadius=\"17\"", xaml);
         Assert.Contains("Background=\"#E6121822\"", xaml);
@@ -59,14 +57,14 @@ public sealed class StatusIslandLayoutTests
     [Fact]
     public void StatusIsland_DoesNotScaleTextContainerWithAudioLevel()
     {
-        var xaml = File.ReadAllText(ProjectFile(
+        var xaml = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml"));
+            "DictationOverlayView.xaml");
 
-        var islandBlock = ExtractBlock(xaml, "x:Name=\"IslandBorder\"");
+        var islandBlock = TestFile.ExtractBlock(xaml, "x:Name=\"IslandBorder\"", 600);
 
         Assert.DoesNotContain("AudioLevelScale", xaml);
         Assert.DoesNotContain("<Border.RenderTransform>", islandBlock);
@@ -76,18 +74,18 @@ public sealed class StatusIslandLayoutTests
     [Fact]
     public void StatusIsland_UsesRuntimeHeightAnimationForLivePartialPreview()
     {
-        var xaml = File.ReadAllText(ProjectFile(
+        var xaml = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml"));
-        var codeBehind = File.ReadAllText(ProjectFile(
+            "DictationOverlayView.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml.cs"));
+            "DictationOverlayView.xaml.cs");
 
         Assert.Contains("x:Name=\"PartialTextBlock\"", xaml);
         Assert.Contains("Height=\"0\"", xaml);
@@ -102,20 +100,20 @@ public sealed class StatusIslandLayoutTests
     [Fact]
     public void StatusIsland_AnimatesLiveTextItselfWithoutTextBlockClipping()
     {
-        var xaml = File.ReadAllText(ProjectFile(
+        var xaml = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml"));
-        var codeBehind = File.ReadAllText(ProjectFile(
+            "DictationOverlayView.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Controls",
             "Overlay",
-            "DictationOverlayView.xaml.cs"));
+            "DictationOverlayView.xaml.cs");
 
-        var partialTextBlock = ExtractBlock(xaml, "x:Name=\"PartialTextBlock\"");
+        var partialTextBlock = TestFile.ExtractBlock(xaml, "x:Name=\"PartialTextBlock\"", 600);
         Assert.Contains("x:Name=\"PartialTextTransform\"", partialTextBlock);
         Assert.Contains("FontSize=\"{Binding LiveTranscriptionFontSize}\"", partialTextBlock);
         Assert.DoesNotContain("TextTrimming=\"CharacterEllipsis\"", partialTextBlock);
@@ -124,23 +122,5 @@ public sealed class StatusIslandLayoutTests
         Assert.Contains("AnimatePartialText", codeBehind);
         Assert.Contains("PartialTextTransform", codeBehind);
         Assert.Contains("UIElement.OpacityProperty", codeBehind);
-    }
-
-    private static string ProjectFile(params string[] parts)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
-            directory = directory.Parent;
-
-        Assert.NotNull(directory);
-        return Path.Join([directory.FullName, .. parts]);
-    }
-
-    private static string ExtractBlock(string text, string marker)
-    {
-        var start = text.IndexOf(marker, StringComparison.Ordinal);
-        Assert.True(start >= 0, $"Expected to find {marker}.");
-        var length = Math.Min(600, text.Length - start);
-        return text.Substring(start, length);
     }
 }

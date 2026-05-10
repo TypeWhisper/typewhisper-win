@@ -83,6 +83,7 @@ public record AppSettings
     // Dictionary
     public string[] EnabledPackIds { get; init; } = [];
     public bool VocabularyBoostingEnabled { get; init; }
+    public string SelectedIndustryPresetId { get; init; } = "general";
 
     // Onboarding
     public bool HasCompletedOnboarding { get; init; }

@@ -37,6 +37,11 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         _installState = registryService.GetInstallState(registryPlugin);
     }
 
+    internal void RefreshInstallState()
+    {
+        InstallState = _registryService.GetInstallState(_registryPlugin);
+    }
+
     [RelayCommand]
     private async Task InstallAsync()
     {

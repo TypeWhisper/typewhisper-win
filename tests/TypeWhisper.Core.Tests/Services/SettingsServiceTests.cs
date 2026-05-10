@@ -56,7 +56,8 @@ public class SettingsServiceTests : IDisposable
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
             LiveTranscriptionFontSize = 15.5,
-            PreviewBubbleAutoHideMilliseconds = 3750
+            PreviewBubbleAutoHideMilliseconds = 3750,
+            SelectedIndustryPresetId = "architecture"
         };
 
         sut.Save(settings);
@@ -83,6 +84,7 @@ public class SettingsServiceTests : IDisposable
         Assert.False(sut2.Current.LiveTranscriptionEnabled);
         Assert.Equal(15.5, sut2.Current.LiveTranscriptionFontSize);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
+        Assert.Equal("architecture", sut2.Current.SelectedIndustryPresetId);
     }
 
     [Fact]

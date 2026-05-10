@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
@@ -13,6 +15,9 @@ public partial class DictionaryViewModel : ObservableObject
 {
     private readonly IDictionaryService _dictionary;
     private readonly ISettingsService _settings;
+    private readonly LicenseService? _license;
+    private readonly TermPackRegistryService? _termPackRegistry;
+    private IReadOnlyList<TermPack> _remotePacks = [];
 
     // Tab: 0=Alle, 1=Begriffe, 2=Korrekturen, 3=Packs
     [ObservableProperty] private int _selectedTab;
@@ -60,19 +65,34 @@ public partial class DictionaryViewModel : ObservableObject
     public ObservableCollection<DictionaryEntry> Entries { get; } = [];
     public ICollectionView FilteredEntries { get; }
     public ObservableCollection<TermPackViewModel> Packs { get; } = [];
+    public ObservableCollection<IndustryPreset> IndustryPresets { get; } = [];
 
-    public DictionaryViewModel(IDictionaryService dictionary, ISettingsService settings)
+    [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
+
+    public DictionaryViewModel(
+        IDictionaryService dictionary,
+        ISettingsService settings,
+        LicenseService? license = null,
+        TermPackRegistryService? termPackRegistry = null)
     {
         _dictionary = dictionary;
         _settings = settings;
+        _license = license;
+        _termPackRegistry = termPackRegistry;
         _vocabularyBoostingEnabled = _settings.Current.VocabularyBoostingEnabled;
+        _selectedIndustryPresetId = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId).Id;
 
         FilteredEntries = CollectionViewSource.GetDefaultView(Entries);
         FilteredEntries.Filter = FilterByTab;
 
         _dictionary.EntriesChanged += RefreshEntries;
+        if (_license is not null)
+            _license.PropertyChanged += OnLicenseChanged;
         RefreshEntries();
+        ReconcileCommercialPackAccess();
+        InitializeIndustryPresets();
         InitializePacks();
+        _ = LoadRemotePacksAsync();
     }
 
     partial void OnSelectedTabChanged(int value)
@@ -95,6 +115,9 @@ public partial class DictionaryViewModel : ObservableObject
 
         _settings.Save(_settings.Current with { VocabularyBoostingEnabled = value });
     }
+
+    partial void OnSelectedIndustryPresetIdChanged(string value) =>
+        ApplyIndustryPreset(value);
 
     partial void OnNewEntryTypeChanged(DictionaryEntryType value)
     {
@@ -201,6 +224,8 @@ public partial class DictionaryViewModel : ObservableObject
     private void TogglePack(TermPackViewModel? pack)
     {
         if (pack is null) return;
+        if (!CanUsePack(pack.Pack))
+            return;
 
         if (pack.IsEnabled)
         {
@@ -218,17 +243,157 @@ public partial class DictionaryViewModel : ObservableObject
 
     private void SavePackState()
     {
-        var enabledIds = Packs.Where(p => p.IsEnabled).Select(p => p.Pack.Id).ToArray();
+        var visiblePackIds = Packs.Select(p => p.Pack.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var enabledIds = _settings.Current.EnabledPackIds
+            .Where(id => !visiblePackIds.Contains(id))
+            .Concat(Packs.Where(p => p.IsEnabled).Select(p => p.Pack.Id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
     }
 
     private void InitializePacks()
     {
-        var enabledIds = _settings.Current.EnabledPackIds.ToHashSet();
-        foreach (var pack in TermPack.AllPacks)
+        Packs.Clear();
+        var enabledIds = _settings.Current.EnabledPackIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var pack in VisiblePacks())
         {
             Packs.Add(new TermPackViewModel(pack, enabledIds.Contains(pack.Id)));
         }
+    }
+
+    private void InitializeIndustryPresets()
+    {
+        IndustryPresets.Clear();
+        foreach (var preset in IndustryPreset.All)
+            IndustryPresets.Add(preset);
+    }
+
+    public void ApplyIndustryPreset(string? presetId)
+    {
+        var preset = IndustryPreset.Resolve(presetId);
+        var current = _settings.Current;
+        var enableVocabulary = current.VocabularyBoostingEnabled || preset.TermPackId is not null;
+
+        _settings.Save(current with
+        {
+            SelectedIndustryPresetId = preset.Id,
+            VocabularyBoostingEnabled = enableVocabulary
+        });
+        VocabularyBoostingEnabled = enableVocabulary;
+
+        if (preset.TermPackId is null || !HasCommercialLicense)
+            return;
+
+        var pack = FindPackById(preset.TermPackId);
+        if (pack is null)
+            return;
+
+        _dictionary.ActivatePack(pack);
+        RefreshEntries();
+
+        var enabledIds = _settings.Current.EnabledPackIds
+            .Append(pack.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
+        InitializePacks();
+    }
+
+    private void ReconcileCommercialPackAccess()
+    {
+        if (HasCommercialLicense)
+            return;
+
+        var currentIds = _settings.Current.EnabledPackIds;
+        var commercialPackIds = GetAllPacks()
+            .Where(pack => pack.RequiresCommercialLicense)
+            .Select(pack => pack.Id)
+            .Concat(TermPack.IndustryPackIds)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allowedIds = currentIds
+            .Where(id => !commercialPackIds.Contains(id))
+            .ToArray();
+
+        foreach (var packId in currentIds.Where(id => commercialPackIds.Contains(id)))
+            _dictionary.DeactivatePack(packId);
+
+        if (allowedIds.Length != currentIds.Length)
+            _settings.Save(_settings.Current with { EnabledPackIds = allowedIds });
+    }
+
+    private void OnLicenseChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(LicenseService.HasCommercialLicense))
+            return;
+
+        if (HasCommercialLicense)
+        {
+            ActivateEnabledRemotePacks();
+            ApplyIndustryPreset(_settings.Current.SelectedIndustryPresetId);
+        }
+        else
+        {
+            ReconcileCommercialPackAccess();
+        }
+        InitializePacks();
+    }
+
+    private bool HasCommercialLicense => _license?.HasCommercialLicense == true;
+
+    private bool CanUsePack(TermPack pack) =>
+        HasCommercialLicense || !pack.RequiresCommercialLicense;
+
+    private IEnumerable<TermPack> GetAllPacks() =>
+        TermPack.AllPacks
+            .Concat(_remotePacks)
+            .GroupBy(pack => pack.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First());
+
+    private IEnumerable<TermPack> VisiblePacks() =>
+        GetAllPacks().Where(CanUsePack);
+
+    private TermPack? FindPackById(string id) =>
+        GetAllPacks().FirstOrDefault(pack => pack.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    private async Task LoadRemotePacksAsync()
+    {
+        if (_termPackRegistry is null)
+            return;
+
+        var packs = await _termPackRegistry.GetRemotePacksAsync();
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            ApplyRemotePacks(packs);
+            return;
+        }
+
+        await dispatcher.InvokeAsync(() => ApplyRemotePacks(packs));
+    }
+
+    private void ApplyRemotePacks(IReadOnlyList<TermPack> packs)
+    {
+        _remotePacks = packs;
+        ReconcileCommercialPackAccess();
+        ActivateEnabledRemotePacks();
+
+        if (HasCommercialLicense)
+            ApplyIndustryPreset(_settings.Current.SelectedIndustryPresetId);
+
+        InitializePacks();
+    }
+
+    private void ActivateEnabledRemotePacks()
+    {
+        if (_remotePacks.Count == 0)
+            return;
+
+        var enabledIds = _settings.Current.EnabledPackIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var pack in _remotePacks.Where(pack => enabledIds.Contains(pack.Id) && CanUsePack(pack)))
+            _dictionary.ActivatePack(pack);
+
+        RefreshEntries();
     }
 
     private void RefreshEntries()
