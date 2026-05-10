@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +34,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private readonly UpdateService _updateService;
     private readonly ISettingsService _settingsService;
     private readonly IErrorLogService _errorLog;
+    private readonly DispatcherTimer _indicatorPreviewTimer = new(DispatcherPriority.Background);
+    private readonly DateTime _indicatorPreviewStartedAt = DateTime.UtcNow;
     private bool _isSyncingUpdateChannel;
+    private double _indicatorPreviewPhase;
 
     [ObservableProperty] private UserControl? _currentSection;
     [ObservableProperty] private SettingsRoute _currentRoute = _lastOpenedRoute;
@@ -44,6 +49,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private bool _isUpdateAvailable;
     [ObservableProperty] private int _pendingFileImporterRequestId;
     [ObservableProperty] private ReleaseChannel _selectedUpdateChannel;
+    [ObservableProperty] private float _audioLevel = 0.18f;
+    [ObservableProperty] private double _recordingSeconds;
+    [ObservableProperty] private string _partialText = "";
 
     public string CurrentAppVersion => _updateService.CurrentVersion;
     public string CurrentAppVersionDisplay => BuildCurrentAppVersionDisplay();
@@ -56,6 +64,24 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public ObservableCollection<ReleaseChannelOption> UpdateChannelOptions { get; } = [];
     public bool HasErrorLogEntries => ErrorLogEntries.Count > 0;
     public ObservableCollection<SettingsNavigationGroup> NavigationGroups { get; } = [];
+    public IndicatorStyle IndicatorStyle => Settings.IndicatorStyle;
+    public OverlayPosition OverlayPosition => Settings.OverlayPosition;
+    public OverlayWidget LeftWidget => Settings.OverlayLeftWidget;
+    public OverlayWidget RightWidget => Settings.OverlayRightWidget;
+    public bool LiveTranscriptionEnabled => Settings.LiveTranscriptionEnabled;
+    public double LiveTranscriptionFontSize => Settings.LiveTranscriptionFontSize;
+    public DictationState State => DictationState.Recording;
+    public string StatusText => Loc.Instance["Appearance.PreviewStatus"];
+    public string? ActiveWorkflowName => Loc.Instance["Widget.Workflow"];
+    public string? ActiveProcessName => "TypeWhisper";
+    public HotkeyMode? CurrentHotkeyMode => HotkeyMode.Toggle;
+    public bool ShowInlineFeedback => false;
+    public string? FeedbackText => null;
+    public bool FeedbackIsError => false;
+    public bool ShowBuiltInPartialPreview =>
+        AppearanceIndicatorPreviewPresentation.ShouldShowPartialText(
+            LiveTranscriptionEnabled,
+            IndicatorStyle);
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
@@ -94,6 +120,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 RefreshUpdateChannelOptions();
+                RefreshIndicatorPreviewText();
                 BuildNavigation();
                 SyncRouteMetadata(CurrentRoute);
                 SyncNavigationSelection();
@@ -104,10 +131,15 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         RefreshUpdateChannelOptions();
         SyncSelectedUpdateChannel(_settingsService.Current);
+        RefreshIndicatorPreviewText();
         BuildNavigation();
         RefreshErrorLog();
         _errorLog.EntriesChanged += RefreshErrorLog;
+        Settings.PropertyChanged += OnSettingsPropertyChanged;
         _settingsService.SettingsChanged += SyncSelectedUpdateChannel;
+        _indicatorPreviewTimer.Interval = TimeSpan.FromMilliseconds(140);
+        _indicatorPreviewTimer.Tick += (_, _) => TickIndicatorPreview();
+        _indicatorPreviewTimer.Start();
         SyncRouteMetadata(CurrentRoute);
         SyncNavigationSelection();
     }
@@ -276,6 +308,47 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
                 ErrorLogEntries.Add(entry);
             OnPropertyChanged(nameof(HasErrorLogEntries));
         });
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SettingsViewModel.IndicatorStyle))
+        {
+            OnPropertyChanged(nameof(IndicatorStyle));
+            OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.LiveTranscriptionEnabled))
+        {
+            OnPropertyChanged(nameof(LiveTranscriptionEnabled));
+            OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
+        }
+
+        if (e.PropertyName == nameof(SettingsViewModel.LiveTranscriptionFontSize))
+            OnPropertyChanged(nameof(LiveTranscriptionFontSize));
+
+        if (e.PropertyName == nameof(SettingsViewModel.OverlayPosition))
+            OnPropertyChanged(nameof(OverlayPosition));
+
+        if (e.PropertyName == nameof(SettingsViewModel.OverlayLeftWidget))
+            OnPropertyChanged(nameof(LeftWidget));
+
+        if (e.PropertyName == nameof(SettingsViewModel.OverlayRightWidget))
+            OnPropertyChanged(nameof(RightWidget));
+    }
+
+    private void TickIndicatorPreview()
+    {
+        _indicatorPreviewPhase += 0.42;
+        AudioLevel = 0.16f + (float)((Math.Sin(_indicatorPreviewPhase) + 1.0) * 0.18);
+        RecordingSeconds = (DateTime.UtcNow - _indicatorPreviewStartedAt).TotalSeconds;
+    }
+
+    private void RefreshIndicatorPreviewText()
+    {
+        PartialText = Loc.Instance["Appearance.PreviewLiveSample"];
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ActiveWorkflowName));
     }
 
     private void SyncSelectedUpdateChannel(AppSettings settings)

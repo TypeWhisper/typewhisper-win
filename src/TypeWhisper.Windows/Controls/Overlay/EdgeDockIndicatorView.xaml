@@ -1,4 +1,4 @@
-<UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.DictationOverlayView"
+<UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.EdgeDockIndicatorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
@@ -9,20 +9,32 @@
         <conv:EdgeDockStatusDockConverter x:Key="EdgeDockStatusDock"/>
     </UserControl.Resources>
 
-    <Border x:Name="IslandBorder"
-            CornerRadius="17"
-            Background="#E6121822"
-            BorderBrush="#22507BAA"
+    <Border x:Name="DockBorder"
+            Background="#E6101824"
+            BorderBrush="#2B7EC8FF"
             BorderThickness="1"
             HorizontalAlignment="Center"
-            MinWidth="172"
-            Padding="10,7">
+            MinWidth="360"
+            MaxWidth="620"
+            Padding="9,6">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="CornerRadius" Value="0,0,9,9"/>
+                <Setter Property="Margin" Value="0"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding OverlayPosition}" Value="{x:Static models:OverlayPosition.Bottom}">
+                        <Setter Property="CornerRadius" Value="9,9,0,0"/>
+                        <Setter Property="Margin" Value="0"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
+            <DropShadowEffect Color="Black" BlurRadius="16" Opacity="0.42" ShadowDepth="0"/>
         </Border.Effect>
 
         <DockPanel LastChildFill="False">
-            <Grid MinHeight="26"
+            <Grid MinHeight="28"
                   DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -34,11 +46,11 @@
                     Grid.Column="0"
                     WidgetType="{Binding LeftWidget}"
                     VerticalAlignment="Center"
-                    Margin="0,0,9,0"/>
+                    Margin="0,0,8,0"/>
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding StatusText}"
-                           Foreground="#CCFFFFFF"
+                           Foreground="#D8FFFFFF"
                            FontSize="12"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
@@ -49,36 +61,41 @@
                     Grid.Column="2"
                     WidgetType="{Binding RightWidget}"
                     VerticalAlignment="Center"
-                    Margin="9,0,0,0"/>
+                    Margin="8,0,0,0"/>
             </Grid>
 
-            <Border x:Name="DownwardPartialPreview"
-                    CornerRadius="0"
-                    Background="Transparent"
+            <Border x:Name="PartialPreviewBorder"
                     ClipToBounds="True"
-                    DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
                     Height="0"
                     Opacity="0"
-                    Padding="0"
-                    RenderTransformOrigin="0.5,0">
+                    Margin="0"
+                    DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
+                    RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform>
-                    <TranslateTransform x:Name="PartialPreviewTransform" Y="-5"/>
+                    <TranslateTransform x:Name="PartialPreviewTransform"/>
                 </Border.RenderTransform>
-                <TextBlock x:Name="PartialTextBlock"
-                           Text="{Binding PartialText}"
-                           Foreground="#8EFFFFFF"
-                           FontSize="{Binding LiveTranscriptionFontSize}"
-                           TextWrapping="Wrap"
-                           RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <TranslateTransform x:Name="PartialTextTransform"/>
-                    </TextBlock.RenderTransform>
-                </TextBlock>
+                <ScrollViewer x:Name="PartialPreviewScrollViewer"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock x:Name="PartialTextBlock"
+                               Text="{Binding PartialText, NotifyOnTargetUpdated=True}"
+                               TargetUpdated="OnPartialTextTargetUpdated"
+                               TextWrapping="Wrap"
+                               MaxWidth="560"
+                               Foreground="#92FFFFFF"
+                               FontSize="{Binding LiveTranscriptionFontSize}"
+                               TextAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="PartialTextTransform"/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </ScrollViewer>
             </Border>
 
-            <Border CornerRadius="0,0,22,22"
-                    Padding="16,6,16,2"
-                    Margin="0,6,0,-4"
+            <Border CornerRadius="8"
+                    Padding="12,6"
+                    Margin="0,4,0,0"
                     DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
                     Visibility="{Binding ShowInlineFeedback, Converter={StaticResource BoolToVis}}">
                 <Border.Style>
