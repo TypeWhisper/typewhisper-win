@@ -1,7 +1,14 @@
 namespace TypeWhisper.Core.Models;
 
-public sealed record TermPack(string Id, string Name, string Icon, string[] Terms)
+public sealed record TermPack(string Id, string Name, string Icon, string[] Terms, bool RequiresCommercialLicense = false)
 {
+    public static readonly HashSet<string> IndustryPackIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "real-estate",
+        "architecture",
+        "legal"
+    };
+
     public static readonly TermPack[] AllPacks =
     [
         new("web-dev", "Web Development", "\U0001F310",
@@ -56,12 +63,6 @@ public sealed record TermPack(string Id, string Name, string Icon, string[] Term
             "Anamnese", "Diagnose", "Pathologie", "EKG", "MRT", "CT", "Ultraschall", "Biopsie",
             "Anästhesie", "Kardiologie", "Onkologie", "Orthopädie", "Neurologie", "Pädiatrie", "Radiologie"
         ]),
-        new("legal", "Jura", "\u2696\uFE0F",
-        [
-            "Klausel", "Haftung", "Vertragsrecht", "DSGVO", "Compliance", "Insolvenz", "Urheberrecht",
-            "Markenrecht", "Patentrecht", "Arbeitsrecht", "Strafrecht", "Zivilrecht", "Schiedsverfahren",
-            "Datenschutz", "Gewährleistung"
-        ]),
         new("finance", "Finanzen", "\U0001F4B0",
         [
             "Portfolio", "Derivat", "Bilanz", "EBITDA", "Hedging", "Cashflow", "Rendite", "Dividende",
@@ -73,4 +74,30 @@ public sealed record TermPack(string Id, string Name, string Icon, string[] Term
             "Sidechain", "Mastering", "Mixing", "Limiter", "Chorus", "Phaser", "Arpeggiator"
         ])
     ];
+
+    public static TermPack? FindById(string id) =>
+        AllPacks.FirstOrDefault(pack => pack.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+
+    public static IEnumerable<TermPack> VisiblePacks(bool hasCommercialLicense) =>
+        AllPacks.Where(pack => hasCommercialLicense || !pack.RequiresCommercialLicense);
+}
+
+public sealed record IndustryPreset(string Id, string Name, string Description, string? TermPackId)
+{
+    public static readonly IndustryPreset General = new(
+        "general",
+        "General writing",
+        "Start with TypeWhisper defaults. You can add term packs later.",
+        null);
+
+    public static readonly IndustryPreset[] All =
+    [
+        General,
+        new("real-estate", "Immobilien", "Prepare property, viewing, and client vocabulary.", "real-estate"),
+        new("architecture", "Architektur", "Prepare planning, construction, and defect vocabulary.", "architecture"),
+        new("legal", "Jura", "Prepare legal dictation vocabulary for drafts and notes.", "legal")
+    ];
+
+    public static IndustryPreset Resolve(string? id) =>
+        All.FirstOrDefault(preset => preset.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) ?? General;
 }

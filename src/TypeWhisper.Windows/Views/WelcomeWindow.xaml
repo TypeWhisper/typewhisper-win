@@ -381,6 +381,25 @@
                                 </StackPanel>
                             </Border>
 
+                            <TextBlock Text="{loc:Str Welcome.IndustryHeader}"
+                                       Style="{StaticResource SettingsGroupTitleStyle}"/>
+
+                            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                                <StackPanel Margin="18">
+                                    <TextBlock Text="{loc:Str Welcome.IndustryDesc}"
+                                               Style="{StaticResource PageSubtitleStyle}"
+                                               Margin="0,0,0,10"/>
+                                    <ComboBox ItemsSource="{Binding IndustryPresets}"
+                                              SelectedValue="{Binding SelectedIndustryPresetId}"
+                                              SelectedValuePath="Id"
+                                              DisplayMemberPath="Name"
+                                              Margin="0,0,0,10"/>
+                                    <TextBlock Text="{loc:Str Welcome.IndustryLicenseHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0"/>
+                                </StackPanel>
+                            </Border>
+
                             <TextBlock Text="{loc:Str Welcome.ExtensionsHeader}"
                                        Style="{StaticResource SettingsGroupTitleStyle}"/>
 
