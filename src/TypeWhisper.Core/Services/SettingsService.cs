@@ -61,6 +61,7 @@ public sealed class SettingsService : ISettingsService
 
     public void Save(AppSettings settings)
     {
+        settings = NormalizeSettings(settings);
         _current = settings;
 
         var directory = Path.GetDirectoryName(_filePath);
@@ -89,7 +90,7 @@ public sealed class SettingsService : ISettingsService
             if (!File.Exists(path)) return null;
             var json = File.ReadAllText(path);
             var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-            return settings is null ? null : ApplyHistoryRetentionMigration(settings, json);
+            return settings is null ? null : ApplySettingsMigrations(settings, json);
         }
         catch (Exception ex)
         {
@@ -98,7 +99,7 @@ public sealed class SettingsService : ISettingsService
         }
     }
 
-    private static AppSettings ApplyHistoryRetentionMigration(AppSettings settings, string json)
+    private static AppSettings ApplySettingsMigrations(AppSettings settings, string json)
     {
         JsonNode? root;
         try
@@ -111,12 +112,12 @@ public sealed class SettingsService : ISettingsService
         }
 
         if (root is not JsonObject obj)
-            return settings;
+            return NormalizeSettings(settings);
 
         if (!obj.ContainsKey("historyRetentionMode") && obj.TryGetPropertyValue("historyRetentionDays", out var legacyNode))
         {
             var legacyDays = legacyNode?.GetValue<int?>();
-            return legacyDays switch
+            settings = legacyDays switch
             {
                 9999 => settings with
                 {
@@ -137,8 +138,22 @@ public sealed class SettingsService : ISettingsService
 
         if (settings.HistoryRetentionMode == HistoryRetentionMode.Duration && settings.HistoryRetentionMinutes <= 0)
         {
-            return settings with { HistoryRetentionMinutes = AppSettings.Default.HistoryRetentionMinutes };
+            settings = settings with { HistoryRetentionMinutes = AppSettings.Default.HistoryRetentionMinutes };
         }
+
+        return NormalizeSettings(settings);
+    }
+
+    private static AppSettings NormalizeSettings(AppSettings settings)
+    {
+        if (!Enum.IsDefined(settings.IndicatorStyle))
+            settings = settings with { IndicatorStyle = AppSettings.Default.IndicatorStyle };
+
+        settings = settings with
+        {
+            LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(
+                settings.LiveTranscriptionFontSize)
+        };
 
         return settings;
     }

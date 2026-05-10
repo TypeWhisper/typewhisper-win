@@ -53,6 +53,9 @@ public class SettingsServiceTests : IDisposable
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
+            IndicatorStyle = IndicatorStyle.EdgeDock,
+            LiveTranscriptionEnabled = false,
+            LiveTranscriptionFontSize = 15.5,
             PreviewBubbleAutoHideMilliseconds = 3750
         };
 
@@ -76,6 +79,9 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
+        Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
+        Assert.False(sut2.Current.LiveTranscriptionEnabled);
+        Assert.Equal(15.5, sut2.Current.LiveTranscriptionFontSize);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
     }
 
@@ -93,6 +99,66 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("", sut.Current.RecentTranscriptionsHotkey);
         Assert.Equal("", sut.Current.CopyLastTranscriptionHotkey);
         Assert.Equal("", sut.Current.WorkflowPaletteHotkey);
+    }
+
+    [Fact]
+    public void Load_LegacySettings_UsesStatusIslandIndicatorDefault()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(IndicatorStyle.StatusIsland, sut.Current.IndicatorStyle);
+    }
+
+    [Fact]
+    public void Load_LegacySettings_UsesDefaultLiveTranscriptionFontSize()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(AppSettings.Default.LiveTranscriptionFontSize, sut.Current.LiveTranscriptionFontSize);
+    }
+
+    [Theory]
+    [InlineData(2.0, 10.0)]
+    [InlineData(44.0, 18.0)]
+    public void Load_OutOfRangeLiveTranscriptionFontSize_ClampsToSupportedRange(double value, double expected)
+    {
+        File.WriteAllText(_filePath, $$"""
+        {
+          "language": "en",
+          "liveTranscriptionFontSize": {{value.ToString(System.Globalization.CultureInfo.InvariantCulture)}}
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(expected, sut.Current.LiveTranscriptionFontSize);
+    }
+
+    [Fact]
+    public void Load_UnknownIndicatorStyle_FallsBackToStatusIsland()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en",
+          "indicatorStyle": 999
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(IndicatorStyle.StatusIsland, sut.Current.IndicatorStyle);
     }
 
     [Fact]

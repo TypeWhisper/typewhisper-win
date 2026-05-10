@@ -6,6 +6,9 @@ public record AppSettings
     public const int MinPreviewBubbleAutoHideMilliseconds = 0;
     public const int DefaultPreviewBubbleAutoHideMilliseconds = 1500;
     public const int MaxPreviewBubbleAutoHideMilliseconds = 5000;
+    public const double MinLiveTranscriptionFontSize = 10d;
+    public const double DefaultLiveTranscriptionFontSize = 12d;
+    public const double MaxLiveTranscriptionFontSize = 18d;
 
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
@@ -42,6 +45,7 @@ public record AppSettings
 
     // Live transcription (streaming preview while recording)
     public bool LiveTranscriptionEnabled { get; init; } = true;
+    public double LiveTranscriptionFontSize { get; init; } = DefaultLiveTranscriptionFontSize;
 
     // Silence detection
     public bool SilenceAutoStopEnabled { get; init; }
@@ -52,6 +56,7 @@ public record AppSettings
     public bool InternalParakeetTailHardeningEnabled { get; init; }
 
     // Overlay
+    public IndicatorStyle IndicatorStyle { get; init; } = IndicatorStyle.StatusIsland;
     public OverlayPosition OverlayPosition { get; init; } = OverlayPosition.Bottom;
     public OverlayWidget OverlayLeftWidget { get; init; } = OverlayWidget.Waveform;
     public OverlayWidget OverlayRightWidget { get; init; } = OverlayWidget.Timer;
@@ -115,6 +120,12 @@ public record AppSettings
             milliseconds,
             MinPreviewBubbleAutoHideMilliseconds,
             MaxPreviewBubbleAutoHideMilliseconds);
+
+    public static double NormalizeLiveTranscriptionFontSize(double fontSize) =>
+        Math.Clamp(
+            fontSize,
+            MinLiveTranscriptionFontSize,
+            MaxLiveTranscriptionFontSize);
 }
 
 public enum RecordingMode
@@ -135,6 +146,13 @@ public enum OverlayPosition
 {
     Top,
     Bottom
+}
+
+public enum IndicatorStyle
+{
+    StatusIsland,
+    EdgeDock,
+    CompactBadge
 }
 
 public enum OverlayWidget

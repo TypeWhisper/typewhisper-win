@@ -1,0 +1,46 @@
+<UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.IndicatorStyleHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:TypeWhisper.Core.Models;assembly=TypeWhisper.Core"
+             xmlns:overlay="clr-namespace:TypeWhisper.Windows.Controls.Overlay">
+    <Grid>
+        <overlay:DictationOverlayView>
+            <overlay:DictationOverlayView.Style>
+                <Style TargetType="{x:Type overlay:DictationOverlayView}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IndicatorStyle}" Value="{x:Static models:IndicatorStyle.StatusIsland}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </overlay:DictationOverlayView.Style>
+        </overlay:DictationOverlayView>
+
+        <overlay:EdgeDockIndicatorView>
+            <overlay:EdgeDockIndicatorView.Style>
+                <Style TargetType="{x:Type overlay:EdgeDockIndicatorView}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IndicatorStyle}" Value="{x:Static models:IndicatorStyle.EdgeDock}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </overlay:EdgeDockIndicatorView.Style>
+        </overlay:EdgeDockIndicatorView>
+
+        <overlay:CompactBadgeIndicatorView>
+            <overlay:CompactBadgeIndicatorView.Style>
+                <Style TargetType="{x:Type overlay:CompactBadgeIndicatorView}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IndicatorStyle}" Value="{x:Static models:IndicatorStyle.CompactBadge}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </overlay:CompactBadgeIndicatorView.Style>
+        </overlay:CompactBadgeIndicatorView>
+    </Grid>
+</UserControl>

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -8,22 +9,23 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
-public partial class DictationOverlayView : UserControl
+public partial class EdgeDockIndicatorView : UserControl
 {
-    private const double MaxPartialPreviewHeight = 124;
-    private const double MinPartialPreviewHeight = 34;
-    private const double FallbackPartialPreviewTextWidth = 368;
+    private const double MaxPartialPreviewHeight = 86;
+    private const double MinPartialPreviewHeight = 26;
+    private const double FallbackPartialPreviewTextWidth = 560;
     private const string ShowBuiltInPartialPreviewProperty = "ShowBuiltInPartialPreview";
     private const string PartialTextProperty = "PartialText";
     private const string OverlayPositionProperty = "OverlayPosition";
 
+    private bool _isPartialPreviewScrollPending;
     private INotifyPropertyChanged? _observableDataContext;
     private bool _partialPreviewUpdateQueued;
     private bool _queuedPartialPreviewAnimation;
     private bool _queuedPartialTextAnimation;
     private int _partialPreviewAnimationVersion;
 
-    public DictationOverlayView()
+    public EdgeDockIndicatorView()
     {
         InitializeComponent();
 
@@ -32,6 +34,18 @@ public partial class DictationOverlayView : UserControl
         DataContextChanged += OnDataContextChanged;
         IsVisibleChanged += OnIsVisibleChanged;
         SizeChanged += OnSizeChanged;
+    }
+
+    private void OnPartialTextTargetUpdated(object sender, DataTransferEventArgs e)
+    {
+        if (sender is TextBlock { Text.Length: 0 })
+        {
+            _isPartialPreviewScrollPending = false;
+            PartialPreviewScrollViewer.ScrollToHome();
+            return;
+        }
+
+        QueuePartialPreviewScrollToEnd();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -133,7 +147,7 @@ public partial class DictationOverlayView : UserControl
     {
         var showPreview = ReadDataContextProperty(ShowBuiltInPartialPreviewProperty, fallback: false);
         var position = ReadDataContextProperty(OverlayPositionProperty, fallback: OverlayPosition.Top);
-        var hiddenOffset = position == OverlayPosition.Bottom ? 5 : -5;
+        var hiddenOffset = position == OverlayPosition.Bottom ? -4 : 4;
         var targetHeight = showPreview ? CalculatePartialPreviewHeight() : 0;
         var targetOpacity = showPreview ? 1 : 0;
         var targetMargin = showPreview
@@ -143,26 +157,31 @@ public partial class DictationOverlayView : UserControl
             : new Thickness(0);
         var targetOffset = showPreview ? 0 : hiddenOffset;
 
-        if (showPreview && DownwardPartialPreview.Height <= 0.5 && DownwardPartialPreview.Opacity <= 0.01)
+        if (showPreview && PartialPreviewBorder.Height <= 0.5 && PartialPreviewBorder.Opacity <= 0.01)
             PartialPreviewTransform.Y = hiddenOffset;
 
         if (!animated || !IsVisible)
         {
             ApplyPartialPreviewState(targetHeight, targetOpacity, targetMargin, targetOffset);
+            if (showPreview)
+                QueuePartialPreviewScrollToEnd();
             return;
         }
 
-        var duration = TimeSpan.FromMilliseconds(showPreview ? 520 : 220);
-        var marginDuration = TimeSpan.FromMilliseconds(showPreview ? 420 : 180);
+        var duration = TimeSpan.FromMilliseconds(showPreview ? 420 : 200);
+        var marginDuration = TimeSpan.FromMilliseconds(showPreview ? 320 : 160);
         var version = ++_partialPreviewAnimationVersion;
 
-        BeginFrameworkElementDoubleAnimation(DownwardPartialPreview, FrameworkElement.HeightProperty, targetHeight, duration, version);
-        BeginFrameworkElementDoubleAnimation(DownwardPartialPreview, UIElement.OpacityProperty, targetOpacity, marginDuration, version);
-        BeginThicknessAnimation(DownwardPartialPreview, FrameworkElement.MarginProperty, targetMargin, marginDuration, version);
+        BeginFrameworkElementDoubleAnimation(PartialPreviewBorder, FrameworkElement.HeightProperty, targetHeight, duration, version);
+        BeginFrameworkElementDoubleAnimation(PartialPreviewBorder, UIElement.OpacityProperty, targetOpacity, marginDuration, version);
+        BeginThicknessAnimation(PartialPreviewBorder, FrameworkElement.MarginProperty, targetMargin, marginDuration, version);
         BeginTransformDoubleAnimation(PartialPreviewTransform, TranslateTransform.YProperty, targetOffset, duration, version);
 
         if (showPreview && animateText)
             AnimatePartialText(position);
+
+        if (showPreview)
+            QueuePartialPreviewScrollToEnd();
     }
 
     private double CalculatePartialPreviewHeight()
@@ -170,29 +189,15 @@ public partial class DictationOverlayView : UserControl
         PartialTextBlock.MaxWidth = GetPartialPreviewTextWidth();
         PartialTextBlock.Measure(new Size(PartialTextBlock.MaxWidth, double.PositiveInfinity));
         return Math.Clamp(
-            Math.Ceiling(PartialTextBlock.DesiredSize.Height) + DownwardPartialPreview.Padding.Top + DownwardPartialPreview.Padding.Bottom,
+            Math.Ceiling(PartialTextBlock.DesiredSize.Height),
             MinPartialPreviewHeight,
             MaxPartialPreviewHeight);
     }
 
     private double GetPartialPreviewTextWidth()
     {
-        var availableWidth = DownwardPartialPreview.ActualWidth
-            - DownwardPartialPreview.Padding.Left
-            - DownwardPartialPreview.Padding.Right;
-
-        return availableWidth > 120 ? availableWidth : FallbackPartialPreviewTextWidth;
-    }
-
-    private void AnimatePartialText(OverlayPosition position)
-    {
-        var fromOffset = position == OverlayPosition.Bottom ? -3 : 3;
-        PartialTextTransform.Y = fromOffset;
-        PartialTextBlock.Opacity = 0.72;
-
-        var duration = TimeSpan.FromMilliseconds(240);
-        BeginTextTransformDoubleAnimation(PartialTextTransform, TranslateTransform.YProperty, 0, duration);
-        BeginTextElementDoubleAnimation(PartialTextBlock, UIElement.OpacityProperty, 1, duration);
+        var availableWidth = PartialPreviewBorder.ActualWidth;
+        return availableWidth > 120 ? Math.Min(availableWidth, FallbackPartialPreviewTextWidth) : FallbackPartialPreviewTextWidth;
     }
 
     private void ApplyPartialPreviewState(
@@ -202,15 +207,26 @@ public partial class DictationOverlayView : UserControl
         double offset)
     {
         _partialPreviewAnimationVersion++;
-        DownwardPartialPreview.BeginAnimation(FrameworkElement.HeightProperty, null);
-        DownwardPartialPreview.BeginAnimation(UIElement.OpacityProperty, null);
-        DownwardPartialPreview.BeginAnimation(FrameworkElement.MarginProperty, null);
+        PartialPreviewBorder.BeginAnimation(FrameworkElement.HeightProperty, null);
+        PartialPreviewBorder.BeginAnimation(UIElement.OpacityProperty, null);
+        PartialPreviewBorder.BeginAnimation(FrameworkElement.MarginProperty, null);
         PartialPreviewTransform.BeginAnimation(TranslateTransform.YProperty, null);
 
-        DownwardPartialPreview.Height = height;
-        DownwardPartialPreview.Opacity = opacity;
-        DownwardPartialPreview.Margin = margin;
+        PartialPreviewBorder.Height = height;
+        PartialPreviewBorder.Opacity = opacity;
+        PartialPreviewBorder.Margin = margin;
         PartialPreviewTransform.Y = offset;
+    }
+
+    private void AnimatePartialText(OverlayPosition position)
+    {
+        var fromOffset = position == OverlayPosition.Bottom ? -3 : 3;
+        PartialTextTransform.Y = fromOffset;
+        PartialTextBlock.Opacity = 0.72;
+
+        var duration = TimeSpan.FromMilliseconds(220);
+        BeginTextTransformDoubleAnimation(PartialTextTransform, TranslateTransform.YProperty, 0, duration);
+        BeginTextElementDoubleAnimation(PartialTextBlock, UIElement.OpacityProperty, 1, duration);
     }
 
     private void BeginFrameworkElementDoubleAnimation(
@@ -343,4 +359,18 @@ public partial class DictationOverlayView : UserControl
 
     private static IEasingFunction CreateEase() =>
         new QuinticEase { EasingMode = EasingMode.EaseOut };
+
+    private void QueuePartialPreviewScrollToEnd()
+    {
+        if (_isPartialPreviewScrollPending)
+            return;
+
+        _isPartialPreviewScrollPending = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _isPartialPreviewScrollPending = false;
+            PartialPreviewScrollViewer.UpdateLayout();
+            PartialPreviewScrollViewer.ScrollToEnd();
+        }));
+    }
 }

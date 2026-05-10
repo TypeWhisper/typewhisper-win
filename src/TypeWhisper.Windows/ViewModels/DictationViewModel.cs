@@ -200,6 +200,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         {
             OnPropertyChanged(nameof(LeftWidget));
             OnPropertyChanged(nameof(RightWidget));
+            OnPropertyChanged(nameof(IndicatorStyle));
+            OnPropertyChanged(nameof(OverlayPosition));
+            OnPropertyChanged(nameof(LiveTranscriptionEnabled));
+            OnPropertyChanged(nameof(LiveTranscriptionFontSize));
+            RefreshPartialPreviewPresentation();
         };
         _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () => await StartRecording());
         _hotkey.DictationStopRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
@@ -242,6 +247,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
     public OverlayWidget RightWidget => _settings.Current.OverlayRightWidget;
+    public IndicatorStyle IndicatorStyle => _settings.Current.IndicatorStyle;
+    public OverlayPosition OverlayPosition => _settings.Current.OverlayPosition;
+    public bool LiveTranscriptionEnabled => _settings.Current.LiveTranscriptionEnabled;
+    public double LiveTranscriptionFontSize =>
+        AppSettings.NormalizeLiveTranscriptionFontSize(_settings.Current.LiveTranscriptionFontSize);
     public bool ShowInlineFeedback =>
         DictationOverlayPresentation.ShowInlineFeedback(IsOverlayVisible, ShowFeedback);
     public bool ShowDetachedFeedback =>
@@ -251,7 +261,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     public bool ExternalLivePreviewActive =>
         _modelManager.PluginManager.IsEnabled(ExternalLiveTranscriptPluginId);
     public bool ShowBuiltInPartialPreview =>
-        DictationOverlayPresentation.ShowBuiltInPartialPreview(PartialText, ExternalLivePreviewActive);
+        DictationOverlayPresentation.ShowBuiltInPartialPreview(
+            PartialText,
+            ExternalLivePreviewActive,
+            LiveTranscriptionEnabled,
+            IndicatorStyle);
 
     partial void OnPartialTextChanged(string value)
     {
@@ -702,7 +716,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         {
             _streamingHandler.Start(EffectiveLanguage, EffectiveTask, () => _isRecording);
         }
-        else if (!isPluginModel)
+        else if (_settings.Current.LiveTranscriptionEnabled && !isPluginModel)
         {
             // VAD fallback for non-plugin models
             _vad = CreateVoiceActivityDetector();
