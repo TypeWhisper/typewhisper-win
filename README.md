@@ -70,7 +70,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 - **Release channels:** Velopack-powered delivery for stable, release-candidate, and daily builds.
 - **Windows autostart:** Optional start with Windows.
 - **System tray:** Minimizes to tray with quick access.
-- **Localization:** English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Czech, Swedish, Danish, and Finnish.
+- **Localization:** English, German, Japanese, and Russian.
 
 ## Install
 
