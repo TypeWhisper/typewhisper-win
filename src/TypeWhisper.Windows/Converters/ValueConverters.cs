@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -25,6 +27,73 @@ public sealed class AudioLevelWidthConverter : IMultiValueConverter
     }
 
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Converts audio level (0..1 float) into a subtle scale factor for live overlay motion.
+/// </summary>
+public sealed class AudioLevelScaleConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var level = value is float f ? Math.Clamp(f, 0f, 1f) : 0f;
+        var maxDelta = 0.035;
+        if (parameter is string s && double.TryParse(s, CultureInfo.InvariantCulture, out var parsed))
+            maxDelta = Math.Clamp(parsed, 0.0, 0.12);
+
+        return 1.0 + Math.Min(level * 2.4, 1.0) * maxDelta;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Splits partial live text into a top or bottom segment for symmetric overlay expansion.
+/// </summary>
+public sealed class PartialTextHalfConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string text || string.IsNullOrWhiteSpace(text))
+            return "";
+
+        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length < 2)
+            return string.Equals(parameter as string, "top", StringComparison.OrdinalIgnoreCase) ? text.Trim() : "";
+
+        var splitIndex = Math.Max(1, words.Length / 2);
+        return string.Equals(parameter as string, "top", StringComparison.OrdinalIgnoreCase)
+            ? string.Join(" ", words.Take(splitIndex))
+            : string.Join(" ", words.Skip(splitIndex));
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Compares an enum binding with the converter parameter and writes the parameter back when selected.
+/// </summary>
+public sealed class EnumEqualsConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        Equals(value, parameter);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true ? parameter : Binding.DoNothing;
+}
+
+/// <summary>
+/// Keeps the Edge Dock status row attached to the selected screen edge.
+/// </summary>
+public sealed class EdgeDockStatusDockConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is OverlayPosition.Bottom ? Dock.Bottom : Dock.Top;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 

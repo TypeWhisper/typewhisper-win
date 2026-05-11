@@ -36,6 +36,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private float _audioDuckingLevel = 0.2f;
     [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
+    [ObservableProperty] private IndicatorStyle _indicatorStyle = IndicatorStyle.StatusIsland;
+    [ObservableProperty] private bool _liveTranscriptionEnabled = true;
+    [ObservableProperty] private double _liveTranscriptionFontSize = AppSettings.DefaultLiveTranscriptionFontSize;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
     [ObservableProperty] private double _previewBubbleAutoHideSeconds = AppSettings.DefaultPreviewBubbleAutoHideMilliseconds / 1000d;
     [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
@@ -107,6 +110,8 @@ public partial class SettingsViewModel : ObservableObject
 
     public string PreviewBubbleAutoHideSecondsText =>
         Loc.Instance.GetString("Appearance.AutoHideSecondsFormat", PreviewBubbleAutoHideSeconds);
+    public string LiveTranscriptionFontSizeText =>
+        Loc.Instance.GetString("Appearance.LiveTextSizeFormat", LiveTranscriptionFontSize);
 
     private bool _isLoading;
     private bool _isSavingSettings;
@@ -138,6 +143,9 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnPreviewBubbleAutoHideSecondsChanged(double value) =>
         OnPropertyChanged(nameof(PreviewBubbleAutoHideSecondsText));
+
+    partial void OnLiveTranscriptionFontSizeChanged(double value) =>
+        OnPropertyChanged(nameof(LiveTranscriptionFontSizeText));
 
     public SettingsViewModel(
         ISettingsService settings,
@@ -285,6 +293,9 @@ public partial class SettingsViewModel : ObservableObject
             WhisperModeEnabled = WhisperModeEnabled,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
+            IndicatorStyle = IndicatorStyle,
+            LiveTranscriptionEnabled = LiveTranscriptionEnabled,
+            LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(LiveTranscriptionFontSize),
             OverlayPosition = OverlayPosition,
             PreviewBubbleAutoHideMilliseconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
                 (int)Math.Round(PreviewBubbleAutoHideSeconds * 1000, MidpointRounding.AwayFromZero)),
@@ -367,6 +378,9 @@ public partial class SettingsViewModel : ObservableObject
         WhisperModeEnabled = s.WhisperModeEnabled;
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
+        IndicatorStyle = s.IndicatorStyle;
+        LiveTranscriptionEnabled = s.LiveTranscriptionEnabled;
+        LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(s.LiveTranscriptionFontSize);
         OverlayPosition = s.OverlayPosition;
         PreviewBubbleAutoHideSeconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
             s.PreviewBubbleAutoHideMilliseconds) / 1000d;
@@ -463,6 +477,7 @@ public partial class SettingsViewModel : ObservableObject
                 _settings.Current.HistoryRetentionMode,
                 _settings.Current.HistoryRetentionMinutes);
             OnPropertyChanged(nameof(PreviewBubbleAutoHideSecondsText));
+            OnPropertyChanged(nameof(LiveTranscriptionFontSizeText));
             RefreshSpokenFeedbackProviders();
             _isLoading = false;
         });

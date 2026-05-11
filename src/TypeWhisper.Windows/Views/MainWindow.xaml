@@ -1,6 +1,7 @@
 <Window x:Class="TypeWhisper.Windows.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:TypeWhisper.Core.Models;assembly=TypeWhisper.Core"
         xmlns:overlay="clr-namespace:TypeWhisper.Windows.Controls.Overlay"
         Title="TypeWhisper"
         SizeToContent="WidthAndHeight"
@@ -13,6 +14,12 @@
         ResizeMode="NoResize"
         WindowStartupLocation="Manual"
         Focusable="False"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        TextOptions.TextHintingMode="Fixed"
+        RenderOptions.ClearTypeHint="Enabled"
         Loaded="OnLoaded"
         SizeChanged="OnSizeChanged">
 
@@ -20,10 +27,22 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </Window.Resources>
 
-    <Grid Margin="8"
+    <Grid x:Name="OverlayChrome"
+          UseLayoutRounding="True"
+          SnapsToDevicePixels="True"
           Visibility="{Binding HasOverlayContentVisible, Converter={StaticResource BoolToVis}}">
+        <Grid.Style>
+            <Style TargetType="{x:Type Grid}">
+                <Setter Property="Margin" Value="8"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IndicatorStyle}" Value="{x:Static models:IndicatorStyle.EdgeDock}">
+                        <Setter Property="Margin" Value="0"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Grid.Style>
 
-        <overlay:DictationOverlayView
+        <overlay:IndicatorStyleHost
             Visibility="{Binding IsOverlayVisible, Converter={StaticResource BoolToVis}}"/>
 
         <overlay:DetachedFeedbackView
