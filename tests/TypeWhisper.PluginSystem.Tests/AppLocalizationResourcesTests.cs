@@ -41,7 +41,7 @@ public class AppLocalizationResourcesTests
     private static Dictionary<string, string> LoadLocalization(string localizationDir, string language)
     {
         var languageFileName = Path.GetFileName($"{language}.json");
-        var path = Path.Combine(localizationDir, languageFileName);
+        var path = Path.Join(localizationDir, languageFileName);
         Assert.True(File.Exists(path), $"{languageFileName} should be copied to the test output.");
 
         var json = File.ReadAllText(path);
