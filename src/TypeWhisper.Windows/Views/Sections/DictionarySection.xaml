@@ -11,6 +11,7 @@
             </ResourceDictionary.MergedDictionaries>
             <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
             <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
+            <converters:LocalizedFormatConverter x:Key="LocalizedFormat"/>
 
             <!-- Small icon button -->
             <Style x:Key="IconButtonStyle" TargetType="Button">
@@ -569,7 +570,12 @@
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </TextBlock.Style>
-                                                        <Run Text="{Binding UsageCount, StringFormat='{}{0}x verwendet', Mode=OneWay}"/>
+                                                        <TextBlock.Text>
+                                                            <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                                                <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.UsageCount]"/>
+                                                                <Binding Path="UsageCount"/>
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
                                                     </TextBlock>
                                                 </StackPanel>
 
