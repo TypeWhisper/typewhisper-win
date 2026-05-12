@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -63,6 +64,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             var filePath = GetPath(file.RelativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
             var tempPath = filePath + ".tmp";
+            var completedFile = false;
 
             try
             {
@@ -94,13 +96,14 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
                 }
 
                 File.Move(tempPath, filePath, overwrite: true);
+                completedFile = true;
                 completedBytes += Math.Max(expectedBytes, fileBytesRead);
                 progress?.Report(ClampProgress(completedBytes / (double)totalBytes));
             }
-            catch
+            finally
             {
-                TryDelete(tempPath);
-                throw;
+                if (!completedFile)
+                    TryDelete(tempPath);
             }
         }
 
@@ -124,13 +127,21 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
                 var text = await _httpClient.GetStringAsync(_licenseUrl, ct);
                 await File.WriteAllTextAsync(licensePath, text, Encoding.UTF8, ct);
             }
-            catch
+            catch (HttpRequestException)
             {
-                await File.WriteAllTextAsync(
-                    licensePath,
-                    $"Supertonic 3 model weights are licensed under OpenRAIL-M. License source: {_licenseUrl}{Environment.NewLine}",
-                    Encoding.UTF8,
-                    ct);
+                await WriteFallbackLicenseAsync(licensePath, ct);
+            }
+            catch (IOException)
+            {
+                await WriteFallbackLicenseAsync(licensePath, ct);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await WriteFallbackLicenseAsync(licensePath, ct);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                await WriteFallbackLicenseAsync(licensePath, ct);
             }
         }
 
@@ -142,6 +153,13 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             "");
         await File.WriteAllTextAsync(GetPath(SupertonicPaths.SourceFileName), sourceText, Encoding.UTF8, ct);
     }
+
+    private Task WriteFallbackLicenseAsync(string licensePath, CancellationToken ct) =>
+        File.WriteAllTextAsync(
+            licensePath,
+            $"Supertonic 3 model weights are licensed under OpenRAIL-M. License source: {_licenseUrl}{Environment.NewLine}",
+            Encoding.UTF8,
+            ct);
 
     private string GetPath(string relativePath) =>
         Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -156,10 +174,26 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch
+        catch (IOException ex)
         {
+            TraceDeleteFailure(path, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            TraceDeleteFailure(path, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            TraceDeleteFailure(path, ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            TraceDeleteFailure(path, ex);
         }
     }
+
+    private static void TraceDeleteFailure(string path, Exception ex) =>
+        Trace.TraceWarning($"Failed to delete Supertonic temporary asset '{path}': {ex.Message}");
 
     private static IReadOnlyList<SupertonicAssetFile> DefaultFiles { get; } =
     [

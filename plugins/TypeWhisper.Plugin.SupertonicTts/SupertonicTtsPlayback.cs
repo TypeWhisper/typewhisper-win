@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO;
 using System.Media;
 
@@ -26,7 +27,8 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
             return;
 
         try { _player.Stop(); }
-        catch { }
+        catch (ObjectDisposedException ex) { TracePlaybackFailure("stop", ex); }
+        catch (InvalidOperationException ex) { TracePlaybackFailure("stop", ex); }
         Finish();
     }
 
@@ -35,9 +37,14 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
     private void PlaySyncAndFinish()
     {
         try { _player.PlaySync(); }
-        catch { }
+        catch (ObjectDisposedException ex) { TracePlaybackFailure("playback", ex); }
+        catch (InvalidOperationException ex) { TracePlaybackFailure("playback", ex); }
+        catch (IOException ex) { TracePlaybackFailure("playback", ex); }
         finally { Finish(); }
     }
+
+    private static void TracePlaybackFailure(string operation, Exception ex) =>
+        Trace.TraceWarning($"Supertonic TTS {operation} failed: {ex.Message}");
 
     private void Finish()
     {

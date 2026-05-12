@@ -1,3 +1,5 @@
+using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -8,11 +10,12 @@ public partial class SupertonicSettingsView : UserControl
 {
     private readonly SupertonicTtsPlugin _plugin;
     private CancellationTokenSource? _downloadCts;
-    private bool _isInitializing = true;
+    private readonly bool _isInitializing;
     private bool _isDownloading;
 
     public SupertonicSettingsView(SupertonicTtsPlugin plugin)
     {
+        _isInitializing = true;
         _plugin = plugin;
         InitializeComponent();
         ApplyLocalization();
@@ -41,7 +44,7 @@ public partial class SupertonicSettingsView : UserControl
         if (_isInitializing)
             return;
 
-        _plugin.SetLicenseAccepted(LicenseCheckBox.IsChecked == true);
+        _plugin.SetLicenseAccepted(LicenseCheckBox.IsChecked.GetValueOrDefault());
         UpdateStatus();
     }
 
@@ -53,7 +56,8 @@ public partial class SupertonicSettingsView : UserControl
             return;
         }
 
-        _downloadCts = new CancellationTokenSource();
+        using var downloadCts = new CancellationTokenSource();
+        _downloadCts = downloadCts;
         _isDownloading = true;
         DownloadButton.Content = L("Settings.Downloading");
         DownloadProgress.Visibility = Visibility.Visible;
@@ -67,24 +71,47 @@ public partial class SupertonicSettingsView : UserControl
 
         try
         {
-            await _plugin.DownloadAssetsAsync(progress, _downloadCts.Token);
+            await _plugin.DownloadAssetsAsync(progress, downloadCts.Token);
             StatusText.Text = L("Settings.DownloadComplete");
             StatusText.Foreground = Brushes.LightGreen;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (downloadCts.IsCancellationRequested)
         {
             StatusText.Text = L("Settings.DownloadCancelled");
             StatusText.Foreground = Brushes.Orange;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
         {
-            StatusText.Text = L("Settings.Error", ex.Message);
-            StatusText.Foreground = Brushes.OrangeRed;
+            ShowDownloadError(ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            ShowDownloadError(ex);
+        }
+        catch (IOException ex)
+        {
+            ShowDownloadError(ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ShowDownloadError(ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            ShowDownloadError(ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            ShowDownloadError(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            ShowDownloadError(ex);
         }
         finally
         {
-            _downloadCts.Dispose();
-            _downloadCts = null;
+            if (ReferenceEquals(_downloadCts, downloadCts))
+                _downloadCts = null;
             _isDownloading = false;
             DownloadButton.Content = L("Settings.Download");
             DownloadProgress.Visibility = Visibility.Collapsed;
@@ -126,6 +153,12 @@ public partial class SupertonicSettingsView : UserControl
 
         DownloadButton.IsEnabled = !_plugin.AreAssetsReady
             && (_plugin.HasAcceptedModelLicense || _isDownloading);
+    }
+
+    private void ShowDownloadError(Exception ex)
+    {
+        StatusText.Text = L("Settings.Error", ex.Message);
+        StatusText.Foreground = Brushes.OrangeRed;
     }
 
     private void UpdateSliderText()

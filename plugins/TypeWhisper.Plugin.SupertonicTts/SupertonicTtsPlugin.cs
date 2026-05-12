@@ -78,7 +78,7 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     public string PluginVersion => "1.0.0";
     public string ProviderId => "supertonic-tts";
     public string ProviderDisplayName => "Supertonic TTS";
-    public bool IsConfigured => _assetManager?.AreAssetsReady == true;
+    public bool IsConfigured => _assetManager?.AreAssetsReady ?? false;
     public IReadOnlyList<PluginVoiceInfo> AvailableVoices => Voices;
     public string? SelectedVoiceId => _selectedVoiceId;
     internal double Speed { get; private set; } = DefaultSpeed;
@@ -104,7 +104,7 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         Speed = NormalizeSpeed(host.GetSetting<double?>(SpeedSettingName) ?? DefaultSpeed);
         DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);
-        _licenseAccepted = host.GetSetting<bool?>(LicenseAcceptedSettingName) == true;
+        _licenseAccepted = host.GetSetting<bool?>(LicenseAcceptedSettingName).GetValueOrDefault();
         PersistSettings();
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
         return Task.CompletedTask;
