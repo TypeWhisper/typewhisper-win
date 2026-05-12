@@ -30,6 +30,27 @@ public sealed class AudioLevelWidthConverter : IMultiValueConverter
         => throw new NotSupportedException();
 }
 
+public sealed class LocalizedFormatConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length == 0 || values[0] is not string template || string.IsNullOrEmpty(template))
+            return "";
+
+        try
+        {
+            return string.Format(culture, template, values[1..]);
+        }
+        catch (FormatException)
+        {
+            return template;
+        }
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>
 /// Converts audio level (0..1 float) into a subtle scale factor for live overlay motion.
 /// </summary>
