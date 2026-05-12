@@ -51,6 +51,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         _subscriptions.Add(host.EventBus.Subscribe<RecordingStoppedEvent>(OnRecordingStopped));
         _subscriptions.Add(host.EventBus.Subscribe<PartialTranscriptionUpdateEvent>(OnPartialTranscriptionUpdate));
         _subscriptions.Add(host.EventBus.Subscribe<TranscriptionCompletedEvent>(OnTranscriptionCompleted));
+        _subscriptions.Add(host.EventBus.Subscribe<TranscriptionFailedEvent>(OnTranscriptionFailed));
 
         host.Log(PluginLogLevel.Info, "Live Transcript plugin activated");
         return Task.CompletedTask;
@@ -151,6 +152,20 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
                 // Cancelled — a new recording started before auto-hide
             }
         }, token);
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
+    {
+        _autoHideCts?.Cancel();
+        _autoHideCts?.Dispose();
+        _autoHideCts = null;
+
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            _window?.Hide();
+        });
 
         return Task.CompletedTask;
     }
