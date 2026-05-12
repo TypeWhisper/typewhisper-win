@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -1596,6 +1597,7 @@ internal static class DictationFinalTextPolicy
     private const int MinimumRepeatedPhraseWords = 3;
     private const int MinimumRepeatedPhraseCharacters = 8;
     private const int MaximumRepeatReductionPasses = 8;
+    private static readonly Regex AutomaticEllipsisRegex = new(@"\s*(?:\.{3,}|\u2026)\s*", RegexOptions.CultureInvariant);
 
     public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
         string.Join(" ", previewSegments.Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
@@ -1615,7 +1617,7 @@ internal static class DictationFinalTextPolicy
     }
 
     public static string SelectRawText(string? finalText) =>
-        ReduceAdjacentRepeatedPhrases(finalText?.Trim() ?? "");
+        NormalizeDictationArtifacts(finalText?.Trim() ?? "");
 
     public static string? SelectTrustedLiveText(string? liveText)
     {
@@ -1627,9 +1629,17 @@ internal static class DictationFinalTextPolicy
     {
         var trusted = SelectTrustedLiveText(trustedLiveText);
         return trusted is not null
-            ? ReduceAdjacentRepeatedPhrases(trusted)
+            ? NormalizeDictationArtifacts(trusted)
             : SelectRawText(finalText);
     }
+
+    private static string NormalizeDictationArtifacts(string text) =>
+        RemoveAutomaticEllipses(ReduceAdjacentRepeatedPhrases(text));
+
+    private static string RemoveAutomaticEllipses(string text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? ""
+            : AutomaticEllipsisRegex.Replace(text, " ").Trim();
 
     private static string ReduceAdjacentRepeatedPhrases(string text)
     {

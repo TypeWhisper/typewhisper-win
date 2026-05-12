@@ -182,6 +182,49 @@ public class DictationFinalTextPolicyTests
     }
 
     [Fact]
+    public void SelectRawText_RemovesAsciiEllipsisBetweenWords()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Dictated words should only... end up once.");
+
+        Assert.Equal("Dictated words should only end up once.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesUnicodeEllipsisBetweenWords()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Pause\u2026 then continue.");
+
+        Assert.Equal("Pause then continue.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesTerminalEllipsis()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Please wait...");
+
+        Assert.Equal("Please wait", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesTrustedLiveTextEllipsis()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText(
+            "fallback text",
+            "Dictated words should only... end up once.");
+
+        Assert.Equal("Dictated words should only end up once.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RepeatedPhraseReductionStillRuns()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText(
+            "Please send the updated draft tomorrow morning. Please send the updated draft tomorrow morning. Thanks.");
+
+        Assert.Equal("Please send the updated draft tomorrow morning. Thanks.", result);
+    }
+
+    [Fact]
     public void SelectRawText_WhitespaceOnlyReturnsEmptyText()
     {
         var result = DictationFinalTextPolicy.SelectRawText("   ");
