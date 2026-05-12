@@ -831,6 +831,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
+                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.TooShort"] });
                 ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
                 return;
             }
@@ -838,6 +839,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
+                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
                 ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
                 return;
             }
@@ -1020,6 +1022,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                             job.TranscribeShortQuietClipsAggressively))
                     {
                         FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                        _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
                         await Application.Current.Dispatcher.InvokeAsync(() =>
                             ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                         return;
@@ -1044,6 +1047,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             {
                 FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
                 LogParakeetTailDiagnostics(job.Diagnostic);
+                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                 return;

@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
@@ -16,10 +17,13 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private readonly List<IDisposable> _subscriptions = [];
     private CancellationTokenSource? _autoHideCts;
     private bool _disposed;
+    // Incremented on every RecordingStarted / failure / completion so that
+    // stale dispatcher callbacks from a previous session silently no-op.
+    private int _sessionId;
 
     public string PluginId => "com.typewhisper.live-transcript";
     public string PluginName => "Live Transcript";
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     public int FontSize
     {
@@ -51,6 +55,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         _subscriptions.Add(host.EventBus.Subscribe<RecordingStoppedEvent>(OnRecordingStopped));
         _subscriptions.Add(host.EventBus.Subscribe<PartialTranscriptionUpdateEvent>(OnPartialTranscriptionUpdate));
         _subscriptions.Add(host.EventBus.Subscribe<TranscriptionCompletedEvent>(OnTranscriptionCompleted));
+        _subscriptions.Add(host.EventBus.Subscribe<TranscriptionFailedEvent>(OnTranscriptionFailed));
 
         host.Log(PluginLogLevel.Info, "Live Transcript plugin activated");
         return Task.CompletedTask;
@@ -86,9 +91,11 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = null;
+        var session = Interlocked.Increment(ref _sessionId);
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (_sessionId != session) return;
             EnsureWindow();
             _window!.UpdateText("Listening...");
             _window.Show();
@@ -99,9 +106,11 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnRecordingStopped(RecordingStoppedEvent evt)
     {
-        // Keep window visible — it will be hidden after TranscriptionCompleted or timeout
+        var session = _sessionId;
+        // Keep window visible — it will be hidden after TranscriptionCompleted/Failed or timeout
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (_sessionId != session) return;
             if (_window is { IsVisible: true })
                 _window.UpdateText(_window.CurrentText + "\nProcessing...");
         });
@@ -111,8 +120,10 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnPartialTranscriptionUpdate(PartialTranscriptionUpdateEvent evt)
     {
+        var session = _sessionId;
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (_sessionId != session) return;
             EnsureWindow();
             _window!.UpdateText(evt.PartialText);
             if (!_window.IsVisible)
@@ -122,15 +133,28 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
+    {
+        _autoHideCts?.Cancel();
+        _autoHideCts?.Dispose();
+        _autoHideCts = null;
+        Interlocked.Increment(ref _sessionId);
+
+        Application.Current?.Dispatcher.InvokeAsync(() => _window?.Hide());
+        return Task.CompletedTask;
+    }
+
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
     {
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = new CancellationTokenSource();
         var token = _autoHideCts.Token;
+        var session = Interlocked.Increment(ref _sessionId);
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (_sessionId != session) return;
             if (_window is not null)
                 _window.UpdateText(evt.Text);
         });
@@ -143,7 +167,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
                 await Task.Delay(3000, token);
                 Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    _window?.Hide();
+                    if (_sessionId == session)
+                        _window?.Hide();
                 });
             }
             catch (TaskCanceledException)
