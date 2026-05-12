@@ -16,6 +16,7 @@ public partial class DictationOverlayView : UserControl
     private const string ShowBuiltInPartialPreviewProperty = "ShowBuiltInPartialPreview";
     private const string PartialTextProperty = "PartialText";
     private const string OverlayPositionProperty = "OverlayPosition";
+    private const string LiveTranscriptionFontSizeProperty = "LiveTranscriptionFontSize";
 
     private INotifyPropertyChanged? _observableDataContext;
     private bool _partialPreviewUpdateQueued;
@@ -93,7 +94,8 @@ public partial class DictationOverlayView : UserControl
             or ""
             or ShowBuiltInPartialPreviewProperty
             or PartialTextProperty
-            or OverlayPositionProperty)
+            or OverlayPositionProperty
+            or LiveTranscriptionFontSizeProperty)
         {
             var propertyChanged = e.PropertyName is null or "";
             QueuePartialPreviewUpdate(
