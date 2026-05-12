@@ -69,6 +69,26 @@ public class SpeechFeedbackServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AutomaticTranscription_UsesConfiguredLanguage_WhenDetectedLanguageMissing()
+    {
+        var provider = new FakeTtsProvider("plugin-tts", "Plugin TTS");
+        TestPluginManagerFactory.SetTtsProviders(_pluginManager, provider);
+        _settings.Save(AppSettings.Default with
+        {
+            Language = "de",
+            SpokenFeedbackProviderId = provider.ProviderId
+        });
+        using var sut = CreateService();
+        sut.IsEnabled = true;
+
+        sut.SpeakAutomaticTranscription("Hallo Welt");
+        await WaitUntilAsync(() => provider.Requests.Count == 1);
+
+        Assert.Equal(TtsPurpose.Transcription, provider.Requests[0].Purpose);
+        Assert.Equal("de", provider.Requests[0].Language);
+    }
+
+    [Fact]
     public async Task AutomaticTranscription_FallsBackToSystemProvider_WhenSelectionMissing()
     {
         var provider = new FakeTtsProvider("plugin-tts", "Plugin TTS");
