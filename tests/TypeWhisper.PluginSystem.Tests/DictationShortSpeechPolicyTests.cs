@@ -150,6 +150,21 @@ public class DictationFinalTextPolicyTests
     }
 
     [Fact]
+    public void SelectRawText_CollapsesIssue108ShortAdjacentRepeatedPhrase()
+    {
+        const string rawText =
+            "Now go back to the appearance screen. and set the and set the preview text size to the maximum. " +
+            "Dictate more text and note that the size of the preview bubble text is unchanged.";
+        const string expected =
+            "Now go back to the appearance screen. and set the preview text size to the maximum. " +
+            "Dictate more text and note that the size of the preview bubble text is unchanged.";
+
+        var result = DictationFinalTextPolicy.SelectRawText(rawText);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
     public void SelectRawText_CollapsesExactAdjacentRepeatedPhrase()
     {
         var result = DictationFinalTextPolicy.SelectRawText(
