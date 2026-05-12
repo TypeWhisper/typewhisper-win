@@ -1,0 +1,16 @@
+{
+  "Settings.Title": "Supertonic 3 assets",
+  "Settings.Description": "Supertonic runs locally after the model assets are downloaded. The model weights are licensed separately under OpenRAIL-M.",
+  "Settings.AcceptLicense": "I understand that Supertonic 3 model weights are licensed under OpenRAIL-M.",
+  "Settings.Download": "Download Supertonic 3",
+  "Settings.Downloading": "Downloading...",
+  "Settings.Ready": "Assets downloaded and ready.",
+  "Settings.NotReady": "Assets not downloaded.",
+  "Settings.DownloadComplete": "Download complete. Supertonic TTS is ready.",
+  "Settings.DownloadCancelled": "Download cancelled.",
+  "Settings.Error": "Error: {0}",
+  "Settings.Speed": "Speech speed",
+  "Settings.Quality": "Quality steps",
+  "Settings.Source": "Source: https://huggingface.co/Supertone/supertonic-3",
+  "Settings.License": "License: OpenRAIL-M"
+}
