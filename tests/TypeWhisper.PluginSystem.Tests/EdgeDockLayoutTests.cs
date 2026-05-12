@@ -54,6 +54,8 @@ public sealed class EdgeDockLayoutTests
         Assert.Contains("BeginAnimation(FrameworkElement.HeightProperty", codeBehind);
         Assert.Contains("AnimatePartialText", codeBehind);
         Assert.Contains("PartialPreviewScrollViewer.ScrollToEnd", codeBehind);
+        Assert.Contains("LiveTranscriptionFontSizeProperty = \"LiveTranscriptionFontSize\"", codeBehind);
+        Assert.Contains("or LiveTranscriptionFontSizeProperty", codeBehind);
     }
 
     [Fact]

@@ -17,6 +17,7 @@ public partial class EdgeDockIndicatorView : UserControl
     private const string ShowBuiltInPartialPreviewProperty = "ShowBuiltInPartialPreview";
     private const string PartialTextProperty = "PartialText";
     private const string OverlayPositionProperty = "OverlayPosition";
+    private const string LiveTranscriptionFontSizeProperty = "LiveTranscriptionFontSize";
 
     private bool _isPartialPreviewScrollPending;
     private INotifyPropertyChanged? _observableDataContext;
@@ -107,7 +108,8 @@ public partial class EdgeDockIndicatorView : UserControl
             or ""
             or ShowBuiltInPartialPreviewProperty
             or PartialTextProperty
-            or OverlayPositionProperty)
+            or OverlayPositionProperty
+            or LiveTranscriptionFontSizeProperty)
         {
             var propertyChanged = e.PropertyName is null or "";
             QueuePartialPreviewUpdate(
