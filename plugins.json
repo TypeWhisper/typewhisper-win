@@ -411,13 +411,13 @@
   {
     "id": "com.typewhisper.supertonic-tts",
     "name": "Supertonic TTS",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": "1.4.0",
     "author": "TypeWhisper",
     "description": "Local Supertonic 3 text-to-speech provider. Downloads OpenRAIL-M model assets on demand and runs synthesis on-device with ONNX Runtime.",
     "category": "tts",
-    "size": 124411693,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-supertonic-tts-v1.0.0/com.typewhisper.supertonic-tts-1.0.0.zip",
+    "size": 10627944,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-supertonic-tts-v1.0.1/com.typewhisper.supertonic-tts-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
