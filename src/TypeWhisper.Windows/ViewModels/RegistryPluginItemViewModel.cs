@@ -130,16 +130,18 @@ internal static class PluginMarketplaceCategories
     {
         "transcription" => new("transcription", Loc.Instance["Plugins.CategoryTranscription"], 0),
         "llm" => new("llm", Loc.Instance["Plugins.CategoryLlmProviders"], 1),
-        "post-processing" => new("post-processing", Loc.Instance["Plugins.CategoryPostProcessors"], 2),
-        "action" => new("action", Loc.Instance["Plugins.CategoryActions"], 3),
-        "memory" => new("memory", Loc.Instance["Plugins.CategoryMemory"], 4),
-        _ => new("utility", Loc.Instance["Plugins.CategoryUtilities"], 5)
+        "tts" => new("tts", Loc.Instance["Plugins.CategoryTts"], 2),
+        "post-processing" => new("post-processing", Loc.Instance["Plugins.CategoryPostProcessors"], 3),
+        "action" => new("action", Loc.Instance["Plugins.CategoryActions"], 4),
+        "memory" => new("memory", Loc.Instance["Plugins.CategoryMemory"], 5),
+        _ => new("utility", Loc.Instance["Plugins.CategoryUtilities"], 6)
     };
 
     private static string Normalize(string? rawCategory) => rawCategory?.Trim().ToLowerInvariant() switch
     {
         "transcription" => "transcription",
         "llm" => "llm",
+        "tts" or "texttospeech" or "text-to-speech" or "text to speech" => "tts",
         "postprocessing" or "post-processing" or "postprocessor" or "post-processor" => "post-processing",
         "action" => "action",
         "memory" => "memory",

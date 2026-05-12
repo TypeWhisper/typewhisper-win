@@ -240,6 +240,7 @@ public partial class PluginItemViewModel : ObservableObject
     // Capability badges
     public bool IsTranscriptionProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITranscriptionEnginePlugin;
     public bool IsLlmProvider => _plugin.Instance is TypeWhisper.PluginSDK.ILlmProviderPlugin;
+    public bool IsTtsProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITtsProviderPlugin;
     public bool IsPostProcessor => _plugin.Instance is TypeWhisper.PluginSDK.IPostProcessorPlugin;
     public bool IsActionProvider => _plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin;
     public bool IsMemoryStorage => _plugin.Instance is TypeWhisper.PluginSDK.IMemoryStoragePlugin;
@@ -302,6 +303,7 @@ public partial class PluginItemViewModel : ObservableObject
     {
         TypeWhisper.PluginSDK.ITranscriptionEnginePlugin => "transcription",
         TypeWhisper.PluginSDK.ILlmProviderPlugin => "llm",
+        TypeWhisper.PluginSDK.ITtsProviderPlugin => "tts",
         TypeWhisper.PluginSDK.IMemoryStoragePlugin => "memory",
         TypeWhisper.PluginSDK.IPostProcessorPlugin => "post-processing",
         TypeWhisper.PluginSDK.IActionPlugin => "action",
