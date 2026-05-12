@@ -1580,8 +1580,8 @@ internal enum ShortSpeechDecision
 internal static class DictationFinalTextPolicy
 {
     private const float NoSpeechProbabilityThreshold = 0.8f;
-    private const int MinimumRepeatedPhraseWords = 5;
-    private const int MinimumRepeatedPhraseCharacters = 20;
+    private const int MinimumRepeatedPhraseWords = 3;
+    private const int MinimumRepeatedPhraseCharacters = 8;
     private const int MaximumRepeatReductionPasses = 8;
 
     public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
