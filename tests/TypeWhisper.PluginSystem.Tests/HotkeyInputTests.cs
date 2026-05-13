@@ -229,6 +229,24 @@ public class HotkeyInputTests
         Assert.Equal(ModifierKeys.Windows, sut.GetCurrentModifiers());
     }
 
+    [Theory]
+    [InlineData(Key.LeftCtrl, "Left Ctrl")]
+    [InlineData(Key.RightCtrl, "Right Ctrl")]
+    [InlineData(Key.LeftShift, "Left Shift")]
+    [InlineData(Key.RightShift, "Right Shift")]
+    [InlineData(Key.LeftAlt, "Left Alt")]
+    [InlineData(Key.RightAlt, "Right Alt")]
+    public void RecorderSession_RecordsSideSpecificSingleModifier(Key key, string expectedHotkey)
+    {
+        var sut = new HotkeyRecorderSession();
+        sut.NoteModifierDown(key);
+
+        var hotkey = sut.TryRecordModifierOnlyOnRelease(key);
+
+        Assert.Equal(expectedHotkey, hotkey);
+        Assert.Equal(ModifierKeys.None, sut.GetCurrentModifiers());
+    }
+
     [Fact]
     public void KeyboardHook_OnlyIgnoresSelfInjectedInput()
     {
@@ -316,10 +334,25 @@ public class HotkeyInputTests
     [InlineData("Shift")]
     [InlineData("Alt")]
     [InlineData("Win")]
-    public void Parser_RejectsSingleModifierOnlyHotkeys(string hotkey)
+    public void Parser_RejectsGenericSingleModifierOnlyHotkeys(string hotkey)
     {
         Assert.False(HotkeyParser.Parse(hotkey, out _, out _));
         Assert.Equal("", HotkeyParser.Normalize(hotkey));
+    }
+
+    [Theory]
+    [InlineData("Left Ctrl", NativeMethods.VK_LCONTROL)]
+    [InlineData("Right Ctrl", NativeMethods.VK_RCONTROL)]
+    [InlineData("Left Shift", NativeMethods.VK_LSHIFT)]
+    [InlineData("Right Shift", NativeMethods.VK_RSHIFT)]
+    [InlineData("Left Alt", NativeMethods.VK_LMENU)]
+    [InlineData("Right Alt", NativeMethods.VK_RMENU)]
+    public void Parser_AllowsSideSpecificSingleModifierHotkeys(string hotkey, uint expectedVk)
+    {
+        Assert.True(HotkeyParser.Parse(hotkey, out var modifiers, out var vk));
+        Assert.Equal(0u, modifiers);
+        Assert.Equal(expectedVk, vk);
+        Assert.Equal(hotkey, HotkeyParser.Normalize(hotkey));
     }
 
     [Theory]
@@ -346,6 +379,25 @@ public class HotkeyInputTests
     public void Parser_NormalizesInvalidRecentActionDefaultsToEmpty(string hotkey)
     {
         Assert.Equal("", HotkeyParser.Normalize(hotkey));
+    }
+
+    [Fact]
+    public void SideSpecificSingleModifier_OnlyActivatesMatchingSide()
+    {
+        var sut = CreateStateMachine(0, NativeMethods.VK_RCONTROL);
+
+        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false));
+        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: false, isKeyUp: true));
+
+        var rightCtrlDown = sut.ProcessKeyEvent(NativeMethods.VK_RCONTROL, isKeyDown: true, isKeyUp: false);
+        Assert.True(rightCtrlDown.RaiseKeyDown);
+        Assert.False(rightCtrlDown.RaiseKeyUp);
+        Assert.True(rightCtrlDown.Swallow);
+
+        var rightCtrlUp = sut.ProcessKeyEvent(NativeMethods.VK_RCONTROL, isKeyDown: false, isKeyUp: true);
+        Assert.False(rightCtrlUp.RaiseKeyDown);
+        Assert.True(rightCtrlUp.RaiseKeyUp);
+        Assert.True(rightCtrlUp.Swallow);
     }
 
     private static HotkeyMatchStateMachine CreateStateMachine(uint modifiers, uint vk = 0)

@@ -1105,7 +1105,10 @@
                                                    Style="{StaticResource HintStyle}"
                                                    Margin="0,0,0,8"/>
                                         <TextBlock Text="{loc:Str Hotkey.ModifierOnlyHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,8"/>
-                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.EditHotkey, Mode=TwoWay}" Width="260" HorizontalAlignment="Left"/>
+                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.EditHotkey, Mode=TwoWay}"
+                                                                        AllowModifierOnly="True"
+                                                                        Width="260"
+                                                                        HorizontalAlignment="Left"/>
                                     </StackPanel>
 
                                     <Border Style="{StaticResource WorkflowPickerPanelStyle}"

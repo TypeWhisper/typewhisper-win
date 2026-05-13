@@ -199,6 +199,17 @@ public sealed class HotkeyRecorderControl : Control
         return string.Join("+", parts);
     }
 
+    internal static string FormatSingleModifier(Key key) => key switch
+    {
+        Key.LeftCtrl => "Left Ctrl",
+        Key.RightCtrl => "Right Ctrl",
+        Key.LeftShift => "Left Shift",
+        Key.RightShift => "Right Shift",
+        Key.LeftAlt => "Left Alt",
+        Key.RightAlt => "Right Alt",
+        _ => ""
+    };
+
     internal static string FormatKeyName(Key key) =>
         HotkeyKeyMap.TryGetToken(key, out var token) ? token : "";
 
@@ -250,10 +261,21 @@ internal sealed class HotkeyRecorderSession
         var modifiers = GetCurrentModifiers();
         var hotkey = HotkeyRecorderControl.CountModifiers(modifiers) >= 2
             ? HotkeyRecorderControl.FormatModifierOnly(modifiers)
-            : "";
+            : TryFormatSinglePressedModifier();
 
         _pressedModifiers.Remove(key);
         return hotkey;
+    }
+
+    private string TryFormatSinglePressedModifier()
+    {
+        if (_pressedModifiers.Count != 1)
+            return "";
+
+        foreach (var pressedModifier in _pressedModifiers)
+            return HotkeyRecorderControl.FormatSingleModifier(pressedModifier);
+
+        return "";
     }
 
     internal ModifierKeys GetCurrentModifiers()

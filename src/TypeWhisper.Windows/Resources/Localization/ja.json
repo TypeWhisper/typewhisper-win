@@ -665,7 +665,7 @@
   "App.ErrorFormat": "エラーが発生しました:\n{0}",
   "Hotkey.Placeholder": "キーの組み合わせを押してください...",
   "Hotkey.ClickToAssign": "クリックして割り当て",
-  "Hotkey.ModifierOnlyHint": "Winキー単独などの修飾キーのみは使用できません。Ctrl+ShiftやAlt+Winなどの組み合わせを使用してください。",
+  "Hotkey.ModifierOnlyHint": "左右のCtrl、Alt、Shiftキー単独を使用できます。Winキー単独は予約されています。Winキーを使う場合はCtrl+ShiftやAlt+Winなどの組み合わせを使用してください。",
   "PromptPalette.NoActions": "アクションが見つかりません",
   "Profiles.NoAssignment": "割り当てなし",
   "Profiles.GlobalDefault": "グローバル（デフォルト）",
