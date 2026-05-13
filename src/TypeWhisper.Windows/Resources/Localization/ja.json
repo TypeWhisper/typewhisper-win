@@ -668,6 +668,7 @@
   "Widget.HotkeyMode": "ホットキーモード",
   "Widget.AppName": "アプリ名",
   "Microphone.Default": "デフォルト",
+  "Microphone.Disconnected": "選択したマイクが切断されています",
   "App.ErrorTitle": "TypeWhisper - エラー",
   "App.ErrorFormat": "エラーが発生しました:\n{0}",
   "Hotkey.Placeholder": "キーの組み合わせを押してください...",

@@ -406,7 +406,7 @@ public partial class WelcomeViewModel : ObservableObject
     {
         Microphones.Clear();
         Microphones.Add(new MicrophoneItem(null, Loc.Instance["Microphone.Default"]));
-        foreach (var (number, name) in AudioRecordingService.GetAvailableDevices())
+        foreach (var (number, name) in _audio.GetAvailableInputDevices())
             Microphones.Add(new MicrophoneItem(number, name));
     }
 

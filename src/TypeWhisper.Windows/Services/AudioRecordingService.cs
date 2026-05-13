@@ -13,6 +13,7 @@ public sealed class AudioRecordingService : IDisposable
     private const float AgcMinGain = 1f;
     private const float NormalizationTarget = 0.707f;
     private static readonly TimeSpan StopDrainDuration = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan DefaultDevicePollInterval = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Minimum per-chunk RMS level to consider as containing speech.
@@ -20,8 +21,11 @@ public sealed class AudioRecordingService : IDisposable
     /// </summary>
     public const float SpeechEnergyThreshold = 0.01f;
 
-    private WaveInEvent? _waveIn;
-    private WaveInEvent? _previewWaveIn;
+    private readonly IAudioInputDeviceProvider _deviceProvider;
+    private readonly IAudioInputCaptureFactory _captureFactory;
+    private readonly TimeSpan _devicePollInterval;
+    private IAudioInputCapture? _waveIn;
+    private IAudioInputCapture? _previewWaveIn;
     private List<float>? _sampleBuffer;
     private readonly object _bufferLock = new();
     private bool _isRecording;
@@ -30,15 +34,35 @@ public sealed class AudioRecordingService : IDisposable
     private bool _disposed;
     private DateTime _recordingStartTime;
     private int? _configuredDeviceNumber;
-    private int _activeDeviceNumber;
+    private string? _configuredDeviceName;
+    private int _activeDeviceNumber = -1;
+    private string? _activeDeviceName;
     private float _peakRmsLevel;
     private float _preGainPeakRms;
     private float _currentRmsLevel;
     private System.Timers.Timer? _devicePollTimer;
-    private int _lastKnownDeviceCount;
+    private string _lastKnownDeviceSignature = "";
+    private bool _lastKnownHasDevices;
+    private bool _lastKnownPreferredDeviceAvailable;
+    private bool _lastKnownSnapshotInitialized;
     private const int TailDiagnosticChunkLimit = 8;
     private readonly Queue<AudioChunkTelemetry> _recentChunks = new();
     private DateTime? _lastSamplesAvailableUtc;
+
+    public AudioRecordingService()
+        : this(new WaveInAudioInputDeviceProvider(), new WaveInAudioInputCaptureFactory(), DefaultDevicePollInterval)
+    {
+    }
+
+    internal AudioRecordingService(
+        IAudioInputDeviceProvider deviceProvider,
+        IAudioInputCaptureFactory captureFactory,
+        TimeSpan devicePollInterval)
+    {
+        _deviceProvider = deviceProvider;
+        _captureFactory = captureFactory;
+        _devicePollInterval = devicePollInterval;
+    }
 
     public event EventHandler<AudioLevelEventArgs>? AudioLevelChanged;
     public event EventHandler<AudioLevelEventArgs>? PreviewLevelChanged;
@@ -47,7 +71,7 @@ public sealed class AudioRecordingService : IDisposable
     public event EventHandler? DeviceLost;
     public event EventHandler? DeviceAvailable;
 
-    public bool HasDevice => WaveInEvent.DeviceCount > 0;
+    public bool HasDevice => _deviceProvider.DeviceCount > 0;
     public bool WhisperModeEnabled { get; set; }
     public bool NormalizationEnabled { get; set; } = true;
     public bool IsRecording => _isRecording;
@@ -59,28 +83,48 @@ public sealed class AudioRecordingService : IDisposable
 
     public void SetMicrophoneDevice(int? deviceNumber)
     {
-        var newDevice = deviceNumber ?? FindBestMicrophoneDevice();
+        var previousDeviceNumber = _configuredDeviceNumber;
+        _configuredDeviceNumber = deviceNumber;
+
+        if (deviceNumber is int explicitDeviceNumber)
+        {
+            var deviceName = TryGetDeviceName(explicitDeviceNumber);
+            if (deviceName is not null
+                && (previousDeviceNumber != explicitDeviceNumber || string.IsNullOrWhiteSpace(_configuredDeviceName)))
+            {
+                _configuredDeviceName = deviceName;
+            }
+        }
+        else
+        {
+            _configuredDeviceName = null;
+        }
+
+        var newDevice = ResolvePreferredDeviceNumber(allowFallback: true);
         if (_isWarmedUp && newDevice != _activeDeviceNumber)
         {
             DisposeWaveIn();
-            _isWarmedUp = false;
+            if (newDevice >= 0)
+                WarmUp();
         }
-        _configuredDeviceNumber = deviceNumber;
-        _activeDeviceNumber = newDevice;
+        else if (newDevice >= 0)
+        {
+            _activeDeviceNumber = newDevice;
+        }
     }
 
     public bool WarmUp()
     {
         if (_isWarmedUp || _disposed) return _isWarmedUp;
 
-        if (WaveInEvent.DeviceCount == 0)
+        if (_deviceProvider.DeviceCount == 0)
         {
             System.Diagnostics.Debug.WriteLine("WarmUp: No audio input devices available.");
             StartDevicePolling();
             return false;
         }
 
-        _activeDeviceNumber = _configuredDeviceNumber ?? FindBestMicrophoneDevice();
+        _activeDeviceNumber = ResolvePreferredDeviceNumber(allowFallback: true);
         if (_activeDeviceNumber < 0)
         {
             StartDevicePolling();
@@ -89,39 +133,33 @@ public sealed class AudioRecordingService : IDisposable
 
         try
         {
-            _waveIn = new WaveInEvent
-            {
-                DeviceNumber = _activeDeviceNumber,
-                WaveFormat = new WaveFormat(SampleRate, BitsPerSample, Channels),
-                BufferMilliseconds = 30
-            };
+            _waveIn = _captureFactory.Create(
+                _activeDeviceNumber,
+                new WaveFormat(SampleRate, BitsPerSample, Channels),
+                bufferMilliseconds: 30);
 
             _waveIn.DataAvailable += OnDataAvailable;
             _waveIn.RecordingStopped += OnRecordingStopped;
             _waveIn.StartRecording();
 
+            _activeDeviceName = TryGetDeviceName(_activeDeviceNumber);
             _isWarmedUp = true;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
-            DisposeWaveIn();
+            DisposeWaveIn(stopRecording: false);
         }
 
         StartDevicePolling();
         return _isWarmedUp;
     }
 
-    public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices()
-    {
-        var devices = new List<(int, string)>();
-        for (var i = 0; i < WaveInEvent.DeviceCount; i++)
-        {
-            var caps = WaveInEvent.GetCapabilities(i);
-            devices.Add((i, caps.ProductName));
-        }
-        return devices;
-    }
+    public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices() =>
+        GetAvailableDevices(new WaveInAudioInputDeviceProvider());
+
+    public IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableInputDevices() =>
+        GetAvailableDevices(_deviceProvider);
 
     public void StartRecording()
     {
@@ -159,8 +197,14 @@ public sealed class AudioRecordingService : IDisposable
 
     public float[]? StopRecording()
     {
-        if (!_isRecording || _waveIn is null)
+        if (!_isRecording)
             return null;
+
+        if (_waveIn is null)
+        {
+            ClearRecordingState();
+            return null;
+        }
 
         _isRecording = false;
 
@@ -207,11 +251,13 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
-    private void OnDataAvailable(object? sender, WaveInEventArgs e)
+    private void OnDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
         if (!_isRecording) return;
 
         var sampleCount = e.BytesRecorded / 2;
+        if (sampleCount == 0) return;
+
         float agcGain = 1f;
 
         // Compute pre-gain RMS for speech energy detection (unaffected by AGC)
@@ -275,7 +321,20 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
-    private void OnRecordingStopped(object? sender, StoppedEventArgs e) { }
+    private void OnRecordingStopped(object? sender, AudioInputRecordingStoppedEventArgs e)
+    {
+        if (_waveIn is null || !ReferenceEquals(sender, _waveIn))
+            return;
+
+        System.Diagnostics.Debug.WriteLine(e.Exception is null
+            ? "Audio input capture stopped unexpectedly."
+            : $"Audio input capture stopped unexpectedly: {e.Exception.Message}");
+
+        ClearRecordingState();
+        DisposeWaveIn(stopRecording: false);
+        StartDevicePolling();
+        DeviceLost?.Invoke(this, EventArgs.Empty);
+    }
 
     private static void NormalizeAudio(float[] samples)
     {
@@ -295,70 +354,243 @@ public sealed class AudioRecordingService : IDisposable
             samples[i] = Math.Clamp(samples[i] * gain, -1f, 1f);
     }
 
-    private static int FindBestMicrophoneDevice()
+    private int FindBestMicrophoneDevice()
     {
-        var deviceCount = WaveInEvent.DeviceCount;
+        var deviceCount = _deviceProvider.DeviceCount;
 
         for (var i = 0; i < deviceCount; i++)
         {
-            var caps = WaveInEvent.GetCapabilities(i);
-            if (caps.ProductName.Contains("Microphone", StringComparison.OrdinalIgnoreCase) ||
-                caps.ProductName.Contains("Mikrofon", StringComparison.OrdinalIgnoreCase))
+            var name = TryGetDeviceName(i);
+            if (name is not null
+                && (name.Contains("Microphone", StringComparison.OrdinalIgnoreCase) ||
+                    name.Contains("Mikrofon", StringComparison.OrdinalIgnoreCase)))
+            {
                 return i;
+            }
         }
 
         for (var i = 0; i < deviceCount; i++)
         {
-            var caps = WaveInEvent.GetCapabilities(i);
-            if (!caps.ProductName.Contains("Virtual", StringComparison.OrdinalIgnoreCase) &&
-                !caps.ProductName.Contains("Mix", StringComparison.OrdinalIgnoreCase))
+            var name = TryGetDeviceName(i);
+            if (name is not null
+                && !name.Contains("Virtual", StringComparison.OrdinalIgnoreCase)
+                && !name.Contains("Mix", StringComparison.OrdinalIgnoreCase))
+            {
                 return i;
+            }
         }
 
         return deviceCount > 0 ? 0 : -1;
     }
 
+    private int ResolvePreferredDeviceNumber(bool allowFallback)
+    {
+        if (_configuredDeviceNumber is int configuredDeviceNumber)
+        {
+            var configuredDeviceName = TryGetDeviceName(configuredDeviceNumber);
+            if (configuredDeviceName is not null)
+            {
+                if (string.IsNullOrWhiteSpace(_configuredDeviceName)
+                    || string.Equals(configuredDeviceName, _configuredDeviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _configuredDeviceName = configuredDeviceName;
+                    return configuredDeviceNumber;
+                }
+            }
+
+            var rememberedDeviceNumber = FindDeviceByName(_configuredDeviceName);
+            if (rememberedDeviceNumber >= 0)
+                return rememberedDeviceNumber;
+
+            return allowFallback ? FindBestMicrophoneDevice() : -1;
+        }
+
+        return FindBestMicrophoneDevice();
+    }
+
+    private int FindDeviceByName(string? deviceName)
+    {
+        if (string.IsNullOrWhiteSpace(deviceName))
+            return -1;
+
+        for (var i = 0; i < _deviceProvider.DeviceCount; i++)
+        {
+            var currentName = TryGetDeviceName(i);
+            if (string.Equals(currentName, deviceName, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private string? TryGetDeviceName(int deviceNumber)
+    {
+        if (deviceNumber < 0 || deviceNumber >= _deviceProvider.DeviceCount)
+            return null;
+
+        try
+        {
+            return _deviceProvider.GetDeviceName(deviceNumber);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private void StartDevicePolling()
     {
-        _lastKnownDeviceCount = WaveInEvent.DeviceCount;
+        UpdateKnownDeviceSnapshot();
         _devicePollTimer?.Dispose();
-        _devicePollTimer = new System.Timers.Timer(2000);
+        _devicePollTimer = null;
+
+        if (_devicePollInterval == Timeout.InfiniteTimeSpan || _devicePollInterval <= TimeSpan.Zero)
+            return;
+
+        _devicePollTimer = new System.Timers.Timer(_devicePollInterval.TotalMilliseconds);
         _devicePollTimer.Elapsed += (_, _) => CheckForDeviceChanges();
         _devicePollTimer.AutoReset = true;
         _devicePollTimer.Start();
     }
 
-    private void CheckForDeviceChanges()
+    private void UpdateKnownDeviceSnapshot()
+    {
+        var snapshot = GetDeviceSnapshot();
+        _lastKnownDeviceSignature = BuildDeviceSignature(snapshot);
+        _lastKnownHasDevices = snapshot.Count > 0;
+        _lastKnownPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
+        _lastKnownSnapshotInitialized = true;
+    }
+
+    internal void CheckForDeviceChanges()
     {
         try
         {
-            var currentCount = WaveInEvent.DeviceCount;
-            if (currentCount == _lastKnownDeviceCount) return;
+            var snapshot = GetDeviceSnapshot();
+            var signature = BuildDeviceSignature(snapshot);
+            if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
+                return;
 
-            var previousCount = _lastKnownDeviceCount;
-            _lastKnownDeviceCount = currentCount;
+            var previousHadDevices = _lastKnownHasDevices;
+            var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
+            var currentHasDevices = snapshot.Count > 0;
+            var currentPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
+
+            _lastKnownDeviceSignature = signature;
+            _lastKnownHasDevices = currentHasDevices;
+            _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
+            _lastKnownSnapshotInitialized = true;
+
             DevicesChanged?.Invoke(this, EventArgs.Empty);
 
-            if (currentCount == 0 && _isWarmedUp)
+            if (!currentHasDevices)
             {
-                DeviceLost?.Invoke(this, EventArgs.Empty);
-                DisposeWaveIn();
-                _configuredDeviceNumber = null;
+                if (_isWarmedUp || _waveIn is not null)
+                    HandleDeviceLost();
+                return;
             }
-            else if (currentCount > 0 && previousCount == 0)
+
+            if (_isWarmedUp && !IsActiveDeviceAvailable(snapshot))
+            {
+                HandleDeviceLost();
+                WarmUp();
+                if ((!previousHadDevices && currentHasDevices)
+                    || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
+                {
+                    DeviceAvailable?.Invoke(this, EventArgs.Empty);
+                }
+                return;
+            }
+
+            if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
+            {
+                DisposeWaveIn();
+                WarmUp();
+            }
+            else if (!_isWarmedUp)
+            {
+                WarmUp();
+            }
+
+            if ((!previousHadDevices && currentHasDevices)
+                || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
             {
                 DeviceAvailable?.Invoke(this, EventArgs.Empty);
-                WarmUp();
-            }
-            else if (_isWarmedUp && _activeDeviceNumber >= currentCount)
-            {
-                DeviceLost?.Invoke(this, EventArgs.Empty);
-                DisposeWaveIn();
-                _configuredDeviceNumber = null;
-                WarmUp();
             }
         }
         catch { }
+    }
+
+    private void HandleDeviceLost()
+    {
+        ClearRecordingState();
+        DisposeWaveIn();
+        DeviceLost?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ClearRecordingState()
+    {
+        _isRecording = false;
+        lock (_bufferLock)
+        {
+            _sampleBuffer = null;
+        }
+    }
+
+    private IReadOnlyList<AudioInputDeviceSnapshot> GetDeviceSnapshot()
+    {
+        var devices = new List<AudioInputDeviceSnapshot>();
+        for (var i = 0; i < _deviceProvider.DeviceCount; i++)
+        {
+            var name = TryGetDeviceName(i);
+            if (name is not null)
+                devices.Add(new AudioInputDeviceSnapshot(i, name));
+        }
+
+        return devices;
+    }
+
+    private static string BuildDeviceSignature(IReadOnlyList<AudioInputDeviceSnapshot> devices) =>
+        string.Join('\n', devices.Select(device => $"{device.DeviceNumber}:{device.Name}"));
+
+    private bool IsPreferredDeviceAvailable(IReadOnlyList<AudioInputDeviceSnapshot> devices)
+    {
+        if (_configuredDeviceNumber is not int configuredDeviceNumber)
+            return devices.Count > 0;
+
+        if (!string.IsNullOrWhiteSpace(_configuredDeviceName)
+            && devices.Any(device => string.Equals(device.Name, _configuredDeviceName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return devices.Any(device => device.DeviceNumber == configuredDeviceNumber);
+    }
+
+    private bool IsActiveDeviceAvailable(IReadOnlyList<AudioInputDeviceSnapshot> devices)
+    {
+        if (_activeDeviceNumber < 0)
+            return false;
+
+        var active = devices.FirstOrDefault(device => device.DeviceNumber == _activeDeviceNumber);
+        if (active is null)
+            return false;
+
+        return string.IsNullOrWhiteSpace(_activeDeviceName)
+            || string.Equals(active.Name, _activeDeviceName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsActiveDevicePreferred()
+    {
+        if (_configuredDeviceNumber is not int configuredDeviceNumber)
+            return _activeDeviceNumber >= 0;
+
+        if (!string.IsNullOrWhiteSpace(_configuredDeviceName))
+        {
+            return string.Equals(_activeDeviceName, _configuredDeviceName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return _activeDeviceNumber == configuredDeviceNumber;
     }
 
     public void StartPreview(int? deviceNumber)
@@ -367,19 +599,19 @@ public sealed class AudioRecordingService : IDisposable
             return;
 
         StopPreview();
-        if (_disposed || WaveInEvent.DeviceCount == 0) return;
+        if (_disposed || _deviceProvider.DeviceCount == 0) return;
 
-        var deviceIndex = deviceNumber ?? FindBestMicrophoneDevice();
+        var deviceIndex = deviceNumber.HasValue
+            ? ResolvePreferredDeviceNumber(allowFallback: true)
+            : FindBestMicrophoneDevice();
         if (deviceIndex < 0) return;
 
         try
         {
-            _previewWaveIn = new WaveInEvent
-            {
-                DeviceNumber = deviceIndex,
-                WaveFormat = new WaveFormat(SampleRate, BitsPerSample, Channels),
-                BufferMilliseconds = 50
-            };
+            _previewWaveIn = _captureFactory.Create(
+                deviceIndex,
+                new WaveFormat(SampleRate, BitsPerSample, Channels),
+                bufferMilliseconds: 50);
             _previewWaveIn.DataAvailable += OnPreviewDataAvailable;
             _previewWaveIn.StartRecording();
             _isPreviewing = true;
@@ -405,7 +637,7 @@ public sealed class AudioRecordingService : IDisposable
 
     public bool IsPreviewing => _isPreviewing;
 
-    private void OnPreviewDataAvailable(object? sender, WaveInEventArgs e)
+    private void OnPreviewDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
     {
         var sampleCount = e.BytesRecorded / 2;
         if (sampleCount == 0) return;
@@ -424,17 +656,23 @@ public sealed class AudioRecordingService : IDisposable
         PreviewLevelChanged?.Invoke(this, new AudioLevelEventArgs(peak, rms));
     }
 
-    private void DisposeWaveIn()
+    private void DisposeWaveIn(bool stopRecording = true)
     {
         if (_waveIn is not null)
         {
-            _waveIn.DataAvailable -= OnDataAvailable;
-            _waveIn.RecordingStopped -= OnRecordingStopped;
-            try { _waveIn.StopRecording(); } catch { }
-            _waveIn.Dispose();
+            var waveIn = _waveIn;
             _waveIn = null;
+            waveIn.DataAvailable -= OnDataAvailable;
+            waveIn.RecordingStopped -= OnRecordingStopped;
+            if (stopRecording)
+            {
+                try { waveIn.StopRecording(); } catch { }
+            }
+            waveIn.Dispose();
         }
         _isWarmedUp = false;
+        _activeDeviceNumber = -1;
+        _activeDeviceName = null;
     }
 
     public void Dispose()
@@ -447,6 +685,16 @@ public sealed class AudioRecordingService : IDisposable
             DisposeWaveIn();
             _disposed = true;
         }
+    }
+
+    private static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices(IAudioInputDeviceProvider provider)
+    {
+        var devices = new List<(int, string)>();
+        for (var i = 0; i < provider.DeviceCount; i++)
+        {
+            devices.Add((i, provider.GetDeviceName(i)));
+        }
+        return devices;
     }
 }
 
@@ -467,3 +715,87 @@ public sealed record AudioChunkTelemetry(
     float Rms,
     float PreGainRms,
     int SampleCount);
+
+internal sealed record AudioInputDeviceSnapshot(int DeviceNumber, string Name);
+
+internal interface IAudioInputDeviceProvider
+{
+    int DeviceCount { get; }
+    string GetDeviceName(int deviceNumber);
+}
+
+internal interface IAudioInputCaptureFactory
+{
+    IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds);
+}
+
+internal interface IAudioInputCapture : IDisposable
+{
+    event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
+    event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
+    void StartRecording();
+    void StopRecording();
+}
+
+internal sealed class AudioInputDataAvailableEventArgs(byte[] buffer, int bytesRecorded) : EventArgs
+{
+    public byte[] Buffer { get; } = buffer;
+    public int BytesRecorded { get; } = bytesRecorded;
+}
+
+internal sealed class AudioInputRecordingStoppedEventArgs(Exception? exception = null) : EventArgs
+{
+    public Exception? Exception { get; } = exception;
+}
+
+internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
+{
+    public int DeviceCount => WaveInEvent.DeviceCount;
+
+    public string GetDeviceName(int deviceNumber) =>
+        WaveInEvent.GetCapabilities(deviceNumber).ProductName;
+}
+
+internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
+{
+    public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds) =>
+        new WaveInAudioInputCapture(deviceNumber, waveFormat, bufferMilliseconds);
+}
+
+internal sealed class WaveInAudioInputCapture : IAudioInputCapture
+{
+    private readonly WaveInEvent _waveIn;
+
+    public WaveInAudioInputCapture(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
+    {
+        _waveIn = new WaveInEvent
+        {
+            DeviceNumber = deviceNumber,
+            WaveFormat = waveFormat,
+            BufferMilliseconds = bufferMilliseconds
+        };
+
+        _waveIn.DataAvailable += OnDataAvailable;
+        _waveIn.RecordingStopped += OnRecordingStopped;
+    }
+
+    public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
+    public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
+
+    public void StartRecording() => _waveIn.StartRecording();
+
+    public void StopRecording() => _waveIn.StopRecording();
+
+    public void Dispose()
+    {
+        _waveIn.DataAvailable -= OnDataAvailable;
+        _waveIn.RecordingStopped -= OnRecordingStopped;
+        _waveIn.Dispose();
+    }
+
+    private void OnDataAvailable(object? sender, WaveInEventArgs e) =>
+        DataAvailable?.Invoke(this, new AudioInputDataAvailableEventArgs(e.Buffer, e.BytesRecorded));
+
+    private void OnRecordingStopped(object? sender, StoppedEventArgs e) =>
+        RecordingStopped?.Invoke(this, new AudioInputRecordingStoppedEventArgs(e.Exception));
+}
