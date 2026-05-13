@@ -185,13 +185,60 @@ jobs:
               $registry = @(
                 Get-Content plugins.json | ConvertFrom-Json
               )
+              $manifestPath = Join-Path ".." "plugins/$env:PROJECT_NAME/manifest.json"
+              $manifest = Get-Content $manifestPath | ConvertFrom-Json
+
+              function Set-RegistryProperty($entry, [string]$name, $value) {
+                if ($entry.PSObject.Properties[$name]) {
+                  $entry.$name = $value
+                } else {
+                  $entry | Add-Member -NotePropertyName $name -NotePropertyValue $value
+                }
+              }
+
+              function Get-RegistryCategory($manifest, [string]$fallbackCategory) {
+                if ($manifest.category) {
+                  return [string]$manifest.category
+                }
+
+                if ($manifest.categories) {
+                  return [string]@($manifest.categories)[0]
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($fallbackCategory)) {
+                  return $fallbackCategory
+                }
+
+                return 'utility'
+              }
+
+              function Get-RegistryCategories($manifest, [string]$resolvedCategory) {
+                if ($manifest.categories) {
+                  return [string[]]@($manifest.categories)
+                }
+
+                return [string[]]@($resolvedCategory)
+              }
+
               $updated = $false
 
               for ($j = 0; $j -lt $registry.Count; $j++) {
                 if ($registry[$j].id -eq $env:PLUGIN_ID) {
-                  $registry[$j].version = $env:PLUGIN_VERSION
-                  $registry[$j].size = [long]$env:ZIP_SIZE
-                  $registry[$j].downloadUrl = $downloadUrl
+                  $category = Get-RegistryCategory $manifest $registry[$j].category
+                  $categories = Get-RegistryCategories $manifest $category
+
+                  Set-RegistryProperty $registry[$j] 'name' $manifest.name
+                  Set-RegistryProperty $registry[$j] 'version' $env:PLUGIN_VERSION
+                  Set-RegistryProperty $registry[$j] 'minHostVersion' $manifest.minHostVersion
+                  Set-RegistryProperty $registry[$j] 'author' $manifest.author
+                  Set-RegistryProperty $registry[$j] 'description' $manifest.description
+                  Set-RegistryProperty $registry[$j] 'category' $category
+                  Set-RegistryProperty $registry[$j] 'categories' $categories
+                  Set-RegistryProperty $registry[$j] 'size' ([long]$env:ZIP_SIZE)
+                  Set-RegistryProperty $registry[$j] 'downloadUrl' $downloadUrl
+                  Set-RegistryProperty $registry[$j] 'iconSystemName' $manifest.iconSystemName
+                  Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))
+                  Set-RegistryProperty $registry[$j] 'descriptions' $manifest.descriptions
                   $updated = $true
                   Write-Host "Updated $($registry[$j].id) to v$env:PLUGIN_VERSION"
                   break
@@ -199,8 +246,8 @@ jobs:
               }
 
               if (-not $updated) {
-                $manifestPath = Join-Path ".." "plugins/$env:PROJECT_NAME/manifest.json"
-                $manifest = Get-Content $manifestPath | ConvertFrom-Json
+                $category = Get-RegistryCategory $manifest ''
+                $categories = Get-RegistryCategories $manifest $category
 
                 $registry += [pscustomobject]@{
                   id = $manifest.id
@@ -209,7 +256,8 @@ jobs:
                   minHostVersion = $manifest.minHostVersion
                   author = $manifest.author
                   description = $manifest.description
-                  category = $manifest.category
+                  category = $category
+                  categories = $categories
                   size = [long]$env:ZIP_SIZE
                   downloadUrl = $downloadUrl
                   iconSystemName = $manifest.iconSystemName
@@ -220,7 +268,7 @@ jobs:
                 Write-Host "Added $env:PLUGIN_ID to registry at v$env:PLUGIN_VERSION"
               }
 
-              $registry | ConvertTo-Json -Depth 4 | Set-Content plugins.json
+              $registry | ConvertTo-Json -Depth 6 | Set-Content plugins.json
 
               # Also copy the ZIP to plugins/ directory on gh-pages
               New-Item -ItemType Directory -Path "plugins" -Force | Out-Null

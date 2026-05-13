@@ -16,14 +16,18 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     public string Author => _registryPlugin.Author;
     public string Description => _registryPlugin.Description;
     public string? Category => _registryPlugin.Category;
+    public IReadOnlyList<string>? Categories => _registryPlugin.Categories;
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
     public string SizeDisplay => FormatSize(_registryPlugin.Size);
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
-    public string CategoryKey => PluginMarketplaceCategories.Resolve(Category).Key;
-    public string CategoryLabel => PluginMarketplaceCategories.Resolve(Category).DisplayName;
-    public int CategorySortOrder => PluginMarketplaceCategories.Resolve(Category).SortOrder;
+    public IReadOnlyList<PluginMarketplaceCategoryDescriptor> CategoryDescriptors =>
+        PluginMarketplaceCategories.ResolveAll(Category, Categories);
+    public IReadOnlyList<string> CategoryKeys => CategoryDescriptors.Select(category => category.Key).ToArray();
+    public string CategoryKey => CategoryDescriptors[0].Key;
+    public string CategoryLabel => CategoryDescriptors[0].DisplayName;
+    public int CategorySortOrder => CategoryDescriptors[0].SortOrder;
     public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
 
     [ObservableProperty] private PluginInstallState _installState;
@@ -117,14 +121,15 @@ public partial class RegistryPluginItemViewModel : ObservableObject
 
     internal void NotifyLocalizationChanged()
     {
+        OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(CategoryLabel));
         OnPropertyChanged(nameof(LocationBadge));
     }
 }
 
-internal sealed record PluginMarketplaceCategoryDescriptor(string Key, string DisplayName, int SortOrder);
+public sealed record PluginMarketplaceCategoryDescriptor(string Key, string DisplayName, int SortOrder);
 
-internal static class PluginMarketplaceCategories
+public static class PluginMarketplaceCategories
 {
     public static PluginMarketplaceCategoryDescriptor Resolve(string? rawCategory) => Normalize(rawCategory) switch
     {
@@ -137,12 +142,42 @@ internal static class PluginMarketplaceCategories
         _ => new("utility", Loc.Instance["Plugins.CategoryUtilities"], 6)
     };
 
+    public static IReadOnlyList<PluginMarketplaceCategoryDescriptor> ResolveAll(
+        string? primaryCategory,
+        IEnumerable<string>? categories)
+    {
+        var descriptors = new List<PluginMarketplaceCategoryDescriptor>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        Add(primaryCategory);
+        if (categories is not null)
+        {
+            foreach (var category in categories)
+                Add(category);
+        }
+
+        if (descriptors.Count == 0)
+            descriptors.Add(Resolve("utility"));
+
+        return descriptors;
+
+        void Add(string? rawCategory)
+        {
+            if (string.IsNullOrWhiteSpace(rawCategory))
+                return;
+
+            var descriptor = Resolve(rawCategory);
+            if (seen.Add(descriptor.Key))
+                descriptors.Add(descriptor);
+        }
+    }
+
     private static string Normalize(string? rawCategory) => rawCategory?.Trim().ToLowerInvariant() switch
     {
         "transcription" => "transcription",
         "llm" => "llm",
         "tts" or "texttospeech" or "text-to-speech" or "text to speech" => "tts",
-        "postprocessing" or "post-processing" or "postprocessor" or "post-processor" => "post-processing",
+        "postprocessing" or "post-processing" or "postprocessor" or "post-processor" or "processing" => "post-processing",
         "action" => "action",
         "memory" => "memory",
         _ => "utility"

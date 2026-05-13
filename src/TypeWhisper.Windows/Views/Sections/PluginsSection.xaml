@@ -78,8 +78,6 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal">
@@ -90,35 +88,6 @@
                         <TextBlock><Run Text="&#x1F6D2;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Marketplace], Mode=OneWay}"/></TextBlock>
                     </Button>
                 </StackPanel>
-
-                <Border Grid.Column="1"
-                        Width="1"
-                        Height="26"
-                        Margin="18,0"
-                        Background="#16FFFFFF"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding Plugins.IsMarketplaceSelected, Converter={StaticResource BoolToVis}}"/>
-
-                <ScrollViewer Grid.Column="2"
-                              HorizontalScrollBarVisibility="Hidden"
-                              VerticalScrollBarVisibility="Disabled"
-                              Visibility="{Binding Plugins.IsMarketplaceSelected, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl ItemsSource="{Binding Plugins.MarketplaceCategories}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:MarketplaceCategoryTabViewModel}">
-                                <Button Content="{Binding DisplayName}"
-                                        Style="{StaticResource MarketplaceCategoryTabButtonStyle}"
-                                        Command="{Binding DataContext.Plugins.SelectMarketplaceCategoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding Key}"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
             </Grid>
         </Border>
 
@@ -176,9 +145,20 @@
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
                                                 <WrapPanel Margin="0,7,0,0">
-                                                    <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
-                                                        <TextBlock Text="{Binding Category}" Foreground="#D6DEE9" FontSize="10"/>
-                                                    </Border>
+                                                    <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel/>
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type vm:PluginMarketplaceCategoryDescriptor}">
+                                                                <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
+                                                                    <TextBlock Text="{Binding DisplayName}" Foreground="#D6DEE9" FontSize="10"/>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
@@ -243,6 +223,35 @@
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Text="{Binding Plugins.MarketplaceCategorySummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0,0,0,4"/>
                                 <TextBlock Text="{loc:Str Plugins.MarketplaceDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
+                                <WrapPanel Margin="0,10,0,0">
+                                    <ui:Button Appearance="Secondary"
+                                               Content="{loc:Str Plugins.AllFunctions}"
+                                               Command="{Binding Plugins.ClearMarketplaceCapabilityFiltersCommand}"
+                                               Visibility="{Binding Plugins.HasActiveMarketplaceCapabilityFilters, Converter={StaticResource BoolToVis}}"
+                                               Margin="0,0,10,6"/>
+                                    <ItemsControl ItemsSource="{Binding Plugins.MarketplaceCapabilityFilters}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:MarketplaceCapabilityFilterViewModel}">
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                          Command="{Binding DataContext.Plugins.ToggleMarketplaceCapabilityFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding Key}"
+                                                          Style="{StaticResource InputCheckBoxStyle}"
+                                                          Margin="0,0,12,6">
+                                                    <TextBlock Foreground="{StaticResource LabelBrush}" FontSize="12">
+                                                        <Run Text="{Binding DisplayName, Mode=OneWay}"/>
+                                                        <Run Text=" "/>
+                                                        <Run Text="{Binding Count, StringFormat='({0})', Mode=OneWay}"/>
+                                                    </TextBlock>
+                                                </CheckBox>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </WrapPanel>
                             </StackPanel>
                             <ui:Button Grid.Column="1"
                                        Appearance="Secondary"
@@ -285,6 +294,20 @@
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
                                                 <WrapPanel Margin="0,7,0,0">
+                                                    <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel/>
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type vm:PluginMarketplaceCategoryDescriptor}">
+                                                                <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
+                                                                    <TextBlock Text="{Binding DisplayName}" Foreground="#D6DEE9" FontSize="10"/>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
