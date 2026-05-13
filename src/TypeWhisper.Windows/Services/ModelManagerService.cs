@@ -6,6 +6,7 @@ using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -190,6 +191,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         SetStatus(modelId, ModelStatus.LoadingModel);
         try
         {
+            plugin.SetAccelerationPreference(GetAccelerationPreference(_settings.Current.LocalModelAcceleration));
+
             if (plugin.SupportsModelDownload)
                 await plugin.LoadModelAsync(pluginModelId, cancellationToken);
 
@@ -203,6 +206,14 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             throw;
         }
     }
+
+    internal static TranscriptionAccelerationPreference GetAccelerationPreference(string? value) =>
+        AppSettings.NormalizeLocalModelAcceleration(value) switch
+        {
+            AppSettings.LocalModelAccelerationCpu => TranscriptionAccelerationPreference.Cpu,
+            AppSettings.LocalModelAccelerationNvidiaCuda => TranscriptionAccelerationPreference.NvidiaCuda,
+            _ => TranscriptionAccelerationPreference.Auto
+        };
 
     public void UnloadModel()
     {

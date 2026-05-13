@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using TypeWhisper.Plugin.WhisperCpp;
 using TypeWhisper.PluginSDK.Models;
+using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -27,6 +28,37 @@ public class WhisperCppPluginTests
         Assert.NotNull(manifest);
         Assert.Equal("1.0.1", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
+    [Theory]
+    [InlineData(TranscriptionAccelerationPreference.Auto, RuntimeLibrary.Cuda, RuntimeLibrary.Cpu)]
+    [InlineData(TranscriptionAccelerationPreference.Cpu, RuntimeLibrary.Cpu)]
+    [InlineData(TranscriptionAccelerationPreference.NvidiaCuda, RuntimeLibrary.Cuda)]
+    public void GetRuntimeLibraryOrder_MapsAccelerationPreference(
+        TranscriptionAccelerationPreference preference,
+        params RuntimeLibrary[] expectedOrder)
+    {
+        var order = WhisperCppPlugin.GetRuntimeLibraryOrder(preference);
+
+        Assert.Equal(expectedOrder, order);
+    }
+
+    [Fact]
+    public void CudaRuntimePackage_IsReferencedAndRequiredInPluginOutput()
+    {
+        var repoRoot = Path.GetFullPath(Path.Join(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", ".."));
+        var projectPath = Path.Join(
+            repoRoot,
+            "plugins",
+            "TypeWhisper.Plugin.WhisperCpp",
+            "TypeWhisper.Plugin.WhisperCpp.csproj");
+
+        var project = File.ReadAllText(projectPath);
+
+        Assert.Contains("Whisper.net.Runtime.Cuda.Windows", project);
+        Assert.Contains("ggml-cuda-whisper.dll", project);
     }
 
     [Fact]

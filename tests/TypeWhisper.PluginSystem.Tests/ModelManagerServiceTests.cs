@@ -69,6 +69,39 @@ public class ModelManagerServiceTests
         Assert.True(sut.Engine.IsModelLoaded);
     }
 
+    [Theory]
+    [InlineData(AppSettings.LocalModelAccelerationAuto, TranscriptionAccelerationPreference.Auto)]
+    [InlineData(AppSettings.LocalModelAccelerationCpu, TranscriptionAccelerationPreference.Cpu)]
+    [InlineData(AppSettings.LocalModelAccelerationNvidiaCuda, TranscriptionAccelerationPreference.NvidiaCuda)]
+    [InlineData("CUDA", TranscriptionAccelerationPreference.NvidiaCuda)]
+    [InlineData("directml", TranscriptionAccelerationPreference.Auto)]
+    public async Task LoadModelAsync_AppliesSavedAccelerationPreferenceBeforeLoading(
+        string savedAcceleration,
+        TranscriptionAccelerationPreference expectedPreference)
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            LocalModelAcceleration = savedAcceleration
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.LoadModelAsync(fullModelId);
+
+        Assert.Equal(expectedPreference, plugin.LastAccelerationPreference);
+        Assert.Equal(expectedPreference, plugin.AccelerationPreferenceAtLoad);
+    }
+
     private PluginManager CreatePluginManager(params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -116,13 +149,20 @@ public class ModelManagerServiceTests
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public string? LastLoadedModelId { get; private set; }
+        public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
+            TranscriptionAccelerationPreference.Auto;
+        public TranscriptionAccelerationPreference? AccelerationPreferenceAtLoad { get; private set; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
         public void SelectModel(string modelId) => SelectedModelId = modelId;
+        public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
+            LastAccelerationPreference = preference;
+
         public Task LoadModelAsync(string modelId, CancellationToken ct)
         {
+            AccelerationPreferenceAtLoad = LastAccelerationPreference;
             LastLoadedModelId = modelId;
             SelectedModelId = modelId;
             return Task.CompletedTask;

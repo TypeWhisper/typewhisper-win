@@ -45,6 +45,98 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public void Constructor_ExposesAccelerationOptionsAndUsesSavedSelection()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, sut.SelectedAccelerationOptionValue);
+        Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationAuto);
+        Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationCpu);
+        Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationNvidiaCuda);
+    }
+
+    [Fact]
+    public void SelectedAccelerationOptionValue_StoresNormalizedSetting()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationAuto
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        sut.SelectedAccelerationOptionValue = "CUDA";
+
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, settings.Current.LocalModelAcceleration);
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, sut.SelectedAccelerationOptionValue);
+    }
+
+    [Fact]
+    public void SelectedAccelerationOptionValue_AppliesPreferenceToSelectedPlugin()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationAuto
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true);
+
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationCpu;
+
+        Assert.Equal(TranscriptionAccelerationPreference.Cpu, plugin.LastAccelerationPreference);
+    }
+
+    [Fact]
+    public void Constructor_ShowsSelectedPluginAccelerationStatus()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var pluginManager = CreatePluginManager(settings,
+            new FakeTranscriptionPlugin(
+                pluginId,
+                "Parakeet",
+                modelId,
+                "Parakeet TDT",
+                configured: true,
+                accelerationStatus: new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.NvidiaCuda,
+                    "Using CUDA")));
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.Equal("Using CUDA", sut.AccelerationStatusText);
+    }
+
+    [Fact]
     public async Task UnloadModel_KeepsSavedSelectionVisible()
     {
         const string pluginId = "com.typewhisper.groq";
@@ -110,12 +202,16 @@ public class ModelManagerViewModelTests
             string providerDisplayName,
             string modelId,
             string modelDisplayName,
-            bool configured)
+            bool configured,
+            TranscriptionAccelerationStatus? accelerationStatus = null)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
             IsConfigured = configured;
             TranscriptionModels = [new PluginModelInfo(modelId, modelDisplayName)];
+            AccelerationStatus = accelerationStatus ?? new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.Cpu,
+                "Using CPU");
         }
 
         public string PluginId { get; }
@@ -127,11 +223,16 @@ public class ModelManagerViewModelTests
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
+        public TranscriptionAccelerationStatus AccelerationStatus { get; }
+        public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
+            TranscriptionAccelerationPreference.Auto;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
         public void SelectModel(string selectedModelId) => SelectedModelId = selectedModelId;
+        public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
+            LastAccelerationPreference = preference;
 
         public Task<PluginTranscriptionResult> TranscribeAsync(
             byte[] wavAudio,

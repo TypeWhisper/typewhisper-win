@@ -9,6 +9,9 @@ public record AppSettings
     public const double MinLiveTranscriptionFontSize = 10d;
     public const double DefaultLiveTranscriptionFontSize = 12d;
     public const double MaxLiveTranscriptionFontSize = 18d;
+    public const string LocalModelAccelerationAuto = "auto";
+    public const string LocalModelAccelerationCpu = "cpu";
+    public const string LocalModelAccelerationNvidiaCuda = "nvidia-cuda";
 
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
@@ -26,6 +29,7 @@ public record AppSettings
 
     // Model
     public string? SelectedModelId { get; init; }
+    public string LocalModelAcceleration { get; init; } = LocalModelAccelerationAuto;
 
     // Manual file transcription
     public string? FileTranscriptionEngineOverride { get; init; }
@@ -127,6 +131,23 @@ public record AppSettings
             fontSize,
             MinLiveTranscriptionFontSize,
             MaxLiveTranscriptionFontSize);
+
+    public static string NormalizeLocalModelAcceleration(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return LocalModelAccelerationAuto;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            LocalModelAccelerationAuto => LocalModelAccelerationAuto,
+            LocalModelAccelerationCpu => LocalModelAccelerationCpu,
+            LocalModelAccelerationNvidiaCuda => LocalModelAccelerationNvidiaCuda,
+            "cuda" => LocalModelAccelerationNvidiaCuda,
+            "nvidia cuda" => LocalModelAccelerationNvidiaCuda,
+            "nvidia_cuda" => LocalModelAccelerationNvidiaCuda,
+            _ => LocalModelAccelerationAuto
+        };
+    }
 }
 
 public enum RecordingMode
