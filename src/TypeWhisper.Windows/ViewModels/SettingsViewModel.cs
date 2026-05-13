@@ -108,6 +108,24 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
     public ObservableCollection<OverlayWidgetOption> WidgetOptions { get; } = [];
 
+    private MicrophoneItem? _selectedMicrophoneItem;
+    private bool _isSyncingMicrophoneSelection;
+
+    public MicrophoneItem? SelectedMicrophoneItem
+    {
+        get => _selectedMicrophoneItem;
+        set
+        {
+            if (!SetProperty(ref _selectedMicrophoneItem, value))
+                return;
+
+            if (_isSyncingMicrophoneSelection || _isLoading)
+                return;
+
+            SelectedMicrophoneDevice = value?.DeviceNumber;
+        }
+    }
+
     public string PreviewBubbleAutoHideSecondsText =>
         Loc.Instance.GetString("Appearance.AutoHideSecondsFormat", PreviewBubbleAutoHideSeconds);
     public string LiveTranscriptionFontSizeText =>
@@ -127,6 +145,7 @@ public partial class SettingsViewModel : ObservableObject
         if (_isLoading) return;
         _audio.SetMicrophoneDevice(value);
         StopMicrophonePreview();
+        SyncSelectedMicrophoneItem();
     }
 
     partial void OnSelectedSpokenFeedbackProviderIdChanged(string value)
@@ -162,6 +181,7 @@ public partial class SettingsViewModel : ObservableObject
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
+        _audio.DevicesChanged += OnAudioDevicesChanged;
 
         _isLoading = true;
         RefreshLocalizedCollections();
@@ -180,6 +200,9 @@ public partial class SettingsViewModel : ObservableObject
         PropertyChanged += (_, args) =>
         {
             if (_isLoading) return;
+
+            if (args.PropertyName == nameof(SelectedMicrophoneItem))
+                return;
 
             if (args.PropertyName == nameof(AutostartEnabled))
             {
@@ -201,12 +224,22 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void RefreshMicrophones()
     {
+        var selectedDevice = SelectedMicrophoneDevice;
         Microphones.Clear();
         Microphones.Add(new MicrophoneItem(null, Loc.Instance["Microphone.Default"]));
-        foreach (var (number, name) in AudioRecordingService.GetAvailableDevices())
+        var availableDevices = _audio.GetAvailableInputDevices();
+        foreach (var (number, name) in availableDevices)
         {
             Microphones.Add(new MicrophoneItem(number, name));
         }
+
+        if (selectedDevice is int selectedDeviceNumber
+            && availableDevices.All(device => device.DeviceNumber != selectedDeviceNumber))
+        {
+            Microphones.Add(new MicrophoneItem(selectedDeviceNumber, Loc.Instance["Microphone.Disconnected"]));
+        }
+
+        SyncSelectedMicrophoneItem();
     }
 
     [RelayCommand]
@@ -500,6 +533,44 @@ public partial class SettingsViewModel : ObservableObject
             RefreshSpokenFeedbackProviders();
             _isLoading = wasLoading;
         });
+    }
+
+    private void OnAudioDevicesChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(HandleAudioDevicesChanged);
+            return;
+        }
+
+        HandleAudioDevicesChanged();
+    }
+
+    private void HandleAudioDevicesChanged()
+    {
+        var wasPreviewing = _audio.IsPreviewing;
+        StopMicrophonePreview();
+        RefreshMicrophones();
+        _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
+        if (wasPreviewing)
+            StartMicrophonePreview();
+    }
+
+    private void SyncSelectedMicrophoneItem()
+    {
+        var selectedItem = Microphones.FirstOrDefault(m => m.DeviceNumber == SelectedMicrophoneDevice)
+            ?? Microphones.FirstOrDefault(m => m.DeviceNumber is null);
+
+        _isSyncingMicrophoneSelection = true;
+        try
+        {
+            SelectedMicrophoneItem = selectedItem;
+        }
+        finally
+        {
+            _isSyncingMicrophoneSelection = false;
+        }
     }
 
     private void RefreshSpokenFeedbackProviders()

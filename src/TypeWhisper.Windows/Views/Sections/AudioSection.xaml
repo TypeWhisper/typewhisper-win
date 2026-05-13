@@ -199,8 +199,7 @@
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           ItemsSource="{Binding Settings.Microphones}"
                                           DisplayMemberPath="Name"
-                                          SelectedValuePath="DeviceNumber"
-                                          SelectedValue="{Binding Settings.SelectedMicrophoneDevice}"/>
+                                          SelectedItem="{Binding Settings.SelectedMicrophoneItem, Mode=TwoWay}"/>
                             </Grid>
                         </Border>
 

@@ -699,6 +699,7 @@
   "Widget.AppName": "App Name",
 
   "Microphone.Default": "Default",
+  "Microphone.Disconnected": "Selected microphone disconnected",
 
   "App.ErrorTitle": "TypeWhisper - Error",
   "App.ErrorFormat": "An error occurred:\n{0}",
