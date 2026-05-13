@@ -10,7 +10,7 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public class LiveTranscriptPluginTests
+public sealed class LiveTranscriptPluginTests
 {
     private static LiveTranscriptPlugin CreatePlugin() => new();
 
