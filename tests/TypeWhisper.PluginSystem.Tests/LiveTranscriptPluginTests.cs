@@ -25,7 +25,7 @@ public class LiveTranscriptPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var manifestPath = Path.GetFullPath(Path.Combine(
+        var manifestPath = Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "..",
             "plugins", "TypeWhisper.Plugin.LiveTranscript", "manifest.json"));
