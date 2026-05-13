@@ -273,7 +273,12 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         string runtimeIdentifier,
         Exception error)
     {
-        var runtimeDirectory = Path.Combine(pluginDirectory, "runtimes", runtimeIdentifier);
+        var safeRuntimeIdentifier = Path.GetFileName(
+            runtimeIdentifier.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeRuntimeIdentifier))
+            safeRuntimeIdentifier = runtimeIdentifier;
+
+        var runtimeDirectory = Path.Join(pluginDirectory, "runtimes", safeRuntimeIdentifier);
         const string requiredFiles =
             "whisper.dll, ggml-whisper.dll, ggml-base-whisper.dll, ggml-cpu-whisper.dll, " +
             "msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll, VCOMP140.DLL";

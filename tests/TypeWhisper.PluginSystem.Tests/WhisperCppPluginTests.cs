@@ -10,10 +10,14 @@ public class WhisperCppPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var manifestPath = Path.GetFullPath(Path.Combine(
+        var repoRoot = Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.WhisperCpp", "manifest.json"));
+            "..", "..", "..", "..", ".."));
+        var manifestPath = Path.Join(
+            repoRoot,
+            "plugins",
+            "TypeWhisper.Plugin.WhisperCpp",
+            "manifest.json");
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -28,8 +32,8 @@ public class WhisperCppPluginTests
     [Fact]
     public void BuildNativeLoadFailureMessage_NamesRuntimeFolderAndVcRedistFallback()
     {
-        var pluginDirectory = Path.Combine(
-            "C:", "Users", "Sal", "AppData", "Local", "TypeWhisper", "Plugins", "com.typewhisper.whisper-cpp");
+        var pluginDirectory = Path.Join(
+            @"C:\", "Users", "Sal", "AppData", "Local", "TypeWhisper", "Plugins", "com.typewhisper.whisper-cpp");
         var nativeError = new DllNotFoundException(
             "Unable to load DLL 'ggml-cpu-whisper.dll' or one of its dependencies: The specified module could not be found. (0x8007007E)");
 
@@ -38,10 +42,26 @@ public class WhisperCppPluginTests
             "win-x64",
             nativeError);
 
-        Assert.Contains(Path.Combine(pluginDirectory, "runtimes", "win-x64"), message);
+        Assert.Contains(Path.Join(pluginDirectory, "runtimes", "win-x64"), message);
         Assert.Contains("ggml-cpu-whisper.dll", message);
         Assert.Contains("VCOMP140.DLL", message);
         Assert.Contains("Microsoft Visual C++ 2015-2022 Redistributable", message);
         Assert.Contains("0x8007007E", message);
+    }
+
+    [Fact]
+    public void BuildNativeLoadFailureMessage_StripsPathLikeRuntimeIdentifier()
+    {
+        var pluginDirectory = Path.Join(
+            @"C:\", "Users", "Sal", "AppData", "Local", "TypeWhisper", "Plugins", "com.typewhisper.whisper-cpp");
+        var nativeError = new DllNotFoundException("Unable to load DLL 'ggml-cpu-whisper.dll'.");
+
+        var message = WhisperCppPlugin.BuildNativeLoadFailureMessage(
+            pluginDirectory,
+            Path.Join("unexpected", "win-x64"),
+            nativeError);
+
+        Assert.Contains(Path.Join(pluginDirectory, "runtimes", "win-x64"), message);
+        Assert.DoesNotContain(Path.Join(pluginDirectory, "runtimes", "unexpected"), message);
     }
 }
