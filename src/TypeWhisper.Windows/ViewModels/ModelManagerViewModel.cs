@@ -20,14 +20,30 @@ public partial class ModelManagerViewModel : ObservableObject
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
-    [ObservableProperty] private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
+    private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
     [ObservableProperty] private string _activeProviderDisplayName = "None";
     [ObservableProperty] private string _activeModelDisplayName = "No model selected";
     [ObservableProperty] private string _activeModelStatusText = "";
-    [ObservableProperty] private string _accelerationStatusText = "";
+    private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
+
+    public string SelectedAccelerationOptionValue
+    {
+        get => _selectedAccelerationOptionValue;
+        set
+        {
+            if (SetProperty(ref _selectedAccelerationOptionValue, value))
+                OnSelectedAccelerationOptionValueChanged(value);
+        }
+    }
+
+    public string AccelerationStatusText
+    {
+        get => _accelerationStatusText;
+        set => SetProperty(ref _accelerationStatusText, value);
+    }
 
     public ObservableCollection<ProviderViewModel> Providers { get; } = [];
     public ObservableCollection<ModelOptionViewModel> AvailableModelOptions { get; } = [];
@@ -152,7 +168,7 @@ public partial class ModelManagerViewModel : ObservableObject
             ActivateModelCommand.Execute(value);
     }
 
-    partial void OnSelectedAccelerationOptionValueChanged(string value)
+    private void OnSelectedAccelerationOptionValueChanged(string value)
     {
         if (_isSyncingAccelerationSelection)
             return;
