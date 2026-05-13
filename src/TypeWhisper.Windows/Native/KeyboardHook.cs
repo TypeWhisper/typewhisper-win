@@ -409,6 +409,9 @@ internal static class HotkeyParser
         vk = 0;
         if (string.IsNullOrWhiteSpace(hotkeyString)) return false;
 
+        if (TryParseSideSpecificSingleModifier(hotkeyString.Trim(), out vk))
+            return true;
+
         foreach (var part in hotkeyString.Split('+'))
         {
             var upper = part.Trim().ToUpperInvariant();
@@ -433,6 +436,22 @@ internal static class HotkeyParser
             return CountModifiers(modifiers) >= 2;
 
         return true;
+    }
+
+    private static bool TryParseSideSpecificSingleModifier(string hotkeyString, out uint vk)
+    {
+        vk = hotkeyString.ToUpperInvariant() switch
+        {
+            "LEFT CTRL" => NativeMethods.VK_LCONTROL,
+            "RIGHT CTRL" => NativeMethods.VK_RCONTROL,
+            "LEFT SHIFT" => NativeMethods.VK_LSHIFT,
+            "RIGHT SHIFT" => NativeMethods.VK_RSHIFT,
+            "LEFT ALT" => NativeMethods.VK_LMENU,
+            "RIGHT ALT" => NativeMethods.VK_RMENU,
+            _ => 0
+        };
+
+        return vk != 0;
     }
 
     private static uint ParseKey(string key) =>

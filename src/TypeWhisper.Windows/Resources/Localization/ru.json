@@ -675,7 +675,7 @@
   "App.ErrorFormat": "Произошла ошибка:\n{0}",
   "Hotkey.Placeholder": "Нажмите сочетание клавиш…",
   "Hotkey.ClickToAssign": "Нажмите для назначения",
-  "Hotkey.ModifierOnlyHint": "Один модификатор (например Win) недопустим. Используйте сочетание вроде Ctrl+Shift или Alt+Win, чтобы не ломать системные горячие клавиши.",
+  "Hotkey.ModifierOnlyHint": "Отдельные левые/правые клавиши Ctrl, Alt и Shift можно использовать. Win отдельно зарезервирован; используйте сочетания вроде Ctrl+Shift или Alt+Win.",
   "PromptPalette.NoActions": "Действий не найдено",
   "Profiles.NoAssignment": "Не назначено",
   "Profiles.GlobalDefault": "Общее (по умолчанию)",

@@ -698,7 +698,7 @@
 
   "Hotkey.Placeholder": "Press key combination...",
   "Hotkey.ClickToAssign": "Click to assign",
-  "Hotkey.ModifierOnlyHint": "Single modifier keys like Win are not allowed. Use a combination like Ctrl+Shift or Alt+Win so Windows shortcuts keep working.",
+  "Hotkey.ModifierOnlyHint": "Single left/right Ctrl, Alt, and Shift keys are allowed. Win alone is reserved; use combinations like Ctrl+Shift or Alt+Win for Windows-key shortcuts.",
 
   "PromptPalette.NoActions": "No actions found",
 
