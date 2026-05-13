@@ -167,7 +167,7 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            .ReturnsAsync(() => new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseJson)
             });

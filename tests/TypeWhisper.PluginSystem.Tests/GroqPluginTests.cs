@@ -14,10 +14,11 @@ public class GroqPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var manifestPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
+        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
+        var relativeManifestPath = Path.Join(
             "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json"));
+            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json");
+        var manifestPath = Path.GetFullPath(relativeManifestPath, basePath);
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -31,10 +32,11 @@ public class GroqPluginTests
     [Fact]
     public void Manifest_AdvertisesTranscriptionAndLlmCategories()
     {
-        var manifestPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
+        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
+        var relativeManifestPath = Path.Join(
             "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json"));
+            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json");
+        var manifestPath = Path.GetFullPath(relativeManifestPath, basePath);
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
