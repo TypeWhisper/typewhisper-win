@@ -22,6 +22,12 @@ public class AppSettingsTests
         Assert.Equal(12d, AppSettings.Default.LiveTranscriptionFontSize);
     }
 
+    [Fact]
+    public void DefaultLocalModelAcceleration_IsAuto()
+    {
+        Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);
+    }
+
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(0, 0)]
@@ -46,5 +52,20 @@ public class AppSettingsTests
         double expected)
     {
         Assert.Equal(expected, AppSettings.NormalizeLiveTranscriptionFontSize(value));
+    }
+
+    [Theory]
+    [InlineData(null, AppSettings.LocalModelAccelerationAuto)]
+    [InlineData("", AppSettings.LocalModelAccelerationAuto)]
+    [InlineData("AUTO", AppSettings.LocalModelAccelerationAuto)]
+    [InlineData("cpu", AppSettings.LocalModelAccelerationCpu)]
+    [InlineData("NVIDIA CUDA", AppSettings.LocalModelAccelerationNvidiaCuda)]
+    [InlineData("cuda", AppSettings.LocalModelAccelerationNvidiaCuda)]
+    [InlineData("directml", AppSettings.LocalModelAccelerationAuto)]
+    public void NormalizeLocalModelAcceleration_ReturnsSupportedStorageValue(
+        string? value,
+        string expected)
+    {
+        Assert.Equal(expected, AppSettings.NormalizeLocalModelAcceleration(value));
     }
 }

@@ -61,6 +61,21 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// <summary>ISO language codes supported by this engine, or empty for all.</summary>
     IReadOnlyList<string> SupportedLanguages => [];
 
+    /// <summary>Acceleration backends supported by this engine.</summary>
+    IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends =>
+        [TranscriptionAccelerationBackend.Cpu];
+
+    /// <summary>Preferred acceleration mode requested by the host.</summary>
+    TranscriptionAccelerationPreference AccelerationPreference =>
+        TranscriptionAccelerationPreference.Auto;
+
+    /// <summary>Current acceleration backend and user-facing status.</summary>
+    TranscriptionAccelerationStatus AccelerationStatus =>
+        new(TranscriptionAccelerationBackend.Cpu, "Using CPU");
+
+    /// <summary>Applies a host-selected acceleration preference.</summary>
+    void SetAccelerationPreference(TranscriptionAccelerationPreference preference) { }
+
     /// <summary>
     /// Transcribes audio with streaming progress updates. Default delegates to <see cref="TranscribeAsync"/>.
     /// </summary>

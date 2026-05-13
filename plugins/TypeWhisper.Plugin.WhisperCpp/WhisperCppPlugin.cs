@@ -6,6 +6,7 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using Whisper.net;
 using Whisper.net.Ggml;
+using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.Plugin.WhisperCpp;
 
@@ -35,6 +36,10 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private string? _selectedModelId;
     private string? _loadedModelId;
     private string? _pluginDirectory;
+    private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
+    private TranscriptionAccelerationStatus _accelerationStatus = new(
+        TranscriptionAccelerationBackend.Cpu,
+        "Using CPU");
 
     public string PluginId => "com.typewhisper.whisper-cpp";
     public string PluginName => "whisper.cpp (Local)";
@@ -47,6 +52,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public bool SupportsTranslation => true;
     public bool SupportsModelDownload => true;
     public IReadOnlyList<string> SupportedLanguages => [];
+    public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
+    [
+        TranscriptionAccelerationBackend.Cpu,
+        TranscriptionAccelerationBackend.NvidiaCuda
+    ];
+    public TranscriptionAccelerationPreference AccelerationPreference => _accelerationPreference;
+    public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
 
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(model =>
         new PluginModelInfo(model.Id, model.DisplayName)
@@ -74,6 +86,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     }
 
     public UserControl? CreateSettingsView() => null;
+
+    public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
+    {
+        _accelerationPreference = preference;
+        ApplyRuntimeLibraryOrder(preference);
+        _accelerationStatus = CreatePendingAccelerationStatus(preference);
+    }
 
     public void SelectModel(string modelId)
     {
@@ -157,19 +176,24 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         try
         {
             DisposeFactoryUnsafe();
+            ApplyRuntimeLibraryOrder(_accelerationPreference);
             try
             {
                 _factory = WhisperFactory.FromPath(modelPath);
             }
             catch (Exception ex) when (IsNativeLoadFailure(ex))
             {
+                _accelerationStatus = CreateNativeLoadFailureStatus(ex);
                 throw CreateNativeLoadFailureException(ex);
             }
 
+            _accelerationStatus = CreateLoadedAccelerationStatus(
+                RuntimeOptions.LoadedLibrary,
+                _accelerationPreference);
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             _host?.SetSetting("selectedModel", modelId);
-            _host?.Log(PluginLogLevel.Info, $"Loaded model {modelId}");
+            _host?.Log(PluginLogLevel.Info, $"Loaded model {modelId} ({_accelerationStatus.DisplayText})");
         }
         finally
         {
@@ -261,6 +285,50 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private ModelDefinition GetModel(string modelId) => Models.FirstOrDefault(model => model.Id == modelId)
         ?? throw new ArgumentException($"Unknown model: {modelId}");
 
+    internal static IReadOnlyList<RuntimeLibrary> GetRuntimeLibraryOrder(
+        TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.Cpu => [RuntimeLibrary.Cpu],
+            TranscriptionAccelerationPreference.NvidiaCuda => [RuntimeLibrary.Cuda],
+            _ => [RuntimeLibrary.Cuda, RuntimeLibrary.Cpu]
+        };
+
+    private static void ApplyRuntimeLibraryOrder(TranscriptionAccelerationPreference preference) =>
+        RuntimeOptions.RuntimeLibraryOrder = GetRuntimeLibraryOrder(preference).ToList();
+
+    private static TranscriptionAccelerationStatus CreatePendingAccelerationStatus(
+        TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.NvidiaCuda => new(
+                TranscriptionAccelerationBackend.Cpu,
+                "Using CPU",
+                "CUDA will be used when the model loads."),
+            _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
+        };
+
+    private static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(
+        RuntimeLibrary? loadedLibrary,
+        TranscriptionAccelerationPreference preference) =>
+        loadedLibrary switch
+        {
+            RuntimeLibrary.Cuda => new(TranscriptionAccelerationBackend.NvidiaCuda, "Using CUDA"),
+            RuntimeLibrary.Cpu => preference == TranscriptionAccelerationPreference.Auto
+                ? new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "CUDA runtime was not selected or could not be loaded.")
+                : new(TranscriptionAccelerationBackend.Cpu, "Using CPU"),
+            _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
+        };
+
+    private static TranscriptionAccelerationStatus CreateNativeLoadFailureStatus(Exception error) =>
+        new(
+            TranscriptionAccelerationBackend.Cpu,
+            "CUDA unavailable",
+            error.Message);
+
     private string GetModelPath(string modelId)
     {
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
@@ -279,12 +347,15 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             safeRuntimeIdentifier = runtimeIdentifier;
 
         var runtimeDirectory = Path.Join(pluginDirectory, "runtimes", safeRuntimeIdentifier);
+        var cudaRuntimeDirectory = Path.Join(pluginDirectory, "runtimes", "cuda", safeRuntimeIdentifier);
         const string requiredFiles =
             "whisper.dll, ggml-whisper.dll, ggml-base-whisper.dll, ggml-cpu-whisper.dll, " +
-            "msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll, VCOMP140.DLL";
+            "ggml-cuda-whisper.dll (for CUDA), msvcp140.dll, vcruntime140.dll, " +
+            "vcruntime140_1.dll, VCOMP140.DLL";
 
         return "Unable to load the whisper.cpp native runtime. " +
-            $"Expected native DLLs under '{runtimeDirectory}', including {requiredFiles}. " +
+            $"Expected CPU native DLLs under '{runtimeDirectory}' and CUDA native DLLs under " +
+            $"'{cudaRuntimeDirectory}', including {requiredFiles}. " +
             "Reinstall or update the whisper.cpp plugin. If the problem persists, install the " +
             "Microsoft Visual C++ 2015-2022 Redistributable for your Windows architecture. " +
             $"Original error: {error.Message}";
