@@ -6,14 +6,19 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "OpenAI Whisper transcription and GPT translation",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 13887,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-v1.0.1/com.typewhisper.openai-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
       "de": "OpenAI Whisper Transkription und GPT Uebersetzung"
-    }
+    },
+    "categories": [
+      "transcription",
+      "llm",
+      "tts"
+    ]
   },
   {
     "id": "com.typewhisper.groq",
@@ -22,14 +27,18 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Groq Whisper transcription and Llama translation",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 17972,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-groq-v1.0.2/com.typewhisper.groq-1.0.2.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
       "de": "Groq Whisper Transkription und Llama Uebersetzung"
-    }
+    },
+    "categories": [
+      "transcription",
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.webhook",
@@ -38,14 +47,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Sends event notifications to a webhook URL",
-    "category": "Integration",
+    "category": "utility",
     "size": 16179,
     "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.webhook-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Sendet Ereignisbenachrichtigungen an eine Webhook-URL"
-    }
+    },
+    "categories": [
+      "utility"
+    ]
   },
   {
     "id": "com.typewhisper.sherpa-onnx",
@@ -54,14 +66,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Offline transcription via sherpa-onnx (NVIDIA NeMo Parakeet + Canary)",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 15494,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-sherpa-onnx-v1.0.1/com.typewhisper.sherpa-onnx-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Offline-Transkription mit sherpa-onnx (NVIDIA NeMo Parakeet + Canary)"
-    }
+    },
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.openai-compatible",
@@ -70,14 +85,18 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
-    "category": "Integration",
+    "category": "transcription",
     "size": 17928,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-compatible-v1.0.1/com.typewhisper.openai-compatible-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Verbindung zu jedem OpenAI-kompatiblen Server (Ollama, LM Studio, vLLM, etc.)"
-    }
+    },
+    "categories": [
+      "transcription",
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.gemini",
@@ -86,14 +105,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Google Gemini LLM provider (Flash, Pro, Flash Lite)",
-    "category": "LLM",
+    "category": "llm",
     "size": 10444,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gemini-v1.1.0/com.typewhisper.gemini-1.1.0.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
       "de": "Google Gemini LLM-Anbieter (Flash, Pro, Flash Lite)"
-    }
+    },
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.linear",
@@ -102,14 +124,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Create Linear issues from transcriptions via GraphQL API",
-    "category": "Integration",
+    "category": "action",
     "size": 12812,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-linear-v1.0.0/com.typewhisper.linear-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
       "de": "Linear-Issues aus Transkriptionen erstellen (GraphQL API)"
-    }
+    },
+    "categories": [
+      "action"
+    ]
   },
   {
     "id": "com.typewhisper.obsidian",
@@ -118,14 +143,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Save transcriptions as Markdown notes in Obsidian vaults",
-    "category": "Integration",
+    "category": "action",
     "size": 10493,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-obsidian-v1.0.0/com.typewhisper.obsidian-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Transkriptionen als Markdown-Notizen in Obsidian-Vaults speichern"
-    }
+    },
+    "categories": [
+      "action"
+    ]
   },
   {
     "id": "com.typewhisper.script",
@@ -134,14 +162,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Process transcriptions through custom shell scripts (cmd/PowerShell)",
-    "category": "Processing",
+    "category": "post-processing",
     "size": 12476,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-script-v1.0.0/com.typewhisper.script-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Transkriptionen durch eigene Shell-Skripte verarbeiten (cmd/PowerShell)"
-    }
+    },
+    "categories": [
+      "post-processing"
+    ]
   },
   {
     "id": "com.typewhisper.live-transcript",
@@ -150,14 +181,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Floating window showing real-time transcription during recording",
-    "category": "UI",
+    "category": "utility",
     "size": 8692,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-live-transcript-v1.0.0/com.typewhisper.live-transcript-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Schwebendes Fenster mit Echtzeit-Transkription waehrend der Aufnahme"
-    }
+    },
+    "categories": [
+      "utility"
+    ]
   },
   {
     "id": "com.typewhisper.granite-speech",
@@ -166,14 +200,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Offline transcription via IBM Granite-4.0 1B Speech with embedded Python runtime",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 17619,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-granite-speech-v1.0.2/com.typewhisper.granite-speech-1.0.2.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Offline-Transkription mit IBM Granite-4.0 1B Speech und eingebetteter Python-Laufzeit"
-    }
+    },
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.gemma-local",
@@ -182,14 +219,17 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Run Google Gemma 4 locally via LLamaSharp - no cloud, no Ollama required",
-    "category": "LLM",
+    "category": "llm",
     "size": 31867021,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gemma-local-v1.0.0/com.typewhisper.gemma-local-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": {
       "de": "Google Gemma 4 lokal ausfuehren mit LLamaSharp - keine Cloud, kein Ollama noetig"
-    }
+    },
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.claude",
@@ -197,10 +237,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Anthropic Claude LLM for prompt processing",
-    "category": "LLM",
+    "category": "llm",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-claude-v1.0.0/com.typewhisper.claude-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-claude-v1.0.0/com.typewhisper.claude-1.0.0.zip",
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.openrouter",
@@ -208,10 +251,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "OpenRouter multi-model LLM gateway",
-    "category": "LLM",
+    "category": "llm",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.0.0/com.typewhisper.openrouter-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.0.0/com.typewhisper.openrouter-1.0.0.zip",
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.cerebras",
@@ -219,10 +265,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Cerebras fast LLM inference",
-    "category": "LLM",
+    "category": "llm",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cerebras-v1.0.0/com.typewhisper.cerebras-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cerebras-v1.0.0/com.typewhisper.cerebras-1.0.0.zip",
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.cohere",
@@ -230,10 +279,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Cohere Command LLM for prompt processing",
-    "category": "LLM",
+    "category": "llm",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cohere-v1.0.0/com.typewhisper.cohere-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cohere-v1.0.0/com.typewhisper.cohere-1.0.0.zip",
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.fireworks",
@@ -241,10 +293,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Fireworks AI fast LLM inference",
-    "category": "LLM",
+    "category": "llm",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fireworks-v1.0.0/com.typewhisper.fireworks-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fireworks-v1.0.0/com.typewhisper.fireworks-1.0.0.zip",
+    "categories": [
+      "llm"
+    ]
   },
   {
     "id": "com.typewhisper.gladia",
@@ -252,10 +307,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Gladia pre-recorded transcription",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gladia-v1.0.0/com.typewhisper.gladia-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gladia-v1.0.0/com.typewhisper.gladia-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.speechmatics",
@@ -263,10 +321,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Speechmatics batch transcription",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-speechmatics-v1.0.0/com.typewhisper.speechmatics-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-speechmatics-v1.0.0/com.typewhisper.speechmatics-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.soniox",
@@ -274,10 +335,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Soniox speech recognition",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.0.0/com.typewhisper.soniox-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.0.0/com.typewhisper.soniox-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.cloudflare-asr",
@@ -285,10 +349,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Cloudflare Workers AI Whisper endpoint",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cloudflare-asr-v1.0.0/com.typewhisper.cloudflare-asr-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cloudflare-asr-v1.0.0/com.typewhisper.cloudflare-asr-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.google-cloud-stt",
@@ -296,10 +363,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Google Cloud Speech-to-Text v1 REST API",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-google-cloud-stt-v1.0.0/com.typewhisper.google-cloud-stt-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-google-cloud-stt-v1.0.0/com.typewhisper.google-cloud-stt-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.qwen3-stt",
@@ -315,7 +385,10 @@
     "iconSystemName": null,
     "descriptions": {
       "de": "Lokale Qwen3-ASR-Transkription mit ONNX Runtime"
-    }
+    },
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.voxtral",
@@ -323,10 +396,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Mistral Voxtral Whisper-compatible transcription",
-    "category": "Transcription",
+    "category": "transcription",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-v1.0.0/com.typewhisper.voxtral-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-v1.0.0/com.typewhisper.voxtral-1.0.0.zip",
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.file-memory",
@@ -334,10 +410,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "File-based memory storage for extracted facts",
-    "category": "Memory",
+    "category": "memory",
     "requiresApiKey": false,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-file-memory-v1.0.0/com.typewhisper.file-memory-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-file-memory-v1.0.0/com.typewhisper.file-memory-1.0.0.zip",
+    "categories": [
+      "memory"
+    ]
   },
   {
     "id": "com.typewhisper.openai-vector-memory",
@@ -345,10 +424,13 @@
     "version": "1.0.0",
     "author": "TypeWhisper",
     "description": "Vector-based memory storage using OpenAI embeddings",
-    "category": "Memory",
+    "category": "memory",
     "requiresApiKey": true,
     "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-vector-memory-v1.0.0/com.typewhisper.openai-vector-memory-1.0.0.zip"
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-vector-memory-v1.0.0/com.typewhisper.openai-vector-memory-1.0.0.zip",
+    "categories": [
+      "memory"
+    ]
   },
   {
     "id": "com.typewhisper.whisper-cpp",
@@ -362,7 +444,10 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.0.1/com.typewhisper.whisper-cpp-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
-    "descriptions": null
+    "descriptions": null,
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.elevenlabs",
@@ -378,7 +463,10 @@
     "requiresApiKey": true,
     "descriptions": {
       "de": "Cloud-Transkription ueber ElevenLabs Scribe mit Echtzeit-WebSocket-Streaming"
-    }
+    },
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.assemblyai",
@@ -387,12 +475,15 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "AssemblyAI Universal-2 transcription engine",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 16776,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-assemblyai-v1.1.2/com.typewhisper.assemblyai-1.1.2.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
-    "descriptions": null
+    "descriptions": null,
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.deepgram",
@@ -401,12 +492,15 @@
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Deepgram Nova transcription engine",
-    "category": "Transcription",
+    "category": "transcription",
     "size": 14989,
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-deepgram-v1.0.2/com.typewhisper.deepgram-1.0.2.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
-    "descriptions": null
+    "descriptions": null,
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.supertonic-tts",
@@ -422,6 +516,9 @@
     "requiresApiKey": false,
     "descriptions": {
       "de": "Lokaler Supertonic-3-Text-to-Speech-Anbieter. Laedt OpenRAIL-M-Modellassets bei Bedarf herunter und synthetisiert Sprache lokal mit ONNX Runtime."
-    }
+    },
+    "categories": [
+      "tts"
+    ]
   }
 ]
