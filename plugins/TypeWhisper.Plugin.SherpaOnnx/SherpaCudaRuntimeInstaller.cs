@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -68,13 +69,14 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
     public SherpaCudaRuntimeInstaller(string pluginDataDirectory, HttpClient httpClient)
     {
-        _runtimeRoot = Path.Combine(pluginDataDirectory, "Runtimes", "sherpa-onnx-cuda", RuntimeVersion);
+        var pluginDataRoot = Path.GetFullPath(pluginDataDirectory);
+        _runtimeRoot = Path.Join(pluginDataRoot, "Runtimes", "sherpa-onnx-cuda", RuntimeVersion);
         _httpClient = httpClient;
     }
 
-    public string RuntimeDirectory => Path.Combine(_runtimeRoot, "native");
+    public string RuntimeDirectory => Path.Join(_runtimeRoot, "native");
 
-    public bool IsInstalled => RequiredFiles.All(file => File.Exists(Path.Combine(RuntimeDirectory, file)));
+    public bool IsInstalled => RequiredFiles.All(file => File.Exists(GetRuntimeFilePath(file)));
 
     public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
     {
@@ -104,8 +106,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
     private async Task InstallSherpaRuntimeAsync(CancellationToken cancellationToken)
     {
-        var tempRoot = Path.Combine(_runtimeRoot, $"extract-{Guid.NewGuid():N}");
-        var archivePath = Path.Combine(_runtimeRoot, $"{AssetFileName}.{Guid.NewGuid():N}.tmp");
+        var tempRoot = Path.Join(_runtimeRoot, $"extract-{Guid.NewGuid():N}");
+        var safeAssetFileName = Path.GetFileName(AssetFileName);
+        var archivePath = Path.Join(_runtimeRoot, $"{safeAssetFileName}.{Guid.NewGuid():N}.tmp");
 
         try
         {
@@ -119,7 +122,7 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
             foreach (var file in Directory.EnumerateFiles(nativeSource))
             {
-                var destination = Path.Combine(RuntimeDirectory, Path.GetFileName(file));
+                var destination = Path.Join(RuntimeDirectory, Path.GetFileName(file));
                 File.Copy(file, destination, overwrite: true);
             }
         }
@@ -138,7 +141,7 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
                 continue;
 
             var wheelUrl = await ResolveWheelUrlAsync(package, cancellationToken);
-            var wheelPath = Path.Combine(
+            var wheelPath = Path.Join(
                 _runtimeRoot,
                 $"{package.PackageName}-{package.Version}.{Guid.NewGuid():N}.whl.tmp");
 
@@ -153,7 +156,7 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             }
 
             var missing = package.RequiredDlls
-                .Where(file => !File.Exists(Path.Combine(RuntimeDirectory, file)))
+                .Where(file => !File.Exists(GetRuntimeFilePath(file)))
                 .ToList();
             if (missing.Count > 0)
             {
@@ -244,7 +247,7 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         foreach (var entry in archive.Entries.Where(entry =>
                      entry.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
         {
-            var destination = Path.Combine(destinationDirectory, entry.Name);
+            var destination = Path.Join(destinationDirectory, Path.GetFileName(entry.Name));
             entry.ExtractToFile(destination, overwrite: true);
         }
     }
@@ -256,12 +259,12 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path));
 
     private bool HasRequiredFiles(IEnumerable<string> files) =>
-        files.All(file => File.Exists(Path.Combine(RuntimeDirectory, file)));
+        files.All(file => File.Exists(GetRuntimeFilePath(file)));
 
     private void ValidateInstalledRuntime()
     {
         var missing = RequiredFiles
-            .Where(file => !File.Exists(Path.Combine(RuntimeDirectory, file)))
+            .Where(file => !File.Exists(GetRuntimeFilePath(file)))
             .ToList();
 
         if (missing.Count > 0)
@@ -271,6 +274,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         }
     }
 
+    private string GetRuntimeFilePath(string fileName) =>
+        Path.Join(RuntimeDirectory, Path.GetFileName(fileName));
+
     private static void TryDeleteFile(string path)
     {
         try
@@ -278,8 +284,13 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch
+        catch (IOException ex)
         {
+            Debug.WriteLine($"Failed to delete temporary file '{path}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Failed to delete temporary file '{path}': {ex.Message}");
         }
     }
 
@@ -290,8 +301,13 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }
-        catch
+        catch (IOException ex)
         {
+            Debug.WriteLine($"Failed to delete temporary directory '{path}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Failed to delete temporary directory '{path}': {ex.Message}");
         }
     }
 
