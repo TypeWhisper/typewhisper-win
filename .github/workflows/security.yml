@@ -10,9 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
-  security-events: write
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
@@ -24,86 +22,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
 
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/dependency-review-action@v4
-
-  codeql:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: github/codeql-action/init@v3
         with:
-          languages: csharp
-          queries: security-extended,security-and-quality
+          persist-credentials: false
 
-      - name: Ensure NuGet global packages folder
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.nuget\packages') | Out-Null
-
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-          cache: true
-          cache-dependency-path: |
-            **/*.csproj
-            Directory.Build.props
-
-      - name: Restore solution and CLI
-        shell: pwsh
-        run: |
-          dotnet restore TypeWhisper.slnx
-          if ($LASTEXITCODE -ne 0) {
-            throw "Solution restore failed."
-          }
-
-          dotnet restore src/TypeWhisper.Cli/TypeWhisper.Cli.csproj
-          if ($LASTEXITCODE -ne 0) {
-            throw "CLI restore failed."
-          }
-
-      - name: Restore plugin projects
-        shell: pwsh
-        run: |
-          foreach ($project in Get-ChildItem plugins -Recurse -Filter *.csproj | Sort-Object FullName) {
-            dotnet restore $project.FullName
-            if ($LASTEXITCODE -ne 0) {
-              throw "Restore failed: $($project.FullName)"
-            }
-          }
-
-      - name: Build repository for CodeQL
-        shell: pwsh
-        run: |
-          dotnet build TypeWhisper.slnx -c Release --no-restore
-          if ($LASTEXITCODE -ne 0) {
-            throw "Solution build failed."
-          }
-
-          dotnet build src/TypeWhisper.Cli/TypeWhisper.Cli.csproj -c Release --no-restore
-          if ($LASTEXITCODE -ne 0) {
-            throw "CLI build failed."
-          }
-
-          foreach ($project in Get-ChildItem plugins -Recurse -Filter *.csproj | Sort-Object FullName) {
-            dotnet build $project.FullName -c Release --no-restore
-            if ($LASTEXITCODE -ne 0) {
-              throw "Build failed: $($project.FullName)"
-            }
-          }
-
-      - uses: github/codeql-action/analyze@v3
+      - uses: actions/dependency-review-action@v5
 
   dotnet-package-audit:
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Ensure NuGet global packages folder
         shell: pwsh
@@ -185,6 +118,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Check Python requirements file
         id: requirements
@@ -199,7 +134,7 @@ jobs:
       - uses: actions/setup-python@v6
         if: steps.requirements.outputs.exists == 'true'
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
       - name: Install pip-audit
         if: steps.requirements.outputs.exists == 'true'

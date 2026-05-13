@@ -4,6 +4,8 @@
   "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
+  "category": "transcription",
+  "categories": ["transcription", "llm"],
   "assemblyName": "TypeWhisper.Plugin.OpenAiCompatible.dll",
   "pluginClass": "TypeWhisper.Plugin.OpenAiCompatible.OpenAiCompatiblePlugin"
 }

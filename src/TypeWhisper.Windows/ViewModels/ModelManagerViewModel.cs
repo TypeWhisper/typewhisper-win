@@ -16,24 +16,51 @@ public partial class ModelManagerViewModel : ObservableObject
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
     private bool _isSyncingSelection;
+    private bool _isSyncingAccelerationSelection;
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
+    private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
     [ObservableProperty] private string _activeProviderDisplayName = "None";
     [ObservableProperty] private string _activeModelDisplayName = "No model selected";
     [ObservableProperty] private string _activeModelStatusText = "";
+    private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
+
+    public string SelectedAccelerationOptionValue
+    {
+        get => _selectedAccelerationOptionValue;
+        set
+        {
+            if (SetProperty(ref _selectedAccelerationOptionValue, value))
+                OnSelectedAccelerationOptionValueChanged(value);
+        }
+    }
+
+    public string AccelerationStatusText
+    {
+        get => _accelerationStatusText;
+        set => SetProperty(ref _accelerationStatusText, value);
+    }
 
     public ObservableCollection<ProviderViewModel> Providers { get; } = [];
     public ObservableCollection<ModelOptionViewModel> AvailableModelOptions { get; } = [];
+    public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } =
+    [
+        new(AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
+        new(AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
+        new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"])
+    ];
 
     public ModelManagerViewModel(ModelManagerService modelManager, ISettingsService settings)
     {
         _modelManager = modelManager;
         _settings = settings;
         _activeModelId = _modelManager.ActiveModelId;
+        _selectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
+            _settings.Current.LocalModelAcceleration);
 
         RebuildProviders();
 
@@ -55,6 +82,7 @@ public partial class ModelManagerViewModel : ObservableObject
         _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
         {
             SyncSelectedModelOption();
+            SyncSelectedAccelerationOption();
             RefreshActiveModelDetails();
         });
     }
@@ -140,6 +168,27 @@ public partial class ModelManagerViewModel : ObservableObject
             ActivateModelCommand.Execute(value);
     }
 
+    private void OnSelectedAccelerationOptionValueChanged(string value)
+    {
+        if (_isSyncingAccelerationSelection)
+            return;
+
+        var normalized = AppSettings.NormalizeLocalModelAcceleration(value);
+        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        {
+            _isSyncingAccelerationSelection = true;
+            SelectedAccelerationOptionValue = normalized;
+            _isSyncingAccelerationSelection = false;
+        }
+
+        if (_settings.Current.LocalModelAcceleration != normalized)
+            _settings.Save(_settings.Current with { LocalModelAcceleration = normalized });
+
+        GetDisplayTranscriptionPlugin()?.SetAccelerationPreference(
+            ModelManagerService.GetAccelerationPreference(normalized));
+        RefreshAccelerationStatus();
+    }
+
     internal static string FormatStatus(ModelStatus status, bool isDownloaded) => status.Type switch
     {
         ModelStatusType.Downloading => $"Download {status.Progress:P0}",
@@ -182,15 +231,38 @@ public partial class ModelManagerViewModel : ObservableObject
         _isSyncingSelection = false;
     }
 
+    private void SyncSelectedAccelerationOption()
+    {
+        _isSyncingAccelerationSelection = true;
+        SelectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
+            _settings.Current.LocalModelAcceleration);
+        _isSyncingAccelerationSelection = false;
+    }
+
     private static void InvokeOnUiThread(Action action)
     {
-        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        if (Application.Current?.Dispatcher is not { } dispatcher
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished)
         {
-            dispatcher.Invoke(action);
+            action();
             return;
         }
 
-        action();
+        if (dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        try
+        {
+            dispatcher.Invoke(action);
+        }
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            action();
+        }
     }
 
     private void RefreshActiveModelDetails()
@@ -209,6 +281,7 @@ public partial class ModelManagerViewModel : ObservableObject
             ActiveModelDisplayName = "No model selected";
             ActiveModelStatusText = "";
             IsActiveModelReady = false;
+            RefreshAccelerationStatus();
             return;
         }
 
@@ -216,7 +289,39 @@ public partial class ModelManagerViewModel : ObservableObject
         ActiveModelDisplayName = activeModel.Model.DisplayName;
         ActiveModelStatusText = activeModel.Model.StatusText;
         IsActiveModelReady = activeModel.Model.IsReady;
+        RefreshAccelerationStatus();
     }
+
+    private void RefreshAccelerationStatus()
+    {
+        var plugin = GetDisplayTranscriptionPlugin();
+        if (plugin is null)
+        {
+            AccelerationStatusText = Loc.Instance["Models.AccelerationStatusNoModel"];
+            return;
+        }
+
+        AccelerationStatusText = FormatAccelerationStatus(plugin.AccelerationStatus);
+    }
+
+    private ITranscriptionEnginePlugin? GetDisplayTranscriptionPlugin()
+    {
+        var displayModelId = !string.IsNullOrWhiteSpace(SelectedModelOptionId)
+            ? SelectedModelOptionId
+            : ActiveModelId;
+
+        if (string.IsNullOrWhiteSpace(displayModelId) || !ModelManagerService.IsPluginModel(displayModelId))
+            return null;
+
+        var (pluginId, _) = ModelManagerService.ParsePluginModelId(displayModelId);
+        return _modelManager.PluginManager.TranscriptionEngines
+            .FirstOrDefault(e => e.PluginId == pluginId);
+    }
+
+    internal static string FormatAccelerationStatus(TranscriptionAccelerationStatus status) =>
+        string.IsNullOrWhiteSpace(status.Detail)
+            ? status.DisplayText
+            : $"{status.DisplayText}: {status.Detail}";
 
     [RelayCommand]
     private void DeleteModel(string modelId)
@@ -293,6 +398,18 @@ public sealed class ModelOptionViewModel
         FullId = fullId;
         ProviderDisplayName = providerDisplayName;
         ModelDisplayName = modelDisplayName;
+        DisplayName = displayName;
+    }
+}
+
+public sealed class AccelerationOptionViewModel
+{
+    public string Value { get; }
+    public string DisplayName { get; }
+
+    public AccelerationOptionViewModel(string value, string displayName)
+    {
+        Value = value;
         DisplayName = displayName;
     }
 }

@@ -142,6 +142,12 @@
   "Models.Languages": " languages",
   "Models.TranslationBadge": " Translation",
   "Models.Active": "Active",
+  "Models.AccelerationLabel": "Local model acceleration",
+  "Models.AccelerationHint": "Applies to local transcription models when they load.",
+  "Models.AccelerationAuto": "Auto",
+  "Models.AccelerationCpu": "CPU",
+  "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationStatusNoModel": "No local model selected",
 
   "Profiles.Title": "Profiles",
   "Profiles.SummaryFormat": "{0} profiles, {1} enabled",
@@ -236,6 +242,7 @@
   "Plugins.MarketplaceCategorySummaryFormat": "{0} extensions in {1}",
   "Plugins.Installed": "Installed",
   "Plugins.Marketplace": "Marketplace",
+  "Plugins.AllFunctions": "All functions",
   "Plugins.NoPlugins": "No plugins installed",
   "Plugins.NoPluginsHint": "Install plugins via the Marketplace tab.",
   "Plugins.Transcription": "Transcription",
@@ -698,7 +705,7 @@
 
   "Hotkey.Placeholder": "Press key combination...",
   "Hotkey.ClickToAssign": "Click to assign",
-  "Hotkey.ModifierOnlyHint": "Single modifier keys like Win are not allowed. Use a combination like Ctrl+Shift or Alt+Win so Windows shortcuts keep working.",
+  "Hotkey.ModifierOnlyHint": "Single left/right Ctrl, Alt, and Shift keys are allowed. Win alone is reserved; use combinations like Ctrl+Shift or Alt+Win for Windows-key shortcuts.",
 
   "PromptPalette.NoActions": "No actions found",
 

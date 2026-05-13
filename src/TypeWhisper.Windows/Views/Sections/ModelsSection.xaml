@@ -25,6 +25,35 @@
                        Margin="0,0,0,8"
                        Visibility="{Binding ModelManager.IsBusy, Converter={StaticResource BoolToVis}}"/>
 
+            <Grid Margin="0,0,0,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="180"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{loc:Str Models.AccelerationLabel}"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                           FontSize="13" FontWeight="SemiBold"/>
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding ModelManager.AccelerationOptions}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Value"
+                          SelectedValue="{Binding ModelManager.SelectedAccelerationOptionValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                          MinWidth="160"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                           Text="{loc:Str Models.AccelerationHint}"
+                           Style="{StaticResource HintStyle}" Margin="0,4,0,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                           Text="{Binding ModelManager.AccelerationStatusText}"
+                           Foreground="{StaticResource HintBrush}" FontSize="12"
+                           Margin="0,4,0,0"/>
+            </Grid>
+
             <ItemsControl ItemsSource="{Binding ModelManager.Providers}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:ProviderViewModel}">

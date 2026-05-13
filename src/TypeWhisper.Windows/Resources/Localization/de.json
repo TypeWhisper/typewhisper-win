@@ -142,6 +142,12 @@
   "Models.Languages": " Sprachen",
   "Models.TranslationBadge": " \u00dcbersetzung",
   "Models.Active": "Aktiv",
+  "Models.AccelerationLabel": "Lokale Modellbeschleunigung",
+  "Models.AccelerationHint": "Gilt f\u00fcr lokale Transkriptionsmodelle beim Laden.",
+  "Models.AccelerationAuto": "Auto",
+  "Models.AccelerationCpu": "CPU",
+  "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationStatusNoModel": "Kein lokales Modell ausgew\u00e4hlt",
 
   "Profiles.Title": "Profile",
   "Profiles.SummaryFormat": "{0} Profile, {1} aktiv",
@@ -236,6 +242,7 @@
   "Plugins.MarketplaceCategorySummaryFormat": "{0} Erweiterungen in {1}",
   "Plugins.Installed": "Installiert",
   "Plugins.Marketplace": "Marketplace",
+  "Plugins.AllFunctions": "Alle Funktionen",
   "Plugins.NoPlugins": "Keine Plugins installiert",
   "Plugins.NoPluginsHint": "Installiere Plugins \u00fcber den Marketplace-Tab.",
   "Plugins.Transcription": "Transkription",
@@ -698,7 +705,7 @@
 
   "Hotkey.Placeholder": "Tastenkombination dr\u00fccken...",
   "Hotkey.ClickToAssign": "Klicken zum Belegen",
-  "Hotkey.ModifierOnlyHint": "Einzelne Modifikatortasten wie Win sind nicht erlaubt. Nutze eine Kombination wie Ctrl+Shift oder Alt+Win, damit Windows-Shortcuts weiter funktionieren.",
+  "Hotkey.ModifierOnlyHint": "Einzelne linke/rechte Ctrl-, Alt- und Shift-Tasten sind erlaubt. Win allein bleibt reserviert; nutze Kombinationen wie Ctrl+Shift oder Alt+Win für Windows-Shortcuts.",
 
   "PromptPalette.NoActions": "Keine Aktionen gefunden",
 

@@ -16,22 +16,29 @@ public partial class PluginsViewModel : ObservableObject
     public ObservableCollection<PluginItemViewModel> Plugins { get; } = [];
     public ObservableCollection<RegistryPluginItemViewModel> RegistryPlugins { get; } = [];
     public ObservableCollection<RegistryPluginCategoryGroupViewModel> MarketplaceGroups { get; } = [];
-    public ObservableCollection<MarketplaceCategoryTabViewModel> MarketplaceCategories { get; } = [];
+    public ObservableCollection<MarketplaceCapabilityFilterViewModel> MarketplaceCapabilityFilters { get; } = [];
     public ObservableCollection<RegistryPluginItemViewModel> FilteredMarketplacePlugins { get; } = [];
     public int InstalledPluginCount => Plugins.Count;
     public int EnabledPluginCount => Plugins.Count(static plugin => plugin.IsEnabled);
     public int MarketplacePluginCount => RegistryPlugins.Count;
     public string InstalledSummaryText => Loc.Instance.GetString("Plugins.InstalledSummaryFormat", InstalledPluginCount, EnabledPluginCount);
     public string MarketplaceSummaryText => Loc.Instance.GetString("Plugins.MarketplaceSummaryFormat", MarketplacePluginCount);
-    public string SelectedMarketplaceCategoryName => MarketplaceCategories.FirstOrDefault(category => category.IsSelected)?.DisplayName ?? string.Empty;
-    public string MarketplaceCategorySummaryText => string.IsNullOrWhiteSpace(SelectedMarketplaceCategoryName)
+    public string SelectedMarketplaceCapabilityFilterName => string.Join(
+        ", ",
+        MarketplaceCapabilityFilters
+            .Where(filter => filter.IsSelected)
+            .OrderBy(filter => filter.SortOrder)
+            .Select(filter => filter.DisplayName));
+    public string MarketplaceCategorySummaryText => string.IsNullOrWhiteSpace(SelectedMarketplaceCapabilityFilterName)
         ? MarketplaceSummaryText
-        : Loc.Instance.GetString("Plugins.MarketplaceCategorySummaryFormat", FilteredMarketplacePlugins.Count, SelectedMarketplaceCategoryName);
-    public bool HasMarketplaceCategories => MarketplaceCategories.Count > 0;
+        : Loc.Instance.GetString("Plugins.MarketplaceCategorySummaryFormat", FilteredMarketplacePlugins.Count, SelectedMarketplaceCapabilityFilterName);
+    public bool HasMarketplaceCategories => MarketplaceCapabilityFilters.Count > 0;
+    public bool HasActiveMarketplaceCapabilityFilters => _selectedMarketplaceCapabilityKeys.Count > 0;
 
     [ObservableProperty] private bool _isLoadingRegistry;
     [ObservableProperty] private bool _isMarketplaceSelected;
-    [ObservableProperty] private string? _selectedMarketplaceCategoryKey;
+
+    private readonly HashSet<string> _selectedMarketplaceCapabilityKeys = new(StringComparer.OrdinalIgnoreCase);
 
     public PluginsViewModel(PluginManager pluginManager, PluginRegistryService registryService)
     {
@@ -88,28 +95,14 @@ public partial class PluginsViewModel : ObservableObject
 
             RegistryPlugins.Clear();
             MarketplaceGroups.Clear();
-            MarketplaceCategories.Clear();
+            MarketplaceCapabilityFilters.Clear();
 
             foreach (var plugin in registryItems)
             {
                 RegistryPlugins.Add(plugin);
             }
 
-            foreach (var group in registryItems
-                         .GroupBy(plugin => plugin.CategoryKey)
-                         .OrderBy(group => group.First().CategorySortOrder))
-            {
-                var first = group.First();
-                MarketplaceGroups.Add(new RegistryPluginCategoryGroupViewModel(first.CategoryLabel, group));
-                MarketplaceCategories.Add(new MarketplaceCategoryTabViewModel(first.CategoryKey, first.CategoryLabel, group.Count()));
-            }
-
-            var selectedCategory = MarketplaceCategories.Any(category => category.Key == SelectedMarketplaceCategoryKey)
-                ? SelectedMarketplaceCategoryKey
-                : MarketplaceCategories.FirstOrDefault()?.Key;
-
-            SelectedMarketplaceCategoryKey = selectedCategory;
-
+            RebuildMarketplaceFilters();
             NotifyStateChanged();
         }
         finally
@@ -118,26 +111,31 @@ public partial class PluginsViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedMarketplaceCategoryKeyChanged(string? value)
-    {
-        foreach (var category in MarketplaceCategories)
-            category.IsSelected = string.Equals(category.Key, value, StringComparison.OrdinalIgnoreCase);
-
-        FilteredMarketplacePlugins.Clear();
-        foreach (var plugin in RegistryPlugins.Where(plugin => string.Equals(plugin.CategoryKey, value, StringComparison.OrdinalIgnoreCase)))
-            FilteredMarketplacePlugins.Add(plugin);
-
-        OnPropertyChanged(nameof(SelectedMarketplaceCategoryName));
-        OnPropertyChanged(nameof(MarketplaceCategorySummaryText));
-    }
-
     [RelayCommand]
-    private void SelectMarketplaceCategory(string? categoryKey)
+    private void ToggleMarketplaceCapabilityFilter(string? categoryKey)
     {
         if (string.IsNullOrWhiteSpace(categoryKey))
             return;
 
-        SelectedMarketplaceCategoryKey = categoryKey;
+        var normalizedKey = PluginMarketplaceCategories.Resolve(categoryKey).Key;
+        if (_selectedMarketplaceCapabilityKeys.Contains(normalizedKey))
+            _selectedMarketplaceCapabilityKeys.Remove(normalizedKey);
+        else
+            _selectedMarketplaceCapabilityKeys.Add(normalizedKey);
+
+        RebuildMarketplaceFilters();
+        NotifyStateChanged();
+    }
+
+    [RelayCommand]
+    private void ClearMarketplaceCapabilityFilters()
+    {
+        if (_selectedMarketplaceCapabilityKeys.Count == 0)
+            return;
+
+        _selectedMarketplaceCapabilityKeys.Clear();
+        RebuildMarketplaceFilters();
+        NotifyStateChanged();
     }
 
     private void NotifyStateChanged()
@@ -147,8 +145,10 @@ public partial class PluginsViewModel : ObservableObject
         OnPropertyChanged(nameof(MarketplacePluginCount));
         OnPropertyChanged(nameof(InstalledSummaryText));
         OnPropertyChanged(nameof(MarketplaceSummaryText));
+        OnPropertyChanged(nameof(SelectedMarketplaceCapabilityFilterName));
         OnPropertyChanged(nameof(MarketplaceCategorySummaryText));
         OnPropertyChanged(nameof(HasMarketplaceCategories));
+        OnPropertyChanged(nameof(HasActiveMarketplaceCapabilityFilters));
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
@@ -161,17 +161,15 @@ public partial class PluginsViewModel : ObservableObject
             foreach (var plugin in RegistryPlugins)
                 plugin.NotifyLocalizationChanged();
 
-            RebuildMarketplaceGroups();
+            RebuildMarketplaceFilters();
             NotifyStateChanged();
         });
     }
 
-    private void RebuildMarketplaceGroups()
+    private void RebuildMarketplaceFilters()
     {
-        var selectedCategory = SelectedMarketplaceCategoryKey;
-
         MarketplaceGroups.Clear();
-        MarketplaceCategories.Clear();
+        MarketplaceCapabilityFilters.Clear();
 
         foreach (var group in RegistryPlugins
                      .GroupBy(plugin => plugin.CategoryKey)
@@ -179,12 +177,47 @@ public partial class PluginsViewModel : ObservableObject
         {
             var first = group.First();
             MarketplaceGroups.Add(new RegistryPluginCategoryGroupViewModel(first.CategoryLabel, group));
-            MarketplaceCategories.Add(new MarketplaceCategoryTabViewModel(first.CategoryKey, first.CategoryLabel, group.Count()));
         }
 
-        SelectedMarketplaceCategoryKey = MarketplaceCategories.Any(category => category.Key == selectedCategory)
-            ? selectedCategory
-            : MarketplaceCategories.FirstOrDefault()?.Key;
+        var categories = RegistryPlugins
+            .SelectMany(plugin => plugin.CategoryDescriptors)
+            .GroupBy(category => category.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                Descriptor = group.First(),
+                Count = RegistryPlugins.Count(plugin => plugin.CategoryKeys.Contains(group.Key, StringComparer.OrdinalIgnoreCase))
+            })
+            .OrderBy(item => item.Descriptor.SortOrder)
+            .ThenBy(item => item.Descriptor.DisplayName)
+            .ToList();
+
+        var availableKeys = categories.Select(item => item.Descriptor.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _selectedMarketplaceCapabilityKeys.IntersectWith(availableKeys);
+
+        foreach (var category in categories)
+        {
+            MarketplaceCapabilityFilters.Add(new MarketplaceCapabilityFilterViewModel(
+                category.Descriptor.Key,
+                category.Descriptor.DisplayName,
+                category.Descriptor.SortOrder,
+                category.Count,
+                _selectedMarketplaceCapabilityKeys.Contains(category.Descriptor.Key)));
+        }
+
+        RefreshFilteredMarketplacePlugins();
+    }
+
+    private void RefreshFilteredMarketplacePlugins()
+    {
+        FilteredMarketplacePlugins.Clear();
+
+        var plugins = _selectedMarketplaceCapabilityKeys.Count == 0
+            ? RegistryPlugins
+            : RegistryPlugins.Where(plugin =>
+                plugin.CategoryKeys.Any(key => _selectedMarketplaceCapabilityKeys.Contains(key)));
+
+        foreach (var plugin in plugins)
+            FilteredMarketplacePlugins.Add(plugin);
     }
 }
 
@@ -201,19 +234,22 @@ public partial class RegistryPluginCategoryGroupViewModel : ObservableObject
     }
 }
 
-public partial class MarketplaceCategoryTabViewModel : ObservableObject
+public partial class MarketplaceCapabilityFilterViewModel : ObservableObject
 {
     public string Key { get; }
     public string DisplayName { get; }
+    public int SortOrder { get; }
     public int Count { get; }
 
     [ObservableProperty] private bool _isSelected;
 
-    public MarketplaceCategoryTabViewModel(string key, string displayName, int count)
+    public MarketplaceCapabilityFilterViewModel(string key, string displayName, int sortOrder, int count, bool isSelected)
     {
         Key = key;
         DisplayName = displayName;
+        SortOrder = sortOrder;
         Count = count;
+        _isSelected = isSelected;
     }
 }
 
@@ -232,10 +268,16 @@ public partial class PluginItemViewModel : ObservableObject
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
     public string StatusLabel => IsEnabled ? Loc.Instance["Plugins.Enabled"] : Loc.Instance["Plugins.Disabled"];
+    public IReadOnlyList<PluginMarketplaceCategoryDescriptor> CategoryDescriptors =>
+        _categoryDescriptors ??= PluginMarketplaceCategories.ResolveAll(
+            _plugin.Manifest.Category ?? DetectPrimaryCategory(),
+            ResolveDeclaredAndDetectedCategories());
 
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private UserControl? _settingsView;
     [ObservableProperty] private bool _isExpanded;
+
+    private IReadOnlyList<PluginMarketplaceCategoryDescriptor>? _categoryDescriptors;
 
     // Capability badges
     public bool IsTranscriptionProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITranscriptionEnginePlugin;
@@ -245,7 +287,7 @@ public partial class PluginItemViewModel : ObservableObject
     public bool IsActionProvider => _plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin;
     public bool IsMemoryStorage => _plugin.Instance is TypeWhisper.PluginSDK.IMemoryStoragePlugin;
 
-    public string Category => PluginMarketplaceCategories.Resolve(_plugin.Manifest.Category ?? DetectCategory()).DisplayName;
+    public string Category => CategoryDescriptors[0].DisplayName;
 
     public bool IsLocal => _plugin.Manifest.IsLocal;
     public string LocationBadge => IsLocal ? Loc.Instance["Plugins.Local"] : Loc.Instance["Plugins.Cloud"];
@@ -299,20 +341,38 @@ public partial class PluginItemViewModel : ObservableObject
         await _registryService.UninstallPluginAsync(Id);
     }
 
-    private string DetectCategory() => _plugin.Instance switch
+    private IEnumerable<string> ResolveDeclaredAndDetectedCategories()
     {
-        TypeWhisper.PluginSDK.ITranscriptionEnginePlugin => "transcription",
-        TypeWhisper.PluginSDK.ILlmProviderPlugin => "llm",
-        TypeWhisper.PluginSDK.ITtsProviderPlugin => "tts",
-        TypeWhisper.PluginSDK.IMemoryStoragePlugin => "memory",
-        TypeWhisper.PluginSDK.IPostProcessorPlugin => "post-processing",
-        TypeWhisper.PluginSDK.IActionPlugin => "action",
-        _ => "utility"
-    };
+        foreach (var category in _plugin.Manifest.Categories ?? [])
+            yield return category;
+
+        foreach (var category in DetectCategories())
+            yield return category;
+    }
+
+    private string DetectPrimaryCategory() => DetectCategories().FirstOrDefault() ?? "utility";
+
+    private IEnumerable<string> DetectCategories()
+    {
+        if (_plugin.Instance is TypeWhisper.PluginSDK.ITranscriptionEnginePlugin)
+            yield return "transcription";
+        if (_plugin.Instance is TypeWhisper.PluginSDK.ILlmProviderPlugin)
+            yield return "llm";
+        if (_plugin.Instance is TypeWhisper.PluginSDK.ITtsProviderPlugin)
+            yield return "tts";
+        if (_plugin.Instance is TypeWhisper.PluginSDK.IMemoryStoragePlugin)
+            yield return "memory";
+        if (_plugin.Instance is TypeWhisper.PluginSDK.IPostProcessorPlugin)
+            yield return "post-processing";
+        if (_plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin)
+            yield return "action";
+    }
 
     internal void NotifyLocalizationChanged()
     {
+        _categoryDescriptors = null;
         OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(LocationBadge));
     }

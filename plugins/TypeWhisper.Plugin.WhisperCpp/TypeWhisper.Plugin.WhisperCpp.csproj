@@ -10,9 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,18 +32,58 @@
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.whisper-cpp\</PluginOutputDir>
     </PropertyGroup>
 
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\eng\Copy-WhisperCppMsvcRuntime.ps1&quot; -OutputDirectory &quot;$(TargetDir).&quot; -RuntimeIdentifiers win-x64,win-arm64 -Required"
+          Condition="'$(Configuration)' == 'Release'" />
+
     <ItemGroup>
       <_DependencyDlls Include="$(TargetDir)*.dll"
                        Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
-      <_RuntimeFiles Include="$(TargetDir)runtimes\**\*" />
+      <_RuntimeFiles Include="$(TargetDir)runtimes\win-x64\**\*.*">
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      </_RuntimeFiles>
+      <_RuntimeFiles Include="$(TargetDir)runtimes\win-arm64\**\*.*">
+        <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+      </_RuntimeFiles>
+      <_RuntimeFiles Include="$(TargetDir)runtimes\cuda\win-x64\**\*.*">
+        <RuntimeIdentifier>cuda\win-x64</RuntimeIdentifier>
+      </_RuntimeFiles>
     </ItemGroup>
 
+    <RemoveDir Directories="$(PluginOutputDir)" Condition="Exists('$(PluginOutputDir)')" />
     <MakeDir Directories="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
     <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="@(_DependencyDlls)" DestinationFolder="$(PluginOutputDir)" SkipUnchangedFiles="true" Condition="'@(_DependencyDlls)' != ''" />
-    <MakeDir Directories="$(PluginOutputDir)runtimes\win-x64\native" Condition="'@(_RuntimeFiles)' != ''" />
-    <Copy SourceFiles="@(_RuntimeFiles)" DestinationFolder="$(PluginOutputDir)runtimes\%(RecursiveDir)" SkipUnchangedFiles="true" Condition="'@(_RuntimeFiles)' != ''" />
+    <Copy SourceFiles="@(_RuntimeFiles)"
+          DestinationFiles="@(_RuntimeFiles->'$(PluginOutputDir)runtimes\%(RuntimeIdentifier)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_RuntimeFiles)' != ''" />
+
+    <ItemGroup>
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\ggml-base-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\ggml-cpu-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\ggml-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\cuda\win-x64\ggml-cuda-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\msvcp140.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\vcruntime140.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\vcruntime140_1.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\VCOMP140.DLL" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\ggml-base-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\ggml-cpu-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\ggml-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\msvcp140.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\vcruntime140.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\vcruntime140_1.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\VCOMP140.DLL" />
+      <_UnexpectedUcrtRuntimeFiles Include="$(PluginOutputDir)runtimes\**\api-ms-win-crt-*.dll" />
+    </ItemGroup>
+
+    <Error Condition="'$(Configuration)' == 'Release' and !Exists('%(_RequiredRuntimeFiles.Identity)')"
+           Text="Missing required whisper.cpp runtime file: %(_RequiredRuntimeFiles.Identity)" />
+    <Error Condition="'$(Configuration)' == 'Release' and '@(_UnexpectedUcrtRuntimeFiles)' != ''"
+           Text="Do not bundle UCRT API-set DLLs with the whisper.cpp plugin: @(_UnexpectedUcrtRuntimeFiles)" />
   </Target>
 </Project>
