@@ -241,13 +241,28 @@ public partial class ModelManagerViewModel : ObservableObject
 
     private static void InvokeOnUiThread(Action action)
     {
-        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        if (Application.Current?.Dispatcher is not { } dispatcher
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished)
         {
-            dispatcher.Invoke(action);
+            action();
             return;
         }
 
-        action();
+        if (dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        try
+        {
+            dispatcher.Invoke(action);
+        }
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            action();
+        }
     }
 
     private void RefreshActiveModelDetails()
