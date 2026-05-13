@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
@@ -33,10 +34,11 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private WhisperFactory? _factory;
     private string? _selectedModelId;
     private string? _loadedModelId;
+    private string? _pluginDirectory;
 
     public string PluginId => "com.typewhisper.whisper-cpp";
     public string PluginName => "whisper.cpp (Local)";
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     public string ProviderId => "whisper-cpp";
     public string ProviderDisplayName => "Local (whisper.cpp)";
@@ -58,6 +60,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
+        _pluginDirectory = Path.GetDirectoryName(typeof(WhisperCppPlugin).Assembly.Location);
         _selectedModelId = host.GetSetting<string>("selectedModel");
         host.Log(PluginLogLevel.Info, "Activated");
         return Task.CompletedTask;
@@ -67,6 +70,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         await UnloadModelAsync();
         _host = null;
+        _pluginDirectory = null;
     }
 
     public UserControl? CreateSettingsView() => null;
@@ -153,7 +157,15 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         try
         {
             DisposeFactoryUnsafe();
-            _factory = WhisperFactory.FromPath(modelPath);
+            try
+            {
+                _factory = WhisperFactory.FromPath(modelPath);
+            }
+            catch (Exception ex) when (IsNativeLoadFailure(ex))
+            {
+                throw CreateNativeLoadFailureException(ex);
+            }
+
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             _host?.SetSetting("selectedModel", modelId);
@@ -254,6 +266,57 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
         var model = GetModel(modelId);
         return Path.Combine(host.PluginDataDirectory, "Models", model.FileName);
+    }
+
+    internal static string BuildNativeLoadFailureMessage(
+        string pluginDirectory,
+        string runtimeIdentifier,
+        Exception error)
+    {
+        var safeRuntimeIdentifier = Path.GetFileName(
+            runtimeIdentifier.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeRuntimeIdentifier))
+            safeRuntimeIdentifier = runtimeIdentifier;
+
+        var runtimeDirectory = Path.Join(pluginDirectory, "runtimes", safeRuntimeIdentifier);
+        const string requiredFiles =
+            "whisper.dll, ggml-whisper.dll, ggml-base-whisper.dll, ggml-cpu-whisper.dll, " +
+            "msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll, VCOMP140.DLL";
+
+        return "Unable to load the whisper.cpp native runtime. " +
+            $"Expected native DLLs under '{runtimeDirectory}', including {requiredFiles}. " +
+            "Reinstall or update the whisper.cpp plugin. If the problem persists, install the " +
+            "Microsoft Visual C++ 2015-2022 Redistributable for your Windows architecture. " +
+            $"Original error: {error.Message}";
+    }
+
+    internal static bool IsNativeLoadFailure(Exception error)
+    {
+        for (var current = error; current is not null; current = current.InnerException)
+        {
+            if (current is DllNotFoundException or BadImageFormatException)
+                return true;
+
+            if (current.Message.Contains("Unable to load DLL", StringComparison.OrdinalIgnoreCase)
+                || current.Message.Contains("0x8007007E", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private InvalidOperationException CreateNativeLoadFailureException(Exception error)
+    {
+        var pluginDirectory = _pluginDirectory
+            ?? Path.GetDirectoryName(typeof(WhisperCppPlugin).Assembly.Location)
+            ?? AppContext.BaseDirectory;
+        var message = BuildNativeLoadFailureMessage(
+            pluginDirectory,
+            RuntimeInformation.RuntimeIdentifier,
+            error);
+        return new InvalidOperationException(message, error);
     }
 
     private void DisposeFactoryUnsafe()
