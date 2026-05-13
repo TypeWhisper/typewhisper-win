@@ -135,11 +135,8 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
     private async Task InstallCudaProviderDependenciesAsync(CancellationToken cancellationToken)
     {
-        foreach (var package in CudaDependencyPackages)
+        foreach (var package in CudaDependencyPackages.Where(package => !HasRequiredFiles(package.RequiredDlls)))
         {
-            if (HasRequiredFiles(package.RequiredDlls))
-                continue;
-
             var wheelUrl = await ResolveWheelUrlAsync(package, cancellationToken);
             var wheelPath = Path.Join(
                 _runtimeRoot,

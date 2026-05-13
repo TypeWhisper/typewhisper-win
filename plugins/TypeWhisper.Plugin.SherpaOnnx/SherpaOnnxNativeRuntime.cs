@@ -46,10 +46,11 @@ internal static class SherpaOnnxNativeRuntime
         if (string.IsNullOrWhiteSpace(runtimeDirectory))
             return IntPtr.Zero;
 
-        var fileName = libraryName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            ? libraryName
-            : libraryName + ".dll";
-        var candidate = Path.Combine(runtimeDirectory, fileName);
+        var libraryFileName = Path.GetFileName(libraryName);
+        var fileName = libraryFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            ? libraryFileName
+            : libraryFileName + ".dll";
+        var candidate = Path.Join(runtimeDirectory, fileName);
 
         return File.Exists(candidate)
             ? NativeLibrary.Load(candidate)

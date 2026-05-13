@@ -88,19 +88,19 @@ public class SherpaOnnxPluginTests
     [Fact]
     public void CudaRuntimeInstaller_IsNotInstalledWhenOnnxCudaDependenciesAreMissing()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
         try
         {
-            var nativeDir = Path.Combine(
+            var nativeDir = Path.Join(
                 tempDir,
                 "Runtimes",
                 "sherpa-onnx-cuda",
                 SherpaCudaRuntimeInstaller.RuntimeVersion,
                 "native");
             Directory.CreateDirectory(nativeDir);
-            File.WriteAllText(Path.Combine(nativeDir, "sherpa-onnx-c-api.dll"), "");
-            File.WriteAllText(Path.Combine(nativeDir, "onnxruntime.dll"), "");
-            File.WriteAllText(Path.Combine(nativeDir, "onnxruntime_providers_cuda.dll"), "");
+            File.WriteAllText(Path.Join(nativeDir, "sherpa-onnx-c-api.dll"), "");
+            File.WriteAllText(Path.Join(nativeDir, "onnxruntime.dll"), "");
+            File.WriteAllText(Path.Join(nativeDir, "onnxruntime_providers_cuda.dll"), "");
 
             var installer = new SherpaCudaRuntimeInstaller(tempDir, new HttpClient());
 
