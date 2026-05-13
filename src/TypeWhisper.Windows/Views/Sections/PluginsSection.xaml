@@ -210,6 +210,9 @@
                                             <Border Style="{StaticResource BadgeStyle}" Visibility="{Binding IsLlmProvider, Converter={StaticResource BoolToVis}}" Margin="0,0,6,6">
                                                 <TextBlock Foreground="#D6DEE9" FontSize="10"><Run Text="&#x1F916; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Llm], Mode=OneWay}"/></TextBlock>
                                             </Border>
+                                            <Border Style="{StaticResource BadgeStyle}" Visibility="{Binding IsTtsProvider, Converter={StaticResource BoolToVis}}" Margin="0,0,6,6">
+                                                <TextBlock Foreground="#D6DEE9" FontSize="10"><Run Text="&#x1F50A; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Tts], Mode=OneWay}"/></TextBlock>
+                                            </Border>
                                             <Border Style="{StaticResource BadgeStyle}" Visibility="{Binding IsPostProcessor, Converter={StaticResource BoolToVis}}" Margin="0,0,6,6">
                                                 <TextBlock Foreground="#D6DEE9" FontSize="10"><Run Text="&#x2699; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.PostProcessing], Mode=OneWay}"/></TextBlock>
                                             </Border>

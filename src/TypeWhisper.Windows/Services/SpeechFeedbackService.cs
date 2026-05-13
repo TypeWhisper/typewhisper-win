@@ -160,6 +160,7 @@ public sealed class SpeechFeedbackService : IDisposable
         if (_disposed || string.IsNullOrWhiteSpace(request.Text)) return;
         if (requireEnabled && !IsEnabled) return;
 
+        request = ApplyConfiguredLanguageFallback(request);
         Stop();
 
         var cts = new CancellationTokenSource();
@@ -173,6 +174,23 @@ public sealed class SpeechFeedbackService : IDisposable
 
         _ = SpeakAsync(request, cts, version);
     }
+
+    private TtsSpeakRequest ApplyConfiguredLanguageFallback(TtsSpeakRequest request)
+    {
+        if (!ShouldUseConfiguredLanguageFallback(request.Purpose) ||
+            !string.IsNullOrWhiteSpace(request.Language))
+            return request;
+
+        var configuredLanguage = _settings.Current.Language;
+        if (string.IsNullOrWhiteSpace(configuredLanguage) ||
+            string.Equals(configuredLanguage, "auto", StringComparison.OrdinalIgnoreCase))
+            return request;
+
+        return request with { Language = configuredLanguage };
+    }
+
+    private static bool ShouldUseConfiguredLanguageFallback(TtsPurpose purpose) =>
+        purpose is TtsPurpose.Transcription or TtsPurpose.ManualReadback;
 
     private async Task SpeakAsync(TtsSpeakRequest request, CancellationTokenSource cts, long version)
     {

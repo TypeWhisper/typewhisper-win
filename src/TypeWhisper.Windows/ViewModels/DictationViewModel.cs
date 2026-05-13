@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -551,6 +552,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _activeApiDictationSessionId = null;
     }
 
+    private void PublishNoSpeechFailure(string? modelId, string? appName)
+    {
+        _eventBus.Publish(new TranscriptionFailedEvent
+        {
+            ErrorMessage = Loc.Instance["Status.NoSpeech"],
+            ModelId = modelId,
+            AppName = appName
+        });
+    }
+
     private void ShowTransientFeedback(string text, bool isError)
     {
         FeedbackText = text;
@@ -831,7 +842,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
-                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.TooShort"] });
+                _eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    ErrorMessage = Loc.Instance["Status.TooShort"],
+                    ModelId = _modelManager.ActiveModelId,
+                    AppName = _capturedWindowTitle
+                });
                 ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
                 return;
             }
@@ -839,7 +855,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
-                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
+                PublishNoSpeechFailure(_modelManager.ActiveModelId, _capturedWindowTitle);
                 ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
                 return;
             }
@@ -1022,7 +1038,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                             job.TranscribeShortQuietClipsAggressively))
                     {
                         FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                        _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
+                        PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle);
                         await Application.Current.Dispatcher.InvokeAsync(() =>
                             ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                         return;
@@ -1046,8 +1062,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(rawText))
             {
                 FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle);
                 LogParakeetTailDiagnostics(job.Diagnostic);
-                _eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = Loc.Instance["Status.NoSpeech"] });
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                 return;
@@ -1584,9 +1600,10 @@ internal enum ShortSpeechDecision
 internal static class DictationFinalTextPolicy
 {
     private const float NoSpeechProbabilityThreshold = 0.8f;
-    private const int MinimumRepeatedPhraseWords = 5;
-    private const int MinimumRepeatedPhraseCharacters = 20;
+    private const int MinimumRepeatedPhraseWords = 3;
+    private const int MinimumRepeatedPhraseCharacters = 8;
     private const int MaximumRepeatReductionPasses = 8;
+    private static readonly Regex AutomaticEllipsisRegex = new(@"\s*(?:\.{3,}|\u2026)\s*", RegexOptions.CultureInvariant);
 
     public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
         string.Join(" ", previewSegments.Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
@@ -1606,7 +1623,7 @@ internal static class DictationFinalTextPolicy
     }
 
     public static string SelectRawText(string? finalText) =>
-        ReduceAdjacentRepeatedPhrases(finalText?.Trim() ?? "");
+        NormalizeDictationArtifacts(finalText?.Trim() ?? "");
 
     public static string? SelectTrustedLiveText(string? liveText)
     {
@@ -1618,9 +1635,17 @@ internal static class DictationFinalTextPolicy
     {
         var trusted = SelectTrustedLiveText(trustedLiveText);
         return trusted is not null
-            ? ReduceAdjacentRepeatedPhrases(trusted)
+            ? NormalizeDictationArtifacts(trusted)
             : SelectRawText(finalText);
     }
+
+    private static string NormalizeDictationArtifacts(string text) =>
+        RemoveAutomaticEllipses(ReduceAdjacentRepeatedPhrases(text));
+
+    private static string RemoveAutomaticEllipses(string text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? ""
+            : AutomaticEllipsisRegex.Replace(text, " ").Trim();
 
     private static string ReduceAdjacentRepeatedPhrases(string text)
     {

@@ -95,6 +95,8 @@ public sealed class StatusIslandLayoutTests
         Assert.Contains("\"ShowBuiltInPartialPreview\"", codeBehind);
         Assert.Contains("\"PartialText\"", codeBehind);
         Assert.Contains("\"OverlayPosition\"", codeBehind);
+        Assert.Contains("LiveTranscriptionFontSizeProperty = \"LiveTranscriptionFontSize\"", codeBehind);
+        Assert.Contains("or LiveTranscriptionFontSizeProperty", codeBehind);
     }
 
     [Fact]

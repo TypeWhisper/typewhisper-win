@@ -326,4 +326,20 @@ public class PostProcessingPipelineTests
 
         Assert.Equal("type whisper", result.Text);
     }
+
+    [Fact]
+    public async Task ProcessAsync_OutlookFormatting_DoesNotEmitHtmlTags()
+    {
+        var options = new PipelineOptions
+        {
+            AppFormatter = AppFormatterService.Format,
+            TargetProcessName = "OUTLOOK"
+        };
+
+        var result = await _sut.ProcessAsync("- one\n- two", options);
+
+        Assert.Equal("- one\n- two", result.Text);
+        Assert.DoesNotContain("<", result.Text);
+        Assert.DoesNotContain(">", result.Text);
+    }
 }

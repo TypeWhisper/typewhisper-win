@@ -62,6 +62,7 @@ jobs:
             'google-cloud-stt'   = 'TypeWhisper.Plugin.GoogleCloudStt'
             'qwen3-stt'          = 'TypeWhisper.Plugin.Qwen3Stt'
             'voxtral'            = 'TypeWhisper.Plugin.Voxtral'
+            'supertonic-tts'     = 'TypeWhisper.Plugin.SupertonicTts'
             'whisper-cpp'        = 'TypeWhisper.Plugin.WhisperCpp'
             'file-memory'        = 'TypeWhisper.Plugin.FileMemory'
             'openai-vector-memory' = 'TypeWhisper.Plugin.OpenAiVectorMemory'
@@ -129,11 +130,19 @@ jobs:
             Write-Host "  Included dependency: $($_.Name)"
           }
 
-          # Copy native runtime directories (e.g. runtimes/win-x64/native/)
+          # Copy only Windows native runtime directories. NuGet packages such as
+          # ONNX Runtime include iOS/Android/macOS/Linux assets that TypeWhisper
+          # cannot use and that would bloat plugin ZIPs substantially.
           $runtimesDir = Join-Path $outputDir 'runtimes'
           if (Test-Path $runtimesDir) {
-            Copy-Item -Path $runtimesDir -Destination "$stagingDir/runtimes" -Recurse
-            Write-Host "  Included native runtimes"
+            New-Item -ItemType Directory -Path "$stagingDir/runtimes" -Force | Out-Null
+            foreach ($runtimeName in @('win-x64', 'win-arm64')) {
+              $runtimeDir = Join-Path $runtimesDir $runtimeName
+              if (Test-Path $runtimeDir) {
+                Copy-Item -Path $runtimeDir -Destination "$stagingDir/runtimes" -Recurse
+                Write-Host "  Included native runtime: $runtimeName"
+              }
+            }
           }
 
           # Create ZIP

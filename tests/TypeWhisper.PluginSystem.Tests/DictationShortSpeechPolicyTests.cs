@@ -150,6 +150,21 @@ public class DictationFinalTextPolicyTests
     }
 
     [Fact]
+    public void SelectRawText_CollapsesIssue108ShortAdjacentRepeatedPhrase()
+    {
+        const string rawText =
+            "Now go back to the appearance screen. and set the and set the preview text size to the maximum. " +
+            "Dictate more text and note that the size of the preview bubble text is unchanged.";
+        const string expected =
+            "Now go back to the appearance screen. and set the preview text size to the maximum. " +
+            "Dictate more text and note that the size of the preview bubble text is unchanged.";
+
+        var result = DictationFinalTextPolicy.SelectRawText(rawText);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
     public void SelectRawText_CollapsesExactAdjacentRepeatedPhrase()
     {
         var result = DictationFinalTextPolicy.SelectRawText(
@@ -164,6 +179,49 @@ public class DictationFinalTextPolicyTests
         var result = DictationFinalTextPolicy.SelectRawText("Yes yes, that's right.");
 
         Assert.Equal("Yes yes, that's right.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesAsciiEllipsisBetweenWords()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Dictated words should only... end up once.");
+
+        Assert.Equal("Dictated words should only end up once.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesUnicodeEllipsisBetweenWords()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Pause\u2026 then continue.");
+
+        Assert.Equal("Pause then continue.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesTerminalEllipsis()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText("Please wait...");
+
+        Assert.Equal("Please wait", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RemovesTrustedLiveTextEllipsis()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText(
+            "fallback text",
+            "Dictated words should only... end up once.");
+
+        Assert.Equal("Dictated words should only end up once.", result);
+    }
+
+    [Fact]
+    public void SelectRawText_RepeatedPhraseReductionStillRuns()
+    {
+        var result = DictationFinalTextPolicy.SelectRawText(
+            "Please send the updated draft tomorrow morning. Please send the updated draft tomorrow morning. Thanks.");
+
+        Assert.Equal("Please send the updated draft tomorrow morning. Thanks.", result);
     }
 
     [Fact]

@@ -9,6 +9,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai-compatible" => "\U0001F310", // OpenAI Compatible - globe
         "com.typewhisper.sherpa-onnx" => "\U0001F3AF",     // SherpaOnnx - local/target
         "com.typewhisper.elevenlabs" => "\U0001F399",       // ElevenLabs - studio microphone
+        "com.typewhisper.supertonic-tts" => "\U0001F50A",   // Supertonic TTS - speaker
         "com.typewhisper.webhook" => "\U0001F517",         // Webhook - link
         _ => "\U0001F9E9"                                   // Default - puzzle piece
     };
@@ -20,6 +21,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai-compatible" => "#6366F1",
         "com.typewhisper.sherpa-onnx" => "#F59E0B",
         "com.typewhisper.elevenlabs" => "#111827",
+        "com.typewhisper.supertonic-tts" => "#00A6A6",
         "com.typewhisper.webhook" => "#8B5CF6",
         _ => "#0078D4"
     };
@@ -31,6 +33,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai-compatible" => "#4F46E5",
         "com.typewhisper.sherpa-onnx" => "#D97706",
         "com.typewhisper.elevenlabs" => "#F97316",
+        "com.typewhisper.supertonic-tts" => "#2563EB",
         "com.typewhisper.webhook" => "#7C3AED",
         _ => "#005A9E"
     };

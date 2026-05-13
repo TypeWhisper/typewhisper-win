@@ -180,6 +180,20 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
+    {
+        _autoHideCts?.Cancel();
+        _autoHideCts?.Dispose();
+        _autoHideCts = null;
+
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            _window?.Hide();
+        });
+
+        return Task.CompletedTask;
+    }
+
     private void EnsureWindow()
     {
         if (_window is null || !_window.IsLoaded)
