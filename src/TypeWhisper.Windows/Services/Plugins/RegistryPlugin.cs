@@ -14,6 +14,7 @@ public sealed record RegistryPlugin
     public string Author { get; init; } = "";
     public string Description { get; init; } = "";
     public string? Category { get; init; }
+    public IReadOnlyList<string>? Categories { get; init; }
     public long Size { get; init; }
     public string DownloadUrl { get; init; } = "";
     public string? IconSystemName { get; init; }

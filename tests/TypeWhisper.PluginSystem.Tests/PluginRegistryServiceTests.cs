@@ -80,6 +80,70 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FetchRegistryAsync_DeserializesMultipleCategories()
+    {
+        var plugins = new[]
+        {
+            new
+            {
+                Id = "com.test.openai",
+                Name = "OpenAI",
+                Version = "1.0.0",
+                Author = "Tester",
+                Description = "A multi-capability plugin",
+                Category = "transcription",
+                Categories = new[] { "transcription", "llm", "tts" },
+                Size = 1024L,
+                DownloadUrl = "https://example.com/plugin.zip",
+                RequiresApiKey = true
+            }
+        };
+
+        var json = JsonSerializer.Serialize(plugins);
+        var httpClient = CreateMockHttpClient(json);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var result = await service.FetchRegistryAsync();
+
+        Assert.Single(result);
+        Assert.Equal("transcription", result[0].Category);
+        Assert.Equal(["transcription", "llm", "tts"], result[0].Categories);
+    }
+
+    [Fact]
+    public async Task FetchRegistryAsync_PreservesLegacyCategoryWhenCategoriesMissing()
+    {
+        var plugins = new[]
+        {
+            new
+            {
+                Id = "com.test.legacy",
+                Name = "Legacy",
+                Version = "1.0.0",
+                Author = "Tester",
+                Description = "A legacy plugin",
+                Category = "LLM",
+                Size = 1024L,
+                DownloadUrl = "https://example.com/plugin.zip",
+                RequiresApiKey = true
+            }
+        };
+
+        var json = JsonSerializer.Serialize(plugins);
+        var httpClient = CreateMockHttpClient(json);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var result = await service.FetchRegistryAsync();
+
+        Assert.Single(result);
+        Assert.Equal("LLM", result[0].Category);
+        Assert.Null(result[0].Categories);
+    }
+
+
+    [Fact]
     public async Task FetchRegistryAsync_CachesResults()
     {
         var plugins = new[] { new { Id = "p1", Name = "P", Version = "1.0", Author = "A", Description = "D", Size = 100L, DownloadUrl = "u", RequiresApiKey = false } };

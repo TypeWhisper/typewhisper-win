@@ -236,6 +236,7 @@
   "Plugins.MarketplaceCategorySummaryFormat": "{0} extensions in {1}",
   "Plugins.Installed": "Installed",
   "Plugins.Marketplace": "Marketplace",
+  "Plugins.AllFunctions": "All functions",
   "Plugins.NoPlugins": "No plugins installed",
   "Plugins.NoPluginsHint": "Install plugins via the Marketplace tab.",
   "Plugins.Transcription": "Transcription",

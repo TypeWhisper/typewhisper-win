@@ -229,6 +229,7 @@
   "Plugins.MarketplaceCategorySummaryFormat": "{0} расширений в {1}",
   "Plugins.Installed": "Установленные",
   "Plugins.Marketplace": "Магазин",
+  "Plugins.AllFunctions": "Все функции",
   "Plugins.NoPlugins": "Расширения не установлены",
   "Plugins.NoPluginsHint": "Установите расширения во вкладке «Магазин».",
   "Plugins.Transcription": "Транскрипция",

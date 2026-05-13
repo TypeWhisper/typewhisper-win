@@ -4,6 +4,8 @@
   "version": "1.0.2",
   "author": "TypeWhisper",
   "description": "Groq Whisper transcription and Llama translation",
+  "category": "transcription",
+  "categories": ["transcription", "llm"],
   "assemblyName": "TypeWhisper.Plugin.Groq.dll",
   "pluginClass": "TypeWhisper.Plugin.Groq.GroqPlugin"
 }

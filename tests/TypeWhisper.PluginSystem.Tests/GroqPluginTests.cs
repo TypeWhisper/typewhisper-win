@@ -29,6 +29,22 @@ public class GroqPluginTests
     }
 
     [Fact]
+    public void Manifest_AdvertisesTranscriptionAndLlmCategories()
+    {
+        var manifestPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "plugins", "TypeWhisper.Plugin.Groq", "manifest.json"));
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(
+            File.ReadAllText(manifestPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        Assert.NotNull(manifest);
+        Assert.Equal("transcription", manifest.Category);
+        Assert.Equal(["transcription", "llm"], manifest.Categories);
+    }
+
+    [Fact]
     public void TranscriptionModels_RemainCuratedWhisperModels()
     {
         var sut = new GroqPlugin();
