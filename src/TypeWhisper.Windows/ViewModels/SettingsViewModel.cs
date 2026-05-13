@@ -540,7 +540,7 @@ public partial class SettingsViewModel : ObservableObject
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            dispatcher.InvokeAsync(HandleAudioDevicesChanged);
+            dispatcher.Invoke(HandleAudioDevicesChanged);
             return;
         }
 

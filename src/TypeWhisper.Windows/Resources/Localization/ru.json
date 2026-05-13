@@ -678,6 +678,7 @@
   "Widget.HotkeyMode": "Режим горячей клавиши",
   "Widget.AppName": "Приложение",
   "Microphone.Default": "По умолчанию",
+  "Microphone.Disconnected": "Выбранный микрофон отключён",
   "App.ErrorTitle": "TypeWhisper — ошибка",
   "App.ErrorFormat": "Произошла ошибка:\n{0}",
   "Hotkey.Placeholder": "Нажмите сочетание клавиш…",

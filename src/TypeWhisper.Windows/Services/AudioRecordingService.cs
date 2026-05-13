@@ -1,3 +1,4 @@
+using NAudio;
 using NAudio.Wave;
 
 namespace TypeWhisper.Windows.Services;
@@ -388,14 +389,12 @@ public sealed class AudioRecordingService : IDisposable
         if (_configuredDeviceNumber is int configuredDeviceNumber)
         {
             var configuredDeviceName = TryGetDeviceName(configuredDeviceNumber);
-            if (configuredDeviceName is not null)
+            if (configuredDeviceName is not null
+                && (string.IsNullOrWhiteSpace(_configuredDeviceName)
+                    || string.Equals(configuredDeviceName, _configuredDeviceName, StringComparison.OrdinalIgnoreCase)))
             {
-                if (string.IsNullOrWhiteSpace(_configuredDeviceName)
-                    || string.Equals(configuredDeviceName, _configuredDeviceName, StringComparison.OrdinalIgnoreCase))
-                {
-                    _configuredDeviceName = configuredDeviceName;
-                    return configuredDeviceNumber;
-                }
+                _configuredDeviceName = configuredDeviceName;
+                return configuredDeviceNumber;
             }
 
             var rememberedDeviceNumber = FindDeviceByName(_configuredDeviceName);
@@ -432,7 +431,7 @@ public sealed class AudioRecordingService : IDisposable
         {
             return _deviceProvider.GetDeviceName(deviceNumber);
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException or MmException)
         {
             return null;
         }
@@ -494,7 +493,7 @@ public sealed class AudioRecordingService : IDisposable
             {
                 HandleDeviceLost();
                 WarmUp();
-                if ((!previousHadDevices && currentHasDevices)
+                if (!previousHadDevices
                     || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
                 {
                     DeviceAvailable?.Invoke(this, EventArgs.Empty);
@@ -512,7 +511,7 @@ public sealed class AudioRecordingService : IDisposable
                 WarmUp();
             }
 
-            if ((!previousHadDevices && currentHasDevices)
+            if (!previousHadDevices
                 || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
             {
                 DeviceAvailable?.Invoke(this, EventArgs.Empty);
@@ -628,11 +627,23 @@ public sealed class AudioRecordingService : IDisposable
         if (_previewWaveIn is not null)
         {
             _previewWaveIn.DataAvailable -= OnPreviewDataAvailable;
-            try { _previewWaveIn.StopRecording(); } catch { }
+            StopRecordingForCleanup(_previewWaveIn);
             _previewWaveIn.Dispose();
             _previewWaveIn = null;
         }
         _isPreviewing = false;
+    }
+
+    private static void StopRecordingForCleanup(IAudioInputCapture waveIn)
+    {
+        try
+        {
+            waveIn.StopRecording();
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or MmException)
+        {
+            System.Diagnostics.Debug.WriteLine($"StopRecording during audio cleanup failed: {ex.Message}");
+        }
     }
 
     public bool IsPreviewing => _isPreviewing;
@@ -666,7 +677,7 @@ public sealed class AudioRecordingService : IDisposable
             waveIn.RecordingStopped -= OnRecordingStopped;
             if (stopRecording)
             {
-                try { waveIn.StopRecording(); } catch { }
+                StopRecordingForCleanup(waveIn);
             }
             waveIn.Dispose();
         }
