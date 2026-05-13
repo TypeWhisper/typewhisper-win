@@ -133,22 +133,6 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
-    private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
-    {
-        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
-
-        _autoHideCts?.Cancel();
-        _autoHideCts?.Dispose();
-        _autoHideCts = null;
-
-        Application.Current?.Dispatcher.InvokeAsync(() =>
-        {
-            if (evt.RecordingId != _activeRecordingId) return;
-            _window?.Hide();
-        });
-        return Task.CompletedTask;
-    }
-
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
     {
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
@@ -183,6 +167,22 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
             }
         }, token);
 
+        return Task.CompletedTask;
+    }
+
+    private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
+    {
+        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
+
+        _autoHideCts?.Cancel();
+        _autoHideCts?.Dispose();
+        _autoHideCts = null;
+
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            if (evt.RecordingId != _activeRecordingId) return;
+            _window?.Hide();
+        });
         return Task.CompletedTask;
     }
 
