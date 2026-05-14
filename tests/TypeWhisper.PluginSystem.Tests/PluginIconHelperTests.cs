@@ -9,14 +9,14 @@ public sealed class PluginIconHelperTests : IDisposable
 
     public PluginIconHelperTests()
     {
-        _baseDirectory = Path.Combine(Path.GetTempPath(), $"typewhisper-plugin-icons-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(_baseDirectory, "Resources", "PluginLogos"));
+        _baseDirectory = Path.Join(Path.GetTempPath(), $"typewhisper-plugin-icons-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(BuildLogoDirectory());
     }
 
     [Fact]
     public void GetLogoPath_KnownPluginWithAsset_ReturnsLocalAssetPath()
     {
-        var expectedPath = Path.Combine(_baseDirectory, "Resources", "PluginLogos", "openai.png");
+        var expectedPath = BuildLogoPath("openai.png");
         WriteValidPng(expectedPath);
 
         var path = PluginIconHelper.GetLogoPath("com.typewhisper.openai", _baseDirectory);
@@ -36,7 +36,7 @@ public sealed class PluginIconHelperTests : IDisposable
     [Fact]
     public void GetLogoPath_DoesNotUseOpenAiLogoForCompatibleProviders()
     {
-        var expectedPath = Path.Combine(_baseDirectory, "Resources", "PluginLogos", "openai.png");
+        var expectedPath = BuildLogoPath("openai.png");
         WriteValidPng(expectedPath);
 
         var path = PluginIconHelper.GetLogoPath("com.typewhisper.openai-compatible", _baseDirectory);
@@ -54,7 +54,7 @@ public sealed class PluginIconHelperTests : IDisposable
     [InlineData("com.typewhisper.cohere", "cohere.png")]
     public void GetLogoPath_MapsApprovedSvglPlugins(string pluginId, string fileName)
     {
-        var expectedPath = Path.Combine(_baseDirectory, "Resources", "PluginLogos", fileName);
+        var expectedPath = BuildLogoPath(fileName);
         WriteValidPng(expectedPath);
 
         var path = PluginIconHelper.GetLogoPath(pluginId, _baseDirectory);
@@ -67,6 +67,15 @@ public sealed class PluginIconHelperTests : IDisposable
         const string onePixelPng =
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
         File.WriteAllBytes(path, Convert.FromBase64String(onePixelPng));
+    }
+
+    private string BuildLogoDirectory() =>
+        Path.Join(_baseDirectory, "Resources", "PluginLogos");
+
+    private string BuildLogoPath(string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        return Path.Join(BuildLogoDirectory(), safeFileName);
     }
 
     public void Dispose()

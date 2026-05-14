@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK.Helpers;
@@ -90,11 +91,8 @@ internal sealed class XaiResponsesClient
     private static string JoinTextParts(IReadOnlyList<string> parts)
     {
         var builder = new StringBuilder();
-        foreach (var part in parts)
+        foreach (var part in parts.Where(static part => !string.IsNullOrEmpty(part)))
         {
-            if (string.IsNullOrEmpty(part))
-                continue;
-
             if (builder.Length > 0
                 && !char.IsWhiteSpace(builder[builder.Length - 1])
                 && !char.IsWhiteSpace(part[0])

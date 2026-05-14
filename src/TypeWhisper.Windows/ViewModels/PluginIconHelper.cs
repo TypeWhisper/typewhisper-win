@@ -21,6 +21,12 @@ internal static class PluginIconHelper
         if (!LogoFileNames.TryGetValue(pluginId, out var fileName))
             return null;
 
+        if (Path.IsPathRooted(fileName)
+            || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal))
+        {
+            return null;
+        }
+
         var resolvedBaseDirectory = Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory);
         var candidate = Path.Combine(
             resolvedBaseDirectory,
