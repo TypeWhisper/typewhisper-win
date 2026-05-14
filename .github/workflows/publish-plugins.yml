@@ -226,7 +226,7 @@ jobs:
               for ($j = 0; $j -lt $registry.Count; $j++) {
                 if ($registry[$j].id -eq $env:PLUGIN_ID) {
                   $category = Get-RegistryCategory $manifest $registry[$j].category
-                  $categories = Get-RegistryCategories $manifest $category
+                  $categories = [string[]]@(Get-RegistryCategories $manifest $category)
 
                   Set-RegistryProperty $registry[$j] 'name' $manifest.name
                   Set-RegistryProperty $registry[$j] 'version' $env:PLUGIN_VERSION
@@ -248,7 +248,7 @@ jobs:
 
               if (-not $updated) {
                 $category = Get-RegistryCategory $manifest ''
-                $categories = Get-RegistryCategories $manifest $category
+                $categories = [string[]]@(Get-RegistryCategories $manifest $category)
 
                 $registry += [pscustomobject]@{
                   id = $manifest.id
