@@ -39,6 +39,7 @@ jobs:
             'openai'             = 'TypeWhisper.Plugin.OpenAI'
             'openai-compatible'  = 'TypeWhisper.Plugin.OpenAiCompatible'
             'groq'               = 'TypeWhisper.Plugin.Groq'
+            'xai'                = 'TypeWhisper.Plugin.Xai'
             'webhook'            = 'TypeWhisper.Plugin.Webhook'
             'deepgram'           = 'TypeWhisper.Plugin.Deepgram'
             'assemblyai'         = 'TypeWhisper.Plugin.AssemblyAi'

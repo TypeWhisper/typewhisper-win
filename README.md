@@ -22,7 +22,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 ### Transcription
 
 - **On-device models:** Parakeet TDT 0.6B, Canary 180M Flash, whisper.cpp models, and Granite Speech run locally through plugins. Recommended local models run on CPU, with no GPU required.
-- **Cloud transcription:** Groq Whisper, OpenAI Whisper, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
+- **Cloud transcription:** Groq Whisper, xAI/Grok STT, OpenAI Whisper, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, and any OpenAI-compatible server can be added through plugins.
 - **Streaming preview:** Silero VAD detects speech segments during recording and shows partial transcription results in the overlay before recording stops.
 - **Short-clip handling:** Brief utterances are padded and retained more reliably across local and cloud engines.
 - **File transcription:** Drag and drop audio/video files. Supports WAV, MP3, M4A, AAC, OGG, FLAC, WMA, MP4, MKV, AVI, MOV, and WebM.
@@ -42,7 +42,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 ### AI Processing
 
 - **Workflows:** Build reusable transformations for cleanup, translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run by app, website, or dedicated hotkey.
-- **LLM providers:** Groq, OpenAI, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, and local Gemma can be used through plugins.
+- **LLM providers:** Groq, xAI/Grok, OpenAI, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, and local Gemma can be used through plugins.
 - **Custom prompts:** Add fine-tuning instructions per workflow, or use custom workflow prompts when the built-in templates are not specific enough.
 - **Translation:** Cloud LLM translation can fall back to local Marian ONNX translation. Supported target languages include EN, DE, FR, ES, IT, NL, PL, SV, DA, FI, CS, RU, UK, HU, JA, ZH, AR, HI, VI, and ID.
 
@@ -235,9 +235,10 @@ Bundled plugin families include:
 | Type | Plugins |
 |------|---------|
 | Local transcription | SherpaOnnx, whisper.cpp, Granite Speech |
-| Cloud transcription | OpenAI, Groq, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
+| Cloud transcription | OpenAI, Groq, xAI/Grok, AssemblyAI, Deepgram, ElevenLabs, Gladia, Google Cloud STT, Soniox, Speechmatics, Cloudflare ASR, Voxtral, OpenAI Compatible |
 | Server-backed transcription | Qwen3 STT |
-| LLM providers | OpenAI, Groq, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Gemma Local |
+| LLM providers | OpenAI, Groq, xAI/Grok, Gemini, Claude, Cerebras, Cohere, Fireworks, OpenRouter, OpenAI Compatible, Gemma Local |
+| TTS providers | OpenAI, xAI/Grok, Supertonic TTS |
 | Actions | Linear, Obsidian, Script, LiveTranscript, Webhook |
 | Memory | File Memory, OpenAI Vector Memory |
 

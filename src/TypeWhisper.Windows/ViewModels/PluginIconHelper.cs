@@ -5,6 +5,7 @@ internal static class PluginIconHelper
     public static string GetIcon(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "\U0001F4A8",           // Groq - lightning fast
+        "com.typewhisper.xai" => "\u2728",                 // xAI / Grok - sparkles
         "com.typewhisper.openai" => "\U0001F916",          // OpenAI - robot
         "com.typewhisper.openai-compatible" => "\U0001F310", // OpenAI Compatible - globe
         "com.typewhisper.sherpa-onnx" => "\U0001F3AF",     // SherpaOnnx - local/target
@@ -17,6 +18,7 @@ internal static class PluginIconHelper
     public static string GetGradientStart(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "#F55036",
+        "com.typewhisper.xai" => "#111827",
         "com.typewhisper.openai" => "#10A37F",
         "com.typewhisper.openai-compatible" => "#6366F1",
         "com.typewhisper.sherpa-onnx" => "#F59E0B",
@@ -29,6 +31,7 @@ internal static class PluginIconHelper
     public static string GetGradientEnd(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "#C0392B",
+        "com.typewhisper.xai" => "#1D4ED8",
         "com.typewhisper.openai" => "#0D8A6A",
         "com.typewhisper.openai-compatible" => "#4F46E5",
         "com.typewhisper.sherpa-onnx" => "#D97706",
