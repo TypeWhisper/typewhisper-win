@@ -58,14 +58,19 @@ public class PluginEventsTests
     [Fact]
     public void TranscriptionFailedEvent_RequiredAndOptionalFields()
     {
+        var id = Guid.NewGuid();
         var evt = new TranscriptionFailedEvent
         {
             ErrorMessage = "API timeout",
-            ModelId = "groq-whisper"
+            ModelId = "groq-whisper",
+            AppName = "Chrome",
+            RecordingId = id
         };
 
         Assert.Equal("API timeout", evt.ErrorMessage);
         Assert.Equal("groq-whisper", evt.ModelId);
+        Assert.Equal("Chrome", evt.AppName);
+        Assert.Equal(id, evt.RecordingId);
     }
 
     [Fact]
@@ -73,6 +78,57 @@ public class PluginEventsTests
     {
         var evt = new TranscriptionFailedEvent { ErrorMessage = "Error" };
         Assert.Null(evt.ModelId);
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_AppNameIsOptional()
+    {
+        var evt = new TranscriptionFailedEvent { ErrorMessage = "Error" };
+        Assert.Null(evt.AppName);
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_AppNameIsPreserved()
+    {
+        var evt = new TranscriptionFailedEvent
+        {
+            ErrorMessage = "No speech",
+            AppName = "Notepad"
+        };
+
+        Assert.Equal("Notepad", evt.AppName);
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_RecordingIdIsOptional()
+    {
+        var evt = new TranscriptionFailedEvent { ErrorMessage = "Error" };
+        Assert.Null(evt.RecordingId);
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_RecordingIdIsPreserved()
+    {
+        var id = Guid.NewGuid();
+        var evt = new TranscriptionFailedEvent
+        {
+            ErrorMessage = "No speech",
+            RecordingId = id
+        };
+
+        Assert.Equal(id, evt.RecordingId);
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_DifferentRecordingIds_AreDistinct()
+    {
+        var id1 = Guid.NewGuid();
+        var id2 = Guid.NewGuid();
+
+        var evt1 = new TranscriptionFailedEvent { ErrorMessage = "Error", RecordingId = id1 };
+        var evt2 = new TranscriptionFailedEvent { ErrorMessage = "Error", RecordingId = id2 };
+
+        Assert.NotEqual(evt1.RecordingId, evt2.RecordingId);
     }
 
     [Fact]
