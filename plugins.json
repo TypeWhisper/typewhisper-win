@@ -187,7 +187,9 @@
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
-    "categories": "utility"
+    "categories": [
+      "utility"
+    ]
   },
   {
     "id": "com.typewhisper.granite-speech",
