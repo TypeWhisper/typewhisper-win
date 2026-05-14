@@ -20,7 +20,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
 
     public string PluginId => "com.typewhisper.gemini";
     public string PluginName => "Google Gemini";
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     public async Task ActivateAsync(IPluginHostServices host)
     {
@@ -44,9 +44,15 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
 
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
     [
-        new PluginModelInfo(DefaultModel, "Gemini 2.5 Flash") { IsRecommended = true },
+        new PluginModelInfo("gemini-3-flash-preview", "Gemini 3 Flash Preview") { IsRecommended = true },
+        new PluginModelInfo("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
+        new PluginModelInfo("gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite"),
+        new PluginModelInfo("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview"),
+        new PluginModelInfo("gemini-2.5-flash", "Gemini 2.5 Flash"),
         new PluginModelInfo("gemini-2.5-pro", "Gemini 2.5 Pro"),
         new PluginModelInfo("gemini-2.5-flash-lite", "Gemini 2.5 Flash Lite"),
+        new PluginModelInfo("gemma-4-26b-a4b-it", "Gemma 4 26B A4B IT"),
+        new PluginModelInfo("gemma-4-31b-it", "Gemma 4 31B IT"),
         new PluginModelInfo("gemma-4-27b-it", "Gemma 4 27B"),
         new PluginModelInfo("gemma-4-12b-it", "Gemma 4 12B"),
         new PluginModelInfo("gemma-4-4b-it", "Gemma 4 4B"),
