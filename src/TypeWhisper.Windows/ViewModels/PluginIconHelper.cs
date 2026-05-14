@@ -1,7 +1,35 @@
+using System.IO;
+
 namespace TypeWhisper.Windows.ViewModels;
 
 internal static class PluginIconHelper
 {
+    private static readonly byte[] PngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+    private static readonly IReadOnlyDictionary<string, string> LogoFileNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["com.typewhisper.openai"] = "openai.png",
+        ["com.typewhisper.groq"] = "groq.png",
+        ["com.typewhisper.xai"] = "xai.png",
+        ["com.typewhisper.gemini"] = "gemini.png",
+        ["com.typewhisper.claude"] = "claude.png",
+        ["com.typewhisper.cohere"] = "cohere.png"
+    };
+
+    public static string? GetLogoPath(string pluginId, string? baseDirectory = null)
+    {
+        if (!LogoFileNames.TryGetValue(pluginId, out var fileName))
+            return null;
+
+        var candidate = Path.Combine(
+            baseDirectory ?? AppContext.BaseDirectory,
+            "Resources",
+            "PluginLogos",
+            fileName);
+
+        return IsReadablePng(candidate) ? candidate : null;
+    }
+
     public static string GetIcon(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "\U0001F4A8",           // Groq - lightning fast
@@ -40,4 +68,30 @@ internal static class PluginIconHelper
         "com.typewhisper.webhook" => "#7C3AED",
         _ => "#005A9E"
     };
+
+    private static bool IsReadablePng(string path)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            using var stream = File.OpenRead(path);
+            Span<byte> signature = stackalloc byte[8];
+            if (stream.Read(signature) != signature.Length)
+                return false;
+
+            for (var i = 0; i < signature.Length; i++)
+            {
+                if (signature[i] != PngSignature[i])
+                    return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
