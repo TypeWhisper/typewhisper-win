@@ -8,7 +8,7 @@ using TypeWhisper.Plugin.LiveTranscript;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
-namespace TypeWhisper.PluginSystem.Tests;
+namespace TypeWhisper.Plugin.LiveTranscript.Tests;
 
 public sealed class LiveTranscriptPluginTests
 {
@@ -360,6 +360,26 @@ public sealed class LiveTranscriptPluginTests
             try
             {
                 plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var noSpeechRecordingId = Guid.NewGuid();
+                eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    RecordingId = noSpeechRecordingId,
+                    ErrorMessage = "No speech detected"
+                });
+                PumpDispatcher();
+
+                Assert.False(GetWindow(plugin)?.IsVisible == true);
+
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = noSpeechRecordingId });
+                PumpDispatcher();
+
+                Assert.False(GetWindow(plugin)?.IsVisible == true);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = noSpeechRecordingId });
+                PumpDispatcher();
+
+                Assert.False(GetWindow(plugin)?.IsVisible == true);
 
                 eventBus.Publish(new RecordingStartedEvent());
                 PumpDispatcher();
