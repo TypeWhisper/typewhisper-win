@@ -42,5 +42,34 @@
                     Value="0.85"
                     ValueChanged="OpacitySlider_ValueChanged" />
         </DockPanel>
+
+        <!-- Auto-hide -->
+        <TextBlock Text="Auto-hide Delay"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,4" />
+        <DockPanel Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Right"
+                       Width="52"
+                       TextAlignment="Right"
+                       VerticalAlignment="Center"
+                       x:Name="AutoHideLabel"
+                       Text="3.0s" />
+            <Slider x:Name="AutoHideSlider"
+                    Minimum="0"
+                    Maximum="10"
+                    TickFrequency="0.25"
+                    IsSnapToTickEnabled="True"
+                    Value="3"
+                    ValueChanged="AutoHideSlider_ValueChanged" />
+        </DockPanel>
+
+        <!-- Position -->
+        <TextBlock Text="Window Position"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,4" />
+        <Button Content="Reset position"
+                HorizontalAlignment="Left"
+                Padding="12,6"
+                Click="ResetPositionButton_Click" />
     </StackPanel>
 </UserControl>

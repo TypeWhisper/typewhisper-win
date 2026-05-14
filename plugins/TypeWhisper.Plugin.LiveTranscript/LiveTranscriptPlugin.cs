@@ -11,10 +11,23 @@ namespace TypeWhisper.Plugin.LiveTranscript;
 /// </summary>
 public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 {
+    private const string FontSizeSettingName = "fontSize";
+    private const string OpacitySettingName = "opacity";
+    private const string AutoHideMillisecondsSettingName = "autoHideMilliseconds";
+    private const string WindowLeftSettingName = "windowLeft";
+    private const string WindowTopSettingName = "windowTop";
+    private const int DefaultAutoHideMilliseconds = 3000;
+    private const int MinAutoHideMilliseconds = 0;
+    private const int MaxAutoHideMilliseconds = 10000;
+    private const int MaxTerminalRecordingIds = 64;
+
     private IPluginHostServices? _host;
     private LiveTranscriptWindow? _window;
     private readonly List<IDisposable> _subscriptions = [];
     private CancellationTokenSource? _autoHideCts;
+    private readonly object _terminalRecordingLock = new();
+    private readonly Queue<Guid> _terminalRecordingOrder = [];
+    private readonly HashSet<Guid> _terminalRecordingIds = [];
     private bool _disposed;
     // Set to the RecordingId of the active recording; all handlers reject events
     // whose RecordingId differs so stale Task.Run callbacks can never mutate state
@@ -27,10 +40,10 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     public int FontSize
     {
-        get => _host?.GetSetting<int?>("fontSize") ?? 16;
+        get => _host?.GetSetting<int?>(FontSizeSettingName) ?? 16;
         set
         {
-            _host?.SetSetting("fontSize", value);
+            _host?.SetSetting(FontSizeSettingName, value);
             if (_window is not null)
                 Application.Current?.Dispatcher.InvokeAsync(() => _window.SetFontSize(value));
         }
@@ -38,13 +51,41 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     public double Opacity
     {
-        get => _host?.GetSetting<double?>("opacity") ?? 0.85;
+        get => _host?.GetSetting<double?>(OpacitySettingName) ?? 0.85;
         set
         {
-            _host?.SetSetting("opacity", value);
+            _host?.SetSetting(OpacitySettingName, value);
             if (_window is not null)
                 Application.Current?.Dispatcher.InvokeAsync(() => _window.SetWindowOpacity(value));
         }
+    }
+
+    public int AutoHideMilliseconds
+    {
+        get => NormalizeAutoHideMilliseconds(
+            _host?.GetSetting<int?>(AutoHideMillisecondsSettingName) ?? DefaultAutoHideMilliseconds);
+        set => _host?.SetSetting(AutoHideMillisecondsSettingName, NormalizeAutoHideMilliseconds(value));
+    }
+
+    private double? WindowLeft => _host?.GetSetting<double?>(WindowLeftSettingName);
+    private double? WindowTop => _host?.GetSetting<double?>(WindowTopSettingName);
+
+    public void SaveWindowPosition(double left, double top)
+    {
+        if (!double.IsFinite(left) || !double.IsFinite(top))
+            return;
+
+        _host?.SetSetting(WindowLeftSettingName, left);
+        _host?.SetSetting(WindowTopSettingName, top);
+    }
+
+    public void ResetWindowPosition()
+    {
+        _host?.SetSetting<double?>(WindowLeftSettingName, null);
+        _host?.SetSetting<double?>(WindowTopSettingName, null);
+
+        if (_window is not null)
+            Application.Current?.Dispatcher.InvokeAsync(_window.ResetToDefaultPosition);
     }
 
     public Task ActivateAsync(IPluginHostServices host)
@@ -88,6 +129,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnRecordingStarted(RecordingStartedEvent evt)
     {
+        if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
+
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = null;
@@ -95,8 +138,10 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (IsTerminalRecording(evt.RecordingId)) return;
             if (_activeRecordingId != evt.RecordingId) return;
             EnsureWindow();
+            _window!.SetSavedPosition(WindowLeft, WindowTop);
             _window!.UpdateText("Listening...");
             _window.Show();
         });
@@ -106,10 +151,12 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnRecordingStopped(RecordingStoppedEvent evt)
     {
+        if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
         // Keep window visible — it will be hidden after TranscriptionCompleted/Failed or timeout
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (IsTerminalRecording(evt.RecordingId)) return;
             if (evt.RecordingId != _activeRecordingId) return;
             if (_window is { IsVisible: true })
                 _window.UpdateText(_window.CurrentText + "\nProcessing...");
@@ -120,9 +167,11 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnPartialTranscriptionUpdate(PartialTranscriptionUpdateEvent evt)
     {
+        if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (IsTerminalRecording(evt.RecordingId)) return;
             if (evt.RecordingId != _activeRecordingId) return;
             EnsureWindow();
             _window!.UpdateText(evt.PartialText);
@@ -135,12 +184,12 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
     {
+        MarkTerminalRecording(evt.RecordingId);
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
 
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
-        _autoHideCts = new CancellationTokenSource();
-        var token = _autoHideCts.Token;
+        _autoHideCts = null;
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
@@ -149,12 +198,18 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
                 _window.UpdateText(evt.Text);
         });
 
-        // Auto-hide after 3 seconds
+        var autoHideMilliseconds = AutoHideMilliseconds;
+        if (autoHideMilliseconds <= 0)
+            return Task.CompletedTask;
+
+        _autoHideCts = new CancellationTokenSource();
+        var token = _autoHideCts.Token;
+
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(3000, token);
+                await Task.Delay(autoHideMilliseconds, token);
                 Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
                     if (evt.RecordingId == _activeRecordingId)
@@ -172,6 +227,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
     {
+        MarkTerminalRecording(evt.RecordingId);
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
 
         _autoHideCts?.Cancel();
@@ -191,8 +247,39 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         if (_window is null || !_window.IsLoaded)
         {
             _window = new LiveTranscriptWindow();
+            _window.PositionChanged += SaveWindowPosition;
             _window.SetFontSize(FontSize);
             _window.SetWindowOpacity(Opacity);
+            _window.SetSavedPosition(WindowLeft, WindowTop);
+        }
+    }
+
+    private static int NormalizeAutoHideMilliseconds(int milliseconds) =>
+        Math.Clamp(milliseconds, MinAutoHideMilliseconds, MaxAutoHideMilliseconds);
+
+    private void MarkTerminalRecording(Guid? recordingId)
+    {
+        if (recordingId is not { } id) return;
+
+        lock (_terminalRecordingLock)
+        {
+            if (!_terminalRecordingIds.Add(id)) return;
+
+            _terminalRecordingOrder.Enqueue(id);
+            while (_terminalRecordingOrder.Count > MaxTerminalRecordingIds)
+            {
+                _terminalRecordingIds.Remove(_terminalRecordingOrder.Dequeue());
+            }
+        }
+    }
+
+    private bool IsTerminalRecording(Guid? recordingId)
+    {
+        if (recordingId is not { } id) return false;
+
+        lock (_terminalRecordingLock)
+        {
+            return _terminalRecordingIds.Contains(id);
         }
     }
 
