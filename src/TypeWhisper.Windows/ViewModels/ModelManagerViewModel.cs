@@ -186,9 +186,9 @@ public partial class ModelManagerViewModel : ObservableObject
             _settings.Save(_settings.Current with { LocalModelAcceleration = normalized });
 
         var plugin = GetDisplayTranscriptionPlugin();
-        if (ShouldShowAccelerationSection(plugin))
+        if (plugin is not null && ShouldShowAccelerationSection(plugin))
         {
-            plugin?.SetAccelerationPreference(
+            plugin.SetAccelerationPreference(
                 ModelManagerService.GetAccelerationPreference(normalized));
         }
 

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Diagnostics;
+using System.Net.Http;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenRouter;
@@ -141,10 +142,17 @@ public partial class OpenRouterSettingsView : UserControl
                 StatusText.Foreground = Brushes.Red;
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
         {
-            StatusText.Text = L("Settings.Error", ex.Message);
-            StatusText.Foreground = Brushes.Red;
+            ShowError(ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            ShowError(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            ShowError(ex);
         }
         finally
         {
@@ -187,10 +195,17 @@ public partial class OpenRouterSettingsView : UserControl
                 : L("Settings.RefreshModelsFailed");
             StatusText.Foreground = totalModels > 0 ? Brushes.Green : Brushes.Orange;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
         {
-            StatusText.Text = L("Settings.Error", ex.Message);
-            StatusText.Foreground = Brushes.Red;
+            ShowError(ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            ShowError(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            ShowError(ex);
         }
         finally
         {
@@ -199,6 +214,12 @@ public partial class OpenRouterSettingsView : UserControl
     }
 
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) => PopulateFilteredModels();
+
+    private void ShowError(Exception ex)
+    {
+        StatusText.Text = L("Settings.Error", ex.Message);
+        StatusText.Foreground = Brushes.Red;
+    }
 
     private void OnLlmModelChanged(object sender, SelectionChangedEventArgs e)
     {

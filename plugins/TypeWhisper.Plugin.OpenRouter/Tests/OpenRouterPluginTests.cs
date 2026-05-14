@@ -249,6 +249,18 @@ public class OpenRouterPluginTests
     }
 
     [Fact]
+    public void FormattedPricing_TreatsEffectivelyZeroPricesAsFree()
+    {
+        var sut = new OpenRouterFetchedModel(
+            "tiny/free",
+            "Tiny Free",
+            "0.0000000000000001",
+            "0");
+
+        Assert.Equal("Free", sut.FormattedPricing("Free"));
+    }
+
+    [Fact]
     public async Task FetchTranscriptionModelsAsync_UsesOutputModalitiesFilterAndSortsModels()
     {
         var handler = new CapturingHandler((request, _) =>

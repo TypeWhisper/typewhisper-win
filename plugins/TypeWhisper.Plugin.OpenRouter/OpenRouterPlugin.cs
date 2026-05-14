@@ -206,8 +206,12 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
             using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
-        catch (OperationCanceledException) { throw; }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+        catch (HttpRequestException)
         {
             return false;
         }
@@ -280,8 +284,20 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
 
             return NormalizeFetchedModels(models);
         }
-        catch (OperationCanceledException) { throw; }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (TaskCanceledException)
+        {
+            return [];
+        }
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+        catch (InvalidOperationException)
         {
             return [];
         }
@@ -316,8 +332,20 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
 
             return NormalizeFetchedTranscriptionModels(models);
         }
-        catch (OperationCanceledException) { throw; }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (TaskCanceledException)
+        {
+            return [];
+        }
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+        catch (InvalidOperationException)
         {
             return [];
         }
@@ -352,8 +380,20 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
                 ? remaining
                 : null;
         }
-        catch (OperationCanceledException) { throw; }
-        catch
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (TaskCanceledException)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
         {
             return null;
         }
@@ -623,7 +663,7 @@ internal sealed record OpenRouterFetchedModel(
         var promptPer1M = ParsePrice(PromptPrice) * 1_000_000;
         var completionPer1M = ParsePrice(CompletionPrice) * 1_000_000;
 
-        if (promptPer1M == 0 && completionPer1M == 0)
+        if (Math.Abs(promptPer1M) < 1e-9 && Math.Abs(completionPer1M) < 1e-9)
             return freeLabel;
 
         return FormattableString.Invariant($"${promptPer1M:0.00}/${completionPer1M:0.00} per 1M");
