@@ -427,10 +427,21 @@
                                                                     Background="#1D2937"
                                                                     BorderBrush="#1AFFFFFF"
                                                                     BorderThickness="1">
-                                                                <TextBlock Text="{Binding IconEmoji}"
-                                                                           FontSize="17"
+                                                                <Grid>
+                                                                    <Image Source="{Binding LogoPath}"
+                                                                           Width="24"
+                                                                           Height="24"
+                                                                           Stretch="Uniform"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality"
                                                                            HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"/>
+                                                                           VerticalAlignment="Center"
+                                                                           Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}"/>
+                                                                    <TextBlock Text="{Binding IconEmoji}"
+                                                                               FontSize="17"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center"
+                                                                               Visibility="{Binding HasLogo, Converter={StaticResource InvertBoolToVis}}"/>
+                                                                </Grid>
                                                             </Border>
                                                             <StackPanel Margin="10,0,0,0"
                                                                         VerticalAlignment="Center">

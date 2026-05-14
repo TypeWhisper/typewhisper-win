@@ -264,6 +264,8 @@ public partial class PluginItemViewModel : ObservableObject
     public string Version => _plugin.Manifest.Version;
     public string? Author => _plugin.Manifest.Author;
     public string? Description => _plugin.Manifest.Description;
+    public string? LogoPath => PluginIconHelper.GetLogoPath(Id);
+    public bool HasLogo => LogoPath is not null;
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);

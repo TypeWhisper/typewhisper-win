@@ -19,6 +19,8 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     public IReadOnlyList<string>? Categories => _registryPlugin.Categories;
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
     public string SizeDisplay => FormatSize(_registryPlugin.Size);
+    public string? LogoPath => PluginIconHelper.GetLogoPath(Id);
+    public bool HasLogo => LogoPath is not null;
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);

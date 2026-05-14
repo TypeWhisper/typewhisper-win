@@ -135,7 +135,21 @@
                                             </Grid.ColumnDefinitions>
 
                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Margin="0,0,12,0" Background="{Binding IconGradientStart, Converter={StaticResource StringToBrush}}">
-                                                <TextBlock Text="{Binding IconEmoji}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <Grid>
+                                                    <Image Source="{Binding LogoPath}"
+                                                           Width="28"
+                                                           Height="28"
+                                                           Stretch="Uniform"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}"/>
+                                                    <TextBlock Text="{Binding IconEmoji}"
+                                                               FontSize="18"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Visibility="{Binding HasLogo, Converter={StaticResource InverseBoolToVis}}"/>
+                                                </Grid>
                                             </Border>
 
                                             <StackPanel Grid.Column="1" Margin="0,0,14,0">
@@ -284,7 +298,21 @@
                                             </Grid.ColumnDefinitions>
 
                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Margin="0,0,12,0" Background="{Binding IconGradientStart, Converter={StaticResource StringToBrush}}">
-                                                <TextBlock Text="{Binding IconEmoji}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                <Grid>
+                                                    <Image Source="{Binding LogoPath}"
+                                                           Width="28"
+                                                           Height="28"
+                                                           Stretch="Uniform"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}"/>
+                                                    <TextBlock Text="{Binding IconEmoji}"
+                                                               FontSize="18"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Visibility="{Binding HasLogo, Converter={StaticResource InverseBoolToVis}}"/>
+                                                </Grid>
                                             </Border>
 
                                             <StackPanel Grid.Column="1" Margin="0,0,14,0">
