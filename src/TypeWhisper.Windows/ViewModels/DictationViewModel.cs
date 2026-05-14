@@ -83,6 +83,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _apiDictationSessions = [];
     private readonly List<Guid> _apiDictationSessionOrder = [];
     private Guid? _activeApiDictationSessionId;
+    // Identifies the current recording session; stamped on all related events.
+    private Guid? _currentRecordingId;
 
     private readonly Channel<TranscriptionJob> _jobChannel =
         Channel.CreateBounded<TranscriptionJob>(new BoundedChannelOptions(5)
@@ -176,7 +178,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _streamingHandler.OnPartialTextUpdate = text =>
         {
             Application.Current?.Dispatcher.InvokeAsync(() => PartialText = text);
-            _eventBus.Publish(new PartialTranscriptionUpdateEvent { PartialText = text });
+            _eventBus.Publish(new PartialTranscriptionUpdateEvent { PartialText = text, RecordingId = _currentRecordingId });
         };
 
         _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
@@ -552,13 +554,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _activeApiDictationSessionId = null;
     }
 
-    private void PublishNoSpeechFailure(string? modelId, string? appName)
+    private void PublishNoSpeechFailure(string? modelId, string? appName, Guid? recordingId)
     {
         _eventBus.Publish(new TranscriptionFailedEvent
         {
             ErrorMessage = Loc.Instance["Status.NoSpeech"],
             ModelId = modelId,
-            AppName = appName
+            AppName = appName,
+            RecordingId = recordingId
         });
     }
 
@@ -750,10 +753,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         if (_settings.Current.PauseMediaDuringRecording)
             _mediaPause.PauseMedia();
 
+        _currentRecordingId = Guid.NewGuid();
         _eventBus.Publish(new RecordingStartedEvent
         {
             AppName = _activeWindow.GetActiveWindowTitle(),
-            AppProcessName = _activeWindow.GetActiveWindowProcessName()
+            AppProcessName = _activeWindow.GetActiveWindowProcessName(),
+            RecordingId = _currentRecordingId
         });
 
         State = DictationState.Recording;
@@ -793,7 +798,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var originalSamples = samples ?? [];
             var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
             var rawDuration = originalSamples.Length / 16000.0;
-            _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration });
+            _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration, RecordingId = _currentRecordingId });
             _durationTimer?.Stop();
             _durationTimer?.Dispose();
             _durationTimer = null;
@@ -842,6 +847,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
+                _eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    ErrorMessage = Loc.Instance["Status.TooShort"],
+                    ModelId = _modelManager.ActiveModelId,
+                    AppName = _capturedWindowTitle,
+                    RecordingId = _currentRecordingId
+                });
                 ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
                 return;
             }
@@ -849,7 +861,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
             {
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
-                PublishNoSpeechFailure(_modelManager.ActiveModelId, _capturedWindowTitle);
+                PublishNoSpeechFailure(_modelManager.ActiveModelId, _capturedWindowTitle, _currentRecordingId);
                 ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
                 return;
             }
@@ -899,7 +911,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     null,
                     null,
                     null,
-                    null));
+                    null),
+                _currentRecordingId);
 
             Interlocked.Increment(ref _pendingJobCount);
             await _jobChannel.Writer.WriteAsync(job);
@@ -1032,7 +1045,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                             job.TranscribeShortQuietClipsAggressively))
                     {
                         FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                        PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle);
+                        PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
                         await Application.Current.Dispatcher.InvokeAsync(() =>
                             ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
                         return;
@@ -1056,7 +1069,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             if (string.IsNullOrWhiteSpace(rawText))
             {
                 FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle);
+                PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
                 LogParakeetTailDiagnostics(job.Diagnostic);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                     ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
@@ -1095,7 +1108,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 ModelId = job.ActiveModelIdAtCapture,
                 ProfileName = job.ActiveWorkflow?.Name,
                 AppName = job.CapturedWindowTitle,
-                AppProcessName = job.CapturedProcessName
+                AppProcessName = job.CapturedProcessName,
+                RecordingId = job.RecordingId
             });
 
             // Build pipeline options
@@ -1354,7 +1368,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             {
                 ErrorMessage = ex.Message,
                 ModelId = job.ActiveModelIdAtCapture,
-                AppName = job.CapturedWindowTitle
+                AppName = job.CapturedWindowTitle,
+                RecordingId = job.RecordingId
             });
             _sound.PlayErrorSound();
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1581,7 +1596,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         Guid? ApiSessionId,
         string? TrustedLiveText,
         bool TranscribeShortQuietClipsAggressively,
-        RecordingTailDiagnosticSnapshot Diagnostic);
+        RecordingTailDiagnosticSnapshot Diagnostic,
+        Guid? RecordingId);
 }
 
 internal enum ShortSpeechDecision

@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.live-transcript",
   "name": "Live Transcript",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "TypeWhisper",
   "description": "Floating window showing real-time transcription",
   "assemblyName": "TypeWhisper.Plugin.LiveTranscript.dll",

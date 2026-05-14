@@ -16,10 +16,14 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private readonly List<IDisposable> _subscriptions = [];
     private CancellationTokenSource? _autoHideCts;
     private bool _disposed;
+    // Set to the RecordingId of the active recording; all handlers reject events
+    // whose RecordingId differs so stale Task.Run callbacks can never mutate state
+    // that belongs to a newer recording.
+    private Guid? _activeRecordingId;
 
     public string PluginId => "com.typewhisper.live-transcript";
     public string PluginName => "Live Transcript";
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     public int FontSize
     {
@@ -87,9 +91,11 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = null;
+        _activeRecordingId = evt.RecordingId;
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (_activeRecordingId != evt.RecordingId) return;
             EnsureWindow();
             _window!.UpdateText("Listening...");
             _window.Show();
@@ -100,9 +106,11 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnRecordingStopped(RecordingStoppedEvent evt)
     {
-        // Keep window visible — it will be hidden after TranscriptionCompleted or timeout
+        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
+        // Keep window visible — it will be hidden after TranscriptionCompleted/Failed or timeout
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (evt.RecordingId != _activeRecordingId) return;
             if (_window is { IsVisible: true })
                 _window.UpdateText(_window.CurrentText + "\nProcessing...");
         });
@@ -112,8 +120,10 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnPartialTranscriptionUpdate(PartialTranscriptionUpdateEvent evt)
     {
+        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (evt.RecordingId != _activeRecordingId) return;
             EnsureWindow();
             _window!.UpdateText(evt.PartialText);
             if (!_window.IsVisible)
@@ -125,6 +135,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
     {
+        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
+
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = new CancellationTokenSource();
@@ -132,6 +144,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (evt.RecordingId != _activeRecordingId) return;
             if (_window is not null)
                 _window.UpdateText(evt.Text);
         });
@@ -144,7 +157,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
                 await Task.Delay(3000, token);
                 Application.Current?.Dispatcher.InvokeAsync(() =>
                 {
-                    _window?.Hide();
+                    if (evt.RecordingId == _activeRecordingId)
+                        _window?.Hide();
                 });
             }
             catch (TaskCanceledException)
@@ -158,15 +172,17 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
     {
+        if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
+
         _autoHideCts?.Cancel();
         _autoHideCts?.Dispose();
         _autoHideCts = null;
 
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
+            if (evt.RecordingId != _activeRecordingId) return;
             _window?.Hide();
         });
-
         return Task.CompletedTask;
     }
 

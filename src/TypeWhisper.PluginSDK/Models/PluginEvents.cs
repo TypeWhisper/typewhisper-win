@@ -7,6 +7,14 @@ public abstract record PluginEvent
 {
     /// <summary>UTC timestamp when the event was created.</summary>
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Identifies the recording session this event belongs to.
+    /// Set by the publisher on <see cref="RecordingStartedEvent"/> and carried through
+    /// all related events (partial, stopped, completed, failed) for the same recording.
+    /// Null for events that are not tied to a specific recording.
+    /// </summary>
+    public Guid? RecordingId { get; init; }
 }
 
 /// <summary>Raised when audio recording starts.</summary>
