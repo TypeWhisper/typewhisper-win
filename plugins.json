@@ -520,5 +520,26 @@
     "categories": [
       "tts"
     ]
+  },
+  {
+    "id": "com.typewhisper.xai",
+    "name": "xAI / Grok",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
+    "category": "transcription",
+    "categories": [
+      "transcription",
+      "llm",
+      "tts"
+    ],
+    "size": 33524,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-xai-v1.0.0/com.typewhisper.xai-1.0.0.zip",
+    "iconSystemName": "sparkles",
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech ueber xAI-Grok-APIs. Erfordert einen xAI API-Key."
+    }
   }
 ]
