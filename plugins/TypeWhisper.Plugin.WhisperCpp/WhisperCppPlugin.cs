@@ -187,13 +187,16 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 throw CreateNativeLoadFailureException(ex);
             }
 
+            var loadedLibrary = RuntimeOptions.LoadedLibrary;
             _accelerationStatus = CreateLoadedAccelerationStatus(
-                RuntimeOptions.LoadedLibrary,
+                loadedLibrary,
                 _accelerationPreference);
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             _host?.SetSetting("selectedModel", modelId);
-            _host?.Log(PluginLogLevel.Info, $"Loaded model {modelId} ({_accelerationStatus.DisplayText})");
+            _host?.Log(
+                PluginLogLevel.Info,
+                $"Loaded model {modelId} using runtime {loadedLibrary?.ToString() ?? "unknown"} ({_accelerationStatus.DisplayText})");
         }
         finally
         {

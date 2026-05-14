@@ -34,6 +34,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly ISettingsService _settings;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
+    private TranscriptionAccelerationPreference? _activeModelAccelerationPreference;
     private System.Timers.Timer? _autoUnloadTimer;
     private bool _disposed;
 
@@ -191,7 +192,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         SetStatus(modelId, ModelStatus.LoadingModel);
         try
         {
-            plugin.SetAccelerationPreference(GetAccelerationPreference(_settings.Current.LocalModelAcceleration));
+            var accelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
+            plugin.SetAccelerationPreference(accelerationPreference);
 
             if (plugin.SupportsModelDownload)
                 await plugin.LoadModelAsync(pluginModelId, cancellationToken);
@@ -199,6 +201,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             plugin.SelectModel(pluginModelId);
             SetStatus(modelId, ModelStatus.Ready);
             ActiveModelId = modelId;
+            _activeModelAccelerationPreference = accelerationPreference;
         }
         catch (Exception ex)
         {
@@ -228,6 +231,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             });
             SetStatus(ActiveModelId, ModelStatus.NotDownloaded);
             ActiveModelId = null;
+            _activeModelAccelerationPreference = null;
         }
     }
 
@@ -274,9 +278,17 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (string.IsNullOrWhiteSpace(targetModelId))
             return false;
 
-        if (ActiveModelId == targetModelId)
+        var targetAccelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
+        if (ActiveModelId == targetModelId
+            && _activeModelAccelerationPreference == targetAccelerationPreference)
         {
             CancelAutoUnload();
+            return true;
+        }
+
+        if (ActiveModelId == targetModelId)
+        {
+            await LoadModelAsync(targetModelId, cancellationToken);
             return true;
         }
 
@@ -444,6 +456,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (previousActiveModelId is null)
         {
             ActiveModelId = null;
+            _activeModelAccelerationPreference = null;
             return Task.CompletedTask;
         }
 
