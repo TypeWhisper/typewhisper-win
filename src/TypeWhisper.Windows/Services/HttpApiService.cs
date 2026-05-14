@@ -7,6 +7,7 @@ using System.Windows;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Services;
@@ -197,6 +198,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         var activeModel = _modelManager.ActiveModelId is { } activeModelId && ModelManagerService.IsPluginModel(activeModelId)
             ? ModelManagerService.ParsePluginModelId(activeModelId).ModelId
             : activePlugin?.SelectedModelId;
+        var accelerationStatus = activePlugin?.AccelerationStatus;
 
         return Json(new
         {
@@ -206,7 +208,17 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             active_model = _modelManager.ActiveModelId,
             api_version = "1.0",
             supports_streaming = activePlugin?.SupportsStreaming ?? false,
-            supports_translation = activePlugin?.SupportsTranslation ?? false
+            supports_translation = activePlugin?.SupportsTranslation ?? false,
+            acceleration = activePlugin is null || accelerationStatus is null
+                ? null
+                : new
+                {
+                    preference = AppSettings.NormalizeLocalModelAcceleration(_settings.Current.LocalModelAcceleration),
+                    active_backend = FormatAccelerationBackend(accelerationStatus.ActiveBackend),
+                    display_text = accelerationStatus.DisplayText,
+                    detail = accelerationStatus.Detail,
+                    requires_restart = accelerationStatus.RequiresRestart
+                }
         });
     }
 
@@ -542,6 +554,13 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         503 => "service_unavailable",
         _ => "error"
     };
+
+    private static string FormatAccelerationBackend(TranscriptionAccelerationBackend backend) =>
+        backend switch
+        {
+            TranscriptionAccelerationBackend.NvidiaCuda => AppSettings.LocalModelAccelerationNvidiaCuda,
+            _ => AppSettings.LocalModelAccelerationCpu
+        };
 
     private static int ParseInt(string? value, int fallback) =>
         int.TryParse(value, out var parsed) ? parsed : fallback;

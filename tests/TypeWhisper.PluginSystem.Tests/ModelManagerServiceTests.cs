@@ -69,6 +69,74 @@ public class ModelManagerServiceTests
         Assert.True(sut.Engine.IsModelLoaded);
     }
 
+    [Fact]
+    public async Task EnsureModelLoadedAsync_ReloadsActiveModel_WhenAccelerationPreferenceChanges()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var currentSettings = new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        };
+
+        _settings.Setup(s => s.Current).Returns(() => currentSettings);
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.EnsureModelLoadedAsync();
+        currentSettings = currentSettings with
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        };
+
+        var loaded = await sut.EnsureModelLoadedAsync();
+
+        Assert.True(loaded);
+        Assert.Equal(2, plugin.LoadCallCount);
+        Assert.Equal(
+            [TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+    }
+
+    [Fact]
+    public async Task EnsureModelLoadedAsync_DoesNotReloadActiveModel_WhenAccelerationPreferenceIsUnchanged()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.EnsureModelLoadedAsync();
+        var loaded = await sut.EnsureModelLoadedAsync();
+
+        Assert.True(loaded);
+        Assert.Equal(1, plugin.LoadCallCount);
+        Assert.Equal(
+            [TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+    }
+
     [Theory]
     [InlineData(AppSettings.LocalModelAccelerationAuto, TranscriptionAccelerationPreference.Auto)]
     [InlineData(AppSettings.LocalModelAccelerationCpu, TranscriptionAccelerationPreference.Cpu)]
@@ -149,6 +217,8 @@ public class ModelManagerServiceTests
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public string? LastLoadedModelId { get; private set; }
+        public int LoadCallCount { get; private set; }
+        public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
         public TranscriptionAccelerationPreference? AccelerationPreferenceAtLoad { get; private set; }
@@ -162,7 +232,9 @@ public class ModelManagerServiceTests
 
         public Task LoadModelAsync(string modelId, CancellationToken ct)
         {
+            LoadCallCount++;
             AccelerationPreferenceAtLoad = LastAccelerationPreference;
+            AccelerationPreferencesAtLoad.Add(LastAccelerationPreference);
             LastLoadedModelId = modelId;
             SelectedModelId = modelId;
             return Task.CompletedTask;

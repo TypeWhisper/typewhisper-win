@@ -212,6 +212,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                     _accelerationPreference == TranscriptionAccelerationPreference.Auto
                     && string.Equals(activeProvider, "cuda", StringComparison.OrdinalIgnoreCase))
                 {
+                    _host?.Log(
+                        PluginLogLevel.Warning,
+                        $"CUDA provider failed for {modelId}; falling back to CPU: {ex.Message}");
                     activeProvider = "cpu";
                     _recognizer = CreateRecognizer(model, dir, activeProvider);
                     accelerationStatus = new TranscriptionAccelerationStatus(
@@ -228,6 +231,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 _canaryTgtLang = "en";
                 _accelerationStatus = accelerationStatus;
 
+                _host?.Log(
+                    PluginLogLevel.Info,
+                    $"Loaded model {modelId} using provider {activeProvider} ({_accelerationStatus.DisplayText})");
                 Debug.WriteLine($"[SherpaOnnx] Model {modelId} loaded from {dir} using {activeProvider}");
             }
         }, ct);

@@ -126,6 +126,45 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Status_IncludesActiveAccelerationDetails()
+    {
+        var plugin = new FakeTranscriptionPlugin
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.NvidiaCuda,
+                "Using CUDA",
+                "Loaded provider cuda.",
+                RequiresRestart: true)
+        };
+        var (service, modelManager) = CreateServiceWithModelManager(
+            new AppSettings
+            {
+                SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"),
+                LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda,
+                SaveToHistoryEnabled = true
+            },
+            plugin);
+
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"));
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var json = JsonObject(response);
+        var acceleration = json["acceleration"];
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, acceleration.GetProperty("preference").GetString());
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, acceleration.GetProperty("active_backend").GetString());
+        Assert.Equal("Using CUDA", acceleration.GetProperty("display_text").GetString());
+        Assert.Equal("Loaded provider cuda.", acceleration.GetProperty("detail").GetString());
+        Assert.True(acceleration.GetProperty("requires_restart").GetBoolean());
+    }
+
+    [Fact]
     public async Task HistorySearch_IncludesRaycastCompatibleAliases()
     {
         var record = new TranscriptionRecord
@@ -187,11 +226,18 @@ public class HttpApiServiceTests : IDisposable
             ? ModelManagerService.GetPluginModelId(plugins[0].PluginId, plugins[0].TranscriptionModels[0].Id)
             : null;
 
-        _settings.Setup(s => s.Current).Returns(new AppSettings
+        return CreateServiceWithModelManager(new AppSettings
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        });
+        }, plugins).Service;
+    }
+
+    private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
+        AppSettings settings,
+        params ITranscriptionEnginePlugin[] plugins)
+    {
+        _settings.Setup(s => s.Current).Returns(settings);
 
         var pluginManager = new PluginManager(
             _loader,
@@ -210,7 +256,7 @@ public class HttpApiServiceTests : IDisposable
         translation.Setup(t => t.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string text, string _, string _, CancellationToken _) => text);
 
-        return new HttpApiService(
+        var service = new HttpApiService(
             modelManager,
             _settings.Object,
             new AudioFileService(),
@@ -220,6 +266,8 @@ public class HttpApiServiceTests : IDisposable
             new PostProcessingPipeline(),
             translation.Object,
             null!);
+
+        return (service, modelManager);
     }
 
     private static HttpApiRequest JsonRequest(string method, string path, string json) =>
@@ -307,11 +355,18 @@ public class HttpApiServiceTests : IDisposable
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("tiny", "Tiny")];
         public string? SelectedModelId { get; private set; } = "tiny";
         public bool SupportsTranslation => true;
+        public TranscriptionAccelerationPreference AccelerationPreference { get; private set; } =
+            TranscriptionAccelerationPreference.Auto;
+        public TranscriptionAccelerationStatus? AccelerationStatusOverride { get; init; }
+        public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
+            ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
         public void SelectModel(string modelId) => SelectedModelId = modelId;
+        public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
+            AccelerationPreference = preference;
 
         public Task<PluginTranscriptionResult> TranscribeAsync(
             byte[] wavAudio,
