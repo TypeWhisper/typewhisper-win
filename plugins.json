@@ -246,16 +246,22 @@
   {
     "id": "com.typewhisper.openrouter",
     "name": "OpenRouter",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "author": "TypeWhisper",
-    "description": "OpenRouter multi-model LLM gateway",
+    "description": "Access LLMs and speech-to-text models from OpenAI, Anthropic, Meta, Google and more via OpenRouter. Shows model pricing and account balance. Requires API key.",
     "category": "llm",
     "requiresApiKey": true,
-    "size": 0,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.0.0/com.typewhisper.openrouter-1.0.0.zip",
+    "size": 29194,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openrouter-v1.1.0/com.typewhisper.openrouter-1.1.0.zip",
     "categories": [
-      "llm"
-    ]
+      "llm",
+      "transcription"
+    ],
+    "minHostVersion": null,
+    "iconSystemName": "globe",
+    "descriptions": {
+      "de": "Zugriff auf LLMs und Speech-to-Text-Modelle von OpenAI, Anthropic, Meta, Google und mehr ueber OpenRouter. Zeigt Modellpreise und Kontoguthaben. Erfordert einen API-Key."
+    }
   },
   {
     "id": "com.typewhisper.cerebras",
