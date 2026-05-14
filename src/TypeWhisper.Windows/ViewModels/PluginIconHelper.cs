@@ -21,8 +21,9 @@ internal static class PluginIconHelper
         if (!LogoFileNames.TryGetValue(pluginId, out var fileName))
             return null;
 
+        var resolvedBaseDirectory = Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory);
         var candidate = Path.Combine(
-            baseDirectory ?? AppContext.BaseDirectory,
+            resolvedBaseDirectory,
             "Resources",
             "PluginLogos",
             fileName);
@@ -89,7 +90,19 @@ internal static class PluginIconHelper
 
             return true;
         }
-        catch
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (System.Security.SecurityException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
         {
             return false;
         }

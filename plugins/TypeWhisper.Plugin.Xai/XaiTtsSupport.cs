@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.IO;
 using System.Media;
 using System.Text.Json;
@@ -69,14 +70,28 @@ internal sealed class XaiPcmTtsPlaybackSession : ITtsPlaybackSession, IDisposabl
             return;
 
         try { _player.Stop(); }
-        catch { }
+        catch (ObjectDisposedException ex)
+        {
+            Trace.TraceWarning($"xAI TTS playback stop skipped after disposal: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Trace.TraceWarning($"xAI TTS playback stop failed: {ex.Message}");
+        }
         Finish();
     }
 
     private void PlaySyncAndFinish()
     {
         try { _player.PlaySync(); }
-        catch { }
+        catch (ObjectDisposedException ex)
+        {
+            Trace.TraceWarning($"xAI TTS playback stopped after disposal: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Trace.TraceWarning($"xAI TTS playback failed: {ex.Message}");
+        }
         finally { Finish(); }
     }
 

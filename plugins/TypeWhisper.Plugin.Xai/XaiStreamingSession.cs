@@ -143,7 +143,10 @@ internal sealed class XaiStreamingSession : IStreamingSession
                     TranscriptReceived?.Invoke(transcriptEvent);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException ex)
+        {
+            Debug.WriteLine($"xAI STT receive loop canceled: {ex.Message}");
+        }
         catch (WebSocketException ex)
         {
             Debug.WriteLine($"xAI STT WebSocket error: {ex.Message}");

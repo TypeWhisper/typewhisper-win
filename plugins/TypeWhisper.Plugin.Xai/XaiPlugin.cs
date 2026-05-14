@@ -315,8 +315,20 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
                 .OrderBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return [];
+        }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+        catch (InvalidOperationException)
         {
             return [];
         }
@@ -332,7 +344,20 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
             using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
-        catch
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
         {
             return false;
         }
@@ -377,8 +402,20 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
                 .OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return [];
+        }
         catch (OperationCanceledException) { throw; }
-        catch
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+        catch (InvalidOperationException)
         {
             return [];
         }
