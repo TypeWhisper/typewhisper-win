@@ -206,11 +206,11 @@ public class DictationFinalTextPolicyTests
     }
 
     [Fact]
-    public void SelectRawText_RemovesTrustedLiveTextEllipsis()
+    public void SelectRawText_FinalDecodeWinsOverTrustedLiveText()
     {
         var result = DictationFinalTextPolicy.SelectRawText(
-            "fallback text",
-            "Dictated words should only... end up once.");
+            "Dictated words should only... end up once.",
+            "stale live preview");
 
         Assert.Equal("Dictated words should only end up once.", result);
     }
@@ -233,25 +233,25 @@ public class DictationFinalTextPolicyTests
     }
 
     [Fact]
-    public void SelectRawText_TrustedLiveTextWinsWithoutFinalText()
+    public void SelectRawText_BlankFinalTextDoesNotUseTrustedLiveText()
     {
         var result = DictationFinalTextPolicy.SelectRawText(null, "  confirmed live transcript  ");
 
-        Assert.Equal("confirmed live transcript", result);
+        Assert.Equal("", result);
     }
 
     [Fact]
-    public void SelectRawText_CollapsesTrustedLiveTextRepeatedPhrase()
+    public void SelectRawText_WhitespaceFinalTextDoesNotUseTrustedLiveText()
     {
         var result = DictationFinalTextPolicy.SelectRawText(
-            "fallback text",
+            "   ",
             "Please send the updated draft tomorrow morning. Please send the updated draft tomorrow morning.");
 
-        Assert.Equal("Please send the updated draft tomorrow morning.", result);
+        Assert.Equal("", result);
     }
 
     [Fact]
-    public void SelectRawText_BlankTrustedLiveTextFallsBackToFinalText()
+    public void SelectRawText_BlankTrustedLiveTextStillUsesFinalText()
     {
         var result = DictationFinalTextPolicy.SelectRawText("final transcript", "   ");
 
