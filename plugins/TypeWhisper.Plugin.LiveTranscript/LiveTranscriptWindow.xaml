@@ -23,16 +23,37 @@
                               Opacity="0.5"
                               Color="Black" />
         </Border.Effect>
-        <ScrollViewer x:Name="TranscriptScroller"
-                      VerticalScrollBarVisibility="Auto"
-                      MaxHeight="200"
-                      HorizontalScrollBarVisibility="Disabled">
-            <TextBlock x:Name="TranscriptText"
-                       Foreground="#CCDDDDDD"
-                       FontSize="16"
-                       TextWrapping="Wrap"
-                       FontFamily="Segoe UI"
-                       Text="Listening..." />
-        </ScrollViewer>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid x:Name="DragHandle"
+                  Height="12"
+                  Margin="0,0,0,6"
+                  Cursor="SizeAll"
+                  MouseLeftButtonDown="DragHandle_MouseLeftButtonDown">
+                <Border Width="34"
+                        Height="4"
+                        CornerRadius="2"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#35FFFFFF" />
+            </Grid>
+
+            <ScrollViewer x:Name="TranscriptScroller"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          MaxHeight="200"
+                          HorizontalScrollBarVisibility="Disabled">
+                <TextBlock x:Name="TranscriptText"
+                           Foreground="#CCDDDDDD"
+                           FontSize="16"
+                           TextWrapping="Wrap"
+                           FontFamily="Segoe UI"
+                           Text="Listening..." />
+            </ScrollViewer>
+        </Grid>
     </Border>
 </Window>

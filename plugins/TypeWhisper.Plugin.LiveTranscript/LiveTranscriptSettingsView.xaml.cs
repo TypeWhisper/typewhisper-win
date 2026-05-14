@@ -23,6 +23,9 @@ public partial class LiveTranscriptSettingsView : UserControl
         OpacitySlider.Value = plugin.Opacity;
         OpacityLabel.Text = $"{(int)(plugin.Opacity * 100)}%";
 
+        AutoHideSlider.Value = plugin.AutoHideMilliseconds / 1000d;
+        UpdateAutoHideLabel(AutoHideSlider.Value);
+
         _initialized = true;
     }
 
@@ -42,5 +45,25 @@ public partial class LiveTranscriptSettingsView : UserControl
         var opacity = e.NewValue;
         OpacityLabel.Text = $"{(int)(opacity * 100)}%";
         _plugin.Opacity = opacity;
+    }
+
+    private void AutoHideSlider_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_initialized) return;
+
+        UpdateAutoHideLabel(e.NewValue);
+        _plugin.AutoHideMilliseconds = (int)Math.Round(e.NewValue * 1000, MidpointRounding.AwayFromZero);
+    }
+
+    private void ResetPositionButton_Click(object sender, System.Windows.RoutedEventArgs e)
+    {
+        _plugin.ResetWindowPosition();
+    }
+
+    private void UpdateAutoHideLabel(double seconds)
+    {
+        AutoHideLabel.Text = seconds <= 0
+            ? "Off"
+            : $"{seconds:0.##}s";
     }
 }

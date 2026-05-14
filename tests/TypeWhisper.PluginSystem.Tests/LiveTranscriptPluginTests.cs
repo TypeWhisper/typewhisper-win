@@ -68,6 +68,13 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
+    public void AutoHideMilliseconds_DefaultsTo3000_WhenNoSettingStored()
+    {
+        var sut = CreatePlugin();
+        Assert.Equal(3000, sut.AutoHideMilliseconds);
+    }
+
+    [Fact]
     public async Task FontSize_PersistsToHostSettings()
     {
         var host = new TestPluginHostServices();
@@ -90,6 +97,43 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
+    public async Task AutoHideMilliseconds_PersistsToHostSettings()
+    {
+        var host = new TestPluginHostServices();
+        var sut = await ActivatedPlugin(host);
+
+        sut.AutoHideMilliseconds = 1250;
+
+        Assert.Equal(1250, host.GetSetting<int?>("autoHideMilliseconds"));
+    }
+
+    [Fact]
+    public async Task WindowPosition_PersistsToHostSettings()
+    {
+        var host = new TestPluginHostServices();
+        var sut = await ActivatedPlugin(host);
+
+        sut.SaveWindowPosition(123.5, 456.25);
+
+        Assert.Equal(123.5, host.GetSetting<double?>("windowLeft"));
+        Assert.Equal(456.25, host.GetSetting<double?>("windowTop"));
+    }
+
+    [Fact]
+    public async Task ResetWindowPosition_ClearsPersistedCoordinates()
+    {
+        var host = new TestPluginHostServices();
+        host.SetSetting("windowLeft", 123.5);
+        host.SetSetting("windowTop", 456.25);
+        var sut = await ActivatedPlugin(host);
+
+        sut.ResetWindowPosition();
+
+        Assert.Null(host.GetSetting<double?>("windowLeft"));
+        Assert.Null(host.GetSetting<double?>("windowTop"));
+    }
+
+    [Fact]
     public async Task FontSize_ReadsPersistedValueFromHost()
     {
         var host = new TestPluginHostServices();
@@ -107,6 +151,16 @@ public sealed class LiveTranscriptPluginTests
         var sut = await ActivatedPlugin(host);
 
         Assert.Equal(0.6, sut.Opacity, precision: 10);
+    }
+
+    [Fact]
+    public async Task AutoHideMilliseconds_ReadsPersistedValueFromHost()
+    {
+        var host = new TestPluginHostServices();
+        host.SetSetting("autoHideMilliseconds", 750);
+        var sut = await ActivatedPlugin(host);
+
+        Assert.Equal(750, sut.AutoHideMilliseconds);
     }
 
     [Fact]
@@ -295,6 +349,12 @@ public sealed class LiveTranscriptPluginTests
             var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             var eventBus = new TestPluginEventBus();
             var host = new WpfTestHostServices(eventBus);
+            var workArea = SystemParameters.WorkArea;
+            var expectedLeft = workArea.Left + 40;
+            var expectedTop = workArea.Top + 40;
+            host.SetSetting("windowLeft", expectedLeft);
+            host.SetSetting("windowTop", expectedTop);
+            host.SetSetting("autoHideMilliseconds", 0);
             var plugin = new LiveTranscriptPlugin();
 
             try
@@ -308,6 +368,8 @@ public sealed class LiveTranscriptPluginTests
                 Assert.NotNull(window);
                 Assert.True(window.IsVisible);
                 Assert.Equal("Listening...", window.CurrentText);
+                Assert.Equal(expectedLeft, window.Left, precision: 1);
+                Assert.Equal(expectedTop, window.Top, precision: 1);
 
                 eventBus.Publish(new RecordingStoppedEvent());
                 PumpDispatcher();
@@ -319,6 +381,24 @@ public sealed class LiveTranscriptPluginTests
                 PumpDispatcher();
 
                 Assert.False(window.IsVisible);
+
+                host.SetSetting("windowLeft", 100000d);
+                host.SetSetting("windowTop", 100000d);
+                eventBus.Publish(new RecordingStartedEvent());
+                PumpDispatcher();
+
+                var windowWidth = window.ActualWidth > 0 ? window.ActualWidth : window.Width;
+                var windowHeight = window.ActualHeight > 0 ? window.ActualHeight : window.Height;
+                Assert.InRange(window.Left, workArea.Left, workArea.Right - windowWidth + 1);
+                Assert.InRange(window.Top, workArea.Top, workArea.Bottom - windowHeight + 1);
+
+                eventBus.Publish(new TranscriptionCompletedEvent { Text = "Finished" });
+                PumpDispatcher();
+                Thread.Sleep(3300);
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Finished", window.CurrentText);
             }
             finally
             {
