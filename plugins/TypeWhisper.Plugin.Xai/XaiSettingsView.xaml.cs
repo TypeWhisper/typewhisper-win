@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -8,7 +9,7 @@ namespace TypeWhisper.Plugin.Xai;
 public partial class XaiSettingsView : UserControl
 {
     private readonly XaiPlugin _plugin;
-    private bool _suppressPasswordChanged;
+    private readonly bool _suppressPasswordChanged;
     private bool _suppressControlChanged;
 
     public XaiSettingsView(XaiPlugin plugin)
@@ -95,7 +96,12 @@ public partial class XaiSettingsView : UserControl
                 StatusText.Foreground = Brushes.Red;
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
+        {
+            StatusText.Text = L("Settings.Error", ex.Message);
+            StatusText.Foreground = Brushes.Red;
+        }
+        catch (HttpRequestException ex)
         {
             StatusText.Text = L("Settings.Error", ex.Message);
             StatusText.Foreground = Brushes.Red;
@@ -147,7 +153,7 @@ public partial class XaiSettingsView : UserControl
         if (_suppressControlChanged)
             return;
 
-        _plugin.SetTtsLowLatency(LowLatencyCheckBox.IsChecked == true);
+        _plugin.SetTtsLowLatency(LowLatencyCheckBox.IsChecked.GetValueOrDefault());
     }
 
     private void OnTextNormalizationChanged(object sender, RoutedEventArgs e)
@@ -155,7 +161,7 @@ public partial class XaiSettingsView : UserControl
         if (_suppressControlChanged)
             return;
 
-        _plugin.SetTtsTextNormalization(TextNormalizationCheckBox.IsChecked == true);
+        _plugin.SetTtsTextNormalization(TextNormalizationCheckBox.IsChecked.GetValueOrDefault());
     }
 
     private async void OnRefreshModelsClick(object sender, RoutedEventArgs e)
@@ -186,7 +192,12 @@ public partial class XaiSettingsView : UserControl
             StatusText.Text = L("Settings.ModelsFetched", models.Count);
             StatusText.Foreground = Brushes.Green;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
+        {
+            StatusText.Text = L("Settings.Error", ex.Message);
+            StatusText.Foreground = Brushes.Red;
+        }
+        catch (HttpRequestException ex)
         {
             StatusText.Text = L("Settings.Error", ex.Message);
             StatusText.Foreground = Brushes.Red;
@@ -225,7 +236,12 @@ public partial class XaiSettingsView : UserControl
             StatusText.Text = L("Settings.VoicesFetched", voices.Count);
             StatusText.Foreground = Brushes.Green;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
+        {
+            StatusText.Text = L("Settings.Error", ex.Message);
+            StatusText.Foreground = Brushes.Red;
+        }
+        catch (HttpRequestException ex)
         {
             StatusText.Text = L("Settings.Error", ex.Message);
             StatusText.Foreground = Brushes.Red;

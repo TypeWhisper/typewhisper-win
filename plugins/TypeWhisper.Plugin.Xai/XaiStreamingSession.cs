@@ -79,7 +79,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_disposed || _ws.State != WebSocketState.Open)
+            if (_ws.State != WebSocketState.Open)
                 return;
 
             await _ws.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
@@ -98,7 +98,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_disposed || _ws.State != WebSocketState.Open)
+            if (_ws.State != WebSocketState.Open)
                 return;
 
             await SendTextAsync("""{"type":"audio.done"}""", ct);
@@ -118,7 +118,7 @@ internal sealed class XaiStreamingSession : IStreamingSession
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
         var buffer = new byte[8192];
-        var messageBuffer = new MemoryStream();
+        using var messageBuffer = new MemoryStream();
 
         try
         {
@@ -166,16 +166,50 @@ internal sealed class XaiStreamingSession : IStreamingSession
         _disposed = true;
         _receiveCts.Cancel();
 
-        if (_ws.State == WebSocketState.Open)
+        await _sendLock.WaitAsync(CancellationToken.None);
+        try
         {
-            try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }
-            catch { }
+            if (_ws.State == WebSocketState.Open)
+            {
+                try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None); }
+                catch (OperationCanceledException ex)
+                {
+                    Debug.WriteLine($"xAI STT WebSocket close canceled: {ex.Message}");
+                }
+                catch (WebSocketException ex)
+                {
+                    Debug.WriteLine($"xAI STT WebSocket close error: {ex.Message}");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Debug.WriteLine($"xAI STT WebSocket close skipped: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            _sendLock.Release();
         }
 
         if (_receiveTask is not null)
         {
             try { await _receiveTask; }
-            catch { }
+            catch (OperationCanceledException ex)
+            {
+                Debug.WriteLine($"xAI STT receive loop canceled during dispose: {ex.Message}");
+            }
+            catch (WebSocketException ex)
+            {
+                Debug.WriteLine($"xAI STT receive loop closed during dispose: {ex.Message}");
+            }
+            catch (JsonException ex)
+            {
+                Debug.WriteLine($"xAI STT receive loop parse error during dispose: {ex.Message}");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Debug.WriteLine($"xAI STT receive loop stopped during dispose: {ex.Message}");
+            }
         }
 
         _sendLock.Dispose();
