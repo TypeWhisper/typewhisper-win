@@ -112,6 +112,37 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FetchRegistryAsync_DeserializesSingleCategoryString()
+    {
+        const string json = """
+        [
+            {
+                "id": "com.test.utility",
+                "name": "Utility",
+                "version": "1.0.0",
+                "author": "Tester",
+                "description": "A utility plugin",
+                "category": "utility",
+                "categories": "utility",
+                "size": 1024,
+                "downloadUrl": "https://example.com/plugin.zip",
+                "requiresApiKey": false
+            }
+        ]
+        """;
+
+        var httpClient = CreateMockHttpClient(json);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var result = await service.FetchRegistryAsync();
+
+        Assert.Single(result);
+        Assert.Equal("utility", result[0].Category);
+        Assert.Equal(["utility"], result[0].Categories);
+    }
+
+    [Fact]
     public async Task FetchRegistryAsync_PreservesLegacyCategoryWhenCategoriesMissing()
     {
         var plugins = new[]
