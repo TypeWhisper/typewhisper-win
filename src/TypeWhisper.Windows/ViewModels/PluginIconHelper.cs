@@ -28,7 +28,7 @@ internal static class PluginIconHelper
         }
 
         var resolvedBaseDirectory = Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory);
-        var candidate = Path.Combine(
+        var candidate = Path.Join(
             resolvedBaseDirectory,
             "Resources",
             "PluginLogos",
