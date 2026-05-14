@@ -1,9 +1,16 @@
 {
   "id": "com.typewhisper.openrouter",
   "name": "OpenRouter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "TypeWhisper",
-  "description": "OpenRouter multi-model LLM gateway",
+  "description": "Access LLMs and speech-to-text models from OpenAI, Anthropic, Meta, Google and more via OpenRouter. Shows model pricing and account balance. Requires API key.",
+  "descriptions": {
+    "de": "Zugriff auf LLMs und Speech-to-Text-Modelle von OpenAI, Anthropic, Meta, Google und mehr ueber OpenRouter. Zeigt Modellpreise und Kontoguthaben. Erfordert einen API-Key."
+  },
+  "category": "llm",
+  "categories": ["llm", "transcription"],
+  "requiresApiKey": true,
+  "iconSystemName": "globe",
   "assemblyName": "TypeWhisper.Plugin.OpenRouter.dll",
   "pluginClass": "TypeWhisper.Plugin.OpenRouter.OpenRouterPlugin"
 }

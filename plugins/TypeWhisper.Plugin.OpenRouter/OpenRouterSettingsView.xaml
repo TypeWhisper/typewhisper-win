@@ -1,17 +1,73 @@
 <UserControl x:Class="TypeWhisper.Plugin.OpenRouter.OpenRouterSettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="0,4">
-        <TextBlock Text="API Key" FontWeight="SemiBold" Margin="0,0,0,4" />
+    <StackPanel Margin="0,4" MaxWidth="560">
+        <TextBlock x:Name="ApiKeyLabel" Text="API Key" FontWeight="SemiBold" Margin="0,0,0,4" />
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnPasswordChanged" />
+            <Grid>
+                <PasswordBox x:Name="ApiKeyBox" />
+                <TextBox x:Name="ApiKeyTextBox" Visibility="Collapsed" FontFamily="Consolas" />
+            </Grid>
             <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,4"
-                    Click="OnTestClick" x:Name="TestButton" />
+                    Click="OnToggleApiKeyVisibilityClick" x:Name="ShowApiKeyButton" />
+            <Button Grid.Column="2" Margin="8,0,0,0" Padding="12,4"
+                    Click="OnSaveClick" x:Name="SaveButton" />
+            <Button Grid.Column="3" Margin="8,0,0,0" Padding="12,4"
+                    Click="OnRemoveClick" x:Name="RemoveButton" />
         </Grid>
-        <TextBlock x:Name="StatusText" Margin="0,4,0,0" FontSize="12" />
+
+        <TextBlock x:Name="StatusText" Margin="0,6,0,0" FontSize="12" />
+        <TextBlock Margin="0,4,0,0" FontSize="11">
+            <Hyperlink x:Name="GetApiKeyLink" NavigateUri="https://openrouter.ai/keys"
+                       RequestNavigate="OnGetApiKeyClick" />
+        </TextBlock>
+
+        <StackPanel x:Name="ModelsSection" Margin="0,16,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="CreditsText" Margin="0,0,0,12" FontSize="12" Foreground="Gray" />
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="LlmModelLabel" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Grid.Column="1" x:Name="RefreshButton" Padding="12,4"
+                        Click="OnRefreshClick" />
+            </Grid>
+
+            <TextBox x:Name="SearchBox" Margin="0,0,0,8" TextChanged="OnSearchTextChanged" />
+            <ComboBox x:Name="LlmModelPicker"
+                      DisplayMemberPath="DisplayText"
+                      SelectionChanged="OnLlmModelChanged" />
+            <TextBlock x:Name="ModelHintText" Margin="0,4,0,16" FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+
+            <TextBlock x:Name="TemperatureLabel" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ComboBox x:Name="TemperatureModePicker"
+                      DisplayMemberPath="DisplayName"
+                      SelectionChanged="OnTemperatureModeChanged"
+                      Margin="0,0,0,8" />
+            <StackPanel x:Name="TemperatureSliderPanel">
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TemperatureValueLabel" FontSize="11" Foreground="Gray" />
+                    <TextBlock Grid.Column="1" x:Name="TemperatureValueText" FontSize="11" Foreground="Gray" />
+                </Grid>
+                <Slider x:Name="TemperatureSlider"
+                        Minimum="0"
+                        Maximum="2"
+                        TickFrequency="0.1"
+                        IsSnapToTickEnabled="True"
+                        ValueChanged="OnTemperatureValueChanged" />
+            </StackPanel>
+        </StackPanel>
     </StackPanel>
 </UserControl>

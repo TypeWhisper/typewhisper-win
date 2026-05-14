@@ -48,7 +48,9 @@
 
                         <Border Grid.Row="1" Background="#18FFFFFF"/>
 
-                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="2"
+                                Style="{StaticResource SettingsRowBorderStyle}"
+                                Visibility="{Binding ModelManager.IsAccelerationSectionVisible, Converter={StaticResource BoolToVis}}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -79,7 +81,9 @@
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+                        <Border Grid.Row="3"
+                                Background="#18FFFFFF"
+                                Visibility="{Binding ModelManager.IsAccelerationSectionVisible, Converter={StaticResource BoolToVis}}"/>
 
                         <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>

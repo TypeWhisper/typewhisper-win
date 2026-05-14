@@ -97,7 +97,8 @@ public class ModelManagerViewModelTests
             "Parakeet",
             modelId,
             "Parakeet TDT",
-            configured: true);
+            configured: true,
+            supportsModelDownload: true);
 
         var pluginManager = CreatePluginManager(settings, plugin);
         var modelManager = new ModelManagerService(pluginManager, settings);
@@ -106,6 +107,62 @@ public class ModelManagerViewModelTests
         sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationCpu;
 
         Assert.Equal(TranscriptionAccelerationPreference.Cpu, plugin.LastAccelerationPreference);
+    }
+
+    [Fact]
+    public void Constructor_HidesAccelerationControls_ForCloudPluginWithDefaultCpuStatus()
+    {
+        const string pluginId = "com.typewhisper.openrouter";
+        const string modelId = "openai/whisper-1";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var pluginManager = CreatePluginManager(settings,
+            new FakeTranscriptionPlugin(
+                pluginId,
+                "OpenRouter",
+                modelId,
+                "OpenAI: Whisper 1",
+                configured: true));
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.False(sut.IsAccelerationSectionVisible);
+        Assert.Equal("", sut.AccelerationStatusText);
+    }
+
+    [Fact]
+    public void Constructor_ShowsAccelerationControls_ForLocalDownloadPlugin()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var pluginManager = CreatePluginManager(settings,
+            new FakeTranscriptionPlugin(
+                pluginId,
+                "Parakeet",
+                modelId,
+                "Parakeet TDT",
+                configured: true,
+                accelerationStatus: new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.NvidiaCuda,
+                    "Using CUDA"),
+                supportsModelDownload: true));
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.True(sut.IsAccelerationSectionVisible);
+        Assert.Equal("Using CUDA", sut.AccelerationStatusText);
     }
 
     [Fact]
@@ -128,7 +185,8 @@ public class ModelManagerViewModelTests
                 configured: true,
                 accelerationStatus: new TranscriptionAccelerationStatus(
                     TranscriptionAccelerationBackend.NvidiaCuda,
-                    "Using CUDA")));
+                    "Using CUDA"),
+                supportsModelDownload: true));
         var modelManager = new ModelManagerService(pluginManager, settings);
 
         var sut = new ModelManagerViewModel(modelManager, settings);
@@ -203,7 +261,9 @@ public class ModelManagerViewModelTests
             string modelId,
             string modelDisplayName,
             bool configured,
-            TranscriptionAccelerationStatus? accelerationStatus = null)
+            TranscriptionAccelerationStatus? accelerationStatus = null,
+            bool supportsModelDownload = false,
+            IReadOnlyList<TranscriptionAccelerationBackend>? supportedAccelerationBackends = null)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
@@ -212,6 +272,8 @@ public class ModelManagerViewModelTests
             AccelerationStatus = accelerationStatus ?? new TranscriptionAccelerationStatus(
                 TranscriptionAccelerationBackend.Cpu,
                 "Using CPU");
+            SupportsModelDownload = supportsModelDownload;
+            SupportedAccelerationBackends = supportedAccelerationBackends ?? [TranscriptionAccelerationBackend.Cpu];
         }
 
         public string PluginId { get; }
@@ -223,6 +285,8 @@ public class ModelManagerViewModelTests
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
+        public bool SupportsModelDownload { get; }
+        public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; }
         public TranscriptionAccelerationStatus AccelerationStatus { get; }
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
