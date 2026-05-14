@@ -25,7 +25,8 @@
                        Margin="0,0,0,8"
                        Visibility="{Binding ModelManager.IsBusy, Converter={StaticResource BoolToVis}}"/>
 
-            <Grid Margin="0,0,0,16">
+            <Grid Margin="0,0,0,16"
+                  Visibility="{Binding ModelManager.IsAccelerationSectionVisible, Converter={StaticResource BoolToVis}}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>

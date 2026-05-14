@@ -28,6 +28,7 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private string _activeModelStatusText = "";
     private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
+    [ObservableProperty] private bool _isAccelerationSectionVisible;
 
     public string SelectedAccelerationOptionValue
     {
@@ -184,8 +185,13 @@ public partial class ModelManagerViewModel : ObservableObject
         if (_settings.Current.LocalModelAcceleration != normalized)
             _settings.Save(_settings.Current with { LocalModelAcceleration = normalized });
 
-        GetDisplayTranscriptionPlugin()?.SetAccelerationPreference(
-            ModelManagerService.GetAccelerationPreference(normalized));
+        var plugin = GetDisplayTranscriptionPlugin();
+        if (plugin is not null && ShouldShowAccelerationSection(plugin))
+        {
+            plugin.SetAccelerationPreference(
+                ModelManagerService.GetAccelerationPreference(normalized));
+        }
+
         RefreshAccelerationStatus();
     }
 
@@ -295,13 +301,14 @@ public partial class ModelManagerViewModel : ObservableObject
     private void RefreshAccelerationStatus()
     {
         var plugin = GetDisplayTranscriptionPlugin();
-        if (plugin is null)
+        IsAccelerationSectionVisible = ShouldShowAccelerationSection(plugin);
+        if (!IsAccelerationSectionVisible)
         {
-            AccelerationStatusText = Loc.Instance["Models.AccelerationStatusNoModel"];
+            AccelerationStatusText = "";
             return;
         }
 
-        AccelerationStatusText = FormatAccelerationStatus(plugin.AccelerationStatus);
+        AccelerationStatusText = FormatAccelerationStatus(plugin!.AccelerationStatus);
     }
 
     private ITranscriptionEnginePlugin? GetDisplayTranscriptionPlugin()
@@ -322,6 +329,16 @@ public partial class ModelManagerViewModel : ObservableObject
         string.IsNullOrWhiteSpace(status.Detail)
             ? status.DisplayText
             : $"{status.DisplayText}: {status.Detail}";
+
+    internal static bool ShouldShowAccelerationSection(ITranscriptionEnginePlugin? plugin)
+    {
+        if (plugin is null)
+            return false;
+
+        return plugin.SupportsModelDownload
+            || plugin.SupportedAccelerationBackends.Any(backend =>
+                backend != TranscriptionAccelerationBackend.Cpu);
+    }
 
     [RelayCommand]
     private void DeleteModel(string modelId)
