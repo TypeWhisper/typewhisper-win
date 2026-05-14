@@ -830,8 +830,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // Confirmed live text can skip the second full-buffer transcription;
-            // unconfirmed preview still falls back to the final transcription path.
+            // Live text can confirm speech for short/quiet handling, but the
+            // pasted transcript must come from the full captured buffer.
             var trustedLiveText = DictationFinalTextPolicy.SelectTrustedLiveText(streamingText);
             partialSnapshot = trustedLiveText is not null
                 ? [trustedLiveText]
@@ -888,7 +888,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 EffectiveTask,
                 _modelManager.ActiveModelId,
                 apiSessionId,
-                trustedLiveText,
                 aggressiveShortQuietHandling,
                 new RecordingTailDiagnosticSnapshot(
                     _modelManager.ActiveModelId,
@@ -992,78 +991,63 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             long? fullDecodeDurationMs = null;
 
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-            if (!isParakeetJob && job.TrustedLiveText is not null)
+            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+            var decodeStartedAt = DateTime.UtcNow;
+            var result = await _modelManager.Engine.TranscribeAsync(
+                decodeSamples, language, job.EffectiveTask, ct);
+            fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
+            fullDecodeText = result.Text ?? "";
+            fullDecodeDetectedLanguage = result.DetectedLanguage;
+
+            if (isParakeetJob)
             {
-                rawText = DictationFinalTextPolicy.SelectRawText(null, job.TrustedLiveText);
+                var selection = ParakeetTailHelper.SelectResult(
+                    job.ActiveModelIdAtCapture,
+                    fullDecodeText,
+                    job.PartialSegments);
+                rawText = DictationFinalTextPolicy.SelectRawText(selection.Text);
+                detectedLanguage = fullDecodeDetectedLanguage;
                 job = job with
                 {
                     Diagnostic = job.Diagnostic with
                     {
-                        FinalTextSource = "trusted_live",
-                        PartialTextLength = previewText.Length
+                        TailGuardApplied = tailGuardApplied,
+                        TailSamplesAdded = tailSamplesAdded,
+                        FinalTextSource = selection.Source,
+                        FullDecodeTextLength = selection.FullDecodeTextLength,
+                        PartialTextLength = selection.PartialTextLength,
+                        DivergedFromPartials = selection.DivergedFromPartials,
+                        FullDecodeDurationMs = fullDecodeDurationMs
                     }
                 };
             }
             else
             {
-                var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
-                var decodeStartedAt = DateTime.UtcNow;
-                var result = await _modelManager.Engine.TranscribeAsync(
-                    decodeSamples, language, job.EffectiveTask, ct);
-                fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
-                fullDecodeText = result.Text ?? "";
-                fullDecodeDetectedLanguage = result.DetectedLanguage;
-
-                if (isParakeetJob)
+                if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
+                        result.Text,
+                        result.NoSpeechProbability,
+                        hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
+                        job.TranscribeShortQuietClipsAggressively))
                 {
-                    var selection = ParakeetTailHelper.SelectResult(
-                        job.ActiveModelIdAtCapture,
-                        fullDecodeText,
-                        job.PartialSegments);
-                    rawText = DictationFinalTextPolicy.SelectRawText(selection.Text);
-                    detectedLanguage = fullDecodeDetectedLanguage;
-                    job = job with
-                    {
-                        Diagnostic = job.Diagnostic with
-                        {
-                            TailGuardApplied = tailGuardApplied,
-                            TailSamplesAdded = tailSamplesAdded,
-                            FinalTextSource = selection.Source,
-                            FullDecodeTextLength = selection.FullDecodeTextLength,
-                            PartialTextLength = selection.PartialTextLength,
-                            DivergedFromPartials = selection.DivergedFromPartials,
-                            FullDecodeDurationMs = fullDecodeDurationMs
-                        }
-                    };
+                    FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                    PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
+                    return;
                 }
-                else
+
+                rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+                detectedLanguage = result.DetectedLanguage;
+                job = job with
                 {
-                    if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
-                            result.Text,
-                            result.NoSpeechProbability,
-                            hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
-                            job.TranscribeShortQuietClipsAggressively))
+                    Diagnostic = job.Diagnostic with
                     {
-                        FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
-                        PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
-                        await Application.Current.Dispatcher.InvokeAsync(() =>
-                            ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]));
-                        return;
+                        FinalTextSource = string.IsNullOrWhiteSpace(fullDecodeText) ? "empty" : "full_decode",
+                        FullDecodeTextLength = fullDecodeText.Length,
+                        PartialTextLength = previewText.Length,
+                        FullDecodeDurationMs = fullDecodeDurationMs
                     }
-
-                    rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
-                    detectedLanguage = result.DetectedLanguage;
-                    job = job with
-                    {
-                        Diagnostic = job.Diagnostic with
-                        {
-                            FinalTextSource = string.IsNullOrWhiteSpace(fullDecodeText) ? "empty" : "full_decode",
-                            FullDecodeTextLength = fullDecodeText.Length,
-                            PartialTextLength = previewText.Length,
-                            FullDecodeDurationMs = fullDecodeDurationMs
-                        }
-                    };
-                }
+                };
             }
 
             if (string.IsNullOrWhiteSpace(rawText))
@@ -1594,7 +1578,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,
-        string? TrustedLiveText,
         bool TranscribeShortQuietClipsAggressively,
         RecordingTailDiagnosticSnapshot Diagnostic,
         Guid? RecordingId);
@@ -1643,10 +1626,7 @@ internal static class DictationFinalTextPolicy
 
     public static string SelectRawText(string? finalText, string? trustedLiveText)
     {
-        var trusted = SelectTrustedLiveText(trustedLiveText);
-        return trusted is not null
-            ? NormalizeDictationArtifacts(trusted)
-            : SelectRawText(finalText);
+        return SelectRawText(finalText);
     }
 
     private static string NormalizeDictationArtifacts(string text) =>
