@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\Tests\*.cs" LinkBase="OpenAi" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\Tests\*.cs" LinkBase="OpenRouter" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\Tests\*.cs" LinkBase="LiveTranscript" />
   </ItemGroup>

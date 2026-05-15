@@ -770,6 +770,7 @@
   "Workflows.GlobalDefault": "Общее (по умолчанию)",
   "Workflows.DefaultProviderLabelNone": "Провайдер ИИ по умолчанию: не настроен",
   "Workflows.DefaultProviderLabelFormat": "Провайдер ИИ по умолчанию: {0}",
+  "Workflows.DefaultProviderLabelAutoFormat": "Провайдер ИИ по умолчанию: {0} (авто)",
   "Workflows.Review": "Проверка",
   "Workflows.ReviewFormat": "{0} выполняется как {1} через {2}.",
   "Workflows.ReviewHotkeyDictationFormat": "{0} — начать диктовку",

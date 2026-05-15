@@ -800,6 +800,7 @@
   "Workflows.GlobalDefault": "Global (Default)",
   "Workflows.DefaultProviderLabelNone": "Default AI provider: none configured",
   "Workflows.DefaultProviderLabelFormat": "Default AI provider: {0}",
+  "Workflows.DefaultProviderLabelAutoFormat": "Default AI provider: {0} (auto)",
   "Workflows.Review": "Review",
   "Workflows.ReviewFormat": "{0} runs as {1} via {2}.",
   "Workflows.ReviewHotkeyDictationFormat": "{0} to start dictation",

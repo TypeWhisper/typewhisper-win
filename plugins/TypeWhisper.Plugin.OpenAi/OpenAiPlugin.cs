@@ -21,6 +21,10 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private const string FetchedLlmModelsSettingName = "fetchedLLMModels";
     private const string AuthModeSettingName = "authMode";
     private const string SelectedLlmModelSettingName = "selectedLLMModel";
+    private const string TemperatureModeSettingName = "llmTemperatureMode";
+    private const string TemperatureValueSettingName = "llmTemperatureValue";
+    private const string TemperatureModeProviderDefault = "providerDefault";
+    private const string TemperatureModeCustom = "custom";
     private const string OAuthAccessTokenSecretName = "oauth-access-token";
     private const string OAuthRefreshTokenSecretName = "oauth-refresh-token";
     private const string OAuthIdTokenSecretName = "oauth-id-token";
@@ -38,6 +42,8 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private string? _selectedVoiceId;
     private string _ttsInstructions = "";
     private string _reasoningEffort = "medium";
+    private string _temperatureMode = TemperatureModeProviderDefault;
+    private double _temperatureValue = 0.3;
     private List<OpenAiFetchedModel> _fetchedLlmModels = [];
     private OpenAiAuthMode _authMode = OpenAiAuthMode.ApiKey;
     private string? _selectedLlmModelId;
@@ -111,6 +117,8 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         _ttsInstructions = host.GetSetting<string>(TtsInstructionsSettingName) ?? "";
         _reasoningEffort = NormalizeReasoningEffort(host.GetSetting<string>(ReasoningEffortSettingName));
+        _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
+        _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
         _fetchedLlmModels = host.GetSetting<List<OpenAiFetchedModel>>(FetchedLlmModelsSettingName) ?? [];
         _oauthAccountId = host.GetSetting<string>(OAuthAccountIdSettingName);
         _oauthPlanType = host.GetSetting<string>(OAuthPlanTypeSettingName);
@@ -207,6 +215,8 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     internal string? ChatGptPlanType => _oauthPlanType;
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal string ReasoningEffort => _reasoningEffort;
+    internal string TemperatureMode => _temperatureMode;
+    internal double TemperatureValue => _temperatureValue;
 
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
@@ -241,7 +251,17 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         }
 
         return await OpenAiChatHelper.SendChatCompletionAsync(
-            _httpClient, BaseUrl, _apiKey!, modelId, systemPrompt, userText, ct);
+            _httpClient,
+            BaseUrl,
+            _apiKey!,
+            modelId,
+            systemPrompt,
+            userText,
+            ct,
+            maxOutputTokens: 2048,
+            maxOutputTokenParameter: OutputTokenParameter(modelId),
+            reasoningEffort: SupportsReasoningEffort(modelId) ? _reasoningEffort : null,
+            temperature: ResolvedTemperature(modelId));
     }
 
     internal static bool UsesResponsesApi(string modelId) =>
@@ -257,14 +277,48 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             || lowered.Contains("codex", StringComparison.Ordinal);
     }
 
+    internal static string OutputTokenParameter(string modelId)
+    {
+        var lowered = modelId.ToLowerInvariant();
+        return lowered.StartsWith("gpt-5", StringComparison.Ordinal)
+            || lowered.StartsWith("o1", StringComparison.Ordinal)
+            || lowered.StartsWith("o3", StringComparison.Ordinal)
+            || lowered.StartsWith("o4", StringComparison.Ordinal)
+            ? "max_completion_tokens"
+            : "max_tokens";
+    }
+
+    internal static bool SupportsCustomTemperature(string modelId, string? reasoningEffort = null) =>
+        ChatCompletionTemperature(modelId, reasoningEffort) is not null;
+
+    internal static double? ChatCompletionTemperature(string modelId, string? reasoningEffort)
+    {
+        var lowered = modelId.ToLowerInvariant();
+        if (lowered.StartsWith("gpt-5", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(reasoningEffort))
+        {
+            return null;
+        }
+
+        return 0.3;
+    }
+
     internal async Task<IReadOnlyList<PluginModelInfo>> RefreshAvailableLlmModelsAsync(CancellationToken ct = default)
     {
+        if (_authMode == OpenAiAuthMode.ChatGpt)
+        {
+            NormalizeSelectedLlmModel(persist: true);
+            _host?.NotifyCapabilitiesChanged();
+            return SupportedModels;
+        }
+
         var models = await FetchLlmModelsAsync(ct);
         if (models.Count == 0)
             return [];
 
         _fetchedLlmModels = models.ToList();
         _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+        NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
         return SupportedModels;
     }
@@ -352,6 +406,18 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     {
         _reasoningEffort = NormalizeReasoningEffort(effort);
         _host?.SetSetting(ReasoningEffortSettingName, _reasoningEffort);
+    }
+
+    internal void SetTemperatureMode(string mode)
+    {
+        _temperatureMode = NormalizeTemperatureMode(mode);
+        _host?.SetSetting(TemperatureModeSettingName, _temperatureMode);
+    }
+
+    internal void SetTemperatureValue(double value)
+    {
+        _temperatureValue = NormalizeTemperatureValue(value);
+        _host?.SetSetting(TemperatureValueSettingName, _temperatureValue);
     }
 
     internal async Task LoginWithChatGptInBrowserAsync(CancellationToken ct = default)
@@ -585,9 +651,22 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             || available.All(model => !string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
         {
             _selectedLlmModelId = available.First().Id;
-            if (persist)
-                _host?.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
         }
+
+        if (persist)
+            _host?.SetSetting(SelectedLlmModelSettingName, _selectedLlmModelId);
+    }
+
+    private double? ResolvedTemperature(string modelId)
+    {
+        if (_temperatureMode != TemperatureModeCustom)
+            return null;
+
+        return SupportsCustomTemperature(
+            modelId,
+            SupportsReasoningEffort(modelId) ? _reasoningEffort : null)
+            ? _temperatureValue
+            : null;
     }
 
     private static DateTimeOffset? LoadExpiresAt(IPluginHostServices host)
@@ -613,6 +692,14 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 
     private static string NormalizeReasoningEffort(string? effort) =>
         effort is "low" or "medium" or "high" or "xhigh" ? effort : "medium";
+
+    private static string NormalizeTemperatureMode(string? mode) =>
+        string.Equals(mode, TemperatureModeCustom, StringComparison.OrdinalIgnoreCase)
+            ? TemperatureModeCustom
+            : TemperatureModeProviderDefault;
+
+    private static double NormalizeTemperatureValue(double? value) =>
+        Math.Clamp(value ?? 0.3, 0.0, 2.0);
 
     private static string NormalizeVoiceId(string? voiceId) =>
         !string.IsNullOrWhiteSpace(voiceId)

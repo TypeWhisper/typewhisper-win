@@ -32,7 +32,7 @@ public class OpenAiPluginTests
     }
 
     [Fact]
-    public void SettingsViewXaml_ExposesTranscriptionModelPicker()
+    public void SettingsViewXaml_KeepsTranscriptionModelOutOfPluginSettings()
     {
         var viewPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -40,8 +40,12 @@ public class OpenAiPluginTests
             "plugins", "TypeWhisper.Plugin.OpenAi", "OpenAiSettingsView.xaml"));
         var xaml = File.ReadAllText(viewPath);
 
-        Assert.Contains("TranscriptionModelComboBox", xaml);
-        Assert.Contains("OnTranscriptionModelSelectionChanged", xaml);
+        Assert.DoesNotContain("TranscriptionModelComboBox", xaml);
+        Assert.DoesNotContain("OnTranscriptionModelSelectionChanged", xaml);
+        Assert.Contains("TemperatureModeComboBox", xaml);
+        Assert.Contains("TemperatureSlider", xaml);
+        Assert.Contains("OnTemperatureModeSelectionChanged", xaml);
+        Assert.Contains("OnTemperatureValueChanged", xaml);
     }
 
     [Fact]
@@ -270,6 +274,7 @@ public class OpenAiPluginTests
         using var httpClient = new HttpClient(handler);
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "sk-live";
+        host.SetSetting("selectedLLMModel", "stale-model");
         var sut = new OpenAiPlugin(httpClient, _ => new FakeTtsPlaybackSession());
         await sut.ActivateAsync(host);
 
@@ -277,6 +282,8 @@ public class OpenAiPluginTests
 
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], models.Select(m => m.Id).ToArray());
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], sut.SupportedModels.Select(m => m.Id).ToArray());
+        Assert.Equal("gpt-4.1-mini", sut.SelectedLlmModelId);
+        Assert.Equal("gpt-4.1-mini", host.GetSetting<string>("selectedLLMModel"));
         Assert.Equal("https://api.openai.com/v1/models", capturedRequest?.RequestUri?.ToString());
         Assert.Equal("Bearer", capturedRequest?.Headers.Authorization?.Scheme);
         Assert.Equal("sk-live", capturedRequest?.Headers.Authorization?.Parameter);
@@ -285,6 +292,109 @@ public class OpenAiPluginTests
         var cachedModels = host.GetSetting<List<OpenAiFetchedModel>>("fetchedLLMModels");
         Assert.NotNull(cachedModels);
         Assert.Equal(["gpt-4.1-mini", "o4-mini"], cachedModels.Select(m => m.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task RefreshAvailableLlmModels_UsesChatGptCatalogWithoutModelsEndpoint()
+    {
+        var requests = 0;
+        var handler = new CapturingHandler((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(JsonResponse("{}"));
+        });
+        var host = new TestPluginHostServices();
+        host.SetSetting("authMode", "chatgpt");
+        host.SetSetting("selectedLLMModel", "stale-model");
+        host.Secrets["oauth-access-token"] = "access-token";
+        host.Secrets["oauth-refresh-token"] = "refresh-token";
+
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(httpClient, _ => new FakeTtsPlaybackSession());
+        await sut.ActivateAsync(host);
+
+        var models = await sut.RefreshAvailableLlmModelsAsync(CancellationToken.None);
+
+        Assert.Equal("gpt-5.5", models.First().Id);
+        Assert.Contains(models, model => model.Id == "gpt-5.3-codex-spark");
+        Assert.Equal("gpt-5.5", sut.SelectedLlmModelId);
+        Assert.Equal("gpt-5.5", host.GetSetting<string>("selectedLLMModel"));
+        Assert.Equal(0, requests);
+        Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UsesReasoningChatCompletionParametersForOModels()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        var handler = new CapturingHandler((request, body) =>
+        {
+            capturedRequest = request;
+            capturedBody = body;
+            return Task.FromResult(JsonResponse("""
+            {
+              "choices": [
+                { "message": { "content": "Reasoned result" } }
+              ]
+            }
+            """));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-live";
+
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(httpClient, _ => new FakeTtsPlaybackSession());
+        await sut.ActivateAsync(host);
+
+        var result = await sut.ProcessAsync("Fix grammar", "hello world", "o4-mini", CancellationToken.None);
+
+        Assert.Equal("Reasoned result", result);
+        Assert.Equal("https://api.openai.com/v1/chat/completions", capturedRequest?.RequestUri?.ToString());
+        Assert.NotNull(capturedBody);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.Equal("o4-mini", doc.RootElement.GetProperty("model").GetString());
+        Assert.Equal(2048, doc.RootElement.GetProperty("max_completion_tokens").GetInt32());
+        Assert.Equal("medium", doc.RootElement.GetProperty("reasoning_effort").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("max_tokens", out _));
+        Assert.False(doc.RootElement.TryGetProperty("temperature", out _));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UsesCustomTemperatureForApiKeyChatCompletions()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return Task.FromResult(JsonResponse("""
+            {
+              "choices": [
+                { "message": { "content": "Warmer result" } }
+              ]
+            }
+            """));
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "sk-live";
+        host.SetSetting("llmTemperatureMode", "custom");
+        host.SetSetting("llmTemperatureValue", 1.2);
+
+        using var httpClient = new HttpClient(handler);
+        var sut = new OpenAiPlugin(httpClient, _ => new FakeTtsPlaybackSession());
+        await sut.ActivateAsync(host);
+
+        var result = await sut.ProcessAsync("Fix grammar", "hello world", "gpt-4o", CancellationToken.None);
+
+        Assert.Equal("Warmer result", result);
+        Assert.NotNull(capturedBody);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.Equal("gpt-4o", doc.RootElement.GetProperty("model").GetString());
+        Assert.Equal(2048, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.Equal(1.2, doc.RootElement.GetProperty("temperature").GetDouble(), precision: 3);
+        Assert.False(doc.RootElement.TryGetProperty("reasoning_effort", out _));
     }
 
     [Fact]

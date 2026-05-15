@@ -24,19 +24,32 @@ public static class OpenAiChatHelper
     /// <returns>The assistant's response content text.</returns>
     public static async Task<string> SendChatCompletionAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
-        string model, string systemPrompt, string userText, CancellationToken ct)
+        string model, string systemPrompt, string userText, CancellationToken ct,
+        int? maxOutputTokens = 2048,
+        string maxOutputTokenParameter = "max_tokens",
+        string? reasoningEffort = null,
+        double? temperature = 0.1)
     {
-        var requestBody = JsonSerializer.Serialize(new
+        var body = new Dictionary<string, object?>
         {
-            model,
-            messages = new object[]
+            ["model"] = model,
+            ["messages"] = new object[]
             {
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText }
-            },
-            temperature = 0.1,
-            max_tokens = 2048
-        });
+            }
+        };
+
+        if (temperature is not null)
+            body["temperature"] = temperature.Value;
+
+        if (maxOutputTokens is not null)
+            body[maxOutputTokenParameter] = maxOutputTokens.Value;
+
+        if (!string.IsNullOrWhiteSpace(reasoningEffort))
+            body["reasoning_effort"] = reasoningEffort;
+
+        var requestBody = JsonSerializer.Serialize(body);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/v1/chat/completions");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);

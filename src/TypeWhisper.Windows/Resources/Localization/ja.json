@@ -745,6 +745,7 @@
   "Workflows.GlobalDefault": "グローバル（デフォルト）",
   "Workflows.DefaultProviderLabelNone": "デフォルトAIプロバイダー: 未設定",
   "Workflows.DefaultProviderLabelFormat": "デフォルトAIプロバイダー: {0}",
+  "Workflows.DefaultProviderLabelAutoFormat": "デフォルトAIプロバイダー: {0}（自動）",
   "Workflows.Review": "レビュー",
   "Workflows.ReviewFormat": "{0}は{1}として{2}経由で実行されます。",
   "Workflows.Enabled": "有効",
