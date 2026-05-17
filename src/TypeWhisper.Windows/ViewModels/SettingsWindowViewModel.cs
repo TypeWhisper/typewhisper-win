@@ -283,6 +283,15 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             ModelManager.RefreshPluginAvailability();
     }
 
+    internal bool FocusInstalledPlugin(string pluginId)
+    {
+        if (string.IsNullOrWhiteSpace(pluginId))
+            return false;
+
+        Open(SettingsRoute.Integrations);
+        return Plugins.FocusInstalledPlugin(pluginId);
+    }
+
     public bool TryConsumePendingFileImporterRequest()
     {
         if (PendingFileImporterRequestId == 0)

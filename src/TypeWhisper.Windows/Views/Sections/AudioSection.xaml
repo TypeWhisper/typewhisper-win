@@ -145,18 +145,8 @@
                                                      Margin="0,0,8,0"
                                                      VerticalAlignment="Center"
                                                      IsIndeterminate="True"
-                                                     Foreground="{StaticResource AccentBrush}">
-                                            <ProgressBar.Style>
-                                                <Style TargetType="ProgressBar">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ModelManager.IsActiveModelReady}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ProgressBar.Style>
-                                        </ProgressBar>
+                                                     Foreground="{StaticResource AccentBrush}"
+                                                     Visibility="{Binding ModelManager.IsActiveModelBusy, Converter={StaticResource BoolToVis}}"/>
 
                                         <TextBlock Grid.Column="1"
                                                    Text="{Binding ModelManager.ActiveModelStatusText}">

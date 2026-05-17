@@ -8,10 +8,13 @@ namespace TypeWhisper.Windows.Views.Sections;
 
 public partial class PluginsSection : UserControl
 {
+    private PluginsViewModel? _pluginsViewModel;
+
     public PluginsSection()
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -19,7 +22,15 @@ public partial class PluginsSection : UserControl
         var vm = (DataContext as SettingsWindowViewModel)?.Plugins;
         if (vm is not null)
         {
-            vm.IsMarketplaceSelected = false;
+            if (!ReferenceEquals(_pluginsViewModel, vm))
+            {
+                if (_pluginsViewModel is not null)
+                    _pluginsViewModel.PropertyChanged -= OnPluginsPropertyChanged;
+                _pluginsViewModel = vm;
+                _pluginsViewModel.PropertyChanged += OnPluginsPropertyChanged;
+            }
+
+            ApplyTabSelection(vm.IsMarketplaceSelected);
             EmptyState.Visibility = vm.Plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             // Setup grouping by Category
@@ -34,26 +45,43 @@ public partial class PluginsSection : UserControl
         }
     }
 
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_pluginsViewModel is null)
+            return;
+
+        _pluginsViewModel.PropertyChanged -= OnPluginsPropertyChanged;
+        _pluginsViewModel = null;
+    }
+
+    private void OnPluginsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PluginsViewModel.IsMarketplaceSelected))
+            ApplyTabSelection(_pluginsViewModel?.IsMarketplaceSelected ?? false);
+    }
+
     private void OnInstalledTabClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
             vm.Plugins.IsMarketplaceSelected = false;
-
-        TabInstalled.Style = (Style)Resources["ActiveTabButtonStyle"];
-        TabMarketplace.Style = (Style)Resources["TabButtonStyle"];
-        InstalledPanel.Visibility = Visibility.Visible;
-        MarketplacePanel.Visibility = Visibility.Collapsed;
+        else
+            ApplyTabSelection(false);
     }
 
     private void OnMarketplaceTabClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
             vm.Plugins.IsMarketplaceSelected = true;
+        else
+            ApplyTabSelection(true);
+    }
 
-        TabInstalled.Style = (Style)Resources["TabButtonStyle"];
-        TabMarketplace.Style = (Style)Resources["ActiveTabButtonStyle"];
-        InstalledPanel.Visibility = Visibility.Collapsed;
-        MarketplacePanel.Visibility = Visibility.Visible;
+    private void ApplyTabSelection(bool marketplaceSelected)
+    {
+        TabInstalled.Style = (Style)Resources[marketplaceSelected ? "TabButtonStyle" : "ActiveTabButtonStyle"];
+        TabMarketplace.Style = (Style)Resources[marketplaceSelected ? "ActiveTabButtonStyle" : "TabButtonStyle"];
+        InstalledPanel.Visibility = marketplaceSelected ? Visibility.Collapsed : Visibility.Visible;
+        MarketplacePanel.Visibility = marketplaceSelected ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnMarketplacePanelPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)

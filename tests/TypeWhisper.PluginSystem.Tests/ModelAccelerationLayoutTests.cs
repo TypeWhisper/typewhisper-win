@@ -23,4 +23,17 @@ public sealed class ModelAccelerationLayoutTests
             "Audio settings should hide the acceleration row and its separator for cloud engines.");
         Assert.Contains("Visibility=\"{Binding ModelManager.IsAccelerationSectionVisible", modelsXaml);
     }
+
+    [Fact]
+    public void AudioSection_BindsModelStatusProgressToBusyState()
+    {
+        var audioXaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "AudioSection.xaml");
+
+        Assert.Contains("ModelManager.IsActiveModelBusy", audioXaml);
+    }
 }

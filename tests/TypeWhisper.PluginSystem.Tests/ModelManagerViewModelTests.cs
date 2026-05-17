@@ -5,6 +5,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
@@ -218,6 +219,54 @@ public class ModelManagerViewModelTests
         Assert.Equal("Whisper Large V3", sut.ActiveModelDisplayName);
     }
 
+    [Fact]
+    public void Constructor_ShowsApiKeyRequiredWithoutBusy_ForUnconfiguredCloudSelection()
+    {
+        const string pluginId = "com.typewhisper.groq";
+        const string modelId = "whisper-large-v3";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var pluginManager = CreatePluginManager(settings,
+            new FakeTranscriptionPlugin(pluginId, "Groq", modelId, "Whisper Large V3", configured: false));
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.Equal(fullModelId, sut.SelectedModelOptionId);
+        Assert.Equal("Groq", sut.ActiveProviderDisplayName);
+        Assert.Equal("Whisper Large V3", sut.ActiveModelDisplayName);
+        Assert.Equal(Loc.Instance["Models.StatusApiKeyRequired"], sut.ActiveModelStatusText);
+        Assert.False(sut.IsActiveModelReady);
+        Assert.False(sut.IsActiveModelBusy);
+    }
+
+    [Fact]
+    public void RefreshPluginAvailability_MarksConfiguredCloudSelectionReadyWithoutBusy()
+    {
+        const string pluginId = "com.typewhisper.groq";
+        const string modelId = "whisper-large-v3";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+        var plugin = new FakeTranscriptionPlugin(pluginId, "Groq", modelId, "Whisper Large V3", configured: false);
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        plugin.IsConfigured = true;
+        sut.RefreshPluginAvailability();
+
+        Assert.Equal(Loc.Instance["Models.StatusReady"], sut.ActiveModelStatusText);
+        Assert.True(sut.IsActiveModelReady);
+        Assert.False(sut.IsActiveModelBusy);
+    }
+
     private PluginManager CreatePluginManager(ISettingsService settings, params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -281,7 +330,7 @@ public class ModelManagerViewModelTests
         public string PluginVersion => "1.0.0";
         public string ProviderId => PluginId;
         public string ProviderDisplayName { get; }
-        public bool IsConfigured { get; }
+        public bool IsConfigured { get; set; }
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;

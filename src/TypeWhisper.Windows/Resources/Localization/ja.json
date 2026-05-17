@@ -694,6 +694,7 @@
   "Models.StatusReady": "準備完了",
   "Models.StatusErrorFormat": "エラー: {0}",
   "Models.StatusDownloaded": "ダウンロード済み",
+  "Models.StatusApiKeyRequired": "APIキーが必要です",
   "Models.LoadingModel": "モデルを読み込み中...",
   "Welcome.DownloadProgress": "ダウンロード中...",
   "Welcome.LoadingModel": "モデルを読み込み中...",

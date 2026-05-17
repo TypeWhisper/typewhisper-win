@@ -28,6 +28,7 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private string _activeModelStatusText = "";
     private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
+    [ObservableProperty] private bool _isActiveModelBusy;
     [ObservableProperty] private bool _isAccelerationSectionVisible;
 
     public string SelectedAccelerationOptionValue
@@ -140,6 +141,8 @@ public partial class ModelManagerViewModel : ObservableObject
             foreach (var m in providerVm.Models)
                 m.IsAvailable = isConfigured;
         }
+
+        RefreshAllModels();
     }
 
     private void RefreshAllModels()
@@ -151,7 +154,8 @@ public partial class ModelManagerViewModel : ObservableObject
                 m.IsDownloaded = _modelManager.IsDownloaded(m.FullId);
                 var status = _modelManager.GetStatus(m.FullId);
                 m.IsReady = status.Type == ModelStatusType.Ready;
-                m.StatusText = FormatStatus(status, m.IsDownloaded);
+                m.IsBusy = IsBusyStatus(status);
+                m.StatusText = FormatStatus(status, m.IsDownloaded, m.IsAvailable, m.SupportsDownload);
             }
 
         SyncSelectedModelOption();
@@ -195,14 +199,22 @@ public partial class ModelManagerViewModel : ObservableObject
         RefreshAccelerationStatus();
     }
 
-    internal static string FormatStatus(ModelStatus status, bool isDownloaded) => status.Type switch
+    internal static string FormatStatus(
+        ModelStatus status,
+        bool isDownloaded,
+        bool isConfigured,
+        bool supportsDownload) => status.Type switch
     {
         ModelStatusType.Downloading => $"Download {status.Progress:P0}",
         ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
         ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
         ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
+        _ when !supportsDownload && !isConfigured => Loc.Instance["Models.StatusApiKeyRequired"],
         _ => isDownloaded ? Loc.Instance["Models.StatusDownloaded"] : ""
     };
+
+    internal static bool IsBusyStatus(ModelStatus status) =>
+        status.Type is ModelStatusType.Downloading or ModelStatusType.Loading;
 
     [RelayCommand]
     private async Task ActivateModel(string fullModelId)
@@ -287,6 +299,7 @@ public partial class ModelManagerViewModel : ObservableObject
             ActiveModelDisplayName = "No model selected";
             ActiveModelStatusText = "";
             IsActiveModelReady = false;
+            IsActiveModelBusy = false;
             RefreshAccelerationStatus();
             return;
         }
@@ -295,6 +308,7 @@ public partial class ModelManagerViewModel : ObservableObject
         ActiveModelDisplayName = activeModel.Model.DisplayName;
         ActiveModelStatusText = activeModel.Model.StatusText;
         IsActiveModelReady = activeModel.Model.IsReady;
+        IsActiveModelBusy = activeModel.Model.IsBusy;
         RefreshAccelerationStatus();
     }
 
@@ -382,6 +396,7 @@ public partial class ModelItemViewModel : ObservableObject
     [ObservableProperty] private bool _isAvailable;
     [ObservableProperty] private bool _isDownloaded;
     [ObservableProperty] private bool _isReady;
+    [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusText = "";
 
     public ModelItemViewModel(string fullId, PluginModelInfo model, bool isAvailable,
@@ -399,7 +414,8 @@ public partial class ModelItemViewModel : ObservableObject
         _isActive = isActive;
         _isDownloaded = isDownloaded;
         _isReady = status.Type == ModelStatusType.Ready;
-        _statusText = ModelManagerViewModel.FormatStatus(status, isDownloaded);
+        _isBusy = ModelManagerViewModel.IsBusyStatus(status);
+        _statusText = ModelManagerViewModel.FormatStatus(status, isDownloaded, isAvailable, supportsDownload);
     }
 }
 

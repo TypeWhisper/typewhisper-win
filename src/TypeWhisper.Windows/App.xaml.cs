@@ -173,10 +173,15 @@ public partial class App : Application
         if (!settings.Current.HasCompletedOnboarding && !Program.StartMinimized)
         {
             _welcomeWindow = _serviceProvider.GetRequiredService<WelcomeWindow>();
-            _welcomeWindow.Closed += (_, _) =>
+            _welcomeWindow.Closed += (sender, _) =>
             {
+                var completionRequest = (sender as WelcomeWindow)?.DataContext is WelcomeViewModel viewModel
+                    ? viewModel.CompletionRequest
+                    : WelcomeCompletionRequest.None;
                 settings.Save(settings.Current with { HasCompletedOnboarding = true });
                 _welcomeWindow = null;
+                if (completionRequest.SettingsRoute is { } route)
+                    ShowSettingsWindow(route, focusPluginId: completionRequest.PluginIdToConfigure);
             };
             _welcomeWindow.Show();
         }
@@ -264,23 +269,21 @@ public partial class App : Application
         ShowSettingsWindow(SettingsRoute.License);
     }
 
-    private void ShowSettingsWindow(SettingsRoute? route = null, bool presentFileImporter = false)
+    private void ShowSettingsWindow(
+        SettingsRoute? route = null,
+        bool presentFileImporter = false,
+        string? focusPluginId = null)
     {
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.Invoke(() => ShowSettingsWindow(route, presentFileImporter));
+            Dispatcher.Invoke(() => ShowSettingsWindow(route, presentFileImporter, focusPluginId));
             return;
         }
 
         if (_settingsWindow is { IsLoaded: true })
         {
             if (_settingsWindow.DataContext is SettingsWindowViewModel existingViewModel)
-            {
-                if (presentFileImporter)
-                    existingViewModel.OpenFileImporterCommand.Execute(null);
-                else if (route.HasValue)
-                    existingViewModel.Open(route.Value);
-            }
+                ApplySettingsWindowRequest(existingViewModel, route, presentFileImporter, focusPluginId);
             _settingsWindow.Activate();
             return;
         }
@@ -290,12 +293,22 @@ public partial class App : Application
         _settingsWindow.Show();
 
         if (_settingsWindow.DataContext is SettingsWindowViewModel viewModel)
-        {
-            if (presentFileImporter)
-                viewModel.OpenFileImporterCommand.Execute(null);
-            else if (route.HasValue)
-                viewModel.Open(route.Value);
-        }
+            ApplySettingsWindowRequest(viewModel, route, presentFileImporter, focusPluginId);
+    }
+
+    private static void ApplySettingsWindowRequest(
+        SettingsWindowViewModel viewModel,
+        SettingsRoute? route,
+        bool presentFileImporter,
+        string? focusPluginId)
+    {
+        if (presentFileImporter)
+            viewModel.OpenFileImporterCommand.Execute(null);
+        else if (route.HasValue)
+            viewModel.Open(route.Value);
+
+        if (!string.IsNullOrWhiteSpace(focusPluginId))
+            viewModel.FocusInstalledPlugin(focusPluginId);
     }
 
     private void ShowFileTranscriptionWindow()
