@@ -23,6 +23,7 @@
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
             <conv:InvertBoolConverter x:Key="InvertBool"/>
             <conv:InvertBoolToVisibilityConverter x:Key="InvertBoolToVis"/>
             <conv:StepToVisibilityConverter x:Key="StepConverter"/>
@@ -153,12 +154,18 @@
                                             </Style>
                                         </Border.Style>
                                         <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <StackPanel>
+                                            <StackPanel Grid.Row="0"
+                                                        Grid.Column="0">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="Parakeet"
                                                                Foreground="{StaticResource TextBrush}"
@@ -185,12 +192,14 @@
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="1"
+                                                        Grid.Row="0"
                                                         Orientation="Horizontal"
                                                         VerticalAlignment="Center"
                                                         Margin="12,0,0,0">
                                                 <Button Content="{loc:Str Welcome.Install}"
-                                                        Command="{Binding RecommendedLocalPlugin.InstallCommand}"
+                                                        Command="{Binding InstallRecommendedLocalCommand}"
                                                         Padding="12,6"
+                                                        IsEnabled="{Binding RecommendedLocalPlugin.IsWorking, Converter={StaticResource InvertBool}}"
                                                         Margin="0,0,8,0">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
@@ -222,6 +231,29 @@
                                                     </Button.Style>
                                                 </Button>
                                             </StackPanel>
+
+                                            <ProgressBar Grid.Row="1"
+                                                         Grid.ColumnSpan="2"
+                                                         Value="{Binding RecommendedLocalPlugin.Progress}"
+                                                         Maximum="1"
+                                                         Height="3"
+                                                         Margin="0,10,0,0"
+                                                         Visibility="{Binding RecommendedLocalPlugin.IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.ColumnSpan="2"
+                                                       Text="{loc:Str Plugins.Installing}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="11"
+                                                       Margin="0,6,0,0"
+                                                       Visibility="{Binding RecommendedLocalPlugin.IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.ColumnSpan="2"
+                                                       Text="{Binding RecommendedLocalPlugin.InstallErrorMessage}"
+                                                       Foreground="{StaticResource DangerBrush}"
+                                                       FontSize="11"
+                                                       Margin="0,6,0,0"
+                                                       TextWrapping="Wrap"
+                                                       Visibility="{Binding RecommendedLocalPlugin.InstallErrorMessage, Converter={StaticResource NonEmptyToVis}}"/>
                                         </Grid>
                                     </Border>
 
@@ -244,12 +276,18 @@
                                             </Style>
                                         </Border.Style>
                                         <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <StackPanel>
+                                            <StackPanel Grid.Row="0"
+                                                        Grid.Column="0">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="Groq"
                                                                Foreground="{StaticResource TextBrush}"
@@ -276,12 +314,14 @@
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="1"
+                                                        Grid.Row="0"
                                                         Orientation="Horizontal"
                                                         VerticalAlignment="Center"
                                                         Margin="12,0,0,0">
                                                 <Button Content="{loc:Str Welcome.Install}"
-                                                        Command="{Binding RecommendedCloudPlugin.InstallCommand}"
+                                                        Command="{Binding InstallRecommendedCloudCommand}"
                                                         Padding="12,6"
+                                                        IsEnabled="{Binding RecommendedCloudPlugin.IsWorking, Converter={StaticResource InvertBool}}"
                                                         Margin="0,0,8,0">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
@@ -298,14 +338,14 @@
                                                     </Button.Style>
                                                 </Button>
 
-                                                <Button Content="{loc:Str Welcome.UseGroq}"
+                                                <Button Content="{Binding CloudRecommendationActionLabel}"
                                                         Command="{Binding SelectRecommendedCloudCommand}"
                                                         Padding="12,6">
                                                     <Button.Style>
                                                         <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
                                                             <Setter Property="Visibility" Value="Visible"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsCloudRecommendationConfigured}" Value="False">
+                                                                <DataTrigger Binding="{Binding IsCloudRecommendationInstalled}" Value="False">
                                                                     <Setter Property="Visibility" Value="Collapsed"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -313,6 +353,29 @@
                                                     </Button.Style>
                                                 </Button>
                                             </StackPanel>
+
+                                            <ProgressBar Grid.Row="1"
+                                                         Grid.ColumnSpan="2"
+                                                         Value="{Binding RecommendedCloudPlugin.Progress}"
+                                                         Maximum="1"
+                                                         Height="3"
+                                                         Margin="0,10,0,0"
+                                                         Visibility="{Binding RecommendedCloudPlugin.IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.ColumnSpan="2"
+                                                       Text="{loc:Str Plugins.Installing}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="11"
+                                                       Margin="0,6,0,0"
+                                                       Visibility="{Binding RecommendedCloudPlugin.IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.ColumnSpan="2"
+                                                       Text="{Binding RecommendedCloudPlugin.InstallErrorMessage}"
+                                                       Foreground="{StaticResource DangerBrush}"
+                                                       FontSize="11"
+                                                       Margin="0,6,0,0"
+                                                       TextWrapping="Wrap"
+                                                       Visibility="{Binding RecommendedCloudPlugin.InstallErrorMessage, Converter={StaticResource NonEmptyToVis}}"/>
                                         </Grid>
                                     </Border>
 
@@ -350,6 +413,18 @@
                                             </Style>
                                         </ComboBox.Style>
                                     </ComboBox>
+
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding SelectedModelNeedsConfiguration, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{loc:Str Welcome.SelectedModelConfigurationTitle}"
+                                                   Style="{StaticResource SettingsRowLabelStyle}"/>
+                                        <TextBlock Text="{Binding SelectedModelConfigurationHint}"
+                                                   Style="{StaticResource PageSubtitleStyle}"
+                                                   FontSize="12"
+                                                   Margin="0,4,0,0"/>
+                                        <ContentControl Content="{Binding SelectedModelSettingsView}"
+                                                        Margin="0,10,0,0"/>
+                                    </StackPanel>
 
                                     <Button Content="{Binding SelectedModelActionLabel}"
                                             Command="{Binding DownloadModelCommand}"
@@ -457,12 +532,28 @@
                                                                                VerticalAlignment="Center"
                                                                                Margin="4,0,0,0"/>
                                                                 </StackPanel>
-                                                                <TextBlock Text="{Binding Description}"
-                                                                           Style="{StaticResource PageSubtitleStyle}"
-                                                                           FontSize="11.5"
-                                                                           Margin="0,2,0,0"/>
-                                                            </StackPanel>
-                                                        </StackPanel>
+                                                                 <TextBlock Text="{Binding Description}"
+                                                                            Style="{StaticResource PageSubtitleStyle}"
+                                                                            FontSize="11.5"
+                                                                            Margin="0,2,0,0"/>
+                                                                 <ProgressBar Value="{Binding Progress}"
+                                                                              Maximum="1"
+                                                                              Height="3"
+                                                                              Margin="0,8,0,0"
+                                                                              Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                                                 <TextBlock Text="{loc:Str Plugins.Installing}"
+                                                                            Foreground="{StaticResource HintBrush}"
+                                                                            FontSize="11"
+                                                                            Margin="0,6,0,0"
+                                                                            Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                                                 <TextBlock Text="{Binding InstallErrorMessage}"
+                                                                            Foreground="{StaticResource DangerBrush}"
+                                                                            FontSize="11"
+                                                                            Margin="0,6,0,0"
+                                                                            TextWrapping="Wrap"
+                                                                            Visibility="{Binding InstallErrorMessage, Converter={StaticResource NonEmptyToVis}}"/>
+                                                             </StackPanel>
+                                                         </StackPanel>
 
                                                         <Grid Grid.Column="1"
                                                               VerticalAlignment="Center"

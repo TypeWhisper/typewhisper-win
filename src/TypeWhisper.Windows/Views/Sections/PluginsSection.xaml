@@ -344,6 +344,12 @@
                                                     </Border>
                                                 </WrapPanel>
                                                 <ProgressBar Value="{Binding Progress}" Maximum="1" Height="3" Margin="0,8,0,0" Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
+                                                <TextBlock Text="{Binding InstallErrorMessage}"
+                                                           Foreground="{StaticResource DangerBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,6,0,0"
+                                                           Visibility="{Binding InstallErrorMessage, Converter={StaticResource NonEmptyToVis}}"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
