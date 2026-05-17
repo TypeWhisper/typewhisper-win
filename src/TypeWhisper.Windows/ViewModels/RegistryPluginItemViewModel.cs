@@ -35,6 +35,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     [ObservableProperty] private PluginInstallState _installState;
     [ObservableProperty] private double _progress;
     [ObservableProperty] private bool _isWorking;
+    [ObservableProperty] private string _installErrorMessage = "";
+
+    public bool HasInstallError => !string.IsNullOrWhiteSpace(InstallErrorMessage);
 
     public RegistryPluginItemViewModel(RegistryPlugin registryPlugin, PluginRegistryService registryService)
     {
@@ -46,6 +49,8 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     internal void RefreshInstallState()
     {
         InstallState = _registryService.GetInstallState(_registryPlugin);
+        if (InstallState == PluginInstallState.Installed)
+            InstallErrorMessage = "";
     }
 
     [RelayCommand]
@@ -55,16 +60,19 @@ public partial class RegistryPluginItemViewModel : ObservableObject
 
         IsWorking = true;
         Progress = 0;
+        InstallErrorMessage = "";
 
         try
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
             InstallState = PluginInstallState.Installed;
+            Progress = 1;
         }
-        catch
+        catch (Exception ex)
         {
             InstallState = PluginInstallState.NotInstalled;
+            InstallErrorMessage = Loc.Instance.GetString("Plugins.InstallFailedFormat", ex.Message);
         }
         finally
         {
@@ -97,21 +105,29 @@ public partial class RegistryPluginItemViewModel : ObservableObject
 
         IsWorking = true;
         Progress = 0;
+        InstallErrorMessage = "";
 
         try
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
             InstallState = PluginInstallState.Installed;
+            Progress = 1;
         }
-        catch
+        catch (Exception ex)
         {
             InstallState = PluginInstallState.UpdateAvailable;
+            InstallErrorMessage = Loc.Instance.GetString("Plugins.UpdateFailedFormat", ex.Message);
         }
         finally
         {
             IsWorking = false;
         }
+    }
+
+    partial void OnInstallErrorMessageChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasInstallError));
     }
 
     private static string FormatSize(long bytes) => bytes switch

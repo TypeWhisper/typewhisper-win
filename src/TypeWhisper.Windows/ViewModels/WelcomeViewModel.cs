@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -28,6 +29,8 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly PluginRegistryService _registry;
     private readonly DictationViewModel _dictation;
     private readonly DictionaryViewModel _dictionary;
+    private readonly EventHandler _pluginStateChangedHandler;
+    private readonly Dictionary<string, (ITranscriptionEnginePlugin Plugin, UserControl? View)> _settingsViewCache = [];
     private bool _isInitializing;
     private bool _isMicTestRunning;
     private DictationState _lastObservedDictationState;
@@ -73,8 +76,8 @@ public partial class WelcomeViewModel : ObservableObject
         SelectedIndustryPresetId = IndustryPreset.Resolve(settings.Current.SelectedIndustryPresetId).Id;
         _isInitializing = false;
 
-        _modelManager.PluginManager.PluginStateChanged += (_, _) =>
-            Application.Current?.Dispatcher.Invoke(RefreshModels);
+        _pluginStateChangedHandler = (_, _) => DispatchToUi(RefreshModels);
+        _modelManager.PluginManager.PluginStateChanged += _pluginStateChangedHandler;
         _modelManager.PropertyChanged += OnModelManagerChanged;
         _dictation.PropertyChanged += OnDictationPropertyChanged;
 
@@ -92,6 +95,18 @@ public partial class WelcomeViewModel : ObservableObject
     public bool HasReadyEngine =>
         !string.IsNullOrWhiteSpace(SelectedModelId)
         && _modelManager.GetStatus(SelectedModelId).Type == ModelStatusType.Ready;
+    public bool SelectedModelNeedsConfiguration => GetSelectedConfigurationPlugin() is not null;
+    public UserControl? SelectedModelSettingsView =>
+        GetSelectedConfigurationPlugin() is { } plugin ? GetSettingsView(plugin) : null;
+    public string SelectedModelConfigurationProviderName =>
+        GetSelectedConfigurationPlugin()?.ProviderDisplayName ?? "";
+    public string SelectedModelConfigurationTitle => Loc.Instance["Welcome.SelectedModelConfigurationTitle"];
+    public string SelectedModelConfigurationHint =>
+        string.IsNullOrWhiteSpace(SelectedModelConfigurationProviderName)
+            ? Loc.Instance["Welcome.SelectedModelConfigurationHint"]
+            : Loc.Instance.GetString(
+                "Welcome.SelectedModelConfigurationHintFormat",
+                SelectedModelConfigurationProviderName);
     public RegistryPluginItemViewModel? RecommendedLocalPlugin => Plugins.FirstOrDefault(p => p.Id == LocalPluginId);
     public RegistryPluginItemViewModel? RecommendedCloudPlugin => Plugins.FirstOrDefault(p => p.Id == GroqPluginId);
     public bool IsLocalRecommendationInstalled => LocalEngine is not null;
@@ -99,10 +114,13 @@ public partial class WelcomeViewModel : ObservableObject
     public bool IsCloudRecommendationConfigured => CloudEngine?.IsConfigured ?? false;
     public bool IsLocalRecommendationSelected => SelectedModelId == ParakeetModelId;
     public bool IsCloudRecommendationSelected => SelectedModelId?.StartsWith($"plugin:{GroqPluginId}:") == true;
+    public string CloudRecommendationActionLabel =>
+        IsCloudRecommendationConfigured ? Loc.Instance["Welcome.UseGroq"] : Loc.Instance["Welcome.ConfigureKey"];
     public string SelectedModelActionLabel => GetSelectedModelActionLabel();
     public bool CanApplySelectedModel =>
         !string.IsNullOrWhiteSpace(SelectedModelId)
         && !IsDownloading
+        && !SelectedModelNeedsConfiguration
         && !(SelectedModelId == _modelManager.ActiveModelId
              && _modelManager.GetStatus(SelectedModelId).Type == ModelStatusType.Ready);
     public string LocalRecommendationStatus => GetLocalRecommendationStatus();
@@ -154,8 +172,7 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(CanTryItOut));
         OnPropertyChanged(nameof(IsLocalRecommendationSelected));
         OnPropertyChanged(nameof(IsCloudRecommendationSelected));
-        OnPropertyChanged(nameof(SelectedModelActionLabel));
-        OnPropertyChanged(nameof(CanApplySelectedModel));
+        NotifySelectedModelConfigurationProperties();
     }
 
     private async Task LoadPluginsAsync()
@@ -166,7 +183,7 @@ public partial class WelcomeViewModel : ObservableObject
         {
             var registryPlugins = await _registry.FetchRegistryAsync();
 
-            Application.Current?.Dispatcher.Invoke(() =>
+            DispatchToUi(() =>
             {
                 Plugins.Clear();
                 foreach (var rp in registryPlugins)
@@ -191,7 +208,9 @@ public partial class WelcomeViewModel : ObservableObject
             foreach (var model in engine.TranscriptionModels)
             {
                 var fullId = ModelManagerService.GetPluginModelId(engine.PluginId, model.Id);
-                var name = $"{model.DisplayName} ({model.SizeDescription})";
+                var name = string.IsNullOrWhiteSpace(model.SizeDescription)
+                    ? model.DisplayName
+                    : $"{model.DisplayName} ({model.SizeDescription})";
                 if (model.IsRecommended)
                     name += $" — {Loc.Instance["Welcome.Recommended"]}";
                 collectedModels.Add(new WelcomeModelItem(fullId, name, model.SizeDescription, model.IsRecommended));
@@ -270,11 +289,43 @@ public partial class WelcomeViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task InstallRecommendedLocal()
+    {
+        var plugin = RecommendedLocalPlugin;
+        if (plugin is null)
+            return;
+
+        await plugin.InstallCommand.ExecuteAsync(null);
+        plugin.RefreshInstallState();
+        NotifyRecommendationProperties();
+        RefreshModels();
+
+        if (plugin.InstallState == PluginInstallState.Installed)
+            SelectRecommendedLocal();
+    }
+
+    [RelayCommand]
     private void SelectRecommendedCloud()
     {
         SelectedModelId = AvailableModels.FirstOrDefault(m => m.FullModelId == PreferredGroqModelId)?.FullModelId
                           ?? AvailableModels.FirstOrDefault(m => m.FullModelId.StartsWith($"plugin:{GroqPluginId}:"))?.FullModelId
                           ?? SelectedModelId;
+    }
+
+    [RelayCommand]
+    private async Task InstallRecommendedCloud()
+    {
+        var plugin = RecommendedCloudPlugin;
+        if (plugin is null)
+            return;
+
+        await plugin.InstallCommand.ExecuteAsync(null);
+        plugin.RefreshInstallState();
+        NotifyRecommendationProperties();
+        RefreshModels();
+
+        if (plugin.InstallState == PluginInstallState.Installed)
+            SelectRecommendedCloud();
     }
 
     private void OnModelManagerChanged(object? sender, PropertyChangedEventArgs args)
@@ -422,6 +473,7 @@ public partial class WelcomeViewModel : ObservableObject
     public void Cleanup()
     {
         StopMicTest();
+        _modelManager.PluginManager.PluginStateChanged -= _pluginStateChangedHandler;
         _modelManager.PropertyChanged -= OnModelManagerChanged;
         _dictation.PropertyChanged -= OnDictationPropertyChanged;
     }
@@ -455,8 +507,19 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCloudRecommendationConfigured));
         OnPropertyChanged(nameof(IsLocalRecommendationSelected));
         OnPropertyChanged(nameof(IsCloudRecommendationSelected));
+        OnPropertyChanged(nameof(CloudRecommendationActionLabel));
         OnPropertyChanged(nameof(LocalRecommendationStatus));
         OnPropertyChanged(nameof(CloudRecommendationStatus));
+        NotifySelectedModelConfigurationProperties();
+    }
+
+    private void NotifySelectedModelConfigurationProperties()
+    {
+        OnPropertyChanged(nameof(SelectedModelNeedsConfiguration));
+        OnPropertyChanged(nameof(SelectedModelSettingsView));
+        OnPropertyChanged(nameof(SelectedModelConfigurationProviderName));
+        OnPropertyChanged(nameof(SelectedModelConfigurationTitle));
+        OnPropertyChanged(nameof(SelectedModelConfigurationHint));
         OnPropertyChanged(nameof(SelectedModelActionLabel));
         OnPropertyChanged(nameof(CanApplySelectedModel));
     }
@@ -480,6 +543,9 @@ public partial class WelcomeViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(SelectedModelId))
             return Loc.Instance["Welcome.Download"];
 
+        if (SelectedModelNeedsConfiguration)
+            return Loc.Instance["Welcome.ConfigureKey"];
+
         var status = _modelManager.GetStatus(SelectedModelId);
         if (status.Type == ModelStatusType.Ready)
         {
@@ -489,6 +555,53 @@ public partial class WelcomeViewModel : ObservableObject
         }
 
         return Loc.Instance["Welcome.DownloadAndActivate"];
+    }
+
+    private ITranscriptionEnginePlugin? GetSelectedTranscriptionPlugin()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedModelId)
+            || !ModelManagerService.IsPluginModel(SelectedModelId))
+        {
+            return null;
+        }
+
+        var (pluginId, _) = ModelManagerService.ParsePluginModelId(SelectedModelId);
+        return _modelManager.PluginManager.TranscriptionEngines
+            .FirstOrDefault(engine => engine.PluginId == pluginId);
+    }
+
+    private ITranscriptionEnginePlugin? GetSelectedConfigurationPlugin()
+    {
+        var plugin = GetSelectedTranscriptionPlugin();
+        if (plugin is null || plugin.SupportsModelDownload || plugin.IsConfigured)
+            return null;
+
+        return plugin;
+    }
+
+    private UserControl? GetSettingsView(ITranscriptionEnginePlugin plugin)
+    {
+        if (_settingsViewCache.TryGetValue(plugin.PluginId, out var cached)
+            && ReferenceEquals(cached.Plugin, plugin))
+        {
+            return cached.View;
+        }
+
+        var view = plugin.CreateSettingsView();
+        _settingsViewCache[plugin.PluginId] = (plugin, view);
+        return view;
+    }
+
+    private static void DispatchToUi(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        dispatcher.Invoke(action);
     }
 
     private string GetLocalRecommendationStatus()

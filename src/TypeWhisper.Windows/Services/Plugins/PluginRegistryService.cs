@@ -156,6 +156,8 @@ public sealed class PluginRegistryService
 
             // Load and activate
             await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: true);
+            if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
+                throw new InvalidOperationException("The downloaded plugin package could not be loaded.");
 
             Debug.WriteLine($"[PluginRegistry] Installed plugin: {registryPlugin.Id} v{registryPlugin.Version}");
         }
