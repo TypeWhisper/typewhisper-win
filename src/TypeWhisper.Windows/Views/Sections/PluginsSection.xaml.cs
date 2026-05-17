@@ -57,7 +57,7 @@ public partial class PluginsSection : UserControl
     private void OnPluginsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PluginsViewModel.IsMarketplaceSelected))
-            ApplyTabSelection(_pluginsViewModel?.IsMarketplaceSelected == true);
+            ApplyTabSelection(_pluginsViewModel?.IsMarketplaceSelected ?? false);
     }
 
     private void OnInstalledTabClick(object sender, RoutedEventArgs e)
