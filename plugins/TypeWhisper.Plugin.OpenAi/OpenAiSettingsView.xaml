@@ -49,16 +49,6 @@
 
         <Separator Margin="0,12,0,10" />
 
-        <TextBlock x:Name="TranscriptionModelLabel" Text="Transcription Model" FontWeight="SemiBold" Margin="0,0,0,4" />
-        <ComboBox x:Name="TranscriptionModelComboBox"
-                  DisplayMemberPath="DisplayName"
-                  SelectedValuePath="Id"
-                  SelectionChanged="OnTranscriptionModelSelectionChanged" />
-
-        <TextBlock x:Name="TranscriptionModelHelpText" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Opacity="0.75" />
-
-        <Separator Margin="0,12,0,10" />
-
         <TextBlock x:Name="LlmModelLabel" Text="LLM Model" FontWeight="SemiBold" Margin="0,0,0,4" />
         <Grid>
             <Grid.ColumnDefinitions>
@@ -76,25 +66,55 @@
                     Click="OnRefreshLlmModelsClick" />
         </Grid>
 
-        <TextBlock x:Name="ReasoningEffortLabel" Text="Reasoning Effort" FontWeight="SemiBold" Margin="0,10,0,4" />
-        <ComboBox x:Name="ReasoningEffortComboBox"
-                  DisplayMemberPath="DisplayName"
-                  SelectedValuePath="Value"
-                  SelectionChanged="OnReasoningEffortSelectionChanged" />
+        <StackPanel x:Name="ReasoningEffortSection" Margin="0,10,0,0">
+            <TextBlock x:Name="ReasoningEffortLabel" Text="Reasoning Effort" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ComboBox x:Name="ReasoningEffortComboBox"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Value"
+                      SelectionChanged="OnReasoningEffortSelectionChanged" />
+            <TextBlock x:Name="ReasoningEffortHelpText" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Opacity="0.75" />
+        </StackPanel>
 
         <TextBlock x:Name="LlmHelpText" Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap" Opacity="0.75" />
 
+        <StackPanel x:Name="TemperatureSection" Margin="0,10,0,0">
+            <TextBlock x:Name="TemperatureLabel" Text="Temperature" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ComboBox x:Name="TemperatureModeComboBox"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Value"
+                      SelectionChanged="OnTemperatureModeSelectionChanged"
+                      Margin="0,0,0,8" />
+            <StackPanel x:Name="TemperatureSliderPanel">
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TemperatureValueLabel" FontSize="12" Opacity="0.75" />
+                    <TextBlock Grid.Column="1" x:Name="TemperatureValueText" FontSize="12" Opacity="0.75" />
+                </Grid>
+                <Slider x:Name="TemperatureSlider"
+                        Minimum="0"
+                        Maximum="2"
+                        TickFrequency="0.1"
+                        IsSnapToTickEnabled="True"
+                        ValueChanged="OnTemperatureValueChanged" />
+            </StackPanel>
+        </StackPanel>
+
         <Separator Margin="0,12,0,10" />
 
-        <TextBlock x:Name="VoiceLabel" Text="Text-to-Speech Voice" FontWeight="SemiBold" Margin="0,0,0,4" />
-        <ComboBox x:Name="VoiceComboBox"
-                  DisplayMemberPath="DisplayName"
-                  SelectedValuePath="Id"
-                  SelectionChanged="OnVoiceSelectionChanged" />
+        <StackPanel x:Name="TtsSection">
+            <TextBlock x:Name="VoiceLabel" Text="Text-to-Speech Voice" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ComboBox x:Name="VoiceComboBox"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Id"
+                      SelectionChanged="OnVoiceSelectionChanged" />
 
-        <TextBlock x:Name="InstructionsLabel" Text="Voice instructions" FontWeight="SemiBold" Margin="0,10,0,4" />
-        <TextBox x:Name="TtsInstructionsBox"
-                 MinHeight="28"
-                 TextChanged="OnTtsInstructionsChanged" />
+            <TextBlock x:Name="InstructionsLabel" Text="Voice instructions" FontWeight="SemiBold" Margin="0,10,0,4" />
+            <TextBox x:Name="TtsInstructionsBox"
+                     MinHeight="28"
+                     TextChanged="OnTtsInstructionsChanged" />
+        </StackPanel>
     </StackPanel>
 </UserControl>

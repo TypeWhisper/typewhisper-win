@@ -808,14 +808,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     private string GetDefaultProviderLabel(IReadOnlyList<ProviderOption> explicitOptions)
     {
         var configuredDefault = _settings.Current.DefaultLlmProvider;
-        if (string.IsNullOrWhiteSpace(configuredDefault))
-            return Loc.Instance["Workflows.DefaultProviderLabelNone"];
+        if (!string.IsNullOrWhiteSpace(configuredDefault))
+        {
+            var configuredOption = explicitOptions.FirstOrDefault(option =>
+                string.Equals(option.Value, configuredDefault, StringComparison.Ordinal));
+            if (configuredOption is not null)
+                return Loc.Instance.GetString("Workflows.DefaultProviderLabelFormat", configuredOption.DisplayName);
+        }
 
-        var configuredOption = explicitOptions.FirstOrDefault(option =>
-            string.Equals(option.Value, configuredDefault, StringComparison.Ordinal));
-        return configuredOption is null
+        var fallbackOption = explicitOptions.FirstOrDefault();
+        return fallbackOption is null
             ? Loc.Instance["Workflows.DefaultProviderLabelNone"]
-            : Loc.Instance.GetString("Workflows.DefaultProviderLabelFormat", configuredOption.DisplayName);
+            : Loc.Instance.GetString("Workflows.DefaultProviderLabelAutoFormat", fallbackOption.DisplayName);
     }
 
     private void RebuildModelOptions()

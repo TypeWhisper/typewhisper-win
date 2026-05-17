@@ -10,6 +10,7 @@ public partial class OpenAiSettingsView : UserControl
     private bool _isInitializing;
     private readonly AuthModeOption[] _authModeOptions;
     private readonly ReasoningEffortOption[] _reasoningEffortOptions;
+    private readonly TemperatureModeOption[] _temperatureModeOptions;
 
     public OpenAiSettingsView(OpenAiPlugin plugin)
     {
@@ -26,6 +27,11 @@ public partial class OpenAiSettingsView : UserControl
             new("high", L("Settings.ReasoningHigh")),
             new("xhigh", L("Settings.ReasoningXHigh")),
         ];
+        _temperatureModeOptions =
+        [
+            new("providerDefault", L("Settings.TemperatureProviderDefault")),
+            new("custom", L("Settings.TemperatureCustom")),
+        ];
 
         _isInitializing = true;
         InitializeComponent();
@@ -39,15 +45,18 @@ public partial class OpenAiSettingsView : UserControl
         SignInBrowserButton.Content = L("Settings.SignInBrowser");
         ImportLoginButton.Content = L("Settings.ImportExistingLogin");
         RemoveLoginButton.Content = L("Settings.Remove");
-        TranscriptionModelLabel.Text = L("Settings.TranscriptionModel");
-        TranscriptionModelComboBox.ItemsSource = plugin.TranscriptionModels;
-        TranscriptionModelComboBox.SelectedValue = plugin.SelectedModelId ?? plugin.TranscriptionModels.FirstOrDefault()?.Id;
         LlmModelLabel.Text = L("Settings.LlmModel");
         RefreshLlmModelsButton.Content = L("Settings.Refresh");
         ReasoningEffortLabel.Text = L("Settings.ReasoningEffort");
         ReasoningEffortComboBox.ItemsSource = _reasoningEffortOptions;
         ReasoningEffortComboBox.SelectedValue = plugin.ReasoningEffort;
+        ReasoningEffortHelpText.Text = L("Settings.ReasoningHelp");
         LlmHelpText.Text = L("Settings.LlmHelpApiKey");
+        TemperatureLabel.Text = L("Settings.Temperature");
+        TemperatureModeComboBox.ItemsSource = _temperatureModeOptions;
+        TemperatureModeComboBox.SelectedValue = plugin.TemperatureMode;
+        TemperatureValueLabel.Text = L("Settings.TemperatureValue");
+        TemperatureSlider.Value = plugin.TemperatureValue;
         VoiceLabel.Text = L("Settings.TtsVoice");
         InstructionsLabel.Text = L("Settings.VoiceInstructions");
         VoiceComboBox.ItemsSource = plugin.AvailableVoices;
@@ -62,9 +71,10 @@ public partial class OpenAiSettingsView : UserControl
         }
 
         _isInitializing = false;
-        UpdateTranscriptionModelHelp();
         UpdateAuthModePanels();
         UpdateChatGptStatus();
+        UpdateReasoningEffortVisibility();
+        UpdateTemperatureVisibility();
     }
 
     private async void OnPasswordChanged(object sender, RoutedEventArgs e)
@@ -127,6 +137,8 @@ public partial class OpenAiSettingsView : UserControl
         RefreshLlmModels();
         UpdateAuthModePanels();
         UpdateChatGptStatus();
+        UpdateReasoningEffortVisibility();
+        UpdateTemperatureVisibility();
     }
 
     private async void OnSignInBrowserClick(object sender, RoutedEventArgs e)
@@ -153,6 +165,8 @@ public partial class OpenAiSettingsView : UserControl
             SetOAuthBusy(false);
             UpdateAuthModePanels();
             UpdateChatGptStatus(keepMessage: true);
+            UpdateReasoningEffortVisibility();
+            UpdateTemperatureVisibility();
         }
     }
 
@@ -177,6 +191,8 @@ public partial class OpenAiSettingsView : UserControl
             SetOAuthBusy(false);
             UpdateAuthModePanels();
             UpdateChatGptStatus(keepMessage: true);
+            UpdateReasoningEffortVisibility();
+            UpdateTemperatureVisibility();
         }
     }
 
@@ -186,6 +202,8 @@ public partial class OpenAiSettingsView : UserControl
         ChatGptStatusText.Text = "";
         UpdateAuthModePanels();
         UpdateChatGptStatus();
+        UpdateReasoningEffortVisibility();
+        UpdateTemperatureVisibility();
     }
 
     private void OnLlmModelSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -194,17 +212,8 @@ public partial class OpenAiSettingsView : UserControl
             return;
 
         _plugin.SelectLlmModel(modelId);
-    }
-
-    private void OnTranscriptionModelSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isInitializing || TranscriptionModelComboBox.SelectedValue is not string modelId)
-            return;
-
-        _plugin.SelectModel(modelId);
-        UpdateTranscriptionModelHelp();
-        StatusText.Text = L("Settings.Saved");
-        StatusText.Foreground = Brushes.Gray;
+        UpdateReasoningEffortVisibility();
+        UpdateTemperatureVisibility();
     }
 
     private void OnReasoningEffortSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -213,6 +222,25 @@ public partial class OpenAiSettingsView : UserControl
             return;
 
         _plugin.SetReasoningEffort(effort);
+        UpdateTemperatureVisibility();
+    }
+
+    private void OnTemperatureModeSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing || TemperatureModeComboBox.SelectedValue is not string mode)
+            return;
+
+        _plugin.SetTemperatureMode(mode);
+        UpdateTemperatureVisibility();
+    }
+
+    private void OnTemperatureValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        TemperatureValueText.Text = TemperatureSlider.Value.ToString("0.0");
+        if (_isInitializing)
+            return;
+
+        _plugin.SetTemperatureValue(TemperatureSlider.Value);
     }
 
     private async void OnRefreshLlmModelsClick(object sender, RoutedEventArgs e)
@@ -263,16 +291,8 @@ public partial class OpenAiSettingsView : UserControl
         LlmHelpText.Text = _plugin.AuthMode == OpenAiAuthMode.ChatGpt
             ? L("Settings.LlmHelpChatGpt")
             : L("Settings.LlmHelpApiKey");
-    }
-
-    private void UpdateTranscriptionModelHelp()
-    {
-        var selectedModel = TranscriptionModelComboBox.SelectedValue as string ?? _plugin.SelectedModelId ?? "";
-        TranscriptionModelHelpText.Text = selectedModel == OpenAiRealtimeStreamingSession.ModelId
-            ? L("Settings.TranscriptionRealtimeHelp")
-            : selectedModel.StartsWith("gpt-4o", StringComparison.OrdinalIgnoreCase)
-                ? L("Settings.TranscriptionGpt4oHelp")
-                : L("Settings.TranscriptionWhisperHelp");
+        UpdateReasoningEffortVisibility();
+        UpdateTemperatureVisibility();
     }
 
     private void UpdateAuthModePanels()
@@ -280,8 +300,31 @@ public partial class OpenAiSettingsView : UserControl
         var isChatGpt = _plugin.AuthMode == OpenAiAuthMode.ChatGpt;
         ApiKeySection.Visibility = isChatGpt ? Visibility.Collapsed : Visibility.Visible;
         ChatGptSection.Visibility = isChatGpt ? Visibility.Visible : Visibility.Collapsed;
+        TtsSection.Visibility = isChatGpt ? Visibility.Collapsed : Visibility.Visible;
         RefreshLlmModelsButton.Visibility = isChatGpt ? Visibility.Collapsed : Visibility.Visible;
         RemoveLoginButton.Visibility = _plugin.HasChatGptCredentials ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateReasoningEffortVisibility()
+    {
+        var modelId = LlmModelComboBox.SelectedValue as string
+            ?? _plugin.SelectedLlmModelId
+            ?? "";
+        ReasoningEffortSection.Visibility = OpenAiPlugin.SupportsReasoningEffort(modelId)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void UpdateTemperatureVisibility()
+    {
+        var isApiKey = _plugin.AuthMode == OpenAiAuthMode.ApiKey;
+        TemperatureSection.Visibility = isApiKey ? Visibility.Visible : Visibility.Collapsed;
+
+        var mode = TemperatureModeComboBox.SelectedValue as string ?? _plugin.TemperatureMode;
+        TemperatureSliderPanel.Visibility = isApiKey && mode == "custom"
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        TemperatureValueText.Text = TemperatureSlider.Value.ToString("0.0");
     }
 
     private void UpdateChatGptStatus(bool keepMessage = false)
@@ -317,4 +360,5 @@ public partial class OpenAiSettingsView : UserControl
 
     private sealed record AuthModeOption(OpenAiAuthMode Value, string DisplayName);
     private sealed record ReasoningEffortOption(string Value, string DisplayName);
+    private sealed record TemperatureModeOption(string Value, string DisplayName);
 }

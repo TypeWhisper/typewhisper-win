@@ -800,6 +800,7 @@
   "Workflows.GlobalDefault": "Global (Standard)",
   "Workflows.DefaultProviderLabelNone": "Standard-KI-Anbieter: keiner eingerichtet",
   "Workflows.DefaultProviderLabelFormat": "Standard-KI-Anbieter: {0}",
+  "Workflows.DefaultProviderLabelAutoFormat": "Standard-KI-Anbieter: {0} (automatisch)",
   "Workflows.Review": "Review",
   "Workflows.ReviewFormat": "{0} läuft als {1} über {2}.",
   "Workflows.ReviewHotkeyDictationFormat": "{0} zum Starten des Diktats",
