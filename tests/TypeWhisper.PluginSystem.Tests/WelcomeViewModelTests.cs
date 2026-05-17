@@ -131,7 +131,7 @@ public sealed class WelcomeViewModelTests
 
     private static HttpClient CreateRegistryHttpClient()
     {
-        var handler = new StaticHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StaticHttpMessageHandler(() => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent("[]")
         });
@@ -222,11 +222,11 @@ public sealed class WelcomeViewModelTests
             throw new InvalidOperationException("No capture should be created when no input device exists.");
     }
 
-    private sealed class StaticHttpMessageHandler(HttpResponseMessage response) : HttpMessageHandler
+    private sealed class StaticHttpMessageHandler(Func<HttpResponseMessage> responseFactory) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
-            Task.FromResult(response);
+            Task.FromResult(responseFactory());
     }
 }

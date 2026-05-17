@@ -29,6 +29,7 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly PluginRegistryService _registry;
     private readonly DictationViewModel _dictation;
     private readonly DictionaryViewModel _dictionary;
+    private readonly EventHandler _pluginStateChangedHandler;
     private readonly Dictionary<string, (ITranscriptionEnginePlugin Plugin, UserControl? View)> _settingsViewCache = [];
     private bool _isInitializing;
     private bool _isMicTestRunning;
@@ -75,8 +76,8 @@ public partial class WelcomeViewModel : ObservableObject
         SelectedIndustryPresetId = IndustryPreset.Resolve(settings.Current.SelectedIndustryPresetId).Id;
         _isInitializing = false;
 
-        _modelManager.PluginManager.PluginStateChanged += (_, _) =>
-            DispatchToUi(RefreshModels);
+        _pluginStateChangedHandler = (_, _) => DispatchToUi(RefreshModels);
+        _modelManager.PluginManager.PluginStateChanged += _pluginStateChangedHandler;
         _modelManager.PropertyChanged += OnModelManagerChanged;
         _dictation.PropertyChanged += OnDictationPropertyChanged;
 
@@ -472,6 +473,7 @@ public partial class WelcomeViewModel : ObservableObject
     public void Cleanup()
     {
         StopMicTest();
+        _modelManager.PluginManager.PluginStateChanged -= _pluginStateChangedHandler;
         _modelManager.PropertyChanged -= OnModelManagerChanged;
         _dictation.PropertyChanged -= OnDictationPropertyChanged;
     }

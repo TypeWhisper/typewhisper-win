@@ -297,33 +297,41 @@ public class PluginRegistryServiceTests : IDisposable
     public async Task RegistryPluginItem_InstallFailure_ExposesErrorMessage()
     {
         Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
         Loc.Instance.CurrentLanguage = "en";
 
-        var manager = CreateManager();
-        var service = new PluginRegistryService(
-            manager,
-            _loader,
-            _settings.Object,
-            CreateMockHttpClient("download failed", HttpStatusCode.InternalServerError));
-        var registryPlugin = new RegistryPlugin
+        try
         {
-            Id = "com.test.install-fails",
-            Name = "Broken Plugin",
-            Version = "1.0.0",
-            Author = "A",
-            Description = "D",
-            Size = 100,
-            DownloadUrl = "https://example.com/broken.zip"
-        };
+            var manager = CreateManager();
+            var service = new PluginRegistryService(
+                manager,
+                _loader,
+                _settings.Object,
+                CreateMockHttpClient("download failed", HttpStatusCode.InternalServerError));
+            var registryPlugin = new RegistryPlugin
+            {
+                Id = "com.test.install-fails",
+                Name = "Broken Plugin",
+                Version = "1.0.0",
+                Author = "A",
+                Description = "D",
+                Size = 100,
+                DownloadUrl = "https://example.com/broken.zip"
+            };
 
-        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+            var item = new RegistryPluginItemViewModel(registryPlugin, service);
 
-        await item.InstallCommand.ExecuteAsync(null);
+            await item.InstallCommand.ExecuteAsync(null);
 
-        Assert.Equal(PluginInstallState.NotInstalled, item.InstallState);
-        Assert.False(item.IsWorking);
-        Assert.True(item.HasInstallError);
-        Assert.Contains("Install failed", item.InstallErrorMessage);
+            Assert.Equal(PluginInstallState.NotInstalled, item.InstallState);
+            Assert.False(item.IsWorking);
+            Assert.True(item.HasInstallError);
+            Assert.Contains("Install failed", item.InstallErrorMessage);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
     }
 
     [Fact]
