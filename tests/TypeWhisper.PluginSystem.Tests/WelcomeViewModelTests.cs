@@ -78,6 +78,75 @@ public sealed class WelcomeViewModelTests
         });
     }
 
+    [Fact]
+    public void FinalGetStarted_WithUnconfiguredCloudModel_RequestsPluginSettings()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: false,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(plugin);
+            sut.SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "whisper-large-v3-turbo");
+            sut.CurrentStep = 3;
+            var completed = false;
+            sut.Completed += (_, _) => completed = true;
+
+            sut.NextStepCommand.Execute(null);
+
+            Assert.True(completed);
+            Assert.Equal(SettingsRoute.Integrations, sut.CompletionRequest.SettingsRoute);
+            Assert.Equal(plugin.PluginId, sut.CompletionRequest.PluginIdToConfigure);
+        });
+    }
+
+    [Fact]
+    public void FinalGetStarted_WithMissingDownloadableModel_RequestsDictationSettings()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.sherpa-onnx",
+                "Parakeet",
+                configured: true,
+                supportsModelDownload: true,
+                isModelDownloaded: false);
+            var sut = CreateViewModel(plugin);
+            sut.SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "whisper-large-v3-turbo");
+            sut.CurrentStep = 3;
+            var completed = false;
+            sut.Completed += (_, _) => completed = true;
+
+            sut.NextStepCommand.Execute(null);
+
+            Assert.True(completed);
+            Assert.Equal(SettingsRoute.Dictation, sut.CompletionRequest.SettingsRoute);
+            Assert.Null(sut.CompletionRequest.PluginIdToConfigure);
+        });
+    }
+
+    [Fact]
+    public void Skip_DoesNotRequestSettings_WhenEngineIsNotReady()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: false,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(plugin);
+            sut.SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "whisper-large-v3-turbo");
+
+            sut.SkipCommand.Execute(null);
+
+            Assert.Null(sut.CompletionRequest.SettingsRoute);
+            Assert.Null(sut.CompletionRequest.PluginIdToConfigure);
+        });
+    }
+
     private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin) =>
         CreateViewModel(plugin, out _);
 
@@ -166,12 +235,14 @@ public sealed class WelcomeViewModelTests
             string pluginId,
             string providerDisplayName,
             bool configured,
-            bool supportsModelDownload)
+            bool supportsModelDownload,
+            bool isModelDownloaded = true)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
             IsConfigured = configured;
             SupportsModelDownload = supportsModelDownload;
+            ModelDownloaded = isModelDownloaded;
         }
 
         public string PluginId { get; }
@@ -181,6 +252,7 @@ public sealed class WelcomeViewModelTests
         public string ProviderDisplayName { get; }
         public bool IsConfigured { get; set; }
         public bool SupportsModelDownload { get; }
+        public bool ModelDownloaded { get; }
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
         [
             new("whisper-large-v3-turbo", "Whisper Large V3 Turbo")
@@ -198,6 +270,7 @@ public sealed class WelcomeViewModelTests
         }
 
         public void SelectModel(string modelId) => SelectedModelId = modelId;
+        public bool IsModelDownloaded(string modelId) => !SupportsModelDownload || ModelDownloaded;
 
         public Task<PluginTranscriptionResult> TranscribeAsync(
             byte[] wavAudio,

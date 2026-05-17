@@ -731,6 +731,7 @@
   "Models.StatusReady": "Bereit",
   "Models.StatusErrorFormat": "Fehler: {0}",
   "Models.StatusDownloaded": "Heruntergeladen",
+  "Models.StatusApiKeyRequired": "API-Key erforderlich",
   "Models.LoadingModel": "Lade Modell...",
 
   "Welcome.DownloadProgress": "Herunterladen...",

@@ -16,6 +16,11 @@ namespace TypeWhisper.Windows.ViewModels;
 
 public record WelcomeModelItem(string FullModelId, string DisplayName, string? SizeDescription, bool IsRecommended);
 
+public sealed record WelcomeCompletionRequest(SettingsRoute? SettingsRoute, string? PluginIdToConfigure)
+{
+    public static WelcomeCompletionRequest None { get; } = new(null, null);
+}
+
 public partial class WelcomeViewModel : ObservableObject
 {
     private const string LocalPluginId = "com.typewhisper.sherpa-onnx";
@@ -53,6 +58,7 @@ public partial class WelcomeViewModel : ObservableObject
     public ObservableCollection<WelcomeModelItem> AvailableModels { get; } = [];
     public ObservableCollection<IndustryPreset> IndustryPresets => _dictionary.IndustryPresets;
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+    public WelcomeCompletionRequest CompletionRequest { get; private set; } = WelcomeCompletionRequest.None;
     public event EventHandler? Completed;
 
     public WelcomeViewModel(
@@ -383,7 +389,7 @@ public partial class WelcomeViewModel : ObservableObject
     {
         if (CurrentStep == 3)
         {
-            Finish();
+            Finish(openSettingsWhenEngineNotReady: true);
             return;
         }
 
@@ -461,13 +467,28 @@ public partial class WelcomeViewModel : ObservableObject
             Microphones.Add(new MicrophoneItem(number, name));
     }
 
-    private void Finish()
+    private void Finish(bool openSettingsWhenEngineNotReady = false)
     {
+        CompletionRequest = openSettingsWhenEngineNotReady
+            ? BuildCompletionRequest()
+            : WelcomeCompletionRequest.None;
+        OnPropertyChanged(nameof(CompletionRequest));
+
         StopMicTest();
         PersistMainDictationHotkey(MainDictationHotkey);
         _dictionary.ApplyIndustryPreset(SelectedIndustryPresetId);
 
         Completed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private WelcomeCompletionRequest BuildCompletionRequest()
+    {
+        if (HasReadyEngine)
+            return WelcomeCompletionRequest.None;
+
+        return GetSelectedConfigurationPlugin() is { } plugin
+            ? new WelcomeCompletionRequest(SettingsRoute.Integrations, plugin.PluginId)
+            : new WelcomeCompletionRequest(SettingsRoute.Dictation, null);
     }
 
     public void Cleanup()

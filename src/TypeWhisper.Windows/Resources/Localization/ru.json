@@ -704,6 +704,7 @@
   "Models.StatusReady": "Готово",
   "Models.StatusErrorFormat": "Ошибка: {0}",
   "Models.StatusDownloaded": "Скачано",
+  "Models.StatusApiKeyRequired": "Требуется API-ключ",
   "Models.LoadingModel": "Загрузка модели…",
   "Welcome.DownloadProgress": "Загрузка…",
   "Welcome.LoadingModel": "Загрузка модели…",

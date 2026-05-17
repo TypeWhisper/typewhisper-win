@@ -151,6 +151,19 @@ public partial class PluginsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasActiveMarketplaceCapabilityFilters));
     }
 
+    internal bool FocusInstalledPlugin(string pluginId)
+    {
+        var selected = Plugins.FirstOrDefault(plugin =>
+            string.Equals(plugin.Id, pluginId, StringComparison.OrdinalIgnoreCase));
+        if (selected is null)
+            return false;
+
+        IsMarketplaceSelected = false;
+        foreach (var plugin in Plugins)
+            plugin.IsExpanded = ReferenceEquals(plugin, selected);
+        return true;
+    }
+
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
         Application.Current?.Dispatcher.Invoke(() =>
