@@ -45,6 +45,18 @@ public sealed class PluginIconHelperTests : IDisposable
         Assert.Equal("\U0001F310", PluginIconHelper.GetIcon("com.typewhisper.openai-compatible"));
     }
 
+    [Fact]
+    public void GetLogoPath_SmallestAi_ReturnsProviderLogoWithFallback()
+    {
+        var expectedPath = BuildLogoPath("smallest.png");
+        WriteValidPng(expectedPath);
+
+        Assert.Equal(expectedPath, PluginIconHelper.GetLogoPath("com.typewhisper.smallest-ai", _baseDirectory));
+        Assert.Equal("\U0001F399", PluginIconHelper.GetIcon("com.typewhisper.smallest-ai"));
+        Assert.Equal("#14B8A6", PluginIconHelper.GetGradientStart("com.typewhisper.smallest-ai"));
+        Assert.Equal("#2563EB", PluginIconHelper.GetGradientEnd("com.typewhisper.smallest-ai"));
+    }
+
     [Theory]
     [InlineData("com.typewhisper.openai", "openai.png")]
     [InlineData("com.typewhisper.groq", "groq.png")]
@@ -52,6 +64,7 @@ public sealed class PluginIconHelperTests : IDisposable
     [InlineData("com.typewhisper.gemini", "gemini.png")]
     [InlineData("com.typewhisper.claude", "claude.png")]
     [InlineData("com.typewhisper.cohere", "cohere.png")]
+    [InlineData("com.typewhisper.smallest-ai", "smallest.png")]
     public void GetLogoPath_MapsApprovedSvglPlugins(string pluginId, string fileName)
     {
         var expectedPath = BuildLogoPath(fileName);

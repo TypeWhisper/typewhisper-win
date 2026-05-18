@@ -1,0 +1,13 @@
+{
+  "id": "com.typewhisper.smallest-ai",
+  "name": "Smallest AI Pulse",
+  "version": "1.0.0",
+  "author": "TypeWhisper",
+  "description": "Smallest AI Pulse speech-to-text transcription engine",
+  "category": "transcription",
+  "categories": ["transcription"],
+  "isLocal": false,
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.SmallestAi.dll",
+  "pluginClass": "TypeWhisper.Plugin.SmallestAi.SmallestAiPlugin"
+}
