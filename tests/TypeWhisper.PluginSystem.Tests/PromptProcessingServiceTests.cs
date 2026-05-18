@@ -93,8 +93,14 @@ public sealed class PromptProcessingServiceTests : IDisposable
 
     private static string ExtractJsonPayload(string framedText)
     {
-        var jsonStart = framedText.IndexOf('{');
-        Assert.True(jsonStart >= 0, "Expected framed prompt to contain a JSON payload.");
+        var separator = Environment.NewLine + Environment.NewLine;
+        var separatorIndex = framedText.IndexOf(separator, StringComparison.Ordinal);
+        Assert.True(separatorIndex >= 0, "Expected framed prompt to contain a header/payload separator.");
+
+        var jsonStart = separatorIndex + separator.Length;
+        Assert.True(
+            jsonStart < framedText.Length && framedText[jsonStart] == '{',
+            "Expected framed prompt to contain a JSON payload.");
         return framedText[jsonStart..];
     }
 
