@@ -21,6 +21,7 @@
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\Tests\*.cs" LinkBase="OpenAi" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\Tests\*.cs" LinkBase="OpenRouter" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\Tests\*.cs" LinkBase="LiveTranscript" />
+    <Compile Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\Tests\*.cs" LinkBase="SmallestAi" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,6 +34,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SherpaOnnx\TypeWhisper.Plugin.SherpaOnnx.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SupertonicTts\TypeWhisper.Plugin.SupertonicTts.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\TypeWhisper.Plugin.LiveTranscript.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\TypeWhisper.Plugin.SmallestAi.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Windows\TypeWhisper.Windows.csproj" />
   </ItemGroup>
