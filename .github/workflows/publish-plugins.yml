@@ -63,6 +63,7 @@ jobs:
             'google-cloud-stt'   = 'TypeWhisper.Plugin.GoogleCloudStt'
             'qwen3-stt'          = 'TypeWhisper.Plugin.Qwen3Stt'
             'voxtral'            = 'TypeWhisper.Plugin.Voxtral'
+            'smallest-ai'        = 'TypeWhisper.Plugin.SmallestAi'
             'supertonic-tts'     = 'TypeWhisper.Plugin.SupertonicTts'
             'whisper-cpp'        = 'TypeWhisper.Plugin.WhisperCpp'
             'file-memory'        = 'TypeWhisper.Plugin.FileMemory'
