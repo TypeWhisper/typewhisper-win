@@ -545,5 +545,22 @@
     "descriptions": {
       "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech ueber xAI-Grok-APIs. Erfordert einen xAI API-Key."
     }
+  },
+  {
+    "id": "com.typewhisper.smallest-ai",
+    "name": "Smallest AI Pulse",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Smallest AI Pulse speech-to-text transcription engine",
+    "category": "transcription",
+    "categories": [
+      "transcription"
+    ],
+    "size": 20366,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-smallest-ai-v1.0.0/com.typewhisper.smallest-ai-1.0.0.zip",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": null
   }
 ]
