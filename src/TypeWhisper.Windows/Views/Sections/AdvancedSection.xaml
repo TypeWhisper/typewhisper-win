@@ -65,6 +65,14 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -228,6 +236,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -262,6 +272,28 @@
                         <Border Grid.Row="3" Background="#18FFFFFF"/>
 
                         <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Advanced.ApiRequireToken}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str Advanced.ApiRequireTokenHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               FontSize="12"
+                                               Margin="0,4,16,0"/>
+                                </StackPanel>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.ApiServerRequiresAuthentication, Mode=TwoWay}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="5" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
                             <StackPanel>
                                 <TextBlock Text="{Binding Settings.ApiServerStatusText}"
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
@@ -273,18 +305,18 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Row="5" Background="#18FFFFFF"/>
+                        <Border Grid.Row="7" Background="#18FFFFFF"/>
 
-                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
                             <TextBlock Text="{loc:Str Advanced.ApiHint}"
                                        Style="{StaticResource HintStyle}"
                                        FontSize="12"
                                        Margin="0"/>
                         </Border>
 
-                        <Border Grid.Row="7" Background="#18FFFFFF"/>
+                        <Border Grid.Row="9" Background="#18FFFFFF"/>
 
-                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="10" Style="{StaticResource SettingsRowBorderStyle}">
                             <StackPanel>
                                 <TextBlock Text="{loc:Str Advanced.CurlExamples}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ItemsControl ItemsSource="{Binding Settings.CurlExamples}" Margin="0,8,0,0">

@@ -463,6 +463,8 @@
   "Advanced.ApiSection": "APIサーバー",
   "Advanced.ApiEnable": "ローカルAPIを有効化",
   "Advanced.ApiPort": "ポート",
+  "Advanced.ApiRequireToken": "APIトークンを必須にする",
+  "Advanced.ApiRequireTokenHint": "api-discovery.jsonに公開されるトークンでローカルAPIリクエストを保護します。",
   "Advanced.ApiDisabled": "APIサーバー無効",
   "Advanced.ApiNotRunning": "APIサーバーは有効ですが、実行されていません",
   "Advanced.ApiRunningFormat": "APIサーバーがポート{0}で実行中",

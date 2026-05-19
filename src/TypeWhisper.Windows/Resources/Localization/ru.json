@@ -465,6 +465,8 @@
   "Advanced.ApiSection": "Сервер API",
   "Advanced.ApiEnable": "Включить локальный API",
   "Advanced.ApiPort": "Порт",
+  "Advanced.ApiRequireToken": "Требовать API-токен",
+  "Advanced.ApiRequireTokenHint": "Защищать локальные API-запросы токеном из api-discovery.json.",
   "Advanced.ApiDisabled": "Сервер API выключен",
   "Advanced.ApiNotRunning": "API включён, но сервер не запущен",
   "Advanced.ApiRunningFormat": "Сервер API на порту {0}",

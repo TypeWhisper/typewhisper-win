@@ -53,6 +53,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string? _translationTargetLanguage;
     [ObservableProperty] private bool _apiServerEnabled;
     [ObservableProperty] private int _apiServerPort = 8978;
+    [ObservableProperty] private bool _apiServerRequiresAuthentication;
     [ObservableProperty] private OverlayWidget _overlayLeftWidget = OverlayWidget.Waveform;
     [ObservableProperty] private OverlayWidget _overlayRightWidget = OverlayWidget.Timer;
     [ObservableProperty] private string? _uiLanguage;
@@ -339,6 +340,7 @@ public partial class SettingsViewModel : ObservableObject
             TranslationTargetLanguage = TranslationTargetLanguage,
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
+            ApiServerRequiresAuthentication = ApiServerRequiresAuthentication,
             ToggleOnlyHotkey = HotkeyParser.Normalize(ToggleOnlyHotkey),
             HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
             RecentTranscriptionsHotkey = HotkeyParser.Normalize(RecentTranscriptionsHotkey),
@@ -423,6 +425,7 @@ public partial class SettingsViewModel : ObservableObject
         TranslationTargetLanguage = s.TranslationTargetLanguage;
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
+        ApiServerRequiresAuthentication = s.ApiServerRequiresAuthentication;
         ToggleOnlyHotkey = HotkeyParser.Normalize(s.ToggleOnlyHotkey);
         HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
         RecentTranscriptionsHotkey = HotkeyParser.Normalize(s.RecentTranscriptionsHotkey);

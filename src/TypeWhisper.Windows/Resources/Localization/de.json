@@ -476,6 +476,8 @@
   "Advanced.ApiSection": "API-Server",
   "Advanced.ApiEnable": "Lokale API aktivieren",
   "Advanced.ApiPort": "Port",
+  "Advanced.ApiRequireToken": "API-Token verlangen",
+  "Advanced.ApiRequireTokenHint": "Lokale API-Anfragen mit dem Token aus api-discovery.json schützen.",
   "Advanced.ApiDisabled": "API-Server deaktiviert",
   "Advanced.ApiNotRunning": "API-Server aktiviert, aber nicht gestartet",
   "Advanced.ApiRunningFormat": "API-Server läuft auf Port {0}",
