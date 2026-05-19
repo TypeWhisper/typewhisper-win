@@ -49,70 +49,63 @@
 ```powershell
 $discovery = Get-Content "$env:LOCALAPPDATA\TypeWhisper\api-discovery.json" | ConvertFrom-Json
 $token = $discovery.token
-curl http://localhost:$($discovery.port)/v1/status
-curl -H "Authorization: Bearer $token" http://localhost:$($discovery.port)/v1/models
-curl -i -X OPTIONS http://localhost:$($discovery.port)/v1/models
+$base = "http://localhost:$($discovery.port)"
+$env:TYPEWHISPER_API_TOKEN = $token
+$auth = "Authorization: Bearer $env:TYPEWHISPER_API_TOKEN"
+$json = "Content-Type: application/json"
+curl.exe "$base/v1/status"
+curl.exe -H $auth "$base/v1/models"
+curl.exe -i -X OPTIONS "$base/v1/models"
 ```
 → `api-discovery.json` enthält `version`, `port`, `token`; `api-port` existiert weiter. `OPTIONS` antwortet mit `204` ohne JSON-Body.
 
 ### 2.2 History
-```bash
-curl "http://localhost:8978/v1/history?limit=5"
-curl "http://localhost:8978/v1/history?q=test"
-curl -X DELETE "http://localhost:8978/v1/history?id=SOME_ID"
+```powershell
+curl.exe -H $auth "$base/v1/history?limit=5"
+curl.exe -H $auth "$base/v1/history?q=test"
+curl.exe -X DELETE -H $auth "$base/v1/history?id=SOME_ID"
 ```
 
 ### 2.3 Workflows / Rules / Profiles
-```bash
-curl http://localhost:8978/v1/rules
-curl http://localhost:8978/v1/profiles
-curl -X PUT "http://localhost:8978/v1/rules/toggle?id=SOME_WORKFLOW_ID"
-curl -X PUT "http://localhost:8978/v1/profiles/toggle?id=SOME_WORKFLOW_ID"
+```powershell
+curl.exe -H $auth "$base/v1/rules"
+curl.exe -H $auth "$base/v1/profiles"
+curl.exe -X PUT -H $auth "$base/v1/rules/toggle?id=SOME_WORKFLOW_ID"
+curl.exe -X PUT -H $auth "$base/v1/profiles/toggle?id=SOME_WORKFLOW_ID"
 ```
 → Windows liefert im Feld `bundle_identifiers` die vorhandenen Prozessnamen.
 
 ### 2.4 Dictionary Terms + Corrections
-```bash
-curl http://localhost:8978/v1/dictionary/terms
-curl -X PUT http://localhost:8978/v1/dictionary/terms ^
-  -H "Content-Type: application/json" ^
-  -d "{\"terms\":[\"TypeWhisper\",\"Raycast\"],\"replace\":false}"
-curl -X DELETE http://localhost:8978/v1/dictionary/terms ^
-  -H "Content-Type: application/json" ^
-  -d "{\"term\":\"Raycast\"}"
+```powershell
+curl.exe -H $auth "$base/v1/dictionary/terms"
+curl.exe -X PUT -H $auth -H $json -d '{"terms":["TypeWhisper","Raycast"],"replace":false}' "$base/v1/dictionary/terms"
+curl.exe -X DELETE -H $auth -H $json -d '{"term":"Raycast"}' "$base/v1/dictionary/terms"
 
-curl http://localhost:8978/v1/dictionary/corrections
-curl -X PUT http://localhost:8978/v1/dictionary/corrections ^
-  -H "Content-Type: application/json" ^
-  -d "{\"original\":\"teh\",\"replacement\":\"the\",\"caseSensitive\":false}"
-curl -X DELETE http://localhost:8978/v1/dictionary/corrections ^
-  -H "Content-Type: application/json" ^
-  -d "{\"original\":\"teh\"}"
+curl.exe -H $auth "$base/v1/dictionary/corrections"
+curl.exe -X PUT -H $auth -H $json -d '{"original":"teh","replacement":"the","caseSensitive":false}' "$base/v1/dictionary/corrections"
+curl.exe -X DELETE -H $auth -H $json -d '{"original":"teh"}' "$base/v1/dictionary/corrections"
 ```
 
 ### 2.5 Dictation Control
-```bash
-curl http://localhost:8978/v1/dictation/status
-curl -X POST http://localhost:8978/v1/dictation/start
-curl -X POST http://localhost:8978/v1/dictation/stop
+```powershell
+curl.exe -H $auth "$base/v1/dictation/status"
+curl.exe -X POST -H $auth "$base/v1/dictation/start"
+curl.exe -X POST -H $auth "$base/v1/dictation/stop"
 ```
 
 ### 2.6 Transcribe
-```bash
+```powershell
 # Multipart oder raw audio
-curl -X POST http://localhost:8978/v1/transcribe \
-  -F "file=@test.wav" \
+curl.exe -X POST -H $auth "$base/v1/transcribe" `
+  -F "file=@test.wav" `
   -F "language=de"
 
 # Mac-kompatible Local-File-Route ohne Byte-Upload
-curl -X POST "http://localhost:8978/v1/transcribe/local-file?await_download=1" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"path\":\"C:\\Audio\\test.wav\",\"language_hints\":[\"de\",\"en\"],\"task\":\"transcribe\"}"
+curl.exe -X POST -H $auth -H $json -d '{"path":"C:\\Audio\\test.wav","language_hints":["de","en"],"task":"transcribe"}' "$base/v1/transcribe/local-file?await_download=1"
 ```
 
 ### 2.7 CLI / Raycast-Pfad
 ```powershell
-$env:TYPEWHISPER_API_TOKEN = $token
 typewhisper status
 typewhisper models
 typewhisper transcribe C:\Audio\test.wav --language de --json

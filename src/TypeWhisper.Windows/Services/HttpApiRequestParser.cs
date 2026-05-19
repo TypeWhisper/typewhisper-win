@@ -210,6 +210,9 @@ internal static class HttpApiRequestParser
         if (payload is null || string.IsNullOrWhiteSpace(payload.Path))
             throw new HttpApiRequestException(400, "Invalid JSON body");
 
+        if (payload.LanguageHints is null)
+            throw new HttpApiRequestException(400, "'language_hints' must be an array or omitted");
+
         if (!string.IsNullOrWhiteSpace(payload.Language) && payload.LanguageHints.Count > 0)
             throw new HttpApiRequestException(400, "Use either 'language' or 'language_hint', not both");
 
@@ -442,7 +445,7 @@ internal static class HttpApiRequestParser
     {
         public string? Path { get; init; }
         public string? Language { get; init; }
-        public IReadOnlyList<string> LanguageHints { get; init; } = [];
+        public IReadOnlyList<string>? LanguageHints { get; init; } = [];
         public string? Task { get; init; }
         public string? TargetLanguage { get; init; }
         public string? ResponseFormat { get; init; }

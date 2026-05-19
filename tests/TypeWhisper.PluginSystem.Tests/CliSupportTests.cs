@@ -59,6 +59,33 @@ public sealed class CliSupportTests : IDisposable
     }
 
     [Fact]
+    public void ConnectionResolver_SkipsInvalidPorts()
+    {
+        var appDirectory = Path.Combine(_root, "TypeWhisper");
+        Directory.CreateDirectory(appDirectory);
+        File.WriteAllText(Path.Combine(appDirectory, "api-port"), "9911");
+        File.WriteAllText(Path.Combine(appDirectory, "api-discovery.json"), """
+            {
+              "version": 1,
+              "port": 70000,
+              "token": "token-from-discovery"
+            }
+            """);
+
+        var legacyFallback = CliConnectionResolver.Resolve(new CliConnectionOptions(
+            ApplicationDataRoot: _root));
+
+        File.WriteAllText(Path.Combine(appDirectory, "api-port"), "0");
+        var defaultFallback = CliConnectionResolver.Resolve(new CliConnectionOptions(
+            ApplicationDataRoot: _root,
+            PortOverride: -1));
+
+        Assert.Equal(9911, legacyFallback.Port);
+        Assert.Equal(8978, defaultFallback.Port);
+    }
+
+
+    [Fact]
     public void RequestBuilder_AddsBearerTokenToRequests()
     {
         using var request = CliRequestBuilder.BuildGet("http://127.0.0.1:8978", "/v1/models", "cli-token");

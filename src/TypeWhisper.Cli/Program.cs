@@ -382,6 +382,8 @@ static class Program
                     case "--port":
                         if (!TryReadValue(args, ref i, out var portValue) || !int.TryParse(portValue, out var parsedPort))
                             return options with { Error = "--port requires a number." };
+                        if (!CliConnectionResolver.IsPortInRange(parsedPort))
+                            return options with { Error = "--port requires a TCP port between 1 and 65535." };
                         port = parsedPort;
                         break;
                     case "--api-token":

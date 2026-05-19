@@ -34,9 +34,9 @@ public static class CliConnectionResolver
             "TypeWhisper");
 
         var discovery = ReadDiscovery(Path.Combine(appDirectory, "api-discovery.json"));
-        var port = options.PortOverride
-            ?? discovery?.Port
-            ?? ReadLegacyPort(Path.Combine(appDirectory, "api-port"))
+        var port = ValidatePort(options.PortOverride)
+            ?? ValidatePort(discovery?.Port)
+            ?? ValidatePort(ReadLegacyPort(Path.Combine(appDirectory, "api-port")))
             ?? DefaultPort;
         var token = FirstNonBlank(
             options.ApiTokenOverride,
@@ -45,6 +45,8 @@ public static class CliConnectionResolver
 
         return new CliConnection(port, token);
     }
+
+    public static bool IsPortInRange(int port) => port is >= 1 and <= 65535;
 
     private static ApiDiscovery? ReadDiscovery(string path)
     {
@@ -57,7 +59,7 @@ public static class CliConnectionResolver
                 File.ReadAllText(path),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            return discovery?.Port > 0 ? discovery : null;
+            return discovery;
         }
         catch
         {
@@ -79,6 +81,9 @@ public static class CliConnectionResolver
 
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static int? ValidatePort(int? port) =>
+        port is int value && IsPortInRange(value) ? value : null;
 
     private sealed record ApiDiscovery
     {

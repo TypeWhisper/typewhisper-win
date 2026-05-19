@@ -418,11 +418,14 @@ public class HttpApiServiceTests : IDisposable
     public async Task TranscribeLocalFileEndpoint_RejectsMissingAndUnsupportedFiles()
     {
         var service = CreateService();
+        var missingPath = Path.Combine(
+            Path.GetTempPath(),
+            $"typewhisper-missing-{Guid.NewGuid():N}.wav");
 
         var missing = await service.HandleRequestAsync(JsonRequest(
             "POST",
             "/v1/transcribe/local-file",
-            """{"path":"C:\\definitely-missing\\audio.wav"}"""), CancellationToken.None);
+            JsonSerializer.Serialize(new { path = missingPath })), CancellationToken.None);
 
         var tempTextFile = Path.GetTempFileName();
         try
