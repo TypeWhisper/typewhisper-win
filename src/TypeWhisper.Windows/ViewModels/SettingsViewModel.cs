@@ -454,7 +454,7 @@ public partial class SettingsViewModel : ObservableObject
         if (_isSavingSettings)
             return;
 
-        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        DispatchToUi(() =>
         {
             _isLoading = true;
             LoadFromSettings(updatedSettings);
@@ -467,7 +467,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnApiServerStateChanged()
     {
-        Application.Current?.Dispatcher.InvokeAsync(RefreshApiServerStatus);
+        DispatchToUi(RefreshApiServerStatus);
     }
 
     private void RefreshApiServerStatus()
@@ -505,7 +505,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        Application.Current?.Dispatcher.Invoke(() =>
+        DispatchToUi(() =>
         {
             _isLoading = true;
             RefreshLocalizedCollections();
@@ -529,7 +529,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnTtsProvidersChanged(object? sender, EventArgs e)
     {
-        Application.Current?.Dispatcher.Invoke(() =>
+        DispatchToUi(() =>
         {
             var wasLoading = _isLoading;
             _isLoading = true;
@@ -540,14 +540,33 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnAudioDevicesChanged(object? sender, EventArgs e)
     {
+        DispatchToUi(HandleAudioDevicesChanged);
+    }
+
+    private static void DispatchToUi(Action action)
+    {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (dispatcher is null
+            || dispatcher.CheckAccess()
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished)
         {
-            dispatcher.Invoke(HandleAudioDevicesChanged);
+            action();
             return;
         }
 
-        HandleAudioDevicesChanged();
+        try
+        {
+            dispatcher.Invoke(action);
+        }
+        catch (TaskCanceledException)
+        {
+            action();
+        }
+        catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            action();
+        }
     }
 
     private void HandleAudioDevicesChanged()
