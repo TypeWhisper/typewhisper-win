@@ -645,6 +645,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         CurrentHotkeyMode = null;
     }
 
+    private void ApplyModelLoadFailureFeedback(Exception ex)
+    {
+        _isRecording = false;
+        ApplyTransientIdleFeedback(
+            Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
+            feedbackIsError: true);
+    }
+
     private async Task StartRecording()
     {
         if (_isRecording || _isStoppingRecording) return;
@@ -685,12 +693,29 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 return;
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
             _isRecording = false;
-            ApplyTransientIdleFeedback(
-                Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
-                feedbackIsError: true);
+            return;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (IOException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (ArgumentException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
             return;
         }
 

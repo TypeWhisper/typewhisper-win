@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,8 +16,11 @@ public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private readonly SemaphoreSlim _accelerationApplyLock = new(1, 1);
     private bool _isSyncingSelection;
     private bool _isSyncingAccelerationSelection;
+    private int _accelerationApplyVersion;
+    private int _accelerationBusyVersion;
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
@@ -178,14 +182,19 @@ public partial class ModelManagerViewModel : ObservableObject
         if (_isSyncingAccelerationSelection)
             return;
 
-        _ = ApplySelectedAccelerationOptionAsync(value);
+        var applyVersion = Interlocked.Increment(ref _accelerationApplyVersion);
+        _ = ApplySelectedAccelerationOptionAsync(value, applyVersion);
     }
 
-    private async Task ApplySelectedAccelerationOptionAsync(string value)
+    private async Task ApplySelectedAccelerationOptionAsync(string value, int applyVersion)
     {
         var managesBusyState = false;
+        await _accelerationApplyLock.WaitAsync();
         try
         {
+            if (!IsCurrentAccelerationApply(applyVersion))
+                return;
+
             var normalized = AppSettings.NormalizeLocalModelAcceleration(value);
             if (!string.Equals(value, normalized, StringComparison.Ordinal))
             {
@@ -215,6 +224,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 IsBusy = true;
                 BusyMessage = Loc.Instance["Models.LoadingModel"];
                 managesBusyState = true;
+                _accelerationBusyVersion = applyVersion;
             }
 
             if (shouldReloadActiveModel)
@@ -222,26 +232,36 @@ public partial class ModelManagerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            if (!managesBusyState)
+            if (IsCurrentAccelerationApply(applyVersion))
             {
                 IsBusy = true;
                 managesBusyState = true;
-            }
+                _accelerationBusyVersion = applyVersion;
 
-            BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
-            await Task.Delay(2000);
+                BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+                await Task.Delay(2000);
+            }
         }
         finally
         {
-            if (managesBusyState)
+            if (IsCurrentAccelerationApply(applyVersion))
             {
-                IsBusy = false;
-                BusyMessage = null;
+                if (managesBusyState || _accelerationBusyVersion != 0)
+                {
+                    IsBusy = false;
+                    BusyMessage = null;
+                    _accelerationBusyVersion = 0;
+                }
+
+                RefreshAllModels();
             }
 
-            RefreshAllModels();
+            _accelerationApplyLock.Release();
         }
     }
+
+    private bool IsCurrentAccelerationApply(int applyVersion) =>
+        applyVersion == Volatile.Read(ref _accelerationApplyVersion);
 
     internal static string FormatStatus(
         ModelStatus status,
