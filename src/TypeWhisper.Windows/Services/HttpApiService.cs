@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
+using System.Windows.Threading;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -27,6 +28,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly DictationViewModel _dictation;
     private readonly IWorkflowService _workflows;
     private readonly Func<string> _apiTokenProvider;
+    private readonly Dispatcher? _dispatcher;
 
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -67,6 +69,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _dictation = dictation;
         _workflows = workflows;
         _apiTokenProvider = apiTokenProvider ?? LoadOrCreateApiToken;
+        _dispatcher = CaptureActiveDispatcher();
     }
 
     public void Start(int port)
@@ -243,6 +246,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         catch (ModelManagerRequestException ex)
         {
             return Error(ex.StatusCode, ex.Message);
+        }
+        catch (DispatcherUnavailableException ex)
+        {
+            return Error(503, ex.Message);
         }
         catch (Exception ex)
         {
@@ -1062,29 +1069,38 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return parts.Count == 0 ? null : string.Join("\n", parts);
     }
 
-    private static async Task<T> InvokeOnDispatcherAsync<T>(Func<Task<T>> action)
+    private static Dispatcher? CaptureActiveDispatcher()
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null
-            || dispatcher.CheckAccess()
-            || dispatcher.HasShutdownStarted
-            || dispatcher.HasShutdownFinished)
-        {
+        return dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished
+            ? null
+            : dispatcher;
+    }
+
+    private async Task<T> InvokeOnDispatcherAsync<T>(Func<Task<T>> action)
+    {
+        var dispatcher = _dispatcher;
+        if (dispatcher is null)
             return await action();
-        }
+
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+            throw new DispatcherUnavailableException("Application is shutting down.");
+
+        if (dispatcher.CheckAccess())
+            return await action();
 
         try
         {
             var operation = dispatcher.InvokeAsync(action);
             return await await operation.Task;
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            return await action();
+            throw new DispatcherUnavailableException("Application is shutting down.");
         }
         catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            return await action();
+            throw new DispatcherUnavailableException("Application is shutting down.");
         }
     }
 
@@ -1093,4 +1109,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         public IReadOnlyList<string> Terms { get; init; } = [];
         public bool? Replace { get; init; }
     }
+
+    private sealed class DispatcherUnavailableException(string message) : Exception(message);
 }

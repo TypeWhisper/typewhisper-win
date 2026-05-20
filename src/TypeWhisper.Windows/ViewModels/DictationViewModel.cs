@@ -645,6 +645,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         CurrentHotkeyMode = null;
     }
 
+    private void ApplyModelLoadFailureFeedback(Exception ex)
+    {
+        _isRecording = false;
+        ApplyTransientIdleFeedback(
+            Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
+            feedbackIsError: true);
+    }
+
     private async Task StartRecording()
     {
         if (_isRecording || _isStoppingRecording) return;
@@ -676,25 +684,39 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (desiredModelId != _modelManager.ActiveModelId || !_modelManager.Engine.IsModelLoaded)
+        try
         {
-            try
+            if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
             {
-                if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
-                {
-                    StatusText = Loc.Instance["Status.NoModelLoaded"];
-                    _isRecording = false;
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
+                StatusText = Loc.Instance["Status.NoModelLoaded"];
                 _isRecording = false;
-                ApplyTransientIdleFeedback(
-                    Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
-                    feedbackIsError: true);
                 return;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            _isRecording = false;
+            return;
+        }
+        catch (InvalidOperationException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (IOException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (ArgumentException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ApplyModelLoadFailureFeedback(ex);
+            return;
         }
 
         if (!_modelManager.Engine.IsModelLoaded)

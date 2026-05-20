@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,8 +16,11 @@ public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private readonly SemaphoreSlim _accelerationApplyLock = new(1, 1);
     private bool _isSyncingSelection;
     private bool _isSyncingAccelerationSelection;
+    private int _accelerationApplyVersion;
+    private int _accelerationBusyVersion;
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
@@ -79,7 +83,7 @@ public partial class ModelManagerViewModel : ObservableObject
         };
 
         _modelManager.PluginManager.PluginStateChanged += (_, _) =>
-            Application.Current.Dispatcher.Invoke(RebuildProviders);
+            InvokeOnUiThread(RebuildProviders);
 
         _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
         {
@@ -178,26 +182,86 @@ public partial class ModelManagerViewModel : ObservableObject
         if (_isSyncingAccelerationSelection)
             return;
 
-        var normalized = AppSettings.NormalizeLocalModelAcceleration(value);
-        if (!string.Equals(value, normalized, StringComparison.Ordinal))
-        {
-            _isSyncingAccelerationSelection = true;
-            SelectedAccelerationOptionValue = normalized;
-            _isSyncingAccelerationSelection = false;
-        }
-
-        if (_settings.Current.LocalModelAcceleration != normalized)
-            _settings.Save(_settings.Current with { LocalModelAcceleration = normalized });
-
-        var plugin = GetDisplayTranscriptionPlugin();
-        if (plugin is not null && ShouldShowAccelerationSection(plugin))
-        {
-            plugin.SetAccelerationPreference(
-                ModelManagerService.GetAccelerationPreference(normalized));
-        }
-
-        RefreshAccelerationStatus();
+        var applyVersion = Interlocked.Increment(ref _accelerationApplyVersion);
+        _ = ApplySelectedAccelerationOptionAsync(value, applyVersion);
     }
+
+    private async Task ApplySelectedAccelerationOptionAsync(string value, int applyVersion)
+    {
+        var managesBusyState = false;
+        await _accelerationApplyLock.WaitAsync();
+        try
+        {
+            if (!IsCurrentAccelerationApply(applyVersion))
+                return;
+
+            var normalized = AppSettings.NormalizeLocalModelAcceleration(value);
+            if (!string.Equals(value, normalized, StringComparison.Ordinal))
+            {
+                _isSyncingAccelerationSelection = true;
+                SelectedAccelerationOptionValue = normalized;
+                _isSyncingAccelerationSelection = false;
+            }
+
+            if (_settings.Current.LocalModelAcceleration != normalized)
+                _settings.Save(_settings.Current with { LocalModelAcceleration = normalized });
+
+            var plugin = GetDisplayTranscriptionPlugin();
+            if (plugin is not null && ShouldShowAccelerationSection(plugin))
+            {
+                plugin.SetAccelerationPreference(
+                    ModelManagerService.GetAccelerationPreference(normalized));
+            }
+
+            var displayModelId = GetDisplayModelId();
+            var shouldReloadActiveModel = plugin is not null
+                && ShouldShowAccelerationSection(plugin)
+                && !string.IsNullOrWhiteSpace(displayModelId)
+                && string.Equals(displayModelId, _modelManager.ActiveModelId, StringComparison.Ordinal);
+
+            if (shouldReloadActiveModel)
+            {
+                IsBusy = true;
+                BusyMessage = Loc.Instance["Models.LoadingModel"];
+                managesBusyState = true;
+                _accelerationBusyVersion = applyVersion;
+            }
+
+            if (shouldReloadActiveModel)
+                await _modelManager.EnsureModelLoadedAsync(displayModelId);
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrentAccelerationApply(applyVersion))
+            {
+                IsBusy = true;
+                managesBusyState = true;
+                _accelerationBusyVersion = applyVersion;
+
+                BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+                await Task.Delay(2000);
+            }
+        }
+        finally
+        {
+            if (IsCurrentAccelerationApply(applyVersion))
+            {
+                if (managesBusyState || _accelerationBusyVersion != 0)
+                {
+                    IsBusy = false;
+                    BusyMessage = null;
+                    _accelerationBusyVersion = 0;
+                }
+
+                RefreshAllModels();
+            }
+
+            _accelerationApplyLock.Release();
+        }
+    }
+
+    private bool IsCurrentAccelerationApply(int applyVersion) =>
+        applyVersion == Volatile.Read(ref _accelerationApplyVersion);
 
     internal static string FormatStatus(
         ModelStatus status,
@@ -285,9 +349,7 @@ public partial class ModelManagerViewModel : ObservableObject
 
     private void RefreshActiveModelDetails()
     {
-        var displayModelId = !string.IsNullOrWhiteSpace(SelectedModelOptionId)
-            ? SelectedModelOptionId
-            : ActiveModelId;
+        var displayModelId = GetDisplayModelId();
 
         var activeModel = Providers
             .SelectMany(p => p.Models.Select(m => (Provider: p, Model: m)))
@@ -327,9 +389,7 @@ public partial class ModelManagerViewModel : ObservableObject
 
     private ITranscriptionEnginePlugin? GetDisplayTranscriptionPlugin()
     {
-        var displayModelId = !string.IsNullOrWhiteSpace(SelectedModelOptionId)
-            ? SelectedModelOptionId
-            : ActiveModelId;
+        var displayModelId = GetDisplayModelId();
 
         if (string.IsNullOrWhiteSpace(displayModelId) || !ModelManagerService.IsPluginModel(displayModelId))
             return null;
@@ -338,6 +398,11 @@ public partial class ModelManagerViewModel : ObservableObject
         return _modelManager.PluginManager.TranscriptionEngines
             .FirstOrDefault(e => e.PluginId == pluginId);
     }
+
+    private string? GetDisplayModelId() =>
+        !string.IsNullOrWhiteSpace(SelectedModelOptionId)
+            ? SelectedModelOptionId
+            : ActiveModelId;
 
     internal static string FormatAccelerationStatus(TranscriptionAccelerationStatus status) =>
         string.IsNullOrWhiteSpace(status.Detail)

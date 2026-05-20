@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -35,6 +36,7 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly DictationViewModel _dictation;
     private readonly DictionaryViewModel _dictionary;
     private readonly EventHandler _pluginStateChangedHandler;
+    private readonly Dispatcher? _uiDispatcher;
     private readonly Dictionary<string, (ITranscriptionEnginePlugin Plugin, UserControl? View)> _settingsViewCache = [];
     private bool _isInitializing;
     private bool _isMicTestRunning;
@@ -75,6 +77,7 @@ public partial class WelcomeViewModel : ObservableObject
         _registry = registry;
         _dictation = dictation;
         _dictionary = dictionary;
+        _uiDispatcher = CaptureActiveDispatcher();
         _lastObservedDictationState = dictation.State;
 
         _isInitializing = true;
@@ -613,10 +616,18 @@ public partial class WelcomeViewModel : ObservableObject
         return view;
     }
 
-    private static void DispatchToUi(Action action)
+    private static Dispatcher? CaptureActiveDispatcher()
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        return dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished
+            ? null
+            : dispatcher;
+    }
+
+    private void DispatchToUi(Action action)
+    {
+        var dispatcher = _uiDispatcher;
+        if (dispatcher is null)
         {
             action();
             return;
@@ -624,6 +635,12 @@ public partial class WelcomeViewModel : ObservableObject
 
         if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
             return;
+
+        if (dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
 
         try
         {

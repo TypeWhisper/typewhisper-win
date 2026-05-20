@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -181,7 +182,7 @@ public partial class SettingsViewModel : ObservableObject
         _apiServer = apiServer;
         _cliInstall = cliInstall;
         _speechFeedback = speechFeedback;
-        _dispatchToUi = dispatchToUi ?? DispatchToUi;
+        _dispatchToUi = dispatchToUi ?? CreateUiDispatcher();
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
@@ -308,7 +309,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnPreviewLevelChanged(object? sender, AudioLevelEventArgs e)
     {
-        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
+        _dispatchToUi(() =>
             PreviewLevel = Math.Min(e.RmsLevel * 5f, 1f)); // Scale for visibility
     }
 
@@ -546,10 +547,23 @@ public partial class SettingsViewModel : ObservableObject
         _dispatchToUi(HandleAudioDevicesChanged);
     }
 
-    private static void DispatchToUi(Action action)
+    private static Action<Action> CreateUiDispatcher()
+    {
+        var dispatcher = CaptureActiveDispatcher();
+        return action => DispatchToUi(dispatcher, action);
+    }
+
+    private static Dispatcher? CaptureActiveDispatcher()
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        return dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished
+            ? null
+            : dispatcher;
+    }
+
+    private static void DispatchToUi(Dispatcher? dispatcher, Action action)
+    {
+        if (dispatcher is null)
         {
             action();
             return;
@@ -557,6 +571,12 @@ public partial class SettingsViewModel : ObservableObject
 
         if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
             return;
+
+        if (dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
 
         try
         {

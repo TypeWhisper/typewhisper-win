@@ -2,6 +2,7 @@ using System.Reflection;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
@@ -108,6 +109,256 @@ public class ModelManagerViewModelTests
         sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationCpu;
 
         Assert.Equal(TranscriptionAccelerationPreference.Cpu, plugin.LastAccelerationPreference);
+    }
+
+    [Fact]
+    public async Task SelectedAccelerationOptionValue_ReloadsActiveModel_WhenAccelerationChanges()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        await modelManager.LoadModelAsync(fullModelId);
+
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationNvidiaCuda;
+
+        Assert.True(
+            await plugin.WaitForLoadCountAsync(2, TimeSpan.FromSeconds(1)),
+            "Changing acceleration for the active model should reload it immediately.");
+        Assert.True(
+            await WaitForConditionAsync(() => !sut.IsBusy, TimeSpan.FromSeconds(1)),
+            "The acceleration reload should clear the busy state after it finishes.");
+        Assert.Equal(
+            [TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, settings.Current.LocalModelAcceleration);
+    }
+
+    [Fact]
+    public async Task SelectedAccelerationOptionValue_AppliesLatestAcceleration_WhenChangesOverlap()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        await modelManager.LoadModelAsync(fullModelId);
+        plugin.BlockNextLoad();
+
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationNvidiaCuda;
+
+        Assert.True(
+            await plugin.WaitForLoadCountAsync(2, TimeSpan.FromSeconds(1)),
+            "The first acceleration change should start reloading the active model.");
+
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationCpu;
+        plugin.ReleaseBlockedLoad();
+
+        Assert.True(
+            await plugin.WaitForLoadCountAsync(3, TimeSpan.FromSeconds(2)),
+            "A newer overlapping acceleration change should reload again with the latest preference.");
+        Assert.True(
+            await WaitForConditionAsync(() => !sut.IsBusy, TimeSpan.FromSeconds(1)),
+            "The latest acceleration apply should own the final busy state.");
+        Assert.Equal(AppSettings.LocalModelAccelerationCpu, settings.Current.LocalModelAcceleration);
+        Assert.Equal(TranscriptionAccelerationPreference.Cpu, plugin.AccelerationPreferencesAtLoad.Last());
+    }
+
+    [Fact]
+    public async Task StartRecordingAsync_ReloadsActiveModel_WhenAccelerationChangedOutsideViewModel()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(fullModelId);
+        settings.Save(settings.Current with
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        });
+
+        var errorLog = new Mock<IErrorLogService>();
+        using var audio = new AudioRecordingService(
+            new FakeAudioInputDeviceProvider("USB Microphone"),
+            new FakeAudioInputCaptureFactory(),
+            Timeout.InfiniteTimeSpan);
+        using var speechFeedback = new SpeechFeedbackService(
+            settings,
+            pluginManager,
+            new FakeTtsProvider("windows-sapi", "System Voice"));
+        var textInsertion = new TextInsertionService(errorLog.Object);
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.Records).Returns([]);
+        var workflowTextProcessor = new Mock<IWorkflowTextProcessor>();
+        var recentTranscriptions = new RecentTranscriptionsService(
+            history.Object,
+            new RecentTranscriptionStore(),
+            textInsertion,
+            settings);
+        var workflowPalette = new WorkflowPaletteService(
+            _workflows.Object,
+            _activeWindow.Object,
+            textInsertion,
+            settings,
+            workflowTextProcessor.Object,
+            pluginManager,
+            new NoOpWorkflowPalettePresenter());
+        var sound = new SoundService { IsEnabled = false };
+        using var hotkey = new HotkeyService(settings, _workflows.Object);
+        using var sut = new DictationViewModel(
+            settings,
+            modelManager,
+            audio,
+            hotkey,
+            textInsertion,
+            _activeWindow.Object,
+            sound,
+            history.Object,
+            Mock.Of<IDictionaryService>(),
+            Mock.Of<IVocabularyBoostingService>(),
+            Mock.Of<ISnippetService>(),
+            _workflows.Object,
+            Mock.Of<ITranslationService>(),
+            Mock.Of<IAudioDuckingService>(),
+            Mock.Of<IMediaPauseService>(),
+            workflowTextProcessor.Object,
+            new PostProcessingPipeline(),
+            errorLog.Object,
+            speechFeedback,
+            recentTranscriptions,
+            workflowPalette);
+
+        await sut.StartRecordingAsync();
+
+        Assert.Equal(
+            [TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+    }
+
+    [Fact]
+    public async Task StartRecordingAsync_StopsQuietly_WhenModelLoadIsCanceled()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true)
+        {
+            LoadException = new OperationCanceledException()
+        };
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var errorLog = new Mock<IErrorLogService>();
+        using var audio = new AudioRecordingService(
+            new FakeAudioInputDeviceProvider("USB Microphone"),
+            new FakeAudioInputCaptureFactory(),
+            Timeout.InfiniteTimeSpan);
+        using var speechFeedback = new SpeechFeedbackService(
+            settings,
+            pluginManager,
+            new FakeTtsProvider("windows-sapi", "System Voice"));
+        var textInsertion = new TextInsertionService(errorLog.Object);
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.Records).Returns([]);
+        var workflowTextProcessor = new Mock<IWorkflowTextProcessor>();
+        var recentTranscriptions = new RecentTranscriptionsService(
+            history.Object,
+            new RecentTranscriptionStore(),
+            textInsertion,
+            settings);
+        var workflowPalette = new WorkflowPaletteService(
+            _workflows.Object,
+            _activeWindow.Object,
+            textInsertion,
+            settings,
+            workflowTextProcessor.Object,
+            pluginManager,
+            new NoOpWorkflowPalettePresenter());
+        var sound = new SoundService { IsEnabled = false };
+        using var hotkey = new HotkeyService(settings, _workflows.Object);
+        using var sut = new DictationViewModel(
+            settings,
+            modelManager,
+            audio,
+            hotkey,
+            textInsertion,
+            _activeWindow.Object,
+            sound,
+            history.Object,
+            Mock.Of<IDictionaryService>(),
+            Mock.Of<IVocabularyBoostingService>(),
+            Mock.Of<ISnippetService>(),
+            _workflows.Object,
+            Mock.Of<ITranslationService>(),
+            Mock.Of<IAudioDuckingService>(),
+            Mock.Of<IMediaPauseService>(),
+            workflowTextProcessor.Object,
+            new PostProcessingPipeline(),
+            errorLog.Object,
+            speechFeedback,
+            recentTranscriptions,
+            workflowPalette);
+
+        await sut.StartRecordingAsync();
+
+        Assert.False(sut.IsRecording);
+        Assert.False(sut.ShowFeedback);
+        Assert.False(sut.FeedbackIsError);
     }
 
     [Fact]
@@ -288,6 +539,34 @@ public class ModelManagerViewModelTests
         field.SetValue(target, value);
     }
 
+    private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        while (!cts.IsCancellationRequested)
+        {
+            if (condition())
+                return true;
+
+            try
+            {
+                await Task.Delay(10, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        return condition();
+    }
+
+    private sealed class NoOpWorkflowPalettePresenter : IWorkflowPalettePresenter
+    {
+        public bool IsVisible => false;
+        public void Show(WorkflowPaletteViewModel viewModel, Action onClosed) { }
+        public void Close() { }
+    }
+
     private sealed class FakeSettingsService(AppSettings initialSettings) : ISettingsService
     {
         public AppSettings Current { get; private set; } = initialSettings;
@@ -339,6 +618,11 @@ public class ModelManagerViewModelTests
         public TranscriptionAccelerationStatus AccelerationStatus { get; }
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
+        public int LoadCallCount { get; private set; }
+        public Exception? LoadException { get; set; }
+        public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
+        private TaskCompletionSource? _nextLoadBlocker;
+        private TaskCompletionSource? _activeLoadBlocker;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -346,6 +630,59 @@ public class ModelManagerViewModelTests
         public void SelectModel(string selectedModelId) => SelectedModelId = selectedModelId;
         public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
             LastAccelerationPreference = preference;
+
+        public void BlockNextLoad() =>
+            _nextLoadBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void ReleaseBlockedLoad() =>
+            (_activeLoadBlocker ?? _nextLoadBlocker)?.TrySetResult();
+
+        public async Task LoadModelAsync(string modelId, CancellationToken ct)
+        {
+            LoadCallCount++;
+            AccelerationPreferencesAtLoad.Add(LastAccelerationPreference);
+            if (LoadException is not null)
+                throw LoadException;
+
+            var blocker = _nextLoadBlocker;
+            _nextLoadBlocker = null;
+            if (blocker is not null)
+            {
+                _activeLoadBlocker = blocker;
+                try
+                {
+                    await blocker.Task.WaitAsync(ct);
+                }
+                finally
+                {
+                    if (ReferenceEquals(_activeLoadBlocker, blocker))
+                        _activeLoadBlocker = null;
+                }
+            }
+
+            SelectedModelId = modelId;
+        }
+
+        public async Task<bool> WaitForLoadCountAsync(int expectedLoadCount, TimeSpan timeout)
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            while (!cts.IsCancellationRequested)
+            {
+                if (LoadCallCount >= expectedLoadCount)
+                    return true;
+
+                try
+                {
+                    await Task.Delay(10, cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
+            return LoadCallCount >= expectedLoadCount;
+        }
 
         public Task<PluginTranscriptionResult> TranscribeAsync(
             byte[] wavAudio,
