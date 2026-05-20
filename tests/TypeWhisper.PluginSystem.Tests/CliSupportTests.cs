@@ -9,15 +9,15 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class CliSupportTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "typewhisper-cli-support-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Join(Path.GetTempPath(), "typewhisper-cli-support-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public void ConnectionResolver_UsesTokenizedDiscoveryFileBeforeLegacyPortFile()
     {
-        var appDirectory = Path.Combine(_root, "TypeWhisper");
+        var appDirectory = Path.Join(_root, "TypeWhisper");
         Directory.CreateDirectory(appDirectory);
-        File.WriteAllText(Path.Combine(appDirectory, "api-port"), "9911");
-        File.WriteAllText(Path.Combine(appDirectory, "api-discovery.json"), """
+        File.WriteAllText(Path.Join(appDirectory, "api-port"), "9911");
+        File.WriteAllText(Path.Join(appDirectory, "api-discovery.json"), """
             {
               "version": 1,
               "port": 9922,
@@ -34,9 +34,9 @@ public sealed class CliSupportTests : IDisposable
     [Fact]
     public void ConnectionResolver_UsesExplicitAndEnvironmentOverrides()
     {
-        var appDirectory = Path.Combine(_root, "TypeWhisper");
+        var appDirectory = Path.Join(_root, "TypeWhisper");
         Directory.CreateDirectory(appDirectory);
-        File.WriteAllText(Path.Combine(appDirectory, "api-discovery.json"), """
+        File.WriteAllText(Path.Join(appDirectory, "api-discovery.json"), """
             {
               "version": 1,
               "port": 9922,
@@ -62,10 +62,10 @@ public sealed class CliSupportTests : IDisposable
     [Fact]
     public void ConnectionResolver_SkipsInvalidPorts()
     {
-        var appDirectory = Path.Combine(_root, "TypeWhisper");
+        var appDirectory = Path.Join(_root, "TypeWhisper");
         Directory.CreateDirectory(appDirectory);
-        File.WriteAllText(Path.Combine(appDirectory, "api-port"), "9911");
-        File.WriteAllText(Path.Combine(appDirectory, "api-discovery.json"), """
+        File.WriteAllText(Path.Join(appDirectory, "api-port"), "9911");
+        File.WriteAllText(Path.Join(appDirectory, "api-discovery.json"), """
             {
               "version": 1,
               "port": 70000,
@@ -76,7 +76,7 @@ public sealed class CliSupportTests : IDisposable
         var legacyFallback = CliConnectionResolver.Resolve(new CliConnectionOptions(
             ApplicationDataRoot: _root));
 
-        File.WriteAllText(Path.Combine(appDirectory, "api-port"), "0");
+        File.WriteAllText(Path.Join(appDirectory, "api-port"), "0");
         var defaultFallback = CliConnectionResolver.Resolve(new CliConnectionOptions(
             ApplicationDataRoot: _root,
             PortOverride: -1));
@@ -99,7 +99,7 @@ public sealed class CliSupportTests : IDisposable
     [Fact]
     public async Task RequestBuilder_UsesLocalFileEndpointWithoutUploadingBytes()
     {
-        var filePath = Path.Combine(_root, "large.wav");
+        var filePath = Path.Join(_root, "large.wav");
         Directory.CreateDirectory(_root);
         await File.WriteAllTextAsync(filePath, "distinctive-audio-bytes");
 
@@ -136,8 +136,10 @@ public sealed class CliSupportTests : IDisposable
     [InlineData(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E' }, "stdin.wav")]
     [InlineData(new byte[] { (byte)'f', (byte)'L', (byte)'a', (byte)'C' }, "stdin.flac")]
     [InlineData(new byte[] { (byte)'O', (byte)'g', (byte)'g', (byte)'S' }, "stdin.ogg")]
+    [InlineData(new byte[] { 0xFF, 0xF1 }, "stdin.aac")]
+    [InlineData(new byte[] { 0xFF, 0xF9 }, "stdin.aac")]
     [InlineData(new byte[] { (byte)'I', (byte)'D', (byte)'3' }, "stdin.mp3")]
-    [InlineData(new byte[] { 0xFF, 0xFB }, "stdin.mp3")]
+    [InlineData(new byte[] { 0xFF, 0xFB, 0x90, 0x64 }, "stdin.mp3")]
     public void RequestBuilder_DetectsStdinFileNameFromAudioHeader(byte[] audioBytes, string expectedFileName)
     {
         Assert.Equal(expectedFileName, CliRequestBuilder.BuildStdinFileName(audioBytes));
@@ -149,6 +151,14 @@ public sealed class CliSupportTests : IDisposable
         var options = ParseCliOptions("status", "--api-token", "--json");
 
         Assert.Equal("--api-token requires a value.", GetOptionValue<string>(options, "Error"));
+    }
+
+    [Fact]
+    public void CliOptions_RejectsSwitchLikeValueForSharedOptionParser()
+    {
+        var options = ParseCliOptions("transcribe", "file.wav", "--language", "--json");
+
+        Assert.Equal("--language requires a value.", GetOptionValue<string>(options, "Error"));
     }
 
     public void Dispose()

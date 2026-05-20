@@ -157,13 +157,32 @@ public static class CliRequestBuilder
         if (audioBytes.StartsWith("OggS"u8))
             return "stdin.ogg";
 
-        if (audioBytes.StartsWith("ID3"u8)
-            || (audioBytes.Length >= 2 && audioBytes[0] == 0xFF && (audioBytes[1] & 0xE0) == 0xE0))
+        if (LooksLikeAdtsAac(audioBytes))
+            return "stdin.aac";
+
+        if (audioBytes.StartsWith("ID3"u8) || LooksLikeMp3Frame(audioBytes))
         {
             return "stdin.mp3";
         }
 
         return "stdin.wav";
+    }
+
+    private static bool LooksLikeAdtsAac(ReadOnlySpan<byte> audioBytes) =>
+        audioBytes.Length >= 2
+        && audioBytes[0] == 0xFF
+        && (audioBytes[1] & 0xF0) == 0xF0
+        && (audioBytes[1] & 0x06) == 0x00;
+
+    private static bool LooksLikeMp3Frame(ReadOnlySpan<byte> audioBytes)
+    {
+        if (audioBytes.Length < 4 || audioBytes[0] != 0xFF || (audioBytes[1] & 0xE0) != 0xE0)
+            return false;
+
+        var version = (audioBytes[1] >> 3) & 0b11;
+        var layer = (audioBytes[1] >> 1) & 0b11;
+
+        return version != 0b01 && layer == 0b01;
     }
 
     private static Uri BuildUri(string baseUrl, string path) =>

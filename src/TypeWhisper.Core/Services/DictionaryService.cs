@@ -155,18 +155,16 @@ public sealed class DictionaryService : IDictionaryService
         }
 
         var existingKeys = existingTerms.Select(e => TermKey(e.Original)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var addedTerms = new List<DictionaryEntry>();
-        foreach (var term in normalized.Where(term => !existingKeys.Contains(TermKey(term))))
-        {
-            var entry = new DictionaryEntry
+        var addedTerms = normalized
+            .Where(term => !existingKeys.Contains(TermKey(term)))
+            .Select(term => new DictionaryEntry
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Term,
                 Original = term
-            };
-            _cache.Add(entry);
-            addedTerms.Add(entry);
-        }
+            })
+            .ToList();
+        _cache.AddRange(addedTerms);
 
         if (replaceExisting)
         {

@@ -173,6 +173,13 @@ jobs:
             PYSEC-2025-218
             PYSEC-2026-139
           )
+          for vuln in "${ignored_vulns[@]}"; do
+            fixed_versions="$(curl -fsS "https://api.osv.dev/v1/vulns/${vuln}" | jq -r '[.affected[]?.ranges[]?.events[]?|select(has("fixed"))|.fixed] | unique | join(",")')"
+            if [[ -n "${fixed_versions}" ]]; then
+              echo "Ignored advisory ${vuln} now has fix(es): ${fixed_versions}. Remove it from ignored_vulns."
+              exit 1
+            fi
+          done
           ignore_args=()
           for vuln in "${ignored_vulns[@]}"; do
             ignore_args+=(--ignore-vuln "$vuln")

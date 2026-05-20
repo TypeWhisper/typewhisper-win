@@ -115,10 +115,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             }, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(TypeWhisperEnvironment.ApiDiscoveryFilePath, discovery);
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to write API discovery files: {ex.Message}");
-        }
+        catch (IOException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (NotSupportedException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogDiscoveryWriteFailure(ex); }
     }
 
     private static void DeleteDiscoveryFiles()
@@ -134,11 +134,17 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to delete {path}: {ex.Message}");
-        }
+        catch (IOException ex) { LogDeleteFailure(path, ex); }
+        catch (UnauthorizedAccessException ex) { LogDeleteFailure(path, ex); }
+        catch (NotSupportedException ex) { LogDeleteFailure(path, ex); }
+        catch (System.Security.SecurityException ex) { LogDeleteFailure(path, ex); }
     }
+
+    private static void LogDiscoveryWriteFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to write API discovery files: {ex.Message}");
+
+    private static void LogDeleteFailure(string path, Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to delete {path}: {ex.Message}");
 
     private async Task ListenLoop(CancellationToken ct)
     {
@@ -310,7 +316,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     {
         var transcribeRequest = HttpApiRequestParser.ParseTranscribe(request);
 
-        var tempPath = Path.Combine(
+        var tempPath = Path.Join(
             Path.GetTempPath(),
             $"tw_api_{Guid.NewGuid():N}.{SanitizeExtension(transcribeRequest.FileExtension)}");
 
@@ -322,7 +328,11 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { }
+            try { File.Delete(tempPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (NotSupportedException) { }
+            catch (System.Security.SecurityException) { }
         }
     }
 
@@ -878,10 +888,11 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                     return token;
             }
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to read API token: {ex.Message}");
-        }
+        catch (IOException ex) { LogTokenReadFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogTokenReadFailure(ex); }
+        catch (NotSupportedException ex) { LogTokenReadFailure(ex); }
+        catch (CryptographicException ex) { LogTokenReadFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogTokenReadFailure(ex); }
 
         var generated = GenerateApiToken();
         try
@@ -889,13 +900,20 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             Directory.CreateDirectory(TypeWhisperEnvironment.BasePath);
             File.WriteAllText(TypeWhisperEnvironment.ApiTokenFilePath, ApiKeyProtection.Encrypt(generated));
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to persist API token: {ex.Message}");
-        }
+        catch (IOException ex) { LogTokenPersistFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogTokenPersistFailure(ex); }
+        catch (NotSupportedException ex) { LogTokenPersistFailure(ex); }
+        catch (CryptographicException ex) { LogTokenPersistFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogTokenPersistFailure(ex); }
 
         return generated;
     }
+
+    private static void LogTokenReadFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to read API token: {ex.Message}");
+
+    private static void LogTokenPersistFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to persist API token: {ex.Message}");
 
     private static string GenerateApiToken()
     {

@@ -387,7 +387,7 @@ static class Program
                         port = parsedPort;
                         break;
                     case "--api-token":
-                        if (!TryReadValue(args, ref i, out apiToken) || LooksLikeOption(apiToken))
+                        if (!TryReadValue(args, ref i, out apiToken))
                             return options with { Error = "--api-token requires a value." };
                         break;
                     case "--language":
@@ -446,7 +446,7 @@ static class Program
 
         private static bool TryReadValue(string[] args, ref int index, out string value)
         {
-            if (index + 1 >= args.Length)
+            if (index + 1 >= args.Length || LooksLikeOption(args[index + 1]))
             {
                 value = "";
                 return false;
@@ -457,6 +457,6 @@ static class Program
         }
 
         private static bool LooksLikeOption(string value) =>
-            value.StartsWith("--", StringComparison.Ordinal);
+            value.Length > 0 && value[0] == '-' && value != "-";
     }
 }
