@@ -83,6 +83,7 @@ public record AppSettings
     // API Server
     public bool ApiServerEnabled { get; init; }
     public int ApiServerPort { get; init; } = 8978;
+    public bool ApiServerRequiresAuthentication { get; init; }
 
     // Dictionary
     public string[] EnabledPackIds { get; init; } = [];

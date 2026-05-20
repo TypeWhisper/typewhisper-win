@@ -33,23 +33,89 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DictionaryTermsEndpoints_SetAppendAndDeleteTerms()
+    public async Task Options_ReturnsNoContentWithoutJsonBody()
+    {
+        var service = CreateService();
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "OPTIONS",
+            "/v1/models",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+
+        Assert.Equal(204, response.StatusCode);
+        Assert.Equal("", response.Body);
+        Assert.Equal("text/plain", response.ContentType);
+    }
+
+    [Fact]
+    public async Task Authentication_ProtectsNonStatusRoutesWhenEnabled()
+    {
+        var service = CreateService(settings: new AppSettings
+        {
+            ApiServerRequiresAuthentication = true,
+            SaveToHistoryEnabled = true
+        });
+
+        var status = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var missingToken = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/models",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var badToken = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/models",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer wrong-token" },
+            []), CancellationToken.None);
+        var goodBearer = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/models",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []), CancellationToken.None);
+        var goodHeader = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/models",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["x-typewhisper-api-token"] = "test-token" },
+            []), CancellationToken.None);
+
+        Assert.Equal(200, status.StatusCode);
+        Assert.Equal(401, missingToken.StatusCode);
+        Assert.Equal("Bearer", missingToken.Headers["WWW-Authenticate"]);
+        Assert.Equal(401, badToken.StatusCode);
+        Assert.Equal(200, goodBearer.StatusCode);
+        Assert.Equal(200, goodHeader.StatusCode);
+    }
+
+    [Fact]
+    public async Task DictionaryTermsEndpoints_ReplaceMergeAndDeleteSingleTerm()
     {
         var service = CreateService();
 
         var put = await service.HandleRequestAsync(JsonRequest(
             "PUT",
             "/v1/dictionary/terms",
-            """{"terms":[" TypeWhisper ","WhisperKit","typewhisper"],"replace":true}"""), CancellationToken.None);
+            """{"terms":[" TypeWhisper ","WhisperKit","typewhisper","Qwen3 "],"replace":true}"""), CancellationToken.None);
         var putJson = JsonObject(put);
 
         Assert.Equal(200, put.StatusCode);
-        Assert.Equal(2, putJson["count"].GetInt32());
+        Assert.Equal(3, putJson["count"].GetInt32());
+        Assert.Equal(["TypeWhisper", "WhisperKit", "Qwen3"], Terms(putJson));
 
         await service.HandleRequestAsync(JsonRequest(
             "PUT",
             "/v1/dictionary/terms",
-            """{"terms":["Kubernetes"],"replace":false}"""), CancellationToken.None);
+            """{"terms":["Raycast","qwen3"],"replace":false}"""), CancellationToken.None);
 
         var get = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
             "GET",
@@ -58,18 +124,99 @@ public class HttpApiServiceTests : IDisposable
             new Dictionary<string, string>(),
             []), CancellationToken.None));
 
-        var terms = get["terms"].EnumerateArray().Select(e => e.GetString()).ToList();
-        Assert.Equal(["TypeWhisper", "WhisperKit", "Kubernetes"], terms);
+        Assert.Equal(["qwen3", "Raycast", "TypeWhisper", "WhisperKit"], Terms(get));
 
-        var delete = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+        var delete = JsonObject(await service.HandleRequestAsync(JsonRequest(
             "DELETE",
+            "/v1/dictionary/terms",
+            """{"term":"typewhisper"}"""), CancellationToken.None));
+
+        Assert.True(delete["deleted"].GetBoolean());
+        Assert.Equal(3, delete["count"].GetInt32());
+
+        var finalGet = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
             "/v1/dictionary/terms",
             new NameValueCollection(),
             new Dictionary<string, string>(),
             []), CancellationToken.None));
 
+        Assert.Equal(["qwen3", "Raycast", "WhisperKit"], Terms(finalGet));
+    }
+
+    [Fact]
+    public async Task DictionaryCorrectionsEndpoints_ListUpsertDeleteAndValidateInput()
+    {
+        var service = CreateService();
+
+        var initial = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/dictionary/corrections",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.Equal(0, initial["count"].GetInt32());
+        Assert.Empty(initial["corrections"].EnumerateArray());
+
+        var put = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"original":"teh","replacement":"the","caseSensitive":false}"""), CancellationToken.None));
+
+        Assert.Equal(1, put["count"].GetInt32());
+        var correction = Assert.Single(put["corrections"].EnumerateArray());
+        Assert.Equal("teh", correction.GetProperty("original").GetString());
+        Assert.Equal("the", correction.GetProperty("replacement").GetString());
+        Assert.False(correction.GetProperty("caseSensitive").GetBoolean());
+
+        var upsert = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"original":"TEH","replacement":"The","caseSensitive":true}"""), CancellationToken.None));
+
+        Assert.Equal(1, upsert["count"].GetInt32());
+        correction = Assert.Single(upsert["corrections"].EnumerateArray());
+        Assert.Equal("TEH", correction.GetProperty("original").GetString());
+        Assert.Equal("The", correction.GetProperty("replacement").GetString());
+        Assert.True(correction.GetProperty("caseSensitive").GetBoolean());
+
+        var emptyReplacement = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"original":"um","replacement":"","caseSensitive":false}"""), CancellationToken.None));
+        Assert.Equal(2, emptyReplacement["count"].GetInt32());
+
+        var delete = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "DELETE",
+            "/v1/dictionary/corrections",
+            """{"original":"teh"}"""), CancellationToken.None));
         Assert.True(delete["deleted"].GetBoolean());
-        Assert.Equal(0, delete["count"].GetInt32());
+        Assert.Equal(1, delete["count"].GetInt32());
+
+        var missingDelete = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "DELETE",
+            "/v1/dictionary/corrections",
+            """{"original":"missing"}"""), CancellationToken.None));
+        Assert.False(missingDelete["deleted"].GetBoolean());
+        Assert.Equal(1, missingDelete["count"].GetInt32());
+
+        var missingOriginalPut = await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"replacement":"value"}"""), CancellationToken.None);
+        var missingReplacementPut = await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"original":"value"}"""), CancellationToken.None);
+        var missingOriginalDelete = await service.HandleRequestAsync(JsonRequest(
+            "DELETE",
+            "/v1/dictionary/corrections",
+            "{}"), CancellationToken.None);
+
+        Assert.Equal(400, missingOriginalPut.StatusCode);
+        Assert.Equal(400, missingReplacementPut.StatusCode);
+        Assert.Equal(400, missingOriginalDelete.StatusCode);
     }
 
     [Fact]
@@ -207,34 +354,125 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ProfilesList_ReturnsNotFoundAfterWorkflowMigration()
+    public async Task RulesAndProfilesEndpoints_ListWorkflowBackedRulesAndToggle()
     {
+        var workflow = new Workflow
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Docs",
+            SortOrder = 7,
+            Template = WorkflowTemplate.Summary,
+            Trigger = new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome.exe"],
+                WebsitePatterns = ["docs.github.com"]
+            },
+            Behavior = new WorkflowBehavior
+            {
+                InputLanguage = null,
+                Settings = new Dictionary<string, string> { ["inputLanguage"] = """["de","en"]""" },
+                TranslationTarget = "fr"
+            }
+        };
+        _workflows.Setup(w => w.Workflows).Returns([workflow]);
+
         var service = CreateService();
-        var response = await service.HandleRequestAsync(new HttpApiRequest(
+        var rules = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/rules",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+        var profiles = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
             "GET",
             "/v1/profiles",
             new NameValueCollection(),
             new Dictionary<string, string>(),
-            []), CancellationToken.None);
+            []), CancellationToken.None));
+        var rule = Assert.Single(rules["rules"].EnumerateArray());
+        var profile = Assert.Single(profiles["profiles"].EnumerateArray());
 
-        Assert.Equal(404, response.StatusCode);
+        Assert.Equal("Docs", rule.GetProperty("name").GetString());
+        Assert.Equal("multiple", rule.GetProperty("language_mode").GetString());
+        Assert.Equal(["de", "en"], rule.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString() ?? "").ToArray());
+        Assert.Equal(JsonValueKind.Null, rule.GetProperty("input_language").ValueKind);
+        Assert.Equal("fr", rule.GetProperty("translation_target_language").GetString());
+        Assert.Equal("Docs", profile.GetProperty("name").GetString());
+
+        var toggle = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "PUT",
+            "/v1/rules/toggle",
+            new NameValueCollection { ["id"] = workflow.Id },
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.Equal(workflow.Id, toggle["id"].GetString());
+        Assert.Equal("Docs", toggle["name"].GetString());
+        Assert.Equal("Docs", toggle["rule_name"].GetString());
+        Assert.Equal("Docs", toggle["profile_name"].GetString());
+        _workflows.Verify(w => w.ToggleWorkflow(workflow.Id), Times.Once);
     }
 
-    private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins)
+    [Fact]
+    public async Task TranscribeLocalFileEndpoint_RejectsMissingAndUnsupportedFiles()
+    {
+        var service = CreateService();
+        var missingPath = Path.Join(
+            Path.GetTempPath(),
+            $"typewhisper-missing-{Guid.NewGuid():N}.wav");
+
+        var missing = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/transcribe/local-file",
+            JsonSerializer.Serialize(new { path = missingPath })), CancellationToken.None);
+
+        var tempTextFile = Path.GetTempFileName();
+        try
+        {
+            var unsupported = await service.HandleRequestAsync(JsonRequest(
+                "POST",
+                "/v1/transcribe/local-file",
+                JsonSerializer.Serialize(new { path = tempTextFile })), CancellationToken.None);
+
+            Assert.Equal(400, missing.StatusCode);
+            Assert.Equal("File not found", ErrorMessage(missing));
+            Assert.Equal(400, unsupported.StatusCode);
+            Assert.Equal("Unsupported audio format", ErrorMessage(unsupported));
+        }
+        finally
+        {
+            File.Delete(tempTextFile);
+        }
+    }
+
+    private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins) =>
+        CreateService(null, null, plugins);
+
+    private HttpApiService CreateService(
+        AppSettings? settings = null,
+        Func<string>? apiTokenProvider = null,
+        params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
             ? ModelManagerService.GetPluginModelId(plugins[0].PluginId, plugins[0].TranscriptionModels[0].Id)
             : null;
 
-        return CreateServiceWithModelManager(new AppSettings
+        return CreateServiceWithModelManager(settings ?? new AppSettings
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, plugins).Service;
+        }, apiTokenProvider, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
+        params ITranscriptionEnginePlugin[] plugins)
+        => CreateServiceWithModelManager(settings, null, plugins);
+
+    private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
+        AppSettings settings,
+        Func<string>? apiTokenProvider,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -265,7 +503,9 @@ public class HttpApiServiceTests : IDisposable
             vocabulary.Object,
             new PostProcessingPipeline(),
             translation.Object,
-            null!);
+            null!,
+            _workflows.Object,
+            apiTokenProvider ?? (() => "test-token"));
 
         return (service, modelManager);
     }
@@ -313,6 +553,9 @@ public class HttpApiServiceTests : IDisposable
         return doc.RootElement.EnumerateObject()
             .ToDictionary(p => p.Name, p => p.Value.Clone());
     }
+
+    private static string[] Terms(Dictionary<string, JsonElement> json) =>
+        json["terms"].EnumerateArray().Select(e => e.GetString() ?? "").ToArray();
 
     private static string ErrorMessage(HttpApiResponse response)
     {

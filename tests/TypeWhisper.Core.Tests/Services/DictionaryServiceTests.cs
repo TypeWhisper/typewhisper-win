@@ -174,6 +174,43 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void DeleteTerm_RemovesSingleTermCaseInsensitively()
+    {
+        _sut.SetTerms(["TypeWhisper", "WhisperKit", "Raycast"], replaceExisting: true);
+
+        var deleted = _sut.DeleteTerm("typewhisper");
+
+        Assert.True(deleted);
+        Assert.Equal(["WhisperKit", "Raycast"], _sut.GetEnabledTerms());
+    }
+
+    [Fact]
+    public void UpsertCorrection_UpdatesExistingCaseInsensitivelyAndEnablesIt()
+    {
+        _sut.UpsertCorrection("teh", "the", caseSensitive: false);
+        _sut.UpsertCorrection("TEH", "The", caseSensitive: true);
+
+        var correction = Assert.Single(_sut.GetEnabledCorrections());
+        Assert.Equal("TEH", correction.Original);
+        Assert.Equal("The", correction.Replacement);
+        Assert.True(correction.CaseSensitive);
+        Assert.True(correction.IsEnabled);
+    }
+
+    [Fact]
+    public void DeleteCorrection_RemovesSingleCorrectionCaseInsensitively()
+    {
+        _sut.UpsertCorrection("teh", "the", caseSensitive: false);
+        _sut.UpsertCorrection("um", "", caseSensitive: false);
+
+        var deleted = _sut.DeleteCorrection("TEH");
+
+        Assert.True(deleted);
+        var remaining = Assert.Single(_sut.GetEnabledCorrections());
+        Assert.Equal("um", remaining.Original);
+    }
+
+    [Fact]
     public void LearnCorrection_AddsNewCorrection()
     {
         _sut.LearnCorrection("kubernets", "Kubernetes");

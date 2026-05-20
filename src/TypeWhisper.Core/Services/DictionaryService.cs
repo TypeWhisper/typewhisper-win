@@ -112,6 +112,15 @@ public sealed class DictionaryService : IDictionaryService
             .Select(e => e.Original));
     }
 
+    public IReadOnlyList<DictionaryEntry> GetEnabledCorrections()
+    {
+        EnsureCacheLoaded();
+        return _cache
+            .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction)
+            .OrderBy(e => e.Original, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public void SetTerms(IEnumerable<string> terms, bool replaceExisting)
     {
         EnsureCacheLoaded();
@@ -119,6 +128,8 @@ public sealed class DictionaryService : IDictionaryService
         var normalized = NormalizeTerms(terms);
         var desiredByKey = normalized.ToDictionary(TermKey, term => term);
         var existingTerms = _cache.Where(e => e.EntryType == DictionaryEntryType.Term).ToList();
+        var touchedTerms = new List<DictionaryEntry>();
+        var untouchedTerms = new List<DictionaryEntry>();
 
         foreach (var entry in existingTerms)
         {
@@ -127,23 +138,46 @@ public sealed class DictionaryService : IDictionaryService
             {
                 var idx = _cache.FindIndex(e => e.Id == entry.Id);
                 if (idx >= 0)
-                    _cache[idx] = entry with { Original = desiredTerm, IsEnabled = true };
+                {
+                    var updated = entry with { Original = desiredTerm, IsEnabled = true };
+                    _cache[idx] = updated;
+                    touchedTerms.Add(updated);
+                }
             }
             else if (replaceExisting)
             {
                 _cache.Remove(entry);
             }
+            else
+            {
+                untouchedTerms.Add(entry);
+            }
         }
 
         var existingKeys = existingTerms.Select(e => TermKey(e.Original)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var term in normalized.Where(term => !existingKeys.Contains(TermKey(term))))
-        {
-            _cache.Add(new DictionaryEntry
+        var addedTerms = normalized
+            .Where(term => !existingKeys.Contains(TermKey(term)))
+            .Select(term => new DictionaryEntry
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Term,
                 Original = term
-            });
+            })
+            .ToList();
+        _cache.AddRange(addedTerms);
+
+        if (replaceExisting)
+        {
+            ReorderTerms(
+                normalized
+                    .Select(term => _cache.First(e =>
+                        e.EntryType == DictionaryEntryType.Term &&
+                        TermKey(e.Original) == TermKey(term)))
+                    .ToList());
+        }
+        else if (touchedTerms.Count > 0)
+        {
+            ReorderTerms([.. touchedTerms, .. addedTerms, .. untouchedTerms]);
         }
 
         SaveToDisk();
@@ -156,6 +190,74 @@ public sealed class DictionaryService : IDictionaryService
         _cache.RemoveAll(e => e.EntryType == DictionaryEntryType.Term);
         SaveToDisk();
         EntriesChanged?.Invoke();
+    }
+
+    public bool DeleteTerm(string term)
+    {
+        EnsureCacheLoaded();
+        var key = TermKey(term);
+        var removed = _cache.RemoveAll(e =>
+            e.EntryType == DictionaryEntryType.Term &&
+            TermKey(e.Original) == key);
+
+        if (removed == 0)
+            return false;
+
+        SaveToDisk();
+        EntriesChanged?.Invoke();
+        return true;
+    }
+
+    public void UpsertCorrection(string original, string replacement, bool caseSensitive)
+    {
+        EnsureCacheLoaded();
+        var existing = _cache.FirstOrDefault(e =>
+            e.EntryType == DictionaryEntryType.Correction &&
+            e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
+        {
+            var idx = _cache.FindIndex(e => e.Id == existing.Id);
+            if (idx >= 0)
+            {
+                _cache[idx] = existing with
+                {
+                    Original = original,
+                    Replacement = replacement,
+                    CaseSensitive = caseSensitive,
+                    IsEnabled = true
+                };
+            }
+        }
+        else
+        {
+            _cache.Add(new DictionaryEntry
+            {
+                Id = Guid.NewGuid().ToString(),
+                EntryType = DictionaryEntryType.Correction,
+                Original = original,
+                Replacement = replacement,
+                CaseSensitive = caseSensitive
+            });
+        }
+
+        SaveToDisk();
+        EntriesChanged?.Invoke();
+    }
+
+    public bool DeleteCorrection(string original)
+    {
+        EnsureCacheLoaded();
+        var removed = _cache.RemoveAll(e =>
+            e.EntryType == DictionaryEntryType.Correction &&
+            e.Original.Equals(original, StringComparison.OrdinalIgnoreCase));
+
+        if (removed == 0)
+            return false;
+
+        SaveToDisk();
+        EntriesChanged?.Invoke();
+        return true;
     }
 
     public void LearnCorrection(string original, string replacement)
@@ -265,6 +367,17 @@ public sealed class DictionaryService : IDictionaryService
             File.WriteAllText(_filePath, json);
         }
         catch { }
+    }
+
+    private void ReorderTerms(IReadOnlyList<DictionaryEntry> orderedTerms)
+    {
+        var orderedIds = orderedTerms.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+        var nonTerms = _cache.Where(e => e.EntryType != DictionaryEntryType.Term).ToList();
+        var remainingTerms = _cache
+            .Where(e => e.EntryType == DictionaryEntryType.Term && !orderedIds.Contains(e.Id))
+            .ToList();
+
+        _cache = [.. nonTerms, .. orderedTerms, .. remainingTerms];
     }
 
     private static IReadOnlyList<string> NormalizeTerms(IEnumerable<string> terms)

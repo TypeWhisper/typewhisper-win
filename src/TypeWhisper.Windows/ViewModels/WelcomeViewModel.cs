@@ -622,7 +622,21 @@ public partial class WelcomeViewModel : ObservableObject
             return;
         }
 
-        dispatcher.Invoke(action);
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+            return;
+
+        try
+        {
+            dispatcher.Invoke(action);
+        }
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+        catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
     }
 
     private string GetLocalRecommendationStatus()

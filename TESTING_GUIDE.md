@@ -43,47 +43,74 @@
 
 ## Phase 2: HTTP API
 
-### 2.1 Basis-Status
-```bash
-curl http://localhost:8978/v1/status
+> **Hinweis:** API Server muss in Einstellungen → Erweitert → API Server aktiviert sein. Standardmäßig ist Auth aus. Wenn "API-Token verlangen" aktiv ist, bleibt `/v1/status` öffentlich; alle anderen Routen brauchen `Authorization: Bearer <token>` oder `X-TypeWhisper-API-Token`.
+
+### 2.1 Discovery + Auth
+```powershell
+$discovery = Get-Content "$env:LOCALAPPDATA\TypeWhisper\api-discovery.json" | ConvertFrom-Json
+$token = $discovery.token
+$base = "http://localhost:$($discovery.port)"
+$env:TYPEWHISPER_API_TOKEN = $token
+$auth = "Authorization: Bearer $env:TYPEWHISPER_API_TOKEN"
+$json = "Content-Type: application/json"
+curl.exe "$base/v1/status"
+curl.exe -H $auth "$base/v1/models"
+curl.exe -i -X OPTIONS "$base/v1/models"
 ```
-→ JSON mit `version`, `is_recording`, `supports_streaming`, `supports_translation`
+→ `api-discovery.json` enthält `version`, `port`, `token`; `api-port` existiert weiter. `OPTIONS` antwortet mit `204` ohne JSON-Body.
 
 ### 2.2 History
-```bash
-# Alle Einträge
-curl "http://localhost:8978/v1/history?limit=5"
-# Suche
-curl "http://localhost:8978/v1/history?q=test"
-# Löschen (mit echter ID)
-curl -X DELETE "http://localhost:8978/v1/history?id=SOME_ID"
+```powershell
+curl.exe -H $auth "$base/v1/history?limit=5"
+curl.exe -H $auth "$base/v1/history?q=test"
+curl.exe -X DELETE -H $auth "$base/v1/history?id=SOME_ID"
 ```
 
-### 2.3 Profile
-```bash
-# Alle Profile
-curl http://localhost:8978/v1/profiles
+### 2.3 Workflows / Rules / Profiles
+```powershell
+curl.exe -H $auth "$base/v1/rules"
+curl.exe -H $auth "$base/v1/profiles"
+curl.exe -X PUT -H $auth "$base/v1/rules/toggle?id=SOME_WORKFLOW_ID"
+curl.exe -X PUT -H $auth "$base/v1/profiles/toggle?id=SOME_WORKFLOW_ID"
+```
+→ Windows liefert im Feld `bundle_identifiers` die vorhandenen Prozessnamen.
+
+### 2.4 Dictionary Terms + Corrections
+```powershell
+curl.exe -H $auth "$base/v1/dictionary/terms"
+curl.exe -X PUT -H $auth -H $json -d '{"terms":["TypeWhisper","Raycast"],"replace":false}' "$base/v1/dictionary/terms"
+curl.exe -X DELETE -H $auth -H $json -d '{"term":"Raycast"}' "$base/v1/dictionary/terms"
+
+curl.exe -H $auth "$base/v1/dictionary/corrections"
+curl.exe -X PUT -H $auth -H $json -d '{"original":"teh","replacement":"the","caseSensitive":false}' "$base/v1/dictionary/corrections"
+curl.exe -X DELETE -H $auth -H $json -d '{"original":"teh"}' "$base/v1/dictionary/corrections"
 ```
 
-### 2.4 Dictation Control
-```bash
-# Status prüfen
-curl http://localhost:8978/v1/dictation/status
-# Starten
-curl -X POST http://localhost:8978/v1/dictation/start
-# Stoppen
-curl -X POST http://localhost:8978/v1/dictation/stop
+### 2.5 Dictation Control
+```powershell
+curl.exe -H $auth "$base/v1/dictation/status"
+curl.exe -X POST -H $auth "$base/v1/dictation/start"
+curl.exe -X POST -H $auth "$base/v1/dictation/stop"
 ```
 
-### 2.5 Transcribe
-```bash
-# Audio-Datei senden
-curl -X POST http://localhost:8978/v1/transcribe \
-  -F "file=@test.wav" \
+### 2.6 Transcribe
+```powershell
+# Multipart oder raw audio
+curl.exe -X POST -H $auth "$base/v1/transcribe" `
+  -F "file=@test.wav" `
   -F "language=de"
+
+# Mac-kompatible Local-File-Route ohne Byte-Upload
+curl.exe -X POST -H $auth -H $json -d '{"path":"C:\\Audio\\test.wav","language_hints":["de","en"],"task":"transcribe"}' "$base/v1/transcribe/local-file?await_download=1"
 ```
 
-> **Hinweis:** API Server muss in Einstellungen → Allgemein aktiviert sein.
+### 2.7 CLI / Raycast-Pfad
+```powershell
+typewhisper status
+typewhisper models
+typewhisper transcribe C:\Audio\test.wav --language de --json
+typewhisper transcribe C:\Audio\test.wav --api-token $token --await-download
+```
 
 ---
 

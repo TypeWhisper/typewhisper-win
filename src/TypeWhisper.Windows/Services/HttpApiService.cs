@@ -1,8 +1,10 @@
 using System.IO;
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
@@ -23,6 +25,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly IPostProcessingPipeline _pipeline;
     private readonly ITranslationService _translation;
     private readonly DictationViewModel _dictation;
+    private readonly IWorkflowService _workflows;
+    private readonly Func<string> _apiTokenProvider;
 
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -48,7 +52,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         IVocabularyBoostingService vocabularyBoosting,
         IPostProcessingPipeline pipeline,
         ITranslationService translation,
-        DictationViewModel dictation)
+        DictationViewModel dictation,
+        IWorkflowService workflows,
+        Func<string>? apiTokenProvider = null)
     {
         _modelManager = modelManager;
         _settings = settings;
@@ -59,6 +65,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _pipeline = pipeline;
         _translation = translation;
         _dictation = dictation;
+        _workflows = workflows;
+        _apiTokenProvider = apiTokenProvider ?? LoadOrCreateApiToken;
     }
 
     public void Start(int port)
@@ -72,7 +80,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
         _listener.Start();
         _runningPort = port;
-        WriteApiPortFile(port);
+        WriteDiscoveryFiles(port, _apiTokenProvider());
 
         _listenTask = Task.Run(() => ListenLoop(_cts.Token));
     }
@@ -88,9 +96,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _listenTask = null;
         _runningPort = null;
         cts?.Dispose();
+        DeleteDiscoveryFiles();
     }
 
-    private static void WriteApiPortFile(int port)
+    private static void WriteDiscoveryFiles(int port, string token)
     {
         try
         {
@@ -98,12 +107,44 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             File.WriteAllText(
                 TypeWhisperEnvironment.ApiPortFilePath,
                 port.ToString(CultureInfo.InvariantCulture));
+            var discovery = JsonSerializer.Serialize(new
+            {
+                version = 1,
+                port,
+                token
+            }, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(TypeWhisperEnvironment.ApiDiscoveryFilePath, discovery);
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to write API port file: {ex.Message}");
-        }
+        catch (IOException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (NotSupportedException ex) { LogDiscoveryWriteFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogDiscoveryWriteFailure(ex); }
     }
+
+    private static void DeleteDiscoveryFiles()
+    {
+        TryDelete(TypeWhisperEnvironment.ApiPortFilePath);
+        TryDelete(TypeWhisperEnvironment.ApiDiscoveryFilePath);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException ex) { LogDeleteFailure(path, ex); }
+        catch (UnauthorizedAccessException ex) { LogDeleteFailure(path, ex); }
+        catch (NotSupportedException ex) { LogDeleteFailure(path, ex); }
+        catch (System.Security.SecurityException ex) { LogDeleteFailure(path, ex); }
+    }
+
+    private static void LogDiscoveryWriteFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to write API discovery files: {ex.Message}");
+
+    private static void LogDeleteFailure(string path, Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to delete {path}: {ex.Message}");
 
     private async Task ListenLoop(CancellationToken ct)
     {
@@ -131,13 +172,13 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
             response.StatusCode = apiResponse.StatusCode;
             response.ContentType = apiResponse.ContentType;
-            response.Headers["Access-Control-Allow-Origin"] = "*";
-            response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
-            response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-Language, X-Language-Hints, X-Task, X-Target-Language, X-Response-Format, X-Prompt, X-Engine, X-Model";
+            foreach (var (name, value) in apiResponse.Headers)
+                response.Headers[name] = value;
 
             var bytes = Encoding.UTF8.GetBytes(apiResponse.Body);
             response.ContentLength64 = bytes.Length;
-            await response.OutputStream.WriteAsync(bytes, ct);
+            if (bytes.Length > 0)
+                await response.OutputStream.WriteAsync(bytes, ct);
         }
         catch (Exception ex)
         {
@@ -157,7 +198,16 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     internal async Task<HttpApiResponse> HandleRequestAsync(HttpApiRequest request, CancellationToken ct)
     {
         if (request.Method == "OPTIONS")
-            return Json(new { ok = true });
+            return new HttpApiResponse(204, "", "text/plain");
+
+        if (!IsKnownRoute(request.Path, request.Method))
+            return Error(404, "Not found");
+
+        if (RequiresAuthentication(request) && !HasValidApiToken(request))
+            return Error(
+                401,
+                "Missing or invalid API token",
+                new Dictionary<string, string> { ["WWW-Authenticate"] = "Bearer" });
 
         try
         {
@@ -166,15 +216,23 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/status", "GET") => HandleStatus(),
                 ("/v1/models", "GET") => HandleModels(),
                 ("/v1/transcribe", "POST") => await HandleTranscribe(request, ct),
+                ("/v1/transcribe/local-file", "POST") => await HandleTranscribeLocalFile(request, ct),
                 ("/v1/history", "GET") => HandleHistorySearch(request),
                 ("/v1/history", "DELETE") => HandleHistoryDelete(request),
                 ("/v1/dictation/start", "POST") => await HandleDictationStart(),
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
                 ("/v1/dictation/transcription", "GET") => HandleDictationTranscription(request),
+                ("/v1/rules", "GET") => HandleGetRules(),
+                ("/v1/profiles", "GET") => HandleGetProfiles(),
+                ("/v1/rules/toggle", "PUT") => HandleToggleRule(request),
+                ("/v1/profiles/toggle", "PUT") => HandleToggleRule(request),
                 ("/v1/dictionary/terms", "GET") => HandleGetDictionaryTerms(),
                 ("/v1/dictionary/terms", "PUT") => await HandlePutDictionaryTerms(request),
-                ("/v1/dictionary/terms", "DELETE") => await HandleDeleteDictionaryTerms(),
+                ("/v1/dictionary/terms", "DELETE") => await HandleDeleteDictionaryTerms(request),
+                ("/v1/dictionary/corrections", "GET") => HandleGetDictionaryCorrections(),
+                ("/v1/dictionary/corrections", "PUT") => await HandlePutDictionaryCorrection(request),
+                ("/v1/dictionary/corrections", "DELETE") => await HandleDeleteDictionaryCorrection(request),
                 _ => Error(404, "Not found")
             };
         }
@@ -258,13 +316,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     {
         var transcribeRequest = HttpApiRequestParser.ParseTranscribe(request);
 
-        await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(
-            transcribeRequest.Engine,
-            transcribeRequest.Model,
-            transcribeRequest.AwaitDownload,
-            ct);
-
-        var tempPath = Path.Combine(
+        var tempPath = Path.Join(
             Path.GetTempPath(),
             $"tw_api_{Guid.NewGuid():N}.{SanitizeExtension(transcribeRequest.FileExtension)}");
 
@@ -272,70 +324,92 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         {
             await File.WriteAllBytesAsync(tempPath, transcribeRequest.AudioData, ct);
             var samples = await _audioFile.LoadAudioAsync(tempPath, ct);
+            return await TranscribeSamplesAsync(samples, TranscribeOptions.From(transcribeRequest), ct);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); }
+            catch (IOException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (UnauthorizedAccessException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (NotSupportedException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (System.Security.SecurityException ex) { LogTempDeleteFailure(tempPath, ex); }
+        }
+    }
 
-            var prompt = MergePrompt(
-                transcribeRequest.Prompt,
-                BuildLanguageHintsPrompt(transcribeRequest.LanguageHints),
-                _dictionary.GetTermsForPrompt());
+    private static void LogTempDeleteFailure(string path, Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to delete temporary audio file {path}: {ex.Message}");
 
-            var activeResult = await _modelManager.TranscribeActiveAsync(
-                samples,
-                transcribeRequest.Language,
-                transcribeRequest.Task,
-                prompt,
-                ct);
+    private async Task<HttpApiResponse> HandleTranscribeLocalFile(HttpApiRequest request, CancellationToken ct)
+    {
+        var transcribeRequest = HttpApiRequestParser.ParseTranscribeLocalFile(request);
 
-            var result = activeResult.Result;
-            var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
+        if (!File.Exists(transcribeRequest.Path))
+            return Error(400, "File not found");
+
+        if (!AudioFileService.IsSupported(transcribeRequest.Path))
+            return Error(400, "Unsupported audio format");
+
+        var samples = await _audioFile.LoadAudioAsync(transcribeRequest.Path, ct);
+        return await TranscribeSamplesAsync(samples, TranscribeOptions.From(transcribeRequest), ct);
+    }
+
+    private async Task<HttpApiResponse> TranscribeSamplesAsync(
+        float[] samples,
+        TranscribeOptions transcribeRequest,
+        CancellationToken ct)
+    {
+        await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(
+            transcribeRequest.Engine,
+            transcribeRequest.Model,
+            transcribeRequest.AwaitDownload,
+            ct);
+
+        var prompt = MergePrompt(
+            transcribeRequest.Prompt,
+            BuildLanguageHintsPrompt(transcribeRequest.LanguageHints),
+            _dictionary.GetTermsForPrompt());
+
+        var activeResult = await _modelManager.TranscribeActiveAsync(
+            samples,
+            transcribeRequest.Language,
+            transcribeRequest.Task,
+            prompt,
+            ct);
+
+        var result = activeResult.Result;
+        var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
+        {
+            VocabularyBooster = GetVocabularyBooster(),
+            DictionaryCorrector = _dictionary.ApplyCorrections
+        }, ct);
+
+        var finalText = pipelineResult.Text;
+        if (!string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage))
+        {
+            var sourceLanguage = result.DetectedLanguage
+                ?? transcribeRequest.Language
+                ?? "en";
+
+            try
             {
-                VocabularyBooster = GetVocabularyBooster(),
-                DictionaryCorrector = _dictionary.ApplyCorrections
-            }, ct);
-
-            var finalText = pipelineResult.Text;
-            if (!string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage))
-            {
-                var sourceLanguage = result.DetectedLanguage
-                    ?? transcribeRequest.Language
-                    ?? "en";
-
-                try
-                {
-                    finalText = await _translation.TranslateAsync(
-                        finalText,
-                        sourceLanguage,
-                        transcribeRequest.TargetLanguage,
-                        ct);
-                }
-                catch (NotSupportedException ex)
-                {
-                    return Error(501, ex.Message);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    return Error(501, ex.Message);
-                }
+                finalText = await _translation.TranslateAsync(
+                    finalText,
+                    sourceLanguage,
+                    transcribeRequest.TargetLanguage,
+                    ct);
             }
-
-            if (transcribeRequest.ResponseFormat.Equals("verbose_json", StringComparison.OrdinalIgnoreCase))
+            catch (NotSupportedException ex)
             {
-                return Json(new
-                {
-                    text = finalText,
-                    language = result.DetectedLanguage,
-                    duration = result.Duration,
-                    processing_time = result.ProcessingTime,
-                    engine = activeResult.EngineId,
-                    model = activeResult.ModelId,
-                    segments = result.Segments.Select(seg => new
-                    {
-                        text = seg.Text,
-                        start = seg.Start,
-                        end = seg.End
-                    })
-                });
+                return Error(501, ex.Message);
             }
+            catch (InvalidOperationException ex)
+            {
+                return Error(501, ex.Message);
+            }
+        }
 
+        if (transcribeRequest.ResponseFormat.Equals("verbose_json", StringComparison.OrdinalIgnoreCase))
+        {
             return Json(new
             {
                 text = finalText,
@@ -343,13 +417,25 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 duration = result.Duration,
                 processing_time = result.ProcessingTime,
                 engine = activeResult.EngineId,
-                model = activeResult.ModelId
+                model = activeResult.ModelId,
+                segments = result.Segments.Select(seg => new
+                {
+                    text = seg.Text,
+                    start = seg.Start,
+                    end = seg.End
+                })
             });
         }
-        finally
+
+        return Json(new
         {
-            try { File.Delete(tempPath); } catch { }
-        }
+            text = finalText,
+            language = result.DetectedLanguage,
+            duration = result.Duration,
+            processing_time = result.ProcessingTime,
+            engine = activeResult.EngineId,
+            model = activeResult.ModelId
+        });
     }
 
     private HttpApiResponse HandleHistorySearch(HttpApiRequest request)
@@ -475,6 +561,43 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         });
     }
 
+    private HttpApiResponse HandleGetRules()
+    {
+        var rules = _workflows.Workflows
+            .OrderBy(workflow => workflow.SortOrder)
+            .Select(RuleFromWorkflow)
+            .ToList();
+
+        return Json(new { rules, count = rules.Count });
+    }
+
+    private HttpApiResponse HandleGetProfiles()
+    {
+        var profiles = _workflows.Workflows
+            .OrderBy(workflow => workflow.SortOrder)
+            .Select(RuleFromWorkflow)
+            .ToList();
+
+        return Json(new { profiles, count = profiles.Count });
+    }
+
+    private HttpApiResponse HandleToggleRule(HttpApiRequest request)
+    {
+        var id = request.QueryString["id"];
+        if (string.IsNullOrWhiteSpace(id))
+            return Error(400, "Missing or invalid 'id' query parameter");
+
+        var workflow = _workflows.GetWorkflow(id)
+            ?? _workflows.Workflows.FirstOrDefault(w => string.Equals(w.Id, id, StringComparison.Ordinal));
+        if (workflow is null)
+            return Error(404, "Rule not found");
+
+        _workflows.ToggleWorkflow(id);
+        var toggled = _workflows.GetWorkflow(id) ?? workflow with { IsEnabled = !workflow.IsEnabled };
+        var response = RuleFromWorkflow(toggled);
+        return Json(response);
+    }
+
     private HttpApiResponse HandleGetDictionaryTerms()
     {
         var terms = _dictionary.GetEnabledTerms();
@@ -508,15 +631,78 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { terms, count = terms.Count });
     }
 
-    private async Task<HttpApiResponse> HandleDeleteDictionaryTerms()
+    private async Task<HttpApiResponse> HandleDeleteDictionaryTerms(HttpApiRequest request)
     {
-        await InvokeOnDispatcherAsync(() =>
+        if (request.Body.Length == 0)
+            return Error(400, "Missing JSON body");
+
+        DictionaryTermDeleteRequest? payload;
+        try
         {
-            _dictionary.RemoveAllTerms();
-            return Task.FromResult(true);
+            payload = JsonSerializer.Deserialize<DictionaryTermDeleteRequest>(request.Body, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return Error(400, "Invalid JSON body");
+        }
+
+        if (payload is null || string.IsNullOrWhiteSpace(payload.Term))
+            return Error(400, "Missing or empty 'term'");
+
+        var result = await InvokeOnDispatcherAsync(() =>
+        {
+            var deleted = _dictionary.DeleteTerm(payload.Term);
+            var terms = _dictionary.GetEnabledTerms();
+            return Task.FromResult((deleted, terms.Count));
         });
 
-        return Json(new { deleted = true, count = 0 });
+        return Json(new { deleted = result.deleted, count = result.Count });
+    }
+
+    private HttpApiResponse HandleGetDictionaryCorrections()
+    {
+        var corrections = CorrectionDtos(_dictionary.GetEnabledCorrections());
+        return Json(new { corrections, count = corrections.Count });
+    }
+
+    private async Task<HttpApiResponse> HandlePutDictionaryCorrection(HttpApiRequest request)
+    {
+        var payload = ParseDictionaryCorrectionMutation(request);
+        if (payload is null)
+            return Error(400, "Invalid JSON body");
+
+        if (string.IsNullOrWhiteSpace(payload.Original))
+            return Error(400, "Missing or empty 'original'");
+
+        if (payload.Replacement is null)
+            return Error(400, "Missing 'replacement'");
+
+        var corrections = await InvokeOnDispatcherAsync(() =>
+        {
+            _dictionary.UpsertCorrection(payload.Original, payload.Replacement, payload.CaseSensitive);
+            return Task.FromResult(CorrectionDtos(_dictionary.GetEnabledCorrections()));
+        });
+
+        return Json(new { corrections, count = corrections.Count });
+    }
+
+    private async Task<HttpApiResponse> HandleDeleteDictionaryCorrection(HttpApiRequest request)
+    {
+        var payload = ParseDictionaryCorrectionMutation(request);
+        if (payload is null)
+            return Error(400, "Invalid JSON body");
+
+        if (string.IsNullOrWhiteSpace(payload.Original))
+            return Error(400, "Missing or empty 'original'");
+
+        var result = await InvokeOnDispatcherAsync(() =>
+        {
+            var deleted = _dictionary.DeleteCorrection(payload.Original);
+            var corrections = CorrectionDtos(_dictionary.GetEnabledCorrections());
+            return Task.FromResult((deleted, corrections));
+        });
+
+        return Json(new { deleted = result.deleted, corrections = result.corrections, count = result.corrections.Count });
     }
 
     public void Dispose()
@@ -531,22 +717,314 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private Func<string, string>? GetVocabularyBooster() =>
         _settings.Current.VocabularyBoostingEnabled ? _vocabularyBoosting.Apply : null;
 
+    private static bool IsKnownRoute(string path, string method) =>
+        (path, method) switch
+        {
+            ("/v1/status", "GET") => true,
+            ("/v1/models", "GET") => true,
+            ("/v1/transcribe", "POST") => true,
+            ("/v1/transcribe/local-file", "POST") => true,
+            ("/v1/history", "GET") => true,
+            ("/v1/history", "DELETE") => true,
+            ("/v1/dictation/start", "POST") => true,
+            ("/v1/dictation/stop", "POST") => true,
+            ("/v1/dictation/status", "GET") => true,
+            ("/v1/dictation/transcription", "GET") => true,
+            ("/v1/rules", "GET") => true,
+            ("/v1/profiles", "GET") => true,
+            ("/v1/rules/toggle", "PUT") => true,
+            ("/v1/profiles/toggle", "PUT") => true,
+            ("/v1/dictionary/terms", "GET") => true,
+            ("/v1/dictionary/terms", "PUT") => true,
+            ("/v1/dictionary/terms", "DELETE") => true,
+            ("/v1/dictionary/corrections", "GET") => true,
+            ("/v1/dictionary/corrections", "PUT") => true,
+            ("/v1/dictionary/corrections", "DELETE") => true,
+            _ => false
+        };
+
+    private bool RequiresAuthentication(HttpApiRequest request) =>
+        _settings.Current.ApiServerRequiresAuthentication &&
+        !string.Equals(request.Path, "/v1/status", StringComparison.Ordinal);
+
+    private bool HasValidApiToken(HttpApiRequest request)
+    {
+        var expected = _apiTokenProvider();
+        if (string.IsNullOrWhiteSpace(expected))
+            return false;
+
+        return TokenMatches(ExtractBearerToken(request.Headers), expected)
+            || TokenMatches(Header(request.Headers, "x-typewhisper-api-token"), expected);
+    }
+
+    private static string? ExtractBearerToken(IReadOnlyDictionary<string, string> headers)
+    {
+        var authorization = Header(headers, "authorization");
+        if (string.IsNullOrWhiteSpace(authorization))
+            return null;
+
+        const string bearerPrefix = "Bearer ";
+        if (!authorization.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var token = authorization[bearerPrefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(token) ? null : token;
+    }
+
+    private static bool TokenMatches(string? candidate, string expected)
+    {
+        if (string.IsNullOrEmpty(candidate))
+            return false;
+
+        var candidateBytes = Encoding.UTF8.GetBytes(candidate);
+        var expectedBytes = Encoding.UTF8.GetBytes(expected);
+        return candidateBytes.Length == expectedBytes.Length
+            && CryptographicOperations.FixedTimeEquals(candidateBytes, expectedBytes);
+    }
+
+    private static string? Header(IReadOnlyDictionary<string, string> headers, string name) =>
+        headers.TryGetValue(name, out var value) ? value : null;
+
+    private static IReadOnlyList<DictionaryCorrectionDto> CorrectionDtos(IReadOnlyList<DictionaryEntry> entries) =>
+        entries
+            .Select(entry => new DictionaryCorrectionDto(
+                entry.Original,
+                entry.Replacement ?? "",
+                entry.CaseSensitive))
+            .ToList();
+
+    private DictionaryCorrectionMutationRequest? ParseDictionaryCorrectionMutation(HttpApiRequest request)
+    {
+        if (request.Body.Length == 0)
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<DictionaryCorrectionMutationRequest>(request.Body, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private RuleDto RuleFromWorkflow(Workflow workflow)
+    {
+        var language = ResolveWorkflowLanguage(workflow);
+        var translationTarget = FirstNonBlank(
+            workflow.Behavior.TranslationTarget,
+            WorkflowSetting(workflow, "targetLanguage"),
+            WorkflowSetting(workflow, "target"));
+
+        return new RuleDto(
+            workflow.Id,
+            workflow.Name,
+            workflow.Name,
+            workflow.Name,
+            workflow.IsEnabled,
+            workflow.SortOrder,
+            workflow.Trigger.ProcessNames.ToList(),
+            workflow.Trigger.WebsitePatterns.ToList(),
+            language.InputLanguage,
+            language.Mode,
+            language.Hints,
+            translationTarget);
+    }
+
+    private static WorkflowLanguageDto ResolveWorkflowLanguage(Workflow workflow)
+    {
+        var configured = FirstNonBlank(
+            workflow.Behavior.InputLanguage,
+            WorkflowSetting(workflow, "inputLanguage"),
+            WorkflowSetting(workflow, "language"));
+
+        if (string.IsNullOrWhiteSpace(configured))
+            return new WorkflowLanguageDto("inherit_global", null, []);
+
+        var trimmed = configured.Trim();
+        if (trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            try
+            {
+                var hints = JsonSerializer.Deserialize<IReadOnlyList<string>>(trimmed) ?? [];
+                var normalized = hints
+                    .Select(value => value.Trim())
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .ToList();
+
+                if (normalized.Count > 0)
+                    return new WorkflowLanguageDto("multiple", null, normalized);
+            }
+            catch (JsonException)
+            {
+                // Fall through and expose the raw setting as an exact language.
+            }
+        }
+
+        if (trimmed.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return new WorkflowLanguageDto("auto", "auto", []);
+
+        if (trimmed.Equals("global", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("inherit_global", StringComparison.OrdinalIgnoreCase))
+        {
+            return new WorkflowLanguageDto("inherit_global", null, []);
+        }
+
+        return new WorkflowLanguageDto("exact", trimmed, []);
+    }
+
+    private static string? WorkflowSetting(Workflow workflow, string key) =>
+        workflow.Behavior.Settings.TryGetValue(key, out var value) ? value : null;
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string LoadOrCreateApiToken()
+    {
+        try
+        {
+            if (File.Exists(TypeWhisperEnvironment.ApiTokenFilePath))
+            {
+                var encrypted = File.ReadAllText(TypeWhisperEnvironment.ApiTokenFilePath).Trim();
+                var token = ApiKeyProtection.Decrypt(encrypted);
+                if (!string.IsNullOrWhiteSpace(token))
+                    return token;
+            }
+        }
+        catch (IOException ex) { LogTokenReadFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogTokenReadFailure(ex); }
+        catch (NotSupportedException ex) { LogTokenReadFailure(ex); }
+        catch (CryptographicException ex) { LogTokenReadFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogTokenReadFailure(ex); }
+
+        var generated = GenerateApiToken();
+        try
+        {
+            Directory.CreateDirectory(TypeWhisperEnvironment.BasePath);
+            File.WriteAllText(TypeWhisperEnvironment.ApiTokenFilePath, ApiKeyProtection.Encrypt(generated));
+        }
+        catch (IOException ex) { LogTokenPersistFailure(ex); }
+        catch (UnauthorizedAccessException ex) { LogTokenPersistFailure(ex); }
+        catch (NotSupportedException ex) { LogTokenPersistFailure(ex); }
+        catch (CryptographicException ex) { LogTokenPersistFailure(ex); }
+        catch (System.Security.SecurityException ex) { LogTokenPersistFailure(ex); }
+
+        return generated;
+    }
+
+    private static void LogTokenReadFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to read API token: {ex.Message}");
+
+    private static void LogTokenPersistFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to persist API token: {ex.Message}");
+
+    private static string GenerateApiToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
     private static HttpApiResponse Json<T>(T value, int statusCode = 200) =>
         new(statusCode, JsonSerializer.Serialize(value, JsonOptions));
 
-    private static HttpApiResponse Error(int statusCode, string message) =>
-        Json(new
-        {
-            error = new
+    private static HttpApiResponse Error(
+        int statusCode,
+        string message,
+        IReadOnlyDictionary<string, string>? headers = null) =>
+        new(
+            statusCode,
+            JsonSerializer.Serialize(new
             {
-                code = ErrorCode(statusCode),
-                message
-            }
-        }, statusCode);
+                error = new
+                {
+                    code = ErrorCode(statusCode),
+                    message
+                }
+            }, JsonOptions),
+            "application/json",
+            headers);
+
+    private sealed record TranscribeOptions(
+        string? Language,
+        IReadOnlyList<string> LanguageHints,
+        TranscriptionTask Task,
+        string? TargetLanguage,
+        string ResponseFormat,
+        string? Prompt,
+        string? Engine,
+        string? Model,
+        bool AwaitDownload)
+    {
+        public static TranscribeOptions From(TranscribeApiRequest request) =>
+            new(
+                request.Language,
+                request.LanguageHints,
+                request.Task,
+                request.TargetLanguage,
+                request.ResponseFormat,
+                request.Prompt,
+                request.Engine,
+                request.Model,
+                request.AwaitDownload);
+
+        public static TranscribeOptions From(LocalFileTranscribeApiRequest request) =>
+            new(
+                request.Language,
+                request.LanguageHints,
+                request.Task,
+                request.TargetLanguage,
+                request.ResponseFormat,
+                request.Prompt,
+                request.Engine,
+                request.Model,
+                request.AwaitDownload);
+    }
+
+    private sealed record RuleDto(
+        string Id,
+        string Name,
+        string RuleName,
+        string ProfileName,
+        bool IsEnabled,
+        int Priority,
+        IReadOnlyList<string> BundleIdentifiers,
+        IReadOnlyList<string> UrlPatterns,
+        string? InputLanguage,
+        string LanguageMode,
+        IReadOnlyList<string> LanguageHints,
+        string? TranslationTargetLanguage);
+
+    private sealed record WorkflowLanguageDto(
+        string Mode,
+        string? InputLanguage,
+        IReadOnlyList<string> Hints);
+
+    private sealed record DictionaryCorrectionDto(
+        [property: JsonPropertyName("original")] string Original,
+        [property: JsonPropertyName("replacement")] string Replacement,
+        [property: JsonPropertyName("caseSensitive")] bool CaseSensitive);
+
+    private sealed record DictionaryCorrectionMutationRequest
+    {
+        public string? Original { get; init; }
+        public string? Replacement { get; init; }
+
+        [JsonPropertyName("caseSensitive")]
+        public bool CaseSensitive { get; init; }
+    }
+
+    private sealed record DictionaryTermDeleteRequest
+    {
+        public string? Term { get; init; }
+    }
 
     private static string ErrorCode(int statusCode) => statusCode switch
     {
         400 => "bad_request",
+        401 => "unauthorized",
         404 => "not_found",
         409 => "conflict",
         413 => "payload_too_large",
@@ -587,11 +1065,27 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private static async Task<T> InvokeOnDispatcherAsync<T>(Func<Task<T>> action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (dispatcher is null
+            || dispatcher.CheckAccess()
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished)
+        {
             return await action();
+        }
 
-        var operation = dispatcher.InvokeAsync(action);
-        return await await operation.Task;
+        try
+        {
+            var operation = dispatcher.InvokeAsync(action);
+            return await await operation.Task;
+        }
+        catch (TaskCanceledException)
+        {
+            return await action();
+        }
+        catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return await action();
+        }
     }
 
     private sealed record DictionaryTermsRequest
