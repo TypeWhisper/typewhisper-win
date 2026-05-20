@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -19,6 +20,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ApiServerController _apiServer;
     private readonly CliInstallService _cliInstall;
     private readonly SpeechFeedbackService _speechFeedback;
+    private readonly Dispatcher? _uiDispatcher;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -178,6 +180,7 @@ public partial class SettingsViewModel : ObservableObject
         _apiServer = apiServer;
         _cliInstall = cliInstall;
         _speechFeedback = speechFeedback;
+        _uiDispatcher = CaptureActiveDispatcher();
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
@@ -540,13 +543,27 @@ public partial class SettingsViewModel : ObservableObject
         InvokeOnUiThread(HandleAudioDevicesChanged);
     }
 
-    private static void InvokeOnUiThread(Action action)
+    private static Dispatcher? CaptureActiveDispatcher()
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null
-            || dispatcher.HasShutdownStarted
-            || dispatcher.HasShutdownFinished
-            || dispatcher.CheckAccess())
+        return dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished
+            ? null
+            : dispatcher;
+    }
+
+    private void InvokeOnUiThread(Action action)
+    {
+        var dispatcher = _uiDispatcher;
+        if (dispatcher is null)
+        {
+            action();
+            return;
+        }
+
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+            return;
+
+        if (dispatcher.CheckAccess())
         {
             action();
             return;
@@ -558,7 +575,11 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            action();
+            return;
+        }
+        catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return;
         }
     }
 
