@@ -1,3 +1,4 @@
+using System.Reflection;
 using Moq;
 using NAudio.Wave;
 using TypeWhisper.Core.Interfaces;
@@ -137,6 +138,87 @@ public class StreamingTranscriptionTests
         Assert.Equal(4, session.SentAudio.Single().Length);
     }
 
+    [Fact]
+    public async Task StreamingHandler_SerializesRealtimeAudioWrites()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        var session = new BlockingStreamingSession();
+        plugin.CompleteStart(session);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.Start("en", TranscriptionTask.Transcribe, () => audio.IsRecording);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+        await session.FirstSendEntered;
+
+        capture.RaiseData([1, 0, 1, 0], 4);
+
+        var overlapped = await CompletesWithinAsync(session.ConcurrentSendObserved, TimeSpan.FromMilliseconds(500));
+        Assert.False(overlapped);
+
+        session.ReleaseFirstSend();
+        await WaitUntilAsync(() => session.SendAttemptCount == 2);
+
+        Assert.Equal(1, session.MaxConcurrentSendCount);
+        Assert.Equal(2, session.SentAudioCount);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_CleansUpStreamingStateWhenInitialFlushFails()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.Start("en", TranscriptionTask.Transcribe, () => audio.IsRecording);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+
+        var session = new FailingStreamingSession();
+        plugin.CompleteStart(session);
+        await WaitUntilAsync(() => session.SendAttemptCount == 1);
+        await Task.Delay(100);
+
+        Assert.Null(GetPrivateField(handler, "_session"));
+        Assert.False((bool)GetPrivateField(handler, "_isFlushingPendingStreamingAudio")!);
+        Assert.Equal(0, (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")!);
+
+        capture.RaiseData([1, 0, 1, 0], 4);
+        await Task.Delay(50);
+
+        Assert.Equal(1, session.SendAttemptCount);
+        Assert.Equal(0, (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")!);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -145,6 +227,19 @@ public class StreamingTranscriptionTests
             timeout.Token.ThrowIfCancellationRequested();
             await Task.Delay(20, timeout.Token);
         }
+    }
+
+    private static async Task<bool> CompletesWithinAsync(Task task, TimeSpan timeout)
+    {
+        var delay = Task.Delay(timeout);
+        return await Task.WhenAny(task, delay) == task;
+    }
+
+    private static object? GetPrivateField(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field.GetValue(target);
     }
 
     private sealed class DelayedStreamingPlugin : ITranscriptionEnginePlugin
@@ -190,6 +285,99 @@ public class StreamingTranscriptionTests
         {
             SentAudio.Add(pcm16Audio.ToArray());
             return Task.CompletedTask;
+        }
+
+        public Task FinalizeAsync(CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
+    }
+
+    private sealed class BlockingStreamingSession : IStreamingSession
+    {
+        private readonly TaskCompletionSource _firstSendEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstSend =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _concurrentSendObserved =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<byte[]> _sentAudio = [];
+
+        private int _inFlightSendCount;
+        private int _maxConcurrentSendCount;
+        private int _sendAttemptCount;
+
+        public Task FirstSendEntered => _firstSendEntered.Task;
+        public Task ConcurrentSendObserved => _concurrentSendObserved.Task;
+        public int MaxConcurrentSendCount => Volatile.Read(ref _maxConcurrentSendCount);
+        public int SendAttemptCount => Volatile.Read(ref _sendAttemptCount);
+        public int SentAudioCount
+        {
+            get
+            {
+                lock (_sentAudio) return _sentAudio.Count;
+            }
+        }
+
+        public event Action<StreamingTranscriptEvent>? TranscriptReceived;
+
+        public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
+        {
+            var inFlight = Interlocked.Increment(ref _inFlightSendCount);
+            TrackMaxConcurrentSendCount(inFlight);
+            if (inFlight > 1)
+                _concurrentSendObserved.TrySetResult();
+
+            var attempt = Interlocked.Increment(ref _sendAttemptCount);
+
+            try
+            {
+                if (attempt == 1)
+                {
+                    _firstSendEntered.TrySetResult();
+                    await _releaseFirstSend.Task.WaitAsync(ct);
+                }
+
+                lock (_sentAudio)
+                {
+                    _sentAudio.Add(pcm16Audio.ToArray());
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _inFlightSendCount);
+            }
+        }
+
+        public void ReleaseFirstSend() => _releaseFirstSend.TrySetResult();
+        public Task FinalizeAsync(CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
+
+        private void TrackMaxConcurrentSendCount(int count)
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref _maxConcurrentSendCount);
+                if (count <= current)
+                    return;
+
+                if (Interlocked.CompareExchange(ref _maxConcurrentSendCount, count, current) == current)
+                    return;
+            }
+        }
+    }
+
+    private sealed class FailingStreamingSession : IStreamingSession
+    {
+        private int _sendAttemptCount;
+
+        public int SendAttemptCount => Volatile.Read(ref _sendAttemptCount);
+        public event Action<StreamingTranscriptEvent>? TranscriptReceived;
+
+        public Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _sendAttemptCount);
+            throw new InvalidOperationException("Simulated streaming send failure.");
         }
 
         public Task FinalizeAsync(CancellationToken ct) => Task.CompletedTask;

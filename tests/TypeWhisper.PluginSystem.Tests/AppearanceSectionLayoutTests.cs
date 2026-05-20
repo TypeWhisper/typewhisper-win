@@ -106,6 +106,9 @@ public sealed class AppearanceSectionLayoutTests
         Assert.Contains("Appearance.OnlineAsrBatchLivePreview", xaml);
         Assert.Contains("Appearance.OnlineAsrBatchLivePreviewHint", xaml);
         Assert.Contains("Settings.OnlineAsrBatchLiveTranscriptionEnabled", xaml);
+
+        var row = TestFile.ExtractBlock(xaml, "x:Name=\"OnlineAsrBatchLivePreviewSettingsRow\"");
+        Assert.Contains("IsEnabled=\"{Binding Settings.LiveTranscriptionEnabled}\"", row);
     }
 
     private static void AssertWidgetSettingCollapsesForCompactBadge(string xamlBlock)
