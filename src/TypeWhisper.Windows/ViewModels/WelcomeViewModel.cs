@@ -616,13 +616,23 @@ public partial class WelcomeViewModel : ObservableObject
     private static void DispatchToUi(Action action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (dispatcher is null
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished
+            || dispatcher.CheckAccess())
         {
             action();
             return;
         }
 
-        dispatcher.Invoke(action);
+        try
+        {
+            dispatcher.Invoke(action);
+        }
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            action();
+        }
     }
 
     private string GetLocalRecommendationStatus()

@@ -587,11 +587,21 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private static async Task<T> InvokeOnDispatcherAsync<T>(Func<Task<T>> action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (dispatcher is null
+            || dispatcher.HasShutdownStarted
+            || dispatcher.HasShutdownFinished
+            || dispatcher.CheckAccess())
             return await action();
 
-        var operation = dispatcher.InvokeAsync(action);
-        return await await operation.Task;
+        try
+        {
+            var operation = dispatcher.InvokeAsync(action);
+            return await await operation.Task;
+        }
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return await action();
+        }
     }
 
     private sealed record DictionaryTermsRequest

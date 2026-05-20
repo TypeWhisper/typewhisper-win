@@ -83,7 +83,7 @@ public partial class ModelManagerViewModel : ObservableObject
         };
 
         _modelManager.PluginManager.PluginStateChanged += (_, _) =>
-            Application.Current.Dispatcher.Invoke(RebuildProviders);
+            InvokeOnUiThread(RebuildProviders);
 
         _settings.SettingsChanged += _ => InvokeOnUiThread(() =>
         {
