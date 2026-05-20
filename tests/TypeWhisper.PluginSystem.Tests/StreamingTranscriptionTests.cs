@@ -179,6 +179,48 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public async Task StreamingHandler_DoesNotBlockAudioCallbackWhenSenderFallsBehind()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        var session = new BlockingStreamingSession();
+        plugin.CompleteStart(session);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.Start("en", TranscriptionTask.Transcribe, () => audio.IsRecording);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+        await session.FirstSendEntered;
+
+        var raiseManyChunks = Task.Run(() =>
+        {
+            for (var i = 0; i < 200; i++)
+                capture.RaiseData([1, 0, 1, 0], 4);
+        });
+
+        var completedWithoutBlocking = await CompletesWithinAsync(raiseManyChunks, TimeSpan.FromMilliseconds(500));
+
+        session.ReleaseFirstSend();
+        await raiseManyChunks.WaitAsync(TimeSpan.FromSeconds(3));
+
+        Assert.True(completedWithoutBlocking);
+    }
+
+    [Fact]
     public async Task StreamingHandler_CleansUpStreamingStateWhenInitialFlushFails()
     {
         var settings = new FakeSettingsService(AppSettings.Default);

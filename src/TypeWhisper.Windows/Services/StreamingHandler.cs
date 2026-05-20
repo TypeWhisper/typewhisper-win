@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.IO;
+using System.Net.WebSockets;
 using System.Threading.Channels;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
@@ -134,7 +136,7 @@ public sealed class StreamingHandler : IDisposable
             {
                 SingleReader = true,
                 SingleWriter = false,
-                FullMode = BoundedChannelFullMode.Wait
+                FullMode = BoundedChannelFullMode.DropOldest
             });
 
             lock (_streamingAudioLock)
@@ -170,20 +172,27 @@ public sealed class StreamingHandler : IDisposable
         if (audioWriter is null)
             return;
 
-        SendStreamingAudio(audioWriter, pcm16, cts);
+        SendStreamingAudio(audioWriter, pcm16);
     }
 
-    private void SendStreamingAudio(ChannelWriter<byte[]> audioWriter, byte[] pcm16, CancellationTokenSource cts)
+    private void SendStreamingAudio(ChannelWriter<byte[]> audioWriter, byte[] pcm16)
     {
         try
         {
-            audioWriter.WriteAsync(pcm16, cts.Token).AsTask().GetAwaiter().GetResult();
+            if (!audioWriter.TryWrite(pcm16))
+                Debug.WriteLine("Streaming audio queue rejected a chunk.");
         }
-        catch (OperationCanceledException) { }
-        catch (ChannelClosedException) { }
-        catch (Exception ex)
+        catch (ChannelClosedException ex)
         {
-            Debug.WriteLine($"Queue streaming audio error: {ex.Message}");
+            Debug.WriteLine($"Streaming audio queue closed: {ex.Message}");
+        }
+        catch (ObjectDisposedException ex)
+        {
+            Debug.WriteLine($"Streaming audio queue disposed: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Debug.WriteLine($"Streaming audio queue unavailable: {ex.Message}");
         }
     }
 
@@ -261,12 +270,21 @@ public sealed class StreamingHandler : IDisposable
                 await session.SendAudioAsync(pcm16, ct);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
         {
-            Debug.WriteLine($"SendAudio error: {ex.Message}");
-            CleanupStreamingSessionAfterFailure(session);
+            Debug.WriteLine($"Streaming audio sender canceled: {ex.Message}");
         }
+        catch (ChannelClosedException ex) { HandleStreamingAudioSenderFailure(session, ex); }
+        catch (ObjectDisposedException ex) { HandleStreamingAudioSenderFailure(session, ex); }
+        catch (InvalidOperationException ex) { HandleStreamingAudioSenderFailure(session, ex); }
+        catch (IOException ex) { HandleStreamingAudioSenderFailure(session, ex); }
+        catch (WebSocketException ex) { HandleStreamingAudioSenderFailure(session, ex); }
+    }
+
+    private void HandleStreamingAudioSenderFailure(IStreamingSession session, Exception ex)
+    {
+        Debug.WriteLine($"SendAudio error: {ex.Message}");
+        CleanupStreamingSessionAfterFailure(session);
     }
 
     private void CleanupStreamingSessionAfterFailure(IStreamingSession? failedSession = null)
