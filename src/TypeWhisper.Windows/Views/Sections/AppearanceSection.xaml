@@ -304,6 +304,28 @@
                                             Margin="0,10,0,0"/>
                                 </Grid>
 
+                                <Grid x:Name="OnlineAsrBatchLivePreviewSettingsRow"
+                                      Margin="0,16,0,0"
+                                      IsEnabled="{Binding Settings.LiveTranscriptionEnabled}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str Appearance.OnlineAsrBatchLivePreview}"
+                                                   Style="{StaticResource SettingsRowLabelStyle}"/>
+                                        <TextBlock Text="{loc:Str Appearance.OnlineAsrBatchLivePreviewHint}"
+                                                   Style="{StaticResource HintStyle}"
+                                                   Margin="0,5,0,0"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ui:ToggleSwitch Grid.Column="1"
+                                                     IsChecked="{Binding Settings.OnlineAsrBatchLiveTranscriptionEnabled}"
+                                                     OnContent=""
+                                                     OffContent=""
+                                                     VerticalAlignment="Center"/>
+                                </Grid>
+
                                 <Grid Margin="0,16,0,0">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>

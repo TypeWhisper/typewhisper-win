@@ -15,12 +15,14 @@ public class SettingsViewModelIndicatorTests
         {
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
+            OnlineAsrBatchLiveTranscriptionEnabled = true,
             LiveTranscriptionFontSize = 15
         });
         var sut = CreateSettingsViewModel(settings);
 
         Assert.Equal(IndicatorStyle.EdgeDock, sut.IndicatorStyle);
         Assert.False(sut.LiveTranscriptionEnabled);
+        Assert.True(sut.OnlineAsrBatchLiveTranscriptionEnabled);
         Assert.Equal(15, sut.LiveTranscriptionFontSize);
     }
 
@@ -32,10 +34,12 @@ public class SettingsViewModelIndicatorTests
 
         sut.IndicatorStyle = IndicatorStyle.CompactBadge;
         sut.LiveTranscriptionEnabled = false;
+        sut.OnlineAsrBatchLiveTranscriptionEnabled = true;
         sut.LiveTranscriptionFontSize = 16.5;
 
         Assert.Equal(IndicatorStyle.CompactBadge, settings.Current.IndicatorStyle);
         Assert.False(settings.Current.LiveTranscriptionEnabled);
+        Assert.True(settings.Current.OnlineAsrBatchLiveTranscriptionEnabled);
         Assert.Equal(16.5, settings.Current.LiveTranscriptionFontSize);
     }
 

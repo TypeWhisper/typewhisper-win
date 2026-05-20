@@ -56,6 +56,7 @@ public class SettingsServiceTests : IDisposable
             TranscribeShortQuietClipsAggressively = true,
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
+            OnlineAsrBatchLiveTranscriptionEnabled = true,
             LiveTranscriptionFontSize = 15.5,
             PreviewBubbleAutoHideMilliseconds = 3750,
             SelectedIndustryPresetId = "architecture"
@@ -84,6 +85,7 @@ public class SettingsServiceTests : IDisposable
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
         Assert.False(sut2.Current.LiveTranscriptionEnabled);
+        Assert.True(sut2.Current.OnlineAsrBatchLiveTranscriptionEnabled);
         Assert.Equal(15.5, sut2.Current.LiveTranscriptionFontSize);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
         Assert.Equal("architecture", sut2.Current.SelectedIndustryPresetId);
@@ -146,6 +148,20 @@ public class SettingsServiceTests : IDisposable
         var sut = new SettingsService(_filePath);
 
         Assert.Equal(AppSettings.Default.LiveTranscriptionFontSize, sut.Current.LiveTranscriptionFontSize);
+    }
+
+    [Fact]
+    public void Load_LegacySettings_DisablesOnlineAsrBatchLiveTranscriptionByDefault()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.False(sut.Current.OnlineAsrBatchLiveTranscriptionEnabled);
     }
 
     [Theory]

@@ -726,11 +726,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         var isPluginModel = _modelManager.ActiveModelId is not null
             && ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
 
-        if (_settings.Current.LiveTranscriptionEnabled && isPluginModel)
+        var liveTranscriptionMode = LiveTranscriptionStartupPolicy.Select(
+            _settings.Current,
+            isPluginModel,
+            _modelManager.ActiveTranscriptionPlugin);
+
+        if (liveTranscriptionMode is LiveTranscriptionStartupMode.PluginStreaming
+            or LiveTranscriptionStartupMode.PluginPollingFallback)
         {
             _streamingHandler.Start(EffectiveLanguage, EffectiveTask, () => _isRecording);
         }
-        else if (_settings.Current.LiveTranscriptionEnabled && !isPluginModel)
+        else if (liveTranscriptionMode == LiveTranscriptionStartupMode.LegacyVad)
         {
             // VAD fallback for non-plugin models
             _vad = CreateVoiceActivityDetector();

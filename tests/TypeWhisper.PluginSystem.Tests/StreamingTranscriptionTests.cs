@@ -1,7 +1,12 @@
 using Moq;
+using NAudio.Wave;
+using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -98,6 +103,229 @@ public class StreamingTranscriptionTests
 
         Assert.Equal("Streamed text", result.Text);
         Assert.Equal("de", result.DetectedLanguage);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_BuffersAudioCapturedBeforeRealtimeSessionConnects()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.Start("en", TranscriptionTask.Transcribe, () => audio.IsRecording);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+        var session = new CapturingStreamingSession();
+        plugin.CompleteStart(session);
+
+        await WaitUntilAsync(() => session.SentAudio.Count == 1);
+
+        Assert.Equal(4, session.SentAudio.Single().Length);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        while (!condition())
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            await Task.Delay(20, timeout.Token);
+        }
+    }
+
+    private sealed class DelayedStreamingPlugin : ITranscriptionEnginePlugin
+    {
+        private readonly TaskCompletionSource<IStreamingSession> _startCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string PluginId => "com.test.delayed-streaming";
+        public string PluginName => "Delayed Streaming";
+        public string PluginVersion => "1.0.0";
+        public string ProviderId => "delayed-streaming";
+        public string ProviderDisplayName => "Delayed Streaming";
+        public bool IsConfigured => true;
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
+            [new PluginModelInfo("stream", "Stream")];
+        public string? SelectedModelId { get; private set; }
+        public bool SupportsTranslation => false;
+        public bool SupportsStreaming => true;
+
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public System.Windows.Controls.UserControl? CreateSettingsView() => null;
+        public void Dispose() { }
+        public void SelectModel(string modelId) => SelectedModelId = modelId;
+        public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
+            _startCompletion.Task.WaitAsync(ct);
+        public void CompleteStart(IStreamingSession session) => _startCompletion.SetResult(session);
+
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct) =>
+            Task.FromResult(new PluginTranscriptionResult("", language ?? "en", 0));
+    }
+
+    private sealed class CapturingStreamingSession : IStreamingSession
+    {
+        public List<byte[]> SentAudio { get; } = [];
+        public event Action<StreamingTranscriptEvent>? TranscriptReceived;
+        public Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
+        {
+            SentAudio.Add(pcm16Audio.ToArray());
+            return Task.CompletedTask;
+        }
+
+        public Task FinalizeAsync(CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
+    }
+
+    private sealed class PassthroughDictionaryService : IDictionaryService
+    {
+        public IReadOnlyList<DictionaryEntry> Entries => [];
+        public event Action? EntriesChanged { add { } remove { } }
+        public void AddEntry(DictionaryEntry entry) { }
+        public void AddEntries(IEnumerable<DictionaryEntry> entries) { }
+        public void UpdateEntry(DictionaryEntry entry) { }
+        public void DeleteEntry(string id) { }
+        public void DeleteEntries(IEnumerable<string> ids) { }
+        public string ApplyCorrections(string text) => text;
+        public string? GetTermsForPrompt() => null;
+        public void LearnCorrection(string original, string replacement) { }
+        public void ActivatePack(TermPack pack) { }
+        public void DeactivatePack(string packId) { }
+    }
+}
+
+public class LiveTranscriptionStartupPolicyTests
+{
+    [Fact]
+    public void GlobalLiveTranscriptionDisabled_SuppressesAllLiveModes()
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(supportsStreaming: true, supportsModelDownload: true);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default with { LiveTranscriptionEnabled = false },
+            isPluginModel: true,
+            plugin);
+
+        Assert.Equal(LiveTranscriptionStartupMode.None, mode);
+    }
+
+    [Fact]
+    public void StreamingPlugin_UsesRealtimeStreaming()
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(supportsStreaming: true, supportsModelDownload: false);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default,
+            isPluginModel: true,
+            plugin);
+
+        Assert.Equal(LiveTranscriptionStartupMode.PluginStreaming, mode);
+    }
+
+    [Fact]
+    public void DownloadablePlugin_UsesPollingFallback()
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(supportsStreaming: false, supportsModelDownload: true);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default,
+            isPluginModel: true,
+            plugin);
+
+        Assert.Equal(LiveTranscriptionStartupMode.PluginPollingFallback, mode);
+    }
+
+    [Fact]
+    public void OnlineBatchProvider_DefaultsToNoLiveTranscription()
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(supportsStreaming: false, supportsModelDownload: false);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default,
+            isPluginModel: true,
+            plugin);
+
+        Assert.Equal(LiveTranscriptionStartupMode.None, mode);
+    }
+
+    [Fact]
+    public void OnlineBatchProvider_UsesPollingFallbackWhenOptedIn()
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(supportsStreaming: false, supportsModelDownload: false);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default with { OnlineAsrBatchLiveTranscriptionEnabled = true },
+            isPluginModel: true,
+            plugin);
+
+        Assert.Equal(LiveTranscriptionStartupMode.PluginPollingFallback, mode);
+    }
+
+    [Fact]
+    public void NonPluginModel_UsesLegacyVad()
+    {
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default,
+            isPluginModel: false,
+            plugin: null);
+
+        Assert.Equal(LiveTranscriptionStartupMode.LegacyVad, mode);
+    }
+
+    private sealed class FakePolicyTranscriptionPlugin : ITranscriptionEnginePlugin
+    {
+        public FakePolicyTranscriptionPlugin(bool supportsStreaming, bool supportsModelDownload)
+        {
+            SupportsStreaming = supportsStreaming;
+            SupportsModelDownload = supportsModelDownload;
+        }
+
+        public string PluginId => "com.test.policy";
+        public string PluginName => "Policy Test";
+        public string PluginVersion => "1.0.0";
+        public string ProviderId => "policy";
+        public string ProviderDisplayName => "Policy";
+        public bool IsConfigured => true;
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
+            [new PluginModelInfo("model", "Model")];
+        public string? SelectedModelId => "model";
+        public bool SupportsTranslation => false;
+        public bool SupportsStreaming { get; }
+        public bool SupportsModelDownload { get; }
+
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public System.Windows.Controls.UserControl? CreateSettingsView() => null;
+        public void Dispose() { }
+        public void SelectModel(string modelId) { }
+
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct) =>
+            Task.FromResult(new PluginTranscriptionResult("", language ?? "en", 0));
     }
 }
 

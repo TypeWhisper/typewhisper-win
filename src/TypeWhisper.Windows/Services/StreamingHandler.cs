@@ -14,11 +14,17 @@ public sealed class StreamingHandler : IDisposable
     private readonly AudioRecordingService _audio;
     private readonly IDictionaryService _dictionary;
     private readonly StreamingTranscriptState _transcriptState = new();
+    private readonly object _streamingAudioLock = new();
+    private readonly Queue<byte[]> _pendingStreamingAudio = new();
 
     private CancellationTokenSource? _cts;
     private Task? _streamingTask;
     private IStreamingSession? _session;
     private Action<StreamingTranscriptEvent>? _transcriptHandler;
+    private int _pendingStreamingAudioBytes;
+    private bool _isFlushingPendingStreamingAudio;
+
+    private const int MaxPendingStreamingAudioBytes = 1024 * 1024;
 
     public Action<string>? OnPartialTextUpdate { get; set; }
 
@@ -38,6 +44,7 @@ public sealed class StreamingHandler : IDisposable
         Func<bool> isStillRecording)
     {
         Stop();
+        ClearPendingStreamingAudio();
 
         var sessionVersion = _transcriptState.StartSession();
         _cts = new CancellationTokenSource();
@@ -46,9 +53,14 @@ public sealed class StreamingHandler : IDisposable
         var plugin = _modelManager.ActiveTranscriptionPlugin;
 
         if (plugin is not null && plugin.SupportsStreaming)
+        {
+            _audio.SamplesAvailable += OnStreamingSamplesAvailable;
             _streamingTask = RunWebSocketStreamingAsync(plugin, language, sessionVersion, ct);
+        }
         else
+        {
             _streamingTask = RunPollingFallbackAsync(language, task, isStillRecording, sessionVersion, ct);
+        }
     }
 
     public string Stop()
@@ -75,6 +87,7 @@ public sealed class StreamingHandler : IDisposable
         _cts?.Dispose();
         _cts = null;
         _streamingTask = null;
+        ClearPendingStreamingAudio();
 
         return finalText;
     }
@@ -103,10 +116,15 @@ public sealed class StreamingHandler : IDisposable
                 return;
             }
 
-            _session = session;
+            lock (_streamingAudioLock)
+            {
+                _session = session;
+                _isFlushingPendingStreamingAudio = true;
+            }
+
             _transcriptHandler = evt => OnTranscriptReceived(evt, sessionVersion);
             session.TranscriptReceived += _transcriptHandler;
-            _audio.SamplesAvailable += OnStreamingSamplesAvailable;
+            await FlushPendingStreamingAudioAsync(session, ct);
 
             // Keep alive until cancelled
             await Task.Delay(Timeout.Infinite, ct);
@@ -120,17 +138,82 @@ public sealed class StreamingHandler : IDisposable
 
     private void OnStreamingSamplesAvailable(object? sender, SamplesAvailableEventArgs e)
     {
-        var session = _session;
         var cts = _cts;
-        if (session is null || cts is null || cts.IsCancellationRequested) return;
+        if (cts is null || cts.IsCancellationRequested) return;
 
         var pcm16 = FloatToPcm16(e.Samples);
+        var session = GetSessionOrBufferStreamingAudio(pcm16);
+        if (session is null)
+            return;
+
+        SendStreamingAudio(session, pcm16, cts);
+    }
+
+    private void SendStreamingAudio(IStreamingSession session, byte[] pcm16, CancellationTokenSource cts)
+    {
         _ = Task.Run(async () =>
         {
             try { await session.SendAudioAsync(pcm16, cts.Token); }
             catch (OperationCanceledException) { }
             catch (Exception ex) { Debug.WriteLine($"SendAudio error: {ex.Message}"); }
         });
+    }
+
+    private IStreamingSession? GetSessionOrBufferStreamingAudio(byte[] pcm16)
+    {
+        lock (_streamingAudioLock)
+        {
+            if (_session is null || _isFlushingPendingStreamingAudio)
+            {
+                EnqueuePendingStreamingAudioCore(pcm16);
+                return null;
+            }
+
+            return _session;
+        }
+    }
+
+    private void EnqueuePendingStreamingAudioCore(byte[] pcm16)
+    {
+        _pendingStreamingAudio.Enqueue(pcm16);
+        _pendingStreamingAudioBytes += pcm16.Length;
+
+        while (_pendingStreamingAudioBytes > MaxPendingStreamingAudioBytes
+            && _pendingStreamingAudio.Count > 0)
+        {
+            _pendingStreamingAudioBytes -= _pendingStreamingAudio.Dequeue().Length;
+        }
+    }
+
+    private async Task FlushPendingStreamingAudioAsync(IStreamingSession session, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            byte[]? next;
+            lock (_streamingAudioLock)
+            {
+                if (_pendingStreamingAudio.Count == 0)
+                {
+                    _isFlushingPendingStreamingAudio = false;
+                    return;
+                }
+
+                next = _pendingStreamingAudio.Dequeue();
+                _pendingStreamingAudioBytes -= next.Length;
+            }
+
+            await session.SendAudioAsync(next, ct);
+        }
+    }
+
+    private void ClearPendingStreamingAudio()
+    {
+        lock (_streamingAudioLock)
+        {
+            _pendingStreamingAudio.Clear();
+            _pendingStreamingAudioBytes = 0;
+            _isFlushingPendingStreamingAudio = false;
+        }
     }
 
     private void OnTranscriptReceived(StreamingTranscriptEvent evt, int sessionVersion)

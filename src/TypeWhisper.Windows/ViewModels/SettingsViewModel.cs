@@ -38,6 +38,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
     [ObservableProperty] private IndicatorStyle _indicatorStyle = IndicatorStyle.StatusIsland;
     [ObservableProperty] private bool _liveTranscriptionEnabled = true;
+    [ObservableProperty] private bool _onlineAsrBatchLiveTranscriptionEnabled;
     [ObservableProperty] private double _liveTranscriptionFontSize = AppSettings.DefaultLiveTranscriptionFontSize;
     [ObservableProperty] private OverlayPosition _overlayPosition = OverlayPosition.Bottom;
     [ObservableProperty] private double _previewBubbleAutoHideSeconds = AppSettings.DefaultPreviewBubbleAutoHideMilliseconds / 1000d;
@@ -328,6 +329,7 @@ public partial class SettingsViewModel : ObservableObject
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
             IndicatorStyle = IndicatorStyle,
             LiveTranscriptionEnabled = LiveTranscriptionEnabled,
+            OnlineAsrBatchLiveTranscriptionEnabled = OnlineAsrBatchLiveTranscriptionEnabled,
             LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(LiveTranscriptionFontSize),
             OverlayPosition = OverlayPosition,
             PreviewBubbleAutoHideMilliseconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
@@ -413,6 +415,7 @@ public partial class SettingsViewModel : ObservableObject
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
         IndicatorStyle = s.IndicatorStyle;
         LiveTranscriptionEnabled = s.LiveTranscriptionEnabled;
+        OnlineAsrBatchLiveTranscriptionEnabled = s.OnlineAsrBatchLiveTranscriptionEnabled;
         LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(s.LiveTranscriptionFontSize);
         OverlayPosition = s.OverlayPosition;
         PreviewBubbleAutoHideSeconds = AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(

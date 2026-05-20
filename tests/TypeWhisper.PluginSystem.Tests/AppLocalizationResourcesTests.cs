@@ -38,6 +38,22 @@ public class AppLocalizationResourcesTests
             option => option.Code == "ru" && option.DisplayName == "Русский");
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("ja")]
+    [InlineData("ru")]
+    public void AppearanceOnlineAsrBatchLivePreviewLocalizationKeys_ArePresent(string language)
+    {
+        var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
+        var localization = LoadLocalization(localizationDir, language);
+
+        Assert.Contains("Appearance.OnlineAsrBatchLivePreview", localization.Keys);
+        Assert.Contains("Appearance.OnlineAsrBatchLivePreviewHint", localization.Keys);
+        Assert.False(string.IsNullOrWhiteSpace(localization["Appearance.OnlineAsrBatchLivePreview"]));
+        Assert.False(string.IsNullOrWhiteSpace(localization["Appearance.OnlineAsrBatchLivePreviewHint"]));
+    }
+
     private static Dictionary<string, string> LoadLocalization(string localizationDir, string language)
     {
         var languageFileName = Path.GetFileName($"{language}.json");

@@ -92,6 +92,22 @@ public sealed class AppearanceSectionLayoutTests
         AssertWidgetSettingCollapsesForCompactBadge(liveTextSize);
     }
 
+    [Fact]
+    public void AppearanceSection_OffersOnlineAsrBatchLivePreviewOptIn()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "AppearanceSection.xaml");
+
+        Assert.Contains("x:Name=\"OnlineAsrBatchLivePreviewSettingsRow\"", xaml);
+        Assert.Contains("Appearance.OnlineAsrBatchLivePreview", xaml);
+        Assert.Contains("Appearance.OnlineAsrBatchLivePreviewHint", xaml);
+        Assert.Contains("Settings.OnlineAsrBatchLiveTranscriptionEnabled", xaml);
+    }
+
     private static void AssertWidgetSettingCollapsesForCompactBadge(string xamlBlock)
     {
         Assert.Contains("Settings.IndicatorStyle", xamlBlock);
