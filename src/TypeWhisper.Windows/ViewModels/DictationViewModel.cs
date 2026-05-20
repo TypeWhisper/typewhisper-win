@@ -676,25 +676,22 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (desiredModelId != _modelManager.ActiveModelId || !_modelManager.Engine.IsModelLoaded)
+        try
         {
-            try
+            if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
             {
-                if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
-                {
-                    StatusText = Loc.Instance["Status.NoModelLoaded"];
-                    _isRecording = false;
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
+                StatusText = Loc.Instance["Status.NoModelLoaded"];
                 _isRecording = false;
-                ApplyTransientIdleFeedback(
-                    Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
-                    feedbackIsError: true);
                 return;
             }
+        }
+        catch (Exception ex)
+        {
+            _isRecording = false;
+            ApplyTransientIdleFeedback(
+                Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
+                feedbackIsError: true);
+            return;
         }
 
         if (!_modelManager.Engine.IsModelLoaded)
