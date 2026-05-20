@@ -25,7 +25,8 @@
              Targets="Restore;Build"
              Properties="Configuration=$(Configuration);Version=$(Version)" />
     <ItemGroup>
-      <BundledCliBinary Include="..\TypeWhisper.Cli\bin\$(Configuration)\net10.0\typewhisper.*" />
+      <BundledCliBinary Include="..\TypeWhisper.Cli\bin\$(Configuration)\net10.0\typewhisper.exe" />
+      <BundledCliBinary Include="..\TypeWhisper.Cli\bin\$(Configuration)\net10.0\TypeWhisper.Cli.*" />
     </ItemGroup>
     <Copy SourceFiles="@(BundledCliBinary)"
           DestinationFolder="$(OutputPath)Cli\"
@@ -38,7 +39,8 @@
              Targets="Restore;Publish"
              Properties="Configuration=$(Configuration);Version=$(Version);PublishDir=$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\;SelfContained=false" />
     <ItemGroup>
-      <PublishedCliBinary Include="$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\typewhisper.*" />
+      <PublishedCliBinary Include="$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\typewhisper.exe" />
+      <PublishedCliBinary Include="$(MSBuildThisFileDirectory)..\TypeWhisper.Cli\obj\bundled-cli\$(Configuration)\TypeWhisper.Cli.*" />
     </ItemGroup>
     <Copy SourceFiles="@(PublishedCliBinary)"
           DestinationFolder="$(PublishDir)Cli\"

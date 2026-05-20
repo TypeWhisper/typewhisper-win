@@ -67,8 +67,8 @@ public sealed class CliInstallService
             ?? throw new InvalidOperationException("Missing CLI install directory.");
 
         Directory.CreateDirectory(installDirectory);
-        foreach (var file in Directory.EnumerateFiles(Path.GetDirectoryName(state.BundledPath)!, "typewhisper.*")
-            .Where(file => Path.GetFileName(file).StartsWith("typewhisper.", StringComparison.Ordinal)))
+        foreach (var file in Directory.EnumerateFiles(Path.GetDirectoryName(state.BundledPath)!)
+            .Where(IsBundledCliRuntimeFile))
         {
             File.Copy(file, Path.Combine(installDirectory, Path.GetFileName(file)), overwrite: true);
         }
@@ -128,6 +128,14 @@ public sealed class CliInstallService
 
     private static bool IsCliAppHost(string path) =>
         FileExistsWithExactName(path);
+
+    private static bool IsBundledCliRuntimeFile(string path)
+    {
+        var name = Path.GetFileName(path);
+        return string.Equals(name, CliFileName, StringComparison.Ordinal)
+            || name.StartsWith("typewhisper.", StringComparison.Ordinal)
+            || name.StartsWith("TypeWhisper.Cli.", StringComparison.Ordinal);
+    }
 
     private static bool FileExistsWithExactName(string path)
     {

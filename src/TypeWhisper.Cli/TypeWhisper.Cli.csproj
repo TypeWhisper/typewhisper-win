@@ -6,6 +6,18 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>TypeWhisper.Cli</RootNamespace>
-    <AssemblyName>typewhisper</AssemblyName>
+    <AssemblyName>TypeWhisper.Cli</AssemblyName>
   </PropertyGroup>
+
+  <Target Name="CopyCommandShim" AfterTargets="Build" Condition="Exists('$(TargetDir)$(AssemblyName).exe')">
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).exe"
+          DestinationFiles="$(TargetDir)typewhisper.exe"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyPublishedCommandShim" AfterTargets="Publish" Condition="Exists('$(PublishDir)$(AssemblyName).exe')">
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName).exe"
+          DestinationFiles="$(PublishDir)typewhisper.exe"
+          SkipUnchangedFiles="true" />
+  </Target>
 </Project>

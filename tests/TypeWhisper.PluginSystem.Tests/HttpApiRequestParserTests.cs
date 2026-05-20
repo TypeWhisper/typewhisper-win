@@ -145,6 +145,22 @@ public class HttpApiRequestParserTests
         Assert.Contains("file", ex.Message);
     }
 
+    [Fact]
+    public void ParseTranscribeLocalFile_RejectsNullLanguageHints()
+    {
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe/local-file",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["content-type"] = "application/json" },
+            Encoding.UTF8.GetBytes("""{"path":"C:\\Audio\\test.wav","language_hints":null}"""));
+
+        var ex = Assert.Throws<HttpApiRequestException>(() => HttpApiRequestParser.ParseTranscribeLocalFile(request));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Contains("language_hints", ex.Message);
+    }
+
     private static byte[] Multipart(
         string boundary,
         params (string Name, string? FileName, string? ContentType, byte[] Data)[] parts)

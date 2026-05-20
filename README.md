@@ -13,7 +13,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 - **Workflows:** Prompt actions and matching rules live in one workflow surface with templates for cleanup, translation, email replies, meeting notes, checklists, JSON extraction, summaries, and custom prompts.
 - **Expanded engines:** Local SherpaOnnx, whisper.cpp, Granite Speech, and compatible server-based engines sit alongside cloud transcription providers.
 - **Streaming preview:** The recording overlay can show partial results while speech is still being captured.
-- **Automation refresh:** The local HTTP API and CLI support per-request engine/model overrides, language hints, translation targets, and dictionary term management.
+- **Automation refresh:** The local HTTP API and CLI support tokenized discovery, local-file transcription, workflow/rule listing, per-request engine/model overrides, language hints, translation targets, and dictionary term/correction management.
 - **Plugin marketplace:** Browse, install, upgrade, and remove bundled or external plugins from Settings.
 - **Release channels:** Velopack powers stable, release-candidate, and daily build delivery.
 
@@ -58,7 +58,7 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 - **Plugin system:** Extend TypeWhisper with custom transcription engines, LLM providers, post-processors, memory providers, TTS providers, event observers, and action plugins.
 - **Plugin marketplace:** Browse, install, upgrade, and remove plugins directly from Settings. Recommended extensions can be installed automatically on first run.
 - **Action plugins:** Linear, Obsidian, Script, Webhook, and LiveTranscript can turn transcriptions into issues, notes, scripts, notifications, or live windows.
-- **HTTP API:** Local REST server for status, models, transcription, history, dictionary terms, and dictation control.
+- **HTTP API:** Local REST server for status, models, transcription, workflows/rules, history, dictionary terms and corrections, and dictation control.
 - **CLI tool:** Shell-friendly transcription via the bundled `typewhisper` command.
 
 ### General
@@ -134,22 +134,32 @@ The app appears in the system tray, and the welcome wizard guides you through ex
 
 ## HTTP API
 
-The HTTP API is an advanced local automation surface. It binds to `localhost` and `127.0.0.1`, is configurable in Settings, and uses port `8978` by default.
+The HTTP API is an advanced local automation surface. It binds to `localhost` and `127.0.0.1`, is configurable in Settings, and uses port `8978` by default. When the server starts it writes discovery files to `%LOCALAPPDATA%\TypeWhisper`: legacy `api-port` and `api-discovery.json` with `{ "version": 1, "port": 8978, "token": "..." }`.
+
+Authentication is off by default for local compatibility. If Settings > Advanced > API Server > Require API Token is enabled, `/v1/status` remains public and all other routes require either `Authorization: Bearer <token>` or `X-TypeWhisper-API-Token: <token>`. `OPTIONS` requests return `204 No Content`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/v1/status` | GET | App status, active engine, active model, API version, and capability flags |
 | `/v1/models` | GET | List all available local and cloud models |
 | `/v1/transcribe` | POST | Transcribe multipart or raw audio |
+| `/v1/transcribe/local-file` | POST | Transcribe a file path already on this Windows machine |
 | `/v1/history` | GET | Search history with pagination |
 | `/v1/history` | DELETE | Delete a history entry by ID |
+| `/v1/rules` | GET | List workflow-backed rules |
+| `/v1/profiles` | GET | List workflow-backed profiles |
+| `/v1/rules/toggle` | PUT | Toggle a rule by `id` |
+| `/v1/profiles/toggle` | PUT | Toggle a profile by `id` |
 | `/v1/dictation/start` | POST | Start recording |
 | `/v1/dictation/stop` | POST | Stop recording |
 | `/v1/dictation/status` | GET | Check current dictation state |
 | `/v1/dictation/transcription` | GET | Poll dictation result by session ID |
 | `/v1/dictionary/terms` | GET | List enabled dictionary terms |
 | `/v1/dictionary/terms` | PUT | Replace or append dictionary terms |
-| `/v1/dictionary/terms` | DELETE | Clear dictionary terms |
+| `/v1/dictionary/terms` | DELETE | Delete one dictionary term |
+| `/v1/dictionary/corrections` | GET | List enabled dictionary corrections |
+| `/v1/dictionary/corrections` | PUT | Upsert a correction |
+| `/v1/dictionary/corrections` | DELETE | Delete a correction |
 
 `/v1/transcribe` accepts `multipart/form-data` with a `file` part or a raw audio request body. Multipart fields are:
 
@@ -162,6 +172,20 @@ The HTTP API is an advanced local automation surface. It binds to `localhost` an
 - `engine` and `model`: per-request overrides using IDs from `/v1/models`
 
 Raw audio requests can pass the same options with headers: `X-Language`, `X-Language-Hints`, `X-Task`, `X-Target-Language`, `X-Response-Format`, `X-Prompt`, `X-Engine`, and `X-Model`. Add `?await_download=1` to wait for a local model download or restore when supported.
+
+`/v1/transcribe/local-file` accepts JSON. This is what the CLI uses for normal file paths, so large local files are not uploaded through the API process:
+
+```json
+{
+  "path": "C:\\Audio\\recording.wav",
+  "language_hints": ["de", "en"],
+  "task": "transcribe",
+  "engine": "mock",
+  "model": "tiny"
+}
+```
+
+Dictionary terms use `PUT /v1/dictionary/terms` with `{ "terms": ["TypeWhisper"], "replace": false }` and `DELETE /v1/dictionary/terms` with `{ "term": "TypeWhisper" }`. Corrections use `{ "original": "teh", "replacement": "the", "caseSensitive": false }`.
 
 ```bash
 curl -X POST http://localhost:8978/v1/transcribe \
@@ -177,7 +201,7 @@ curl "http://localhost:8978/v1/dictation/transcription?id=<session-id>"
 
 ## CLI Tool
 
-The optional `typewhisper` CLI talks to the local HTTP API and is intended for scripts, terminals, and batch workflows.
+The optional `typewhisper` CLI talks to the local HTTP API and is intended for scripts, terminals, Raycast commands, and batch workflows. It reads `%LOCALAPPDATA%\TypeWhisper\api-discovery.json` before the legacy `api-port` file. Tokens can also be supplied with `TYPEWHISPER_API_TOKEN` or `--api-token`.
 
 ### Commands
 
@@ -194,7 +218,8 @@ typewhisper transcribe - < audio.wav
 
 | Option | Description |
 |--------|-------------|
-| `--port <N>` | Server port (default: `8978`) |
+| `--port <N>` | Server port (default: auto-discover, fallback `8978`) |
+| `--api-token <token>` | API token override |
 | `--json` | Output as JSON |
 | `--language <code>` | Source language, such as `en` or `de` |
 | `--language-hint <code>` | Repeatable language hint for restricted auto-detection |

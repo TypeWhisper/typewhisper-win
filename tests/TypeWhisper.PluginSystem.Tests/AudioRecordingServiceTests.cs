@@ -176,7 +176,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
     {
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
-        return new SettingsViewModel(settings, audio, api, cli, speech);
+        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: action => action());
     }
 }
 

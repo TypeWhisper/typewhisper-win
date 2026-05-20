@@ -150,9 +150,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/security
-
-          # Upstream has not published fixed versions for these optional Granite Speech
-          # runtime advisories yet. Keep the audit active so new advisories still fail CI.
+          # These torch/transformers advisories currently have no fixed versions
+          # in the vulnerability feed; keep the audit active for all other IDs.
           ignored_vulns=(
             PYSEC-2025-189
             PYSEC-2025-190
@@ -164,7 +163,6 @@ jobs:
             PYSEC-2025-196
             PYSEC-2025-197
             PYSEC-2025-210
-            PYSEC-2026-139
             PYSEC-2025-211
             PYSEC-2025-212
             PYSEC-2025-213
@@ -173,18 +171,20 @@ jobs:
             PYSEC-2025-216
             PYSEC-2025-217
             PYSEC-2025-218
+            PYSEC-2026-139
           )
-
+          for vuln in "${ignored_vulns[@]}"; do
+            fixed_versions="$(curl -fsS "https://api.osv.dev/v1/vulns/${vuln}" | jq -r '[.affected[]?.ranges[]?.events[]?|select(has("fixed"))|.fixed] | unique | join(",")')"
+            if [[ -n "${fixed_versions}" ]]; then
+              echo "Ignored advisory ${vuln} now has fix(es): ${fixed_versions}. Remove it from ignored_vulns."
+              exit 1
+            fi
+          done
           ignore_args=()
           for vuln in "${ignored_vulns[@]}"; do
             ignore_args+=(--ignore-vuln "$vuln")
           done
-
-          pip-audit \
-            -r plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt \
-            --progress-spinner off \
-            "${ignore_args[@]}" \
-            | tee artifacts/security/granite-speech-pip-audit.txt
+          pip-audit -r plugins/TypeWhisper.Plugin.GraniteSpeech/Scripts/requirements.txt --progress-spinner off "${ignore_args[@]}" | tee artifacts/security/granite-speech-pip-audit.txt
 
       - uses: actions/upload-artifact@v7
         if: always()

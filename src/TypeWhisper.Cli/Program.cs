@@ -9,7 +9,6 @@ namespace TypeWhisper.Cli;
 /// </summary>
 static class Program
 {
-    private const int DefaultPort = 8978;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
 
     static async Task<int> Main(string[] args)
@@ -36,25 +35,34 @@ static class Program
             return 1;
         }
 
-        var baseUrl = $"http://localhost:{options.Port}";
+        var connection = CliConnectionResolver.Resolve(new CliConnectionOptions(
+            PortOverride: options.Port,
+            ApiTokenOverride: options.ApiToken,
+            EnvironmentApiToken: Environment.GetEnvironmentVariable("TYPEWHISPER_API_TOKEN")));
+        var baseUrl = $"http://127.0.0.1:{connection.Port}";
 
         return options.Command switch
         {
-            "status" => await StatusAsync(baseUrl, options.Json),
-            "models" => await ModelsAsync(baseUrl, options.Json),
-            "transcribe" => await TranscribeAsync(baseUrl, options),
+            "status" => await StatusAsync(baseUrl, options.Json, connection.ApiToken),
+            "models" => await ModelsAsync(baseUrl, options.Json, connection.ApiToken),
+            "transcribe" => await TranscribeAsync(baseUrl, options, connection.ApiToken),
             _ => Error($"Unknown command: {options.Command}")
         };
     }
 
-    static async Task<int> StatusAsync(string baseUrl, bool json)
+    static async Task<int> StatusAsync(string baseUrl, bool json, string? apiToken)
     {
         try
         {
-            var response = await Http.GetStringAsync($"{baseUrl}/v1/status");
-            if (json) { Console.WriteLine(PrettyJson(response)); return 0; }
+            using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/status", apiToken);
+            var response = await Http.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return Error($"Status request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
 
-            using var doc = JsonDocument.Parse(response);
+            if (json) { Console.WriteLine(PrettyJson(body)); return 0; }
+
+            using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
             var status = Prop(root, "status") == "ready" ? "Ready" : "No model loaded";
             var engine = Prop(root, "engine");
@@ -70,14 +78,19 @@ static class Program
         }
     }
 
-    static async Task<int> ModelsAsync(string baseUrl, bool json)
+    static async Task<int> ModelsAsync(string baseUrl, bool json, string? apiToken)
     {
         try
         {
-            var response = await Http.GetStringAsync($"{baseUrl}/v1/models");
-            if (json) { Console.WriteLine(PrettyJson(response)); return 0; }
+            using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/models", apiToken);
+            var response = await Http.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return Error($"Models request failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
 
-            using var doc = JsonDocument.Parse(response);
+            if (json) { Console.WriteLine(PrettyJson(body)); return 0; }
+
+            using var doc = JsonDocument.Parse(body);
             if (!doc.RootElement.TryGetProperty("models", out var models))
                 return 0;
 
@@ -110,7 +123,7 @@ static class Program
         }
     }
 
-    static async Task<int> TranscribeAsync(string baseUrl, CliOptions options)
+    static async Task<int> TranscribeAsync(string baseUrl, CliOptions options, string? apiToken)
     {
         if (!string.IsNullOrEmpty(options.Language) && options.LanguageHints.Count > 0)
             return Error("--language and --language-hint cannot be used together.");
@@ -119,44 +132,70 @@ static class Program
         if (string.IsNullOrWhiteSpace(file))
             return Error("Usage: typewhisper transcribe <file|->");
 
-        byte[] audioBytes;
-        var fileName = "audio.wav";
-
         if (file == "-")
         {
+            byte[] audioBytes;
             await using var stdin = Console.OpenStandardInput();
             using var buffer = new MemoryStream();
             await stdin.CopyToAsync(buffer);
             audioBytes = buffer.ToArray();
             if (audioBytes.Length == 0)
                 return Error("No data received from stdin.");
-        }
-        else
-        {
-            if (!File.Exists(file))
-                return Error($"File not found: {file}");
 
-            audioBytes = await File.ReadAllBytesAsync(file);
-            fileName = Path.GetFileName(file);
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(audioBytes);
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                content.Add(fileContent, "file", CliRequestBuilder.BuildStdinFileName(audioBytes));
+
+                AddString(content, "language", options.Language);
+                foreach (var hint in options.LanguageHints)
+                    AddString(content, "language_hint", hint);
+                AddString(content, "task", options.Task);
+                AddString(content, "target_language", options.TranslateTo);
+                AddString(content, "engine", options.Engine);
+                AddString(content, "model", options.Model);
+
+                var path = options.AwaitDownload ? "/v1/transcribe?await_download=1" : "/v1/transcribe";
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}{path}") { Content = content };
+                CliRequestBuilder.ApplyApiToken(request, apiToken);
+                var response = await Http.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                    return Error($"Transcription failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+
+                if (options.Json) { Console.WriteLine(PrettyJson(body)); return 0; }
+
+                using var doc = JsonDocument.Parse(body);
+                Console.WriteLine(Prop(doc.RootElement, "text"));
+                return 0;
+            }
+            catch (HttpRequestException)
+            {
+                return Error("TypeWhisper is not running or API server is disabled.");
+            }
         }
+
+        if (!File.Exists(file))
+            return Error($"File not found: {file}");
 
         try
         {
-            using var content = new MultipartFormDataContent();
-            var fileContent = new ByteArrayContent(audioBytes);
-            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            content.Add(fileContent, "file", fileName);
-
-            AddString(content, "language", options.Language);
-            foreach (var hint in options.LanguageHints)
-                AddString(content, "language_hint", hint);
-            AddString(content, "task", options.Task);
-            AddString(content, "target_language", options.TranslateTo);
-            AddString(content, "engine", options.Engine);
-            AddString(content, "model", options.Model);
-
-            var path = options.AwaitDownload ? "/v1/transcribe?await_download=1" : "/v1/transcribe";
-            var response = await Http.PostAsync($"{baseUrl}{path}", content);
+            using var request = CliRequestBuilder.BuildTranscribeLocalFile(
+                baseUrl,
+                new CliTranscribeRequest(
+                    Path.GetFullPath(file),
+                    options.Language,
+                    options.LanguageHints,
+                    options.Task,
+                    options.TranslateTo,
+                    options.Engine,
+                    options.Model,
+                    options.AwaitDownload),
+                apiToken);
+            var response = await Http.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
@@ -187,7 +226,8 @@ static class Program
               transcribe <file|->       Transcribe an audio file, or - for stdin
 
             Global options:
-              --port <N>                API server port (default: 8978)
+              --port <N>                API server port (default: auto-discover, fallback 8978)
+              --api-token <token>       API token (overrides TYPEWHISPER_API_TOKEN and discovery)
               --json                    Output as JSON
               --version                 Show version
               --help, -h                Show this help
@@ -293,7 +333,8 @@ static class Program
     {
         public string? Command { get; private init; }
         public List<string> Positionals { get; private init; } = [];
-        public int Port { get; private init; } = DefaultPort;
+        public int? Port { get; private init; }
+        public string? ApiToken { get; private init; }
         public bool Json { get; private init; }
         public bool ShowHelp { get; private init; }
         public bool ShowVersion { get; private init; }
@@ -317,7 +358,8 @@ static class Program
             string? translateTo = null;
             string? engine = null;
             string? model = null;
-            var port = DefaultPort;
+            int? port = null;
+            string? apiToken = null;
             var json = false;
             var awaitDownload = false;
 
@@ -338,8 +380,15 @@ static class Program
                         awaitDownload = true;
                         break;
                     case "--port":
-                        if (!TryReadValue(args, ref i, out var portValue) || !int.TryParse(portValue, out port))
+                        if (!TryReadValue(args, ref i, out var portValue) || !int.TryParse(portValue, out var parsedPort))
                             return options with { Error = "--port requires a number." };
+                        if (!CliConnectionResolver.IsPortInRange(parsedPort))
+                            return options with { Error = "--port requires a TCP port between 1 and 65535." };
+                        port = parsedPort;
+                        break;
+                    case "--api-token":
+                        if (!TryReadValue(args, ref i, out apiToken))
+                            return options with { Error = "--api-token requires a value." };
                         break;
                     case "--language":
                         if (!TryReadValue(args, ref i, out language))
@@ -383,6 +432,7 @@ static class Program
                 Command = command,
                 Positionals = positionals,
                 Port = port,
+                ApiToken = apiToken,
                 Json = json,
                 Language = language,
                 LanguageHints = languageHints,
@@ -396,7 +446,7 @@ static class Program
 
         private static bool TryReadValue(string[] args, ref int index, out string value)
         {
-            if (index + 1 >= args.Length)
+            if (index + 1 >= args.Length || LooksLikeOption(args[index + 1]))
             {
                 value = "";
                 return false;
@@ -405,5 +455,8 @@ static class Program
             value = args[++index];
             return true;
         }
+
+        private static bool LooksLikeOption(string value) =>
+            value.Length > 0 && value[0] == '-' && value != "-";
     }
 }

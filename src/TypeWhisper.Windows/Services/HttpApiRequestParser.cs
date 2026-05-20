@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 
@@ -41,7 +42,25 @@ internal sealed record HttpApiRequest(
     }
 }
 
-internal sealed record HttpApiResponse(int StatusCode, string Body, string ContentType = "application/json");
+internal sealed record HttpApiResponse
+{
+    public int StatusCode { get; }
+    public string Body { get; }
+    public string ContentType { get; }
+    public IReadOnlyDictionary<string, string> Headers { get; }
+
+    public HttpApiResponse(
+        int statusCode,
+        string body,
+        string contentType = "application/json",
+        IReadOnlyDictionary<string, string>? headers = null)
+    {
+        StatusCode = statusCode;
+        Body = body;
+        ContentType = contentType;
+        Headers = headers ?? new Dictionary<string, string>();
+    }
+}
 
 internal sealed class HttpApiRequestException : Exception
 {
@@ -67,6 +86,18 @@ internal sealed record TranscribeApiRequest(
     string? Model,
     bool AwaitDownload);
 
+internal sealed record LocalFileTranscribeApiRequest(
+    string Path,
+    string? Language,
+    IReadOnlyList<string> LanguageHints,
+    TranscriptionTask Task,
+    string? TargetLanguage,
+    string ResponseFormat,
+    string? Prompt,
+    string? Engine,
+    string? Model,
+    bool AwaitDownload);
+
 internal sealed record MultipartPart(
     string Name,
     string? FileName,
@@ -75,6 +106,12 @@ internal sealed record MultipartPart(
 
 internal static class HttpApiRequestParser
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true
+    };
+
     public static TranscribeApiRequest ParseTranscribe(HttpApiRequest request)
     {
         var contentType = Header(request.Headers, "content-type") ?? "";
@@ -153,6 +190,50 @@ internal static class HttpApiRequestParser
             engine,
             model,
             awaitDownload);
+    }
+
+    public static LocalFileTranscribeApiRequest ParseTranscribeLocalFile(HttpApiRequest request)
+    {
+        if (request.Body.Length == 0)
+            throw new HttpApiRequestException(400, "Missing JSON body");
+
+        LocalFileTranscribePayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<LocalFileTranscribePayload>(request.Body, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            throw new HttpApiRequestException(400, "Invalid JSON body");
+        }
+
+        if (payload is null || string.IsNullOrWhiteSpace(payload.Path))
+            throw new HttpApiRequestException(400, "Invalid JSON body");
+
+        if (payload.LanguageHints is null)
+            throw new HttpApiRequestException(400, "'language_hints' must be an array or omitted");
+
+        if (!string.IsNullOrWhiteSpace(payload.Language) && payload.LanguageHints.Count > 0)
+            throw new HttpApiRequestException(400, "Use either 'language' or 'language_hint', not both");
+
+        var awaitDownload = string.Equals(request.QueryString["await_download"], "1", StringComparison.Ordinal)
+            || string.Equals(request.QueryString["await_download"], "true", StringComparison.OrdinalIgnoreCase);
+
+        return new LocalFileTranscribeApiRequest(
+            payload.Path.Trim(),
+            Clean(payload.Language),
+            payload.LanguageHints
+                .Select(Clean)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!)
+                .ToList(),
+            ParseTask(payload.Task),
+            Clean(payload.TargetLanguage),
+            Clean(payload.ResponseFormat) ?? "json",
+            Clean(payload.Prompt),
+            Clean(payload.Engine),
+            Clean(payload.Model),
+            awaitDownload || payload.AwaitDownload);
     }
 
     public static IReadOnlyList<MultipartPart> ParseMultipart(byte[] body, string boundary)
@@ -358,5 +439,19 @@ internal static class HttpApiRequestParser
         }
 
         return -1;
+    }
+
+    private sealed record LocalFileTranscribePayload
+    {
+        public string? Path { get; init; }
+        public string? Language { get; init; }
+        public IReadOnlyList<string>? LanguageHints { get; init; } = [];
+        public string? Task { get; init; }
+        public string? TargetLanguage { get; init; }
+        public string? ResponseFormat { get; init; }
+        public string? Prompt { get; init; }
+        public string? Engine { get; init; }
+        public string? Model { get; init; }
+        public bool AwaitDownload { get; init; }
     }
 }

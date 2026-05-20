@@ -20,7 +20,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ApiServerController _apiServer;
     private readonly CliInstallService _cliInstall;
     private readonly SpeechFeedbackService _speechFeedback;
-    private readonly Dispatcher? _uiDispatcher;
+    private readonly Action<Action> _dispatchToUi;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -55,6 +55,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string? _translationTargetLanguage;
     [ObservableProperty] private bool _apiServerEnabled;
     [ObservableProperty] private int _apiServerPort = 8978;
+    [ObservableProperty] private bool _apiServerRequiresAuthentication;
     [ObservableProperty] private OverlayWidget _overlayLeftWidget = OverlayWidget.Waveform;
     [ObservableProperty] private OverlayWidget _overlayRightWidget = OverlayWidget.Timer;
     [ObservableProperty] private string? _uiLanguage;
@@ -173,14 +174,15 @@ public partial class SettingsViewModel : ObservableObject
         AudioRecordingService audio,
         ApiServerController apiServer,
         CliInstallService cliInstall,
-        SpeechFeedbackService speechFeedback)
+        SpeechFeedbackService speechFeedback,
+        Action<Action>? dispatchToUi = null)
     {
         _settings = settings;
         _audio = audio;
         _apiServer = apiServer;
         _cliInstall = cliInstall;
         _speechFeedback = speechFeedback;
-        _uiDispatcher = CaptureActiveDispatcher();
+        _dispatchToUi = dispatchToUi ?? CreateUiDispatcher();
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
@@ -307,7 +309,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnPreviewLevelChanged(object? sender, AudioLevelEventArgs e)
     {
-        InvokeOnUiThread(() =>
+        _dispatchToUi(() =>
             PreviewLevel = Math.Min(e.RmsLevel * 5f, 1f)); // Scale for visibility
     }
 
@@ -342,6 +344,7 @@ public partial class SettingsViewModel : ObservableObject
             TranslationTargetLanguage = TranslationTargetLanguage,
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
+            ApiServerRequiresAuthentication = ApiServerRequiresAuthentication,
             ToggleOnlyHotkey = HotkeyParser.Normalize(ToggleOnlyHotkey),
             HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
             RecentTranscriptionsHotkey = HotkeyParser.Normalize(RecentTranscriptionsHotkey),
@@ -426,6 +429,7 @@ public partial class SettingsViewModel : ObservableObject
         TranslationTargetLanguage = s.TranslationTargetLanguage;
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
+        ApiServerRequiresAuthentication = s.ApiServerRequiresAuthentication;
         ToggleOnlyHotkey = HotkeyParser.Normalize(s.ToggleOnlyHotkey);
         HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
         RecentTranscriptionsHotkey = HotkeyParser.Normalize(s.RecentTranscriptionsHotkey);
@@ -454,7 +458,7 @@ public partial class SettingsViewModel : ObservableObject
         if (_isSavingSettings)
             return;
 
-        InvokeOnUiThread(() =>
+        _dispatchToUi(() =>
         {
             _isLoading = true;
             LoadFromSettings(updatedSettings);
@@ -467,7 +471,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnApiServerStateChanged()
     {
-        InvokeOnUiThread(RefreshApiServerStatus);
+        _dispatchToUi(RefreshApiServerStatus);
     }
 
     private void RefreshApiServerStatus()
@@ -505,7 +509,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        InvokeOnUiThread(() =>
+        _dispatchToUi(() =>
         {
             _isLoading = true;
             RefreshLocalizedCollections();
@@ -529,7 +533,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnTtsProvidersChanged(object? sender, EventArgs e)
     {
-        InvokeOnUiThread(() =>
+        _dispatchToUi(() =>
         {
             var wasLoading = _isLoading;
             _isLoading = true;
@@ -540,7 +544,13 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnAudioDevicesChanged(object? sender, EventArgs e)
     {
-        InvokeOnUiThread(HandleAudioDevicesChanged);
+        _dispatchToUi(HandleAudioDevicesChanged);
+    }
+
+    private static Action<Action> CreateUiDispatcher()
+    {
+        var dispatcher = CaptureActiveDispatcher();
+        return action => DispatchToUi(dispatcher, action);
     }
 
     private static Dispatcher? CaptureActiveDispatcher()
@@ -551,9 +561,8 @@ public partial class SettingsViewModel : ObservableObject
             : dispatcher;
     }
 
-    private void InvokeOnUiThread(Action action)
+    private static void DispatchToUi(Dispatcher? dispatcher, Action action)
     {
-        var dispatcher = _uiDispatcher;
         if (dispatcher is null)
         {
             action();

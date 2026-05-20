@@ -39,6 +39,22 @@ public class SettingsViewModelIndicatorTests
         Assert.Equal(16.5, settings.Current.LiveTranscriptionFontSize);
     }
 
+    [Fact]
+    public void LoadsAndPersistsApiAuthenticationSetting()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            ApiServerRequiresAuthentication = true
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.True(sut.ApiServerRequiresAuthentication);
+
+        sut.ApiServerRequiresAuthentication = false;
+
+        Assert.False(settings.Current.ApiServerRequiresAuthentication);
+    }
+
     private static SettingsViewModel CreateSettingsViewModel(FakeSettingsService settings)
     {
         var pluginManager = TestPluginManagerFactory.Create(settings);
@@ -48,6 +64,6 @@ public class SettingsViewModelIndicatorTests
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
 
-        return new SettingsViewModel(settings, audio, api, cli, speech);
+        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: action => action());
     }
 }

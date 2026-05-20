@@ -19,11 +19,23 @@ public interface IDictionaryService
         .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term)
         .Select(e => e.Original)
         .ToList();
+    IReadOnlyList<DictionaryEntry> GetEnabledCorrections() => Entries
+        .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction)
+        .ToList();
 
     void SetTerms(IEnumerable<string> terms, bool replaceExisting) =>
         throw new NotSupportedException();
 
     void RemoveAllTerms() =>
+        throw new NotSupportedException();
+
+    bool DeleteTerm(string term) =>
+        throw new NotSupportedException();
+
+    void UpsertCorrection(string original, string replacement, bool caseSensitive) =>
+        throw new NotSupportedException();
+
+    bool DeleteCorrection(string original) =>
         throw new NotSupportedException();
 
     void LearnCorrection(string original, string replacement);
