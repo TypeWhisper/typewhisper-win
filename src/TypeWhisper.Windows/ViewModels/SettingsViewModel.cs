@@ -19,6 +19,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly ApiServerController _apiServer;
     private readonly CliInstallService _cliInstall;
     private readonly SpeechFeedbackService _speechFeedback;
+    private readonly Action<Action> _dispatchToUi;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -172,13 +173,15 @@ public partial class SettingsViewModel : ObservableObject
         AudioRecordingService audio,
         ApiServerController apiServer,
         CliInstallService cliInstall,
-        SpeechFeedbackService speechFeedback)
+        SpeechFeedbackService speechFeedback,
+        Action<Action>? dispatchToUi = null)
     {
         _settings = settings;
         _audio = audio;
         _apiServer = apiServer;
         _cliInstall = cliInstall;
         _speechFeedback = speechFeedback;
+        _dispatchToUi = dispatchToUi ?? DispatchToUi;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
@@ -454,7 +457,7 @@ public partial class SettingsViewModel : ObservableObject
         if (_isSavingSettings)
             return;
 
-        DispatchToUi(() =>
+        _dispatchToUi(() =>
         {
             _isLoading = true;
             LoadFromSettings(updatedSettings);
@@ -467,7 +470,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnApiServerStateChanged()
     {
-        DispatchToUi(RefreshApiServerStatus);
+        _dispatchToUi(RefreshApiServerStatus);
     }
 
     private void RefreshApiServerStatus()
@@ -505,7 +508,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        DispatchToUi(() =>
+        _dispatchToUi(() =>
         {
             _isLoading = true;
             RefreshLocalizedCollections();
@@ -529,7 +532,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnTtsProvidersChanged(object? sender, EventArgs e)
     {
-        DispatchToUi(() =>
+        _dispatchToUi(() =>
         {
             var wasLoading = _isLoading;
             _isLoading = true;
@@ -540,7 +543,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private void OnAudioDevicesChanged(object? sender, EventArgs e)
     {
-        DispatchToUi(HandleAudioDevicesChanged);
+        _dispatchToUi(HandleAudioDevicesChanged);
     }
 
     private static void DispatchToUi(Action action)
