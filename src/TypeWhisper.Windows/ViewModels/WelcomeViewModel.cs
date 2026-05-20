@@ -616,26 +616,26 @@ public partial class WelcomeViewModel : ObservableObject
     private static void DispatchToUi(Action action)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null
-            || dispatcher.CheckAccess()
-            || dispatcher.HasShutdownStarted
-            || dispatcher.HasShutdownFinished)
+        if (dispatcher is null || dispatcher.CheckAccess())
         {
             action();
             return;
         }
 
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+            return;
+
         try
         {
             dispatcher.Invoke(action);
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            action();
+            return;
         }
         catch (InvalidOperationException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            action();
+            return;
         }
     }
 

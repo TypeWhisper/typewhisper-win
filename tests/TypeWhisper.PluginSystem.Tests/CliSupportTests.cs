@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http;
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using TypeWhisper.Cli;
 
@@ -131,9 +132,40 @@ public sealed class CliSupportTests : IDisposable
         Assert.DoesNotContain("distinctive-audio-bytes", body);
     }
 
+    [Theory]
+    [InlineData(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E' }, "stdin.wav")]
+    [InlineData(new byte[] { (byte)'f', (byte)'L', (byte)'a', (byte)'C' }, "stdin.flac")]
+    [InlineData(new byte[] { (byte)'O', (byte)'g', (byte)'g', (byte)'S' }, "stdin.ogg")]
+    [InlineData(new byte[] { (byte)'I', (byte)'D', (byte)'3' }, "stdin.mp3")]
+    [InlineData(new byte[] { 0xFF, 0xFB }, "stdin.mp3")]
+    public void RequestBuilder_DetectsStdinFileNameFromAudioHeader(byte[] audioBytes, string expectedFileName)
+    {
+        Assert.Equal(expectedFileName, CliRequestBuilder.BuildStdinFileName(audioBytes));
+    }
+
+    [Fact]
+    public void CliOptions_RejectsApiTokenWhenNextArgumentIsSwitch()
+    {
+        var options = ParseCliOptions("status", "--api-token", "--json");
+
+        Assert.Equal("--api-token requires a value.", GetOptionValue<string>(options, "Error"));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
             Directory.Delete(_root, recursive: true);
     }
+
+    private static object ParseCliOptions(params string[] args)
+    {
+        var type = typeof(CliRequestBuilder).Assembly.GetType("TypeWhisper.Cli.Program+CliOptions", throwOnError: true)!;
+        var parse = type.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static)!;
+        return parse.Invoke(null, [args])!;
+    }
+
+    private static T? GetOptionValue<T>(object options, string propertyName) =>
+        (T?)options.GetType()
+            .GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance)!
+            .GetValue(options);
 }

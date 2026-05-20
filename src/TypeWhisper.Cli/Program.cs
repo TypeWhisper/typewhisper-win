@@ -147,7 +147,7 @@ static class Program
                 using var content = new MultipartFormDataContent();
                 var fileContent = new ByteArrayContent(audioBytes);
                 fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                content.Add(fileContent, "file", "stdin.wav");
+                content.Add(fileContent, "file", CliRequestBuilder.BuildStdinFileName(audioBytes));
 
                 AddString(content, "language", options.Language);
                 foreach (var hint in options.LanguageHints)
@@ -387,7 +387,7 @@ static class Program
                         port = parsedPort;
                         break;
                     case "--api-token":
-                        if (!TryReadValue(args, ref i, out apiToken))
+                        if (!TryReadValue(args, ref i, out apiToken) || LooksLikeOption(apiToken))
                             return options with { Error = "--api-token requires a value." };
                         break;
                     case "--language":
@@ -455,5 +455,8 @@ static class Program
             value = args[++index];
             return true;
         }
+
+        private static bool LooksLikeOption(string value) =>
+            value.StartsWith("--", StringComparison.Ordinal);
     }
 }

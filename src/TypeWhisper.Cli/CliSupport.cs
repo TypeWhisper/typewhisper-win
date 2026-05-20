@@ -28,15 +28,15 @@ public static class CliConnectionResolver
 
     public static CliConnection Resolve(CliConnectionOptions options)
     {
-        var appDirectory = Path.Combine(
+        var appDirectory = Path.Join(
             options.ApplicationDataRoot
                 ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "TypeWhisper");
 
-        var discovery = ReadDiscovery(Path.Combine(appDirectory, "api-discovery.json"));
+        var discovery = ReadDiscovery(Path.Join(appDirectory, "api-discovery.json"));
         var port = ValidatePort(options.PortOverride)
             ?? ValidatePort(discovery?.Port)
-            ?? ValidatePort(ReadLegacyPort(Path.Combine(appDirectory, "api-port")))
+            ?? ValidatePort(ReadLegacyPort(Path.Join(appDirectory, "api-port")))
             ?? DefaultPort;
         var token = FirstNonBlank(
             options.ApiTokenOverride,
@@ -61,7 +61,7 @@ public static class CliConnectionResolver
 
             return discovery;
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return null;
         }
@@ -74,7 +74,12 @@ public static class CliConnectionResolver
             if (File.Exists(path) && int.TryParse(File.ReadAllText(path).Trim(), out var port))
                 return port;
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or System.Security.SecurityException)
+        {
+        }
 
         return null;
     }
@@ -135,6 +140,30 @@ public static class CliRequestBuilder
     {
         if (!string.IsNullOrWhiteSpace(apiToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken.Trim());
+    }
+
+    public static string BuildStdinFileName(ReadOnlySpan<byte> audioBytes)
+    {
+        if (audioBytes.Length >= 12
+            && audioBytes[..4].SequenceEqual("RIFF"u8)
+            && audioBytes[8..12].SequenceEqual("WAVE"u8))
+        {
+            return "stdin.wav";
+        }
+
+        if (audioBytes.StartsWith("fLaC"u8))
+            return "stdin.flac";
+
+        if (audioBytes.StartsWith("OggS"u8))
+            return "stdin.ogg";
+
+        if (audioBytes.StartsWith("ID3"u8)
+            || (audioBytes.Length >= 2 && audioBytes[0] == 0xFF && (audioBytes[1] & 0xE0) == 0xE0))
+        {
+            return "stdin.mp3";
+        }
+
+        return "stdin.wav";
     }
 
     private static Uri BuildUri(string baseUrl, string path) =>
