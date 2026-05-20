@@ -78,7 +78,13 @@ TypeWhisper for Windows includes system-wide dictation, file transcription, work
 
 Download the latest installer from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-win/releases/latest).
 
+Windows releases are code-signed using SignPath.io. Free code signing is provided by SignPath.io, certificate by SignPath Foundation. See the [privacy policy](docs/PRIVACY.md) for data handling details.
+
 Stable releases use the default Velopack channel. Release candidates and daily builds are published as prereleases on their own update channels. Installed builds can switch channels in Settings.
+
+### Code Signing Policy
+
+TypeWhisper for Windows release artifacts are built from this repository by GitHub Actions and submitted for signing through SignPath.io. Signing approvals are limited to project maintainers. The signed publisher may appear as SignPath Foundation because the certificate is provided through the SignPath Foundation open-source program.
 
 ## Quick Start
 
