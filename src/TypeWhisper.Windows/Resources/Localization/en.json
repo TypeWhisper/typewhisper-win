@@ -434,6 +434,8 @@
   "Appearance.StyleCompactBadgeHint": "Small centered status light, without widgets or live text expansion.",
   "Appearance.LivePreview": "Live transcription preview",
   "Appearance.LivePreviewHint": "Shows partial text in Island and Edge Dock when no external live preview plugin is active.",
+  "Appearance.OnlineAsrBatchLivePreview": "Online batch live preview",
+  "Appearance.OnlineAsrBatchLivePreviewHint": "Also run repeated online transcription calls while recording for providers without real-time streaming.",
   "Appearance.LiveTextSize": "Live text size",
   "Appearance.LiveTextSizeFormat": "{0:0.#} pt",
   "Appearance.LeftContent": "Left content",

@@ -23,6 +23,12 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultOnlineAsrBatchLiveTranscriptionEnabled_IsFalse()
+    {
+        Assert.False(AppSettings.Default.OnlineAsrBatchLiveTranscriptionEnabled);
+    }
+
+    [Fact]
     public void DefaultLocalModelAcceleration_IsAuto()
     {
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);

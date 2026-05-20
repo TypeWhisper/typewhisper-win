@@ -434,6 +434,8 @@
   "Appearance.StyleCompactBadgeHint": "Kleines zentriertes Statuslicht, ohne Widgets oder Live-Text-Erweiterung.",
   "Appearance.LivePreview": "Live-Transkriptionsvorschau",
   "Appearance.LivePreviewHint": "Zeigt Teiltext in Island und Edge Dock, wenn kein externes Live-Preview-Plugin aktiv ist.",
+  "Appearance.OnlineAsrBatchLivePreview": "Online-Batch-Livevorschau",
+  "Appearance.OnlineAsrBatchLivePreviewHint": "Führt bei Providern ohne echtes Echtzeit-Streaming während der Aufnahme wiederholte Online-Transkriptionsaufrufe aus.",
   "Appearance.LiveTextSize": "Live-Textgroesse",
   "Appearance.LiveTextSizeFormat": "{0:0.#} pt",
   "Appearance.LeftContent": "Linker Inhalt",

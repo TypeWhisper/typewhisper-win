@@ -423,6 +423,8 @@
   "Appearance.StyleCompactBadgeHint": "Небольшой центральный индикатор без виджетов и расширения живого текста.",
   "Appearance.LivePreview": "Предпросмотр живой транскрипции",
   "Appearance.LivePreviewHint": "Показывает частичный текст в режимах «Островок» и «Боковая панель», если нет внешнего плагина предпросмотра.",
+  "Appearance.OnlineAsrBatchLivePreview": "Онлайн-предпросмотр пакетной ASR",
+  "Appearance.OnlineAsrBatchLivePreviewHint": "Во время записи выполняет повторные онлайн-запросы транскрипции для провайдеров без потоковой передачи в реальном времени.",
   "Appearance.LiveTextSize": "Размер живого текста",
   "Appearance.LiveTextSizeFormat": "{0:0.#} pt",
   "Appearance.LeftContent": "Содержимое слева",

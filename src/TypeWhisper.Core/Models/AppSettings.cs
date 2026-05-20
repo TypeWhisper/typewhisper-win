@@ -49,6 +49,7 @@ public record AppSettings
 
     // Live transcription (streaming preview while recording)
     public bool LiveTranscriptionEnabled { get; init; } = true;
+    public bool OnlineAsrBatchLiveTranscriptionEnabled { get; init; }
     public double LiveTranscriptionFontSize { get; init; } = DefaultLiveTranscriptionFontSize;
 
     // Silence detection

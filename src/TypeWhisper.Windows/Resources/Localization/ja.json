@@ -421,6 +421,8 @@
   "Appearance.StyleCompactBadgeHint": "ウィジェットやライブテキスト展開のない、小さな中央ステータスライトです。",
   "Appearance.LivePreview": "ライブ文字起こしプレビュー",
   "Appearance.LivePreviewHint": "外部ライブプレビュープラグインが無効なとき、Island と Edge Dock に途中テキストを表示します。",
+  "Appearance.OnlineAsrBatchLivePreview": "オンラインバッチのライブプレビュー",
+  "Appearance.OnlineAsrBatchLivePreviewHint": "リアルタイムストリーミング非対応のプロバイダーで、録音中にオンライン文字起こしを繰り返し実行します。",
   "Appearance.LiveTextSize": "ライブテキストサイズ",
   "Appearance.LiveTextSizeFormat": "{0:0.#} pt",
   "Appearance.LeftContent": "左コンテンツ",
