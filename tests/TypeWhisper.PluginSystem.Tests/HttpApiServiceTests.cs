@@ -418,7 +418,7 @@ public class HttpApiServiceTests : IDisposable
     public async Task TranscribeLocalFileEndpoint_RejectsMissingAndUnsupportedFiles()
     {
         var service = CreateService();
-        var missingPath = Path.Combine(
+        var missingPath = Path.Join(
             Path.GetTempPath(),
             $"typewhisper-missing-{Guid.NewGuid():N}.wav");
 

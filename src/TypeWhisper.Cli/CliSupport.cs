@@ -79,6 +79,7 @@ public static class CliConnectionResolver
             or NotSupportedException
             or System.Security.SecurityException)
         {
+            return null;
         }
 
         return null;

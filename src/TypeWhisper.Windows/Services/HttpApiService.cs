@@ -329,12 +329,15 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         finally
         {
             try { File.Delete(tempPath); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-            catch (NotSupportedException) { }
-            catch (System.Security.SecurityException) { }
+            catch (IOException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (UnauthorizedAccessException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (NotSupportedException ex) { LogTempDeleteFailure(tempPath, ex); }
+            catch (System.Security.SecurityException ex) { LogTempDeleteFailure(tempPath, ex); }
         }
     }
+
+    private static void LogTempDeleteFailure(string path, Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"[HttpApi] Failed to delete temporary audio file {path}: {ex.Message}");
 
     private async Task<HttpApiResponse> HandleTranscribeLocalFile(HttpApiRequest request, CancellationToken ct)
     {
