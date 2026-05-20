@@ -9,12 +9,6 @@ namespace TypeWhisper.Windows.Services.Localization;
 
 public sealed record UiLanguageOption(string? Code, string DisplayName);
 
-/// <summary>
-/// Singleton localization service for the UI.
-/// Loads JSON translation files from Resources/Localization/{lang}.json.
-/// Fallback chain: selected language -> "en" -> key itself.
-/// Fires PropertyChanged("Item[]") on language change so all WPF bindings update.
-/// </summary>
 public sealed class Loc : INotifyPropertyChanged
 {
     private const string FallbackLanguage = "en";
@@ -35,9 +29,6 @@ public sealed class Loc : INotifyPropertyChanged
 
     private Loc() { }
 
-    /// <summary>
-    /// Indexer used by StrExtension bindings: Loc.Instance["Key"]
-    /// </summary>
     public string this[string key] => GetString(key);
 
     public string CurrentLanguage
@@ -100,6 +91,7 @@ public sealed class Loc : INotifyPropertyChanged
             ["de"] = "Deutsch",
             ["ja"] = "日本語",
             ["ru"] = "Русский",
+            ["zh"] = "中文",
         };
 
         var options = new List<UiLanguageOption>
@@ -118,12 +110,6 @@ public sealed class Loc : INotifyPropertyChanged
 
     public bool HasLanguage(string langCode) => _strings.ContainsKey(langCode);
 
-    /// <summary>
-    /// Auto-detect language from the Windows user default UI language, falling back to
-    /// CultureInfo.CurrentUICulture, then to English if the detected language is unavailable.
-    /// Uses GetUserDefaultUILanguage() which reads the registry directly and is not affected
-    /// by parent-process culture inheritance (e.g. Velopack installer).
-    /// </summary>
     public string DetectSystemLanguage()
     {
         string code;
