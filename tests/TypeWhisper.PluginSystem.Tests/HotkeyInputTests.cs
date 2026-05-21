@@ -70,7 +70,7 @@ public class HotkeyInputTests
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_ALT);
 
         var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
-        Assert.Equal(default, winDown);
+        Assert.True(winDown.Swallow);
 
         var altDown = sut.ProcessKeyEvent(NativeMethods.VK_LMENU, isKeyDown: true, isKeyUp: false);
         Assert.True(altDown.RaiseKeyDown);
@@ -126,12 +126,12 @@ public class HotkeyInputTests
     }
 
     [Fact]
-    public void ModifierOnly_CtrlWin_WhenWinIsPressedFirst_RequestsSyntheticWinRelease()
+    public void ModifierOnly_CtrlWin_WhenWinIsPressedFirst_SuppressesInitialWinKey()
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL);
 
         var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
-        Assert.Equal(default, winDown);
+        Assert.True(winDown.Swallow);
 
         var ctrlDown = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
         Assert.True(ctrlDown.RaiseKeyDown);
@@ -144,15 +144,39 @@ public class HotkeyInputTests
     }
 
     [Fact]
-    public void ModifierOnly_CtrlWin_WhenWinIsPressedAlone_AllowsStandaloneWinTap()
+    public void ModifierOnly_CtrlWin_WhenCtrlIsPressedFirst_SuppressesWinActivationKey()
+    {
+        var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL);
+
+        var ctrlDown = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        Assert.Equal(default, ctrlDown);
+
+        var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
+        Assert.True(winDown.RaiseKeyDown);
+        Assert.True(winDown.Swallow);
+        Assert.Equal(0u, winDown.SyntheticKeyUpVk);
+
+        var ctrlUp = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: false, isKeyUp: true);
+        Assert.True(ctrlUp.RaiseKeyUp);
+        Assert.False(ctrlUp.Swallow);
+
+        var winUp = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true);
+        Assert.True(winUp.Swallow);
+        Assert.False(winUp.RaiseKeyUp);
+    }
+
+    [Fact]
+    public void ModifierOnly_CtrlWin_WhenWinIsPressedAlone_ReplaysStandaloneWinTap()
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL);
 
         var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
-        Assert.Equal(default, winDown);
+        Assert.True(winDown.Swallow);
 
         var winUp = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true);
-        Assert.Equal(default, winUp);
+        Assert.True(winUp.Swallow);
+        Assert.Equal((uint)NativeMethods.VK_LWIN, winUp.SyntheticKeyTapVk);
+        Assert.False(winUp.RaiseKeyUp);
     }
 
     [Fact]
@@ -161,12 +185,13 @@ public class HotkeyInputTests
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL, (uint)'X');
 
         var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
-        Assert.Equal(default, winDown);
+        Assert.True(winDown.Swallow);
         _ = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
 
         var xDown = sut.ProcessKeyEvent((uint)'X', isKeyDown: true, isKeyUp: false);
         Assert.True(xDown.RaiseKeyDown);
         Assert.True(xDown.Swallow);
+        Assert.Equal(0u, xDown.SyntheticKeyUpVk);
 
         var xUp = sut.ProcessKeyEvent((uint)'X', isKeyDown: false, isKeyUp: true);
         Assert.True(xUp.RaiseKeyUp);
@@ -184,8 +209,13 @@ public class HotkeyInputTests
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL);
 
-        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false));
-        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false));
+        var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
+        Assert.True(winDown.Swallow);
+
+        var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.False(shiftDown.Swallow);
+        Assert.Equal((uint)NativeMethods.VK_LWIN, shiftDown.SyntheticKeyDownVk);
+
         Assert.Equal(default, sut.ProcessKeyEvent((uint)'S', isKeyDown: true, isKeyUp: false));
         Assert.Equal(default, sut.ProcessKeyEvent((uint)'S', isKeyDown: false, isKeyUp: true));
         Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true));
@@ -197,10 +227,34 @@ public class HotkeyInputTests
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN, (uint)'X');
 
-        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false));
-        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false));
+        var winDown = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false);
+        Assert.True(winDown.Swallow);
+
+        var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.False(shiftDown.Swallow);
+        Assert.Equal((uint)NativeMethods.VK_LWIN, shiftDown.SyntheticKeyDownVk);
+
         Assert.Equal(default, sut.ProcessKeyEvent((uint)'S', isKeyDown: true, isKeyUp: false));
         Assert.Equal(default, sut.ProcessKeyEvent((uint)'S', isKeyDown: false, isKeyUp: true));
+        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true));
+        Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true));
+    }
+
+    [Fact]
+    public void KeyedHotkey_WinX_DoesNotActivateAfterWinChordWasPassedThrough()
+    {
+        var sut = CreateStateMachine(NativeMethods.MOD_WIN, (uint)'X');
+
+        Assert.True(sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: true, isKeyUp: false).Swallow);
+
+        var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.False(shiftDown.Swallow);
+        Assert.Equal((uint)NativeMethods.VK_LWIN, shiftDown.SyntheticKeyDownVk);
+
+        var xDown = sut.ProcessKeyEvent((uint)'X', isKeyDown: true, isKeyUp: false);
+        Assert.Equal(default, xDown);
+
+        Assert.Equal(default, sut.ProcessKeyEvent((uint)'X', isKeyDown: false, isKeyUp: true));
         Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true));
         Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true));
     }

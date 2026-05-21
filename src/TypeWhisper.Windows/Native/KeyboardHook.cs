@@ -70,6 +70,8 @@ public sealed class KeyboardHook : IDisposable
             var result = _stateMachine.ProcessKeyEvent(vkCode, isKeyDown, isKeyUp);
             if (IsEnabled)
             {
+                if (result.SyntheticKeyDownVk != 0)
+                    SendSyntheticKeyDown((ushort)result.SyntheticKeyDownVk);
                 if (result.SyntheticKeyTapVk != 0)
                     SendSyntheticKeyTap((ushort)result.SyntheticKeyTapVk);
                 if (result.SyntheticKeyUpVk != 0)
@@ -124,6 +126,24 @@ public sealed class KeyboardHook : IDisposable
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    private static void SendSyntheticKeyDown(ushort vk)
+    {
+        var input = new NativeMethods.INPUT
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.INPUTUNION
+            {
+                ki = new NativeMethods.KEYBDINPUT
+                {
+                    wVk = vk,
+                    dwExtraInfo = NativeMethods.SelfInjectedInputMarker
+                }
+            }
+        };
+
+        NativeMethods.SendInput(1, [input], Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
     private static void SendSyntheticKeyUp(ushort vk)
     {
         var input = new NativeMethods.INPUT
@@ -158,6 +178,7 @@ internal readonly record struct HotkeyProcessResult(
     bool RaiseKeyDown,
     bool RaiseKeyUp,
     bool Swallow,
+    uint SyntheticKeyDownVk = 0,
     uint SyntheticKeyTapVk = 0,
     uint SyntheticKeyUpVk = 0);
 
@@ -167,9 +188,11 @@ internal sealed class HotkeyMatchStateMachine
     private readonly HashSet<uint> _pendingSuppressedKeyUps = [];
     private readonly HashSet<uint> _suppressedKeyDowns = [];
 
+    private uint _pendingSuppressedWinKey;
     private uint _targetModifiers;
     private uint _targetVk;
     private bool _isPressed;
+    private bool _winPassThroughActive;
 
     public bool HasHotkey => _targetVk != 0 || _targetModifiers != 0;
 
@@ -195,6 +218,9 @@ internal sealed class HotkeyMatchStateMachine
         var swallow = false;
         var raiseKeyDown = false;
         var raiseKeyUp = false;
+        uint syntheticKeyDownVk = 0;
+        uint syntheticKeyTapVk = 0;
+        uint syntheticKeyUpVk = 0;
 
         if (isKeyUp && _pendingSuppressedKeyUps.Remove(vkCode))
             swallow = true;
@@ -202,6 +228,13 @@ internal sealed class HotkeyMatchStateMachine
         if (isKeyDown)
         {
             var firstPress = _pressedKeys.Add(vkCode);
+
+            if (!_isPressed && firstPress && ShouldPreSuppressWinKeyDown(vkCode))
+            {
+                swallow = true;
+                _pendingSuppressedWinKey = vkCode;
+                _suppressedKeyDowns.Add(vkCode);
+            }
 
             if (!_isPressed)
             {
@@ -211,6 +244,7 @@ internal sealed class HotkeyMatchStateMachine
                     raiseKeyDown = true;
                     swallow = true;
                     _suppressedKeyDowns.Add(vkCode);
+                    _pendingSuppressedWinKey = 0;
                     CaptureWinKeyUpsForSuppression();
 
                     if ((_targetModifiers & NativeMethods.MOD_WIN) != 0
@@ -219,10 +253,22 @@ internal sealed class HotkeyMatchStateMachine
                     {
                         _pendingSuppressedKeyUps.Add(unsuppressedWinKey);
                         _suppressedKeyDowns.Add(unsuppressedWinKey);
+                        syntheticKeyUpVk = unsuppressedWinKey;
                     }
                 }
+                else if (!firstPress && _suppressedKeyDowns.Contains(vkCode))
+                {
+                    swallow = true;
+                }
+                else if (firstPress && ShouldReleasePendingSuppressedWinKey(vkCode, out var suppressedWinKey))
+                {
+                    syntheticKeyDownVk = suppressedWinKey;
+                    _suppressedKeyDowns.Remove(suppressedWinKey);
+                    _pendingSuppressedWinKey = 0;
+                    _winPassThroughActive = true;
+                }
             }
-            else if (!firstPress && ShouldSuppressWhilePressed(vkCode))
+            else if (!firstPress && (ShouldSuppressWhilePressed(vkCode) || _suppressedKeyDowns.Contains(vkCode)))
             {
                 swallow = true;
             }
@@ -232,6 +278,14 @@ internal sealed class HotkeyMatchStateMachine
         }
         else if (isKeyUp)
         {
+            if (!_isPressed && _pendingSuppressedWinKey == vkCode)
+            {
+                _pendingSuppressedWinKey = 0;
+                _pressedKeys.Remove(vkCode);
+                _suppressedKeyDowns.Remove(vkCode);
+                return new HotkeyProcessResult(raiseKeyDown, raiseKeyUp, true, SyntheticKeyTapVk: vkCode);
+            }
+
             if (_isPressed && ShouldRelease(vkCode))
             {
                 _isPressed = false;
@@ -243,9 +297,19 @@ internal sealed class HotkeyMatchStateMachine
 
             _pressedKeys.Remove(vkCode);
             _suppressedKeyDowns.Remove(vkCode);
+            if (_pendingSuppressedWinKey == vkCode)
+                _pendingSuppressedWinKey = 0;
+            if (HotkeyKeyClassifier.IsWinKey(vkCode))
+                _winPassThroughActive = false;
         }
 
-        return new HotkeyProcessResult(raiseKeyDown, raiseKeyUp, swallow);
+        return new HotkeyProcessResult(
+            raiseKeyDown,
+            raiseKeyUp,
+            swallow,
+            SyntheticKeyDownVk: syntheticKeyDownVk,
+            SyntheticKeyTapVk: syntheticKeyTapVk,
+            SyntheticKeyUpVk: syntheticKeyUpVk);
     }
 
     private void ResetRuntimeState()
@@ -253,11 +317,16 @@ internal sealed class HotkeyMatchStateMachine
         _pressedKeys.Clear();
         _pendingSuppressedKeyUps.Clear();
         _suppressedKeyDowns.Clear();
+        _pendingSuppressedWinKey = 0;
         _isPressed = false;
+        _winPassThroughActive = false;
     }
 
     private bool ShouldActivate(uint vkCode)
     {
+        if (_winPassThroughActive && (_targetModifiers & NativeMethods.MOD_WIN) != 0)
+            return false;
+
         if (_targetVk != 0)
             return vkCode == _targetVk && AreRequiredModifiersPressed();
 
@@ -325,6 +394,26 @@ internal sealed class HotkeyMatchStateMachine
     private bool ShouldSuppressWhilePressed(uint vkCode) =>
         vkCode == _targetVk
         || ((_targetModifiers & NativeMethods.MOD_WIN) != 0 && HotkeyKeyClassifier.IsWinKey(vkCode));
+
+    private bool ShouldPreSuppressWinKeyDown(uint vkCode)
+    {
+        if (!HotkeyKeyClassifier.IsWinKey(vkCode))
+            return false;
+
+        if ((_targetModifiers & NativeMethods.MOD_WIN) == 0)
+            return false;
+
+        return _targetVk != 0 || (_targetModifiers & ~NativeMethods.MOD_WIN) != 0;
+    }
+
+    private bool ShouldReleasePendingSuppressedWinKey(uint vkCode, out uint suppressedWinKey)
+    {
+        suppressedWinKey = _pendingSuppressedWinKey;
+        if (suppressedWinKey == 0 || vkCode == suppressedWinKey)
+            return false;
+
+        return !IsRequiredModifier(vkCode);
+    }
 
     private void CaptureWinKeyUpsForSuppression()
     {
