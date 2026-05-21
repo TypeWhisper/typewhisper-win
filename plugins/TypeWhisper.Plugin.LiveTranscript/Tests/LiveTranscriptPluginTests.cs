@@ -426,6 +426,96 @@ public sealed class LiveTranscriptPluginTests
 
                 Assert.False(window.IsVisible);
 
+                var recordingIdWithoutFailureId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = recordingIdWithoutFailureId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = recordingIdWithoutFailureId });
+                eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+
+                var delayedNoIdFailureRecordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = delayedNoIdFailureRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = delayedNoIdFailureRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...\nProcessing...", window.CurrentText);
+
+                var newRecordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = newRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    RecordingId = newRecordingId,
+                    ErrorMessage = "No speech detected"
+                });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+
+                var queuedStopRecordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = queuedStopRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = queuedStopRecordingId });
+                eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+                Assert.NotEqual("Listening...\nProcessing...", window.CurrentText);
+
+                eventBus.Publish(new PartialTranscriptionUpdateEvent
+                {
+                    RecordingId = queuedStopRecordingId,
+                    PartialText = "stale partial"
+                });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+                Assert.NotEqual("stale partial", window.CurrentText);
+
+                var queuedStopWithFailureId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = queuedStopWithFailureId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = queuedStopWithFailureId });
+                eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    RecordingId = queuedStopWithFailureId,
+                    ErrorMessage = "No speech detected"
+                });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+                Assert.NotEqual("Listening...\nProcessing...", window.CurrentText);
+
                 host.SetSetting("windowLeft", 100000d);
                 host.SetSetting("windowTop", 100000d);
                 eventBus.Publish(new RecordingStartedEvent());
