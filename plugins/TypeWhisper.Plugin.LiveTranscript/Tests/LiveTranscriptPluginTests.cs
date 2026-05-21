@@ -409,7 +409,43 @@ public sealed class LiveTranscriptPluginTests
                 Assert.True(window.IsVisible);
                 Assert.Equal("Listening...", window.CurrentText);
 
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = recordingIdWithoutFailureId });
                 eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+
+                var delayedNoIdFailureRecordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = delayedNoIdFailureRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new RecordingStoppedEvent { RecordingId = delayedNoIdFailureRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...\nProcessing...", window.CurrentText);
+
+                var newRecordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = newRecordingId });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible);
+                Assert.Equal("Listening...", window.CurrentText);
+
+                eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    RecordingId = newRecordingId,
+                    ErrorMessage = "No speech detected"
+                });
                 PumpDispatcher();
 
                 Assert.False(window.IsVisible);
