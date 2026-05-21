@@ -216,7 +216,8 @@ public sealed class PluginManager : IDisposable
                 {
                     RebuildCapabilityIndices();
                     PluginStateChanged?.Invoke(this, EventArgs.Empty);
-                });
+                },
+                settings: _settings);
 
             await plugin.Instance.ActivateAsync(hostServices);
 

@@ -58,3 +58,13 @@ public interface IPluginHostServices
     /// </summary>
     void SetStreamingDisplayActive(bool active) { }
 }
+
+/// <summary>
+/// Optional host-provided appearance values for plugins that render live preview text.
+/// Values are already normalized by the host.
+/// </summary>
+public interface ILivePreviewAppearanceProvider
+{
+    double LiveTranscriptionFontSize { get; }
+    int PreviewBubbleAutoHideMilliseconds { get; }
+}

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 
 namespace TypeWhisper.Plugin.LiveTranscript;
@@ -16,15 +17,22 @@ public partial class LiveTranscriptSettingsView : UserControl
         _plugin = plugin;
         InitializeComponent();
 
-        // Load current values from plugin settings
-        FontSizeSlider.Value = plugin.FontSize;
-        FontSizeLabel.Text = plugin.FontSize.ToString();
+        if (plugin.UsesHostAppearance)
+        {
+            FontSizePanel.Visibility = Visibility.Collapsed;
+            AutoHidePanel.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            FontSizeSlider.Value = plugin.FontSize;
+            FontSizeLabel.Text = plugin.FontSize.ToString("0.#");
+
+            AutoHideSlider.Value = plugin.AutoHideMilliseconds / 1000d;
+            UpdateAutoHideLabel(AutoHideSlider.Value);
+        }
 
         OpacitySlider.Value = plugin.Opacity;
         OpacityLabel.Text = $"{(int)(plugin.Opacity * 100)}%";
-
-        AutoHideSlider.Value = plugin.AutoHideMilliseconds / 1000d;
-        UpdateAutoHideLabel(AutoHideSlider.Value);
 
         _initialized = true;
     }
@@ -33,8 +41,8 @@ public partial class LiveTranscriptSettingsView : UserControl
     {
         if (!_initialized) return;
 
-        var size = (int)e.NewValue;
-        FontSizeLabel.Text = size.ToString();
+        var size = e.NewValue;
+        FontSizeLabel.Text = size.ToString("0.#");
         _plugin.FontSize = size;
     }
 
