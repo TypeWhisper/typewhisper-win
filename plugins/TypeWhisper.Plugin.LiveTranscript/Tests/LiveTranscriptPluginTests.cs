@@ -57,7 +57,7 @@ public sealed class LiveTranscriptPluginTests
     public void FontSize_DefaultsTo16_WhenNoSettingStored()
     {
         var sut = CreatePlugin();
-        Assert.Equal(16, sut.FontSize);
+        Assert.Equal(16d, sut.FontSize);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class LiveTranscriptPluginTests
 
         sut.FontSize = 20;
 
-        Assert.Equal(20, host.GetSetting<int?>("fontSize"));
+        Assert.Equal(20d, host.GetSetting<double?>("fontSize"));
     }
 
     [Fact]
@@ -137,10 +137,36 @@ public sealed class LiveTranscriptPluginTests
     public async Task FontSize_ReadsPersistedValueFromHost()
     {
         var host = new TestPluginHostServices();
-        host.SetSetting("fontSize", 24);
+        host.SetSetting("fontSize", 24d);
         var sut = await ActivatedPlugin(host);
 
-        Assert.Equal(24, sut.FontSize);
+        Assert.Equal(24d, sut.FontSize);
+    }
+
+    [Fact]
+    public async Task FontSize_UsesHostAppearance_WhenAvailable()
+    {
+        var host = new AppearanceTestPluginHostServices
+        {
+            LiveTranscriptionFontSize = 10.5
+        };
+        host.SetSetting("fontSize", 24d);
+        var sut = await ActivatedPlugin(host);
+
+        Assert.Equal(10.5, sut.FontSize);
+    }
+
+    [Fact]
+    public async Task AutoHideMilliseconds_UsesHostAppearance_WhenAvailable()
+    {
+        var host = new AppearanceTestPluginHostServices
+        {
+            PreviewBubbleAutoHideMilliseconds = 0
+        };
+        host.SetSetting("autoHideMilliseconds", 3000);
+        var sut = await ActivatedPlugin(host);
+
+        Assert.Equal(0, sut.AutoHideMilliseconds);
     }
 
     [Fact]
@@ -188,13 +214,13 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
-    public async Task ActivateAsync_SubscribesToFiveEvents()
+    public async Task ActivateAsync_SubscribesToSixEvents()
     {
         var host = new TestPluginHostServices();
         var sut = CreatePlugin();
         await sut.ActivateAsync(host);
 
-        Assert.Equal(5, host.Bus.SubscriptionCount);
+        Assert.Equal(6, host.Bus.SubscriptionCount);
     }
 
     [Fact]
@@ -345,8 +371,6 @@ public sealed class LiveTranscriptPluginTests
     {
         RunOnStaThread(() =>
         {
-            var appCreated = Application.Current is null;
-            var app = Application.Current ?? new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             var eventBus = new TestPluginEventBus();
             var host = new WpfTestHostServices(eventBus);
             var workArea = SystemParameters.WorkArea;
@@ -386,7 +410,7 @@ public sealed class LiveTranscriptPluginTests
 
                 var window = GetWindow(plugin);
                 Assert.NotNull(window);
-                Assert.True(window.IsVisible);
+                Assert.True(window.IsVisible, "Window should be visible after a fresh recording starts.");
                 Assert.Equal("Listening...", window.CurrentText);
                 Assert.Equal(expectedLeft, window.Left, precision: 1);
                 Assert.Equal(expectedTop, window.Top, precision: 1);
@@ -394,7 +418,7 @@ public sealed class LiveTranscriptPluginTests
                 eventBus.Publish(new RecordingStoppedEvent());
                 PumpDispatcher();
 
-                Assert.True(window.IsVisible);
+                Assert.True(window.IsVisible, "Window should stay visible while the recording is processing.");
                 Assert.Equal("Listening...\nProcessing...", window.CurrentText);
 
                 eventBus.Publish(new TranscriptionFailedEvent { ErrorMessage = "No speech detected" });
@@ -507,15 +531,163 @@ public sealed class LiveTranscriptPluginTests
                 Thread.Sleep(3300);
                 PumpDispatcher();
 
-                Assert.True(window.IsVisible);
+                Assert.True(window.IsVisible, "Fallback auto-hide setting of 0 should keep the window visible after completion.");
                 Assert.Equal("Finished", window.CurrentText);
             }
             finally
             {
                 plugin.DeactivateAsync().GetAwaiter().GetResult();
                 PumpDispatcher();
-                if (appCreated)
-                    app.Shutdown();
+            }
+        });
+    }
+
+    [Fact]
+    public void TextInsertedEvent_StartsAppearanceAutoHideForMatchingRecording()
+    {
+        RunOnStaThread(() =>
+        {
+            var eventBus = new TestPluginEventBus();
+            var host = new AppearanceWpfTestHostServices(eventBus)
+            {
+                LiveTranscriptionFontSize = 15,
+                PreviewBubbleAutoHideMilliseconds = 25
+            };
+            host.SetSetting("autoHideMilliseconds", 0);
+            var plugin = new LiveTranscriptPlugin();
+
+            try
+            {
+                plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var recordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = recordingId });
+                PumpDispatcher();
+
+                var window = GetWindow(plugin);
+                Assert.NotNull(window);
+                Assert.True(window.IsVisible, "Window should be visible after a fresh recording starts.");
+
+                eventBus.Publish(new TranscriptionCompletedEvent
+                {
+                    RecordingId = recordingId,
+                    Text = "Finished"
+                });
+                PumpDispatcher();
+                Thread.Sleep(80);
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible, "Completion alone should not start the Appearance auto-hide timer.");
+                Assert.Equal("Finished", window.CurrentText);
+
+                eventBus.Publish(new TextInsertedEvent
+                {
+                    RecordingId = Guid.NewGuid(),
+                    Text = "Other"
+                });
+                PumpDispatcher();
+                Thread.Sleep(80);
+                PumpDispatcher();
+
+                Assert.True(window.IsVisible, "A TextInsertedEvent for another recording must not hide the active window.");
+
+                eventBus.Publish(new TextInsertedEvent
+                {
+                    RecordingId = recordingId,
+                    Text = "Finished"
+                });
+                PumpDispatcher();
+                Thread.Sleep(80);
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+            }
+            finally
+            {
+                plugin.DeactivateAsync().GetAwaiter().GetResult();
+                PumpDispatcher();
+            }
+        });
+    }
+
+    [Fact]
+    public void TextInsertedEvent_WithZeroAppearanceAutoHide_HidesImmediately()
+    {
+        RunOnStaThread(() =>
+        {
+            var eventBus = new TestPluginEventBus();
+            var host = new AppearanceWpfTestHostServices(eventBus)
+            {
+                LiveTranscriptionFontSize = 15,
+                PreviewBubbleAutoHideMilliseconds = 0
+            };
+            host.SetSetting("autoHideMilliseconds", 3000);
+            var plugin = new LiveTranscriptPlugin();
+
+            try
+            {
+                plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var recordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = recordingId });
+                PumpDispatcher();
+
+                var window = GetWindow(plugin);
+                Assert.NotNull(window);
+                Assert.True(window.IsVisible, "Window should be visible after a fresh recording starts.");
+
+                eventBus.Publish(new TranscriptionCompletedEvent
+                {
+                    RecordingId = recordingId,
+                    Text = "Finished"
+                });
+                PumpDispatcher();
+                Assert.True(window.IsVisible, "Completion alone should not hide when global auto-hide is 0.");
+
+                eventBus.Publish(new TextInsertedEvent
+                {
+                    RecordingId = recordingId,
+                    Text = "Finished"
+                });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+            }
+            finally
+            {
+                plugin.DeactivateAsync().GetAwaiter().GetResult();
+                PumpDispatcher();
+            }
+        });
+    }
+
+    [Fact]
+    public void SettingsView_HidesDuplicateAppearanceControls_WhenHostProvidesAppearance()
+    {
+        RunOnStaThread(() =>
+        {
+            var host = new AppearanceTestPluginHostServices
+            {
+                LiveTranscriptionFontSize = 14,
+                PreviewBubbleAutoHideMilliseconds = 1500
+            };
+            var plugin = new LiveTranscriptPlugin();
+
+            try
+            {
+                plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var view = Assert.IsType<LiveTranscriptSettingsView>(plugin.CreateSettingsView());
+                var fontSizePanel = Assert.IsAssignableFrom<FrameworkElement>(view.FindName("FontSizePanel"));
+                var autoHidePanel = Assert.IsAssignableFrom<FrameworkElement>(view.FindName("AutoHidePanel"));
+
+                Assert.Equal(Visibility.Collapsed, fontSizePanel.Visibility);
+                Assert.Equal(Visibility.Collapsed, autoHidePanel.Visibility);
+            }
+            finally
+            {
+                plugin.DeactivateAsync().GetAwaiter().GetResult();
+                PumpDispatcher();
             }
         });
     }
@@ -573,7 +745,7 @@ public sealed class LiveTranscriptPluginTests
         Dispatcher.PushFrame(frame);
     }
 
-    private sealed class TestPluginHostServices : IPluginHostServices
+    private class TestPluginHostServices : IPluginHostServices
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -606,7 +778,13 @@ public sealed class LiveTranscriptPluginTests
         public Task DeleteSecretAsync(string key) => Task.CompletedTask;
     }
 
-    private sealed class WpfTestHostServices(IPluginEventBus eventBus) : IPluginHostServices
+    private sealed class AppearanceTestPluginHostServices : TestPluginHostServices, ILivePreviewAppearanceProvider
+    {
+        public double LiveTranscriptionFontSize { get; init; }
+        public int PreviewBubbleAutoHideMilliseconds { get; init; }
+    }
+
+    private class WpfTestHostServices(IPluginEventBus eventBus) : IPluginHostServices
     {
         private readonly Dictionary<string, JsonElement> _settings = [];
 
@@ -630,6 +808,13 @@ public sealed class LiveTranscriptPluginTests
         public void Log(PluginLogLevel level, string message) { }
         public void NotifyCapabilitiesChanged() { }
         public IPluginLocalization Localization { get; } = new NoOpLocalization();
+    }
+
+    private sealed class AppearanceWpfTestHostServices(IPluginEventBus eventBus)
+        : WpfTestHostServices(eventBus), ILivePreviewAppearanceProvider
+    {
+        public double LiveTranscriptionFontSize { get; init; }
+        public int PreviewBubbleAutoHideMilliseconds { get; init; }
     }
 
     private sealed class TrackingPluginEventBus : IPluginEventBus

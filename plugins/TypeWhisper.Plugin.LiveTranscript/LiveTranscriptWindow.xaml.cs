@@ -31,7 +31,7 @@ public partial class LiveTranscriptWindow : Window
     }
 
     /// <summary>Sets the font size of the transcript text.</summary>
-    public void SetFontSize(int size)
+    public void SetFontSize(double size)
     {
         TranscriptText.FontSize = size;
     }

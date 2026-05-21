@@ -3,25 +3,26 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Padding="8">
     <StackPanel>
-        <!-- Font Size -->
-        <TextBlock Text="Font Size"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,4" />
-        <DockPanel Margin="0,0,0,12">
-            <TextBlock DockPanel.Dock="Right"
-                       Width="30"
-                       TextAlignment="Right"
-                       VerticalAlignment="Center"
-                       x:Name="FontSizeLabel"
-                       Text="16" />
-            <Slider x:Name="FontSizeSlider"
-                    Minimum="12"
-                    Maximum="32"
-                    IsSnapToTickEnabled="True"
-                    TickFrequency="1"
-                    Value="16"
-                    ValueChanged="FontSizeSlider_ValueChanged" />
-        </DockPanel>
+        <StackPanel x:Name="FontSizePanel">
+            <TextBlock Text="Font Size"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,4" />
+            <DockPanel Margin="0,0,0,12">
+                <TextBlock DockPanel.Dock="Right"
+                           Width="30"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center"
+                           x:Name="FontSizeLabel"
+                           Text="16" />
+                <Slider x:Name="FontSizeSlider"
+                        Minimum="12"
+                        Maximum="32"
+                        IsSnapToTickEnabled="True"
+                        TickFrequency="1"
+                        Value="16"
+                        ValueChanged="FontSizeSlider_ValueChanged" />
+            </DockPanel>
+        </StackPanel>
 
         <!-- Opacity -->
         <TextBlock Text="Window Opacity"
@@ -43,25 +44,26 @@
                     ValueChanged="OpacitySlider_ValueChanged" />
         </DockPanel>
 
-        <!-- Auto-hide -->
-        <TextBlock Text="Auto-hide Delay"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,4" />
-        <DockPanel Margin="0,0,0,12">
-            <TextBlock DockPanel.Dock="Right"
-                       Width="52"
-                       TextAlignment="Right"
-                       VerticalAlignment="Center"
-                       x:Name="AutoHideLabel"
-                       Text="3.0s" />
-            <Slider x:Name="AutoHideSlider"
-                    Minimum="0"
-                    Maximum="10"
-                    TickFrequency="0.25"
-                    IsSnapToTickEnabled="True"
-                    Value="3"
-                    ValueChanged="AutoHideSlider_ValueChanged" />
-        </DockPanel>
+        <StackPanel x:Name="AutoHidePanel">
+            <TextBlock Text="Auto-hide Delay"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,4" />
+            <DockPanel Margin="0,0,0,12">
+                <TextBlock DockPanel.Dock="Right"
+                           Width="52"
+                           TextAlignment="Right"
+                           VerticalAlignment="Center"
+                           x:Name="AutoHideLabel"
+                           Text="3.0s" />
+                <Slider x:Name="AutoHideSlider"
+                        Minimum="0"
+                        Maximum="10"
+                        TickFrequency="0.25"
+                        IsSnapToTickEnabled="True"
+                        Value="3"
+                        ValueChanged="AutoHideSlider_ValueChanged" />
+            </DockPanel>
+        </StackPanel>
 
         <!-- Position -->
         <TextBlock Text="Window Position"

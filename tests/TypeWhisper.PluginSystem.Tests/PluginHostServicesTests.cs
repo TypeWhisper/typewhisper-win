@@ -1,6 +1,7 @@
 using System.IO;
 using Moq;
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -20,9 +21,11 @@ public class PluginHostServicesTests : IDisposable
         Directory.CreateDirectory(_tempDir);
     }
 
-    private PluginHostServices CreateServices(Action? onCapabilitiesChanged = null) =>
+    private PluginHostServices CreateServices(
+        Action? onCapabilitiesChanged = null,
+        ISettingsService? settings = null) =>
         new("test-plugin", _tempDir, _activeWindow.Object, _eventBus.Object,
-            _workflows.Object, onCapabilitiesChanged);
+            _workflows.Object, onCapabilitiesChanged, settings);
 
     [Fact]
     public void NotifyCapabilitiesChanged_InvokesCallback()
@@ -33,6 +36,23 @@ public class PluginHostServicesTests : IDisposable
         services.NotifyCapabilitiesChanged();
 
         Assert.True(callbackInvoked);
+    }
+
+    [Fact]
+    public void LivePreviewAppearanceProvider_ReturnsNormalizedGlobalSettings()
+    {
+        var settings = new Mock<ISettingsService>();
+        settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            LiveTranscriptionFontSize = 99,
+            PreviewBubbleAutoHideMilliseconds = 9999
+        });
+        var services = CreateServices(settings: settings.Object);
+
+        var provider = Assert.IsAssignableFrom<ILivePreviewAppearanceProvider>(services);
+
+        Assert.Equal(AppSettings.MaxLiveTranscriptionFontSize, provider.LiveTranscriptionFontSize);
+        Assert.Equal(AppSettings.MaxPreviewBubbleAutoHideMilliseconds, provider.PreviewBubbleAutoHideMilliseconds);
     }
 
     [Fact]

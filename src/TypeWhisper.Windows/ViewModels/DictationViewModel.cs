@@ -1271,7 +1271,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             _eventBus.Publish(new TextInsertedEvent
             {
                 Text = finalText,
-                TargetApp = job.CapturedProcessName
+                TargetApp = job.CapturedProcessName,
+                RecordingId = job.RecordingId
             });
 
             // Restore global model if workflow override was active

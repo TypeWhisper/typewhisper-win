@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using AppLocalization = TypeWhisper.Windows.Services.Localization;
@@ -12,7 +13,7 @@ namespace TypeWhisper.Windows.Services.Plugins;
 /// Per-plugin host services implementation. Each plugin gets its own instance
 /// with isolated settings storage and secret management scoped to its plugin ID.
 /// </summary>
-public sealed class PluginHostServices : IPluginHostServices
+public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppearanceProvider
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -27,6 +28,7 @@ public sealed class PluginHostServices : IPluginHostServices
     private readonly IPluginEventBus _eventBus;
     private readonly IWorkflowService _workflows;
     private readonly Action? _onCapabilitiesChanged;
+    private readonly ISettingsService? _settings;
     private readonly PluginLocalization _localization;
     private readonly string _settingsFilePath;
     private readonly string _pluginDataDirectory;
@@ -40,13 +42,15 @@ public sealed class PluginHostServices : IPluginHostServices
         IActiveWindowService activeWindow,
         IPluginEventBus eventBus,
         IWorkflowService workflows,
-        Action? onCapabilitiesChanged = null)
+        Action? onCapabilitiesChanged = null,
+        ISettingsService? settings = null)
     {
         _pluginId = pluginId;
         _activeWindow = activeWindow;
         _eventBus = eventBus;
         _workflows = workflows;
         _onCapabilitiesChanged = onCapabilitiesChanged;
+        _settings = settings;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
         _pluginDataDirectory = Path.Combine(Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
@@ -70,6 +74,14 @@ public sealed class PluginHostServices : IPluginHostServices
 
     public IReadOnlyList<string> AvailableProfileNames =>
         _workflows.Workflows.Select(w => w.Name).ToList();
+
+    public double LiveTranscriptionFontSize =>
+        AppSettings.NormalizeLiveTranscriptionFontSize(
+            (_settings?.Current ?? AppSettings.Default).LiveTranscriptionFontSize);
+
+    public int PreviewBubbleAutoHideMilliseconds =>
+        AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
+            (_settings?.Current ?? AppSettings.Default).PreviewBubbleAutoHideMilliseconds);
 
     public void Log(PluginLogLevel level, string message)
     {
