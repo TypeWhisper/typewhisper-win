@@ -12,19 +12,22 @@ public class AppLocalizationResourcesTests
         PropertyNameCaseInsensitive = true
     };
 
-    [Fact]
-    public void RussianLocalization_HasSameKeysAndFormatPlaceholdersAsEnglish()
+    [Theory]
+    [MemberData(nameof(AppLocalizationLanguages))]
+    public void AppLocalization_HasSameKeysAndFormatPlaceholdersAsEnglish(string language)
     {
         var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
         var english = LoadLocalization(localizationDir, "en");
-        var russian = LoadLocalization(localizationDir, "ru");
+        var localized = LoadLocalization(localizationDir, language);
 
-        Assert.Equal(english.Keys.OrderBy(k => k), russian.Keys.OrderBy(k => k));
+        Assert.Equal(english.Keys.OrderBy(k => k), localized.Keys.OrderBy(k => k));
 
         foreach (var key in english.Keys)
         {
-            Assert.False(string.IsNullOrWhiteSpace(russian[key]), $"Russian value for {key} must not be empty.");
-            Assert.Equal(FormatPlaceholders(english[key]), FormatPlaceholders(russian[key]));
+            Assert.False(
+                string.IsNullOrWhiteSpace(localized[key]),
+                $"{language} value for {key} must not be empty.");
+            Assert.Equal(FormatPlaceholders(english[key]), FormatPlaceholders(localized[key]));
         }
     }
 
@@ -65,6 +68,19 @@ public class AppLocalizationResourcesTests
 
         Assert.NotNull(localization);
         return localization;
+    }
+
+    public static IEnumerable<object[]> AppLocalizationLanguages()
+    {
+        var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
+        Assert.True(Directory.Exists(localizationDir), "Localization resources should be copied to the test output.");
+
+        return Directory.EnumerateFiles(localizationDir, "*.json")
+            .Select(path => Path.GetFileNameWithoutExtension(path))
+            .Where(language => !string.Equals(language, "en", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(language => language)
+            .Select(language => new object[] { language! })
+            .ToArray();
     }
 
     private static string[] FormatPlaceholders(string value) =>

@@ -574,10 +574,10 @@ public sealed class LiveTranscriptPluginTests
                     Text = "Finished"
                 });
                 PumpDispatcher();
-                Thread.Sleep(80);
-                PumpDispatcher();
 
-                Assert.True(window.IsVisible, "Completion alone should not start the Appearance auto-hide timer.");
+                Assert.False(
+                    WaitUntil(() => !window.IsVisible, TimeSpan.FromMilliseconds(150)),
+                    "Completion alone should not start the Appearance auto-hide timer.");
                 Assert.Equal("Finished", window.CurrentText);
 
                 eventBus.Publish(new TextInsertedEvent
@@ -586,10 +586,10 @@ public sealed class LiveTranscriptPluginTests
                     Text = "Other"
                 });
                 PumpDispatcher();
-                Thread.Sleep(80);
-                PumpDispatcher();
 
-                Assert.True(window.IsVisible, "A TextInsertedEvent for another recording must not hide the active window.");
+                Assert.False(
+                    WaitUntil(() => !window.IsVisible, TimeSpan.FromMilliseconds(150)),
+                    "A TextInsertedEvent for another recording must not hide the active window.");
 
                 eventBus.Publish(new TextInsertedEvent
                 {
@@ -597,10 +597,10 @@ public sealed class LiveTranscriptPluginTests
                     Text = "Finished"
                 });
                 PumpDispatcher();
-                Thread.Sleep(80);
-                PumpDispatcher();
 
-                Assert.False(window.IsVisible);
+                Assert.True(
+                    WaitUntil(() => !window.IsVisible, TimeSpan.FromSeconds(1)),
+                    "Matching TextInsertedEvent should eventually hide the window.");
             }
             finally
             {
@@ -743,6 +743,22 @@ public sealed class LiveTranscriptPluginTests
             }),
             null);
         Dispatcher.PushFrame(frame);
+    }
+
+    private static bool WaitUntil(Func<bool> condition, TimeSpan timeout, int pollMs = 10)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            PumpDispatcher();
+            if (condition())
+                return true;
+
+            Thread.Sleep(pollMs);
+        }
+
+        PumpDispatcher();
+        return condition();
     }
 
     private class TestPluginHostServices : IPluginHostServices
