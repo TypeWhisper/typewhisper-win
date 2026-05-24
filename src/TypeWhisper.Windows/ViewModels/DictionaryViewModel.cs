@@ -11,6 +11,8 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+public sealed record LocalizedIndustryPresetOption(string Id, string DisplayName, string? TermPackId);
+
 public partial class DictionaryViewModel : ObservableObject
 {
     private readonly IDictionaryService _dictionary;
@@ -65,7 +67,7 @@ public partial class DictionaryViewModel : ObservableObject
     public ObservableCollection<DictionaryEntry> Entries { get; } = [];
     public ICollectionView FilteredEntries { get; }
     public ObservableCollection<TermPackViewModel> Packs { get; } = [];
-    public ObservableCollection<IndustryPreset> IndustryPresets { get; } = [];
+    public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets { get; } = [];
 
     [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
@@ -88,6 +90,7 @@ public partial class DictionaryViewModel : ObservableObject
         _dictionary.EntriesChanged += RefreshEntries;
         if (_license is not null)
             _license.PropertyChanged += OnLicenseChanged;
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
         RefreshEntries();
         ReconcileCommercialPackAccess();
         InitializeIndustryPresets();
@@ -266,7 +269,22 @@ public partial class DictionaryViewModel : ObservableObject
     {
         IndustryPresets.Clear();
         foreach (var preset in IndustryPreset.All)
-            IndustryPresets.Add(preset);
+            IndustryPresets.Add(CreateIndustryPresetOption(preset));
+    }
+
+    private static LocalizedIndustryPresetOption CreateIndustryPresetOption(IndustryPreset preset) =>
+        new(preset.Id, Loc.Instance[$"IndustryPreset.{preset.Id}.Name"], preset.TermPackId);
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(InitializeIndustryPresets);
+            return;
+        }
+
+        InitializeIndustryPresets();
     }
 
     public void ApplyIndustryPreset(string? presetId)

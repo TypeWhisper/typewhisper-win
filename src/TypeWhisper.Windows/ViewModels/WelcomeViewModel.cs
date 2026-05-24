@@ -58,7 +58,7 @@ public partial class WelcomeViewModel : ObservableObject
 
     public ObservableCollection<RegistryPluginItemViewModel> Plugins { get; } = [];
     public ObservableCollection<WelcomeModelItem> AvailableModels { get; } = [];
-    public ObservableCollection<IndustryPreset> IndustryPresets => _dictionary.IndustryPresets;
+    public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets => _dictionary.IndustryPresets;
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
     public WelcomeCompletionRequest CompletionRequest { get; private set; } = WelcomeCompletionRequest.None;
     public event EventHandler? Completed;

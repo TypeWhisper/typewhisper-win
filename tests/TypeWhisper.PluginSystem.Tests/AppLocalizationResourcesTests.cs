@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -55,6 +56,24 @@ public class AppLocalizationResourcesTests
         Assert.Contains("Appearance.OnlineAsrBatchLivePreviewHint", localization.Keys);
         Assert.False(string.IsNullOrWhiteSpace(localization["Appearance.OnlineAsrBatchLivePreview"]));
         Assert.False(string.IsNullOrWhiteSpace(localization["Appearance.OnlineAsrBatchLivePreviewHint"]));
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("de")]
+    [InlineData("ja")]
+    [InlineData("ru")]
+    public void IndustryPresetLocalizationKeys_ArePresent(string language)
+    {
+        var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
+        var localization = LoadLocalization(localizationDir, language);
+
+        foreach (var preset in IndustryPreset.All)
+        {
+            var key = $"IndustryPreset.{preset.Id}.Name";
+            Assert.True(localization.ContainsKey(key), $"{language} should define {key}.");
+            Assert.False(string.IsNullOrWhiteSpace(localization[key]));
+        }
     }
 
     private static Dictionary<string, string> LoadLocalization(string localizationDir, string language)
