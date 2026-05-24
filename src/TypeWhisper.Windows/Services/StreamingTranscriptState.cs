@@ -20,8 +20,9 @@ internal sealed class StreamingTranscriptState
 
     public string StopSession()
     {
-        var hasUncommittedPreview = _lastDisplayedText != _confirmedText;
-        var finalText = hasUncommittedPreview ? "" : _confirmedText;
+        var finalText = !string.IsNullOrWhiteSpace(_lastDisplayedText)
+            ? _lastDisplayedText
+            : _confirmedText;
         InvalidateSession();
         _confirmedText = "";
         _lastDisplayedText = "";

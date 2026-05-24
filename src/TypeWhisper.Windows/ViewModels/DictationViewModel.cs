@@ -1003,7 +1003,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 StatusText = Loc.Instance["Status.Processing"];
             });
 
-            string rawText;
+            string rawText = "";
             string? detectedLanguage = null;
             double audioDuration = job.OriginalSamples.Length / 16000.0;
             var diagnosticsEnabled = _settings.Current.InternalParakeetTailDiagnosticsEnabled;
@@ -1021,27 +1021,59 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
             var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
             var decodeStartedAt = DateTime.UtcNow;
-            var result = await _modelManager.Engine.TranscribeAsync(
-                decodeSamples, language, job.EffectiveTask, ct);
-            fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
-            fullDecodeText = result.Text ?? "";
-            fullDecodeDetectedLanguage = result.DetectedLanguage;
-
-            if (isParakeetJob)
+            TranscriptionResult? result = null;
+            try
             {
-                var selection = ParakeetTailHelper.SelectResult(
-                    job.ActiveModelIdAtCapture,
-                    fullDecodeText,
-                    job.PartialSegments);
-                rawText = DictationFinalTextPolicy.SelectRawText(selection.Text);
-                detectedLanguage = fullDecodeDetectedLanguage;
+                result = await _modelManager.Engine.TranscribeAsync(
+                    decodeSamples, language, job.EffectiveTask, ct);
+                fullDecodeText = result.Text ?? "";
+                fullDecodeDetectedLanguage = result.DetectedLanguage;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (!string.IsNullOrWhiteSpace(previewText))
+            {
+                rawText = DictationFinalTextPolicy.SelectRawText(null, previewText);
+                detectedLanguage = language;
+                _errorLog.AddEntry(
+                    $"Final transcription failed; using live preview fallback: {ex.Message}",
+                    ErrorCategory.Transcription);
                 job = job with
                 {
                     Diagnostic = job.Diagnostic with
                     {
                         TailGuardApplied = tailGuardApplied,
                         TailSamplesAdded = tailSamplesAdded,
-                        FinalTextSource = selection.Source,
+                        FinalTextSource = "live_preview_fallback",
+                        FullDecodeTextLength = 0,
+                        PartialTextLength = previewText.Length
+                    }
+                };
+            }
+            finally
+            {
+                fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
+            }
+
+            if (result is not null && isParakeetJob)
+            {
+                var selection = ParakeetTailHelper.SelectResult(
+                    job.ActiveModelIdAtCapture,
+                    fullDecodeText,
+                    job.PartialSegments);
+                rawText = DictationFinalTextPolicy.SelectRawText(selection.Text, previewText);
+                detectedLanguage = fullDecodeDetectedLanguage;
+                var usedPreviewFallback = string.IsNullOrWhiteSpace(fullDecodeText)
+                    && !string.IsNullOrWhiteSpace(previewText);
+                job = job with
+                {
+                    Diagnostic = job.Diagnostic with
+                    {
+                        TailGuardApplied = tailGuardApplied,
+                        TailSamplesAdded = tailSamplesAdded,
+                        FinalTextSource = usedPreviewFallback ? "live_preview_fallback" : selection.Source,
                         FullDecodeTextLength = selection.FullDecodeTextLength,
                         PartialTextLength = selection.PartialTextLength,
                         DivergedFromPartials = selection.DivergedFromPartials,
@@ -1049,7 +1081,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     }
                 };
             }
-            else
+            else if (result is not null)
             {
                 if (DictationFinalTextPolicy.ShouldRejectAsNoSpeech(
                         result.Text,
@@ -1064,13 +1096,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     return;
                 }
 
-                rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
+                rawText = DictationFinalTextPolicy.SelectRawText(result.Text, previewText);
                 detectedLanguage = result.DetectedLanguage;
+                var usedPreviewFallback = string.IsNullOrWhiteSpace(
+                    DictationFinalTextPolicy.SelectRawText(result.Text))
+                    && !string.IsNullOrWhiteSpace(rawText);
                 job = job with
                 {
                     Diagnostic = job.Diagnostic with
                     {
-                        FinalTextSource = string.IsNullOrWhiteSpace(fullDecodeText) ? "empty" : "full_decode",
+                        FinalTextSource = usedPreviewFallback
+                            ? "live_preview_fallback"
+                            : string.IsNullOrWhiteSpace(fullDecodeText) ? "empty" : "full_decode",
                         FullDecodeTextLength = fullDecodeText.Length,
                         PartialTextLength = previewText.Length,
                         FullDecodeDurationMs = fullDecodeDurationMs
@@ -1202,6 +1239,76 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var pipelineResult = await _pipeline.ProcessAsync(rawText, pipelineOptions, ct);
             var finalText = pipelineResult.Text;
 
+            var timestamp = DateTime.UtcNow;
+            var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
+            var wordsCount = CountWords(finalText);
+            var recordId = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString();
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                LastTranscribedText = finalText;
+                LastTranscriptionLanguage = detectedLanguage;
+            });
+            _recentTranscriptions.RecordTranscription(
+                recordId,
+                finalText,
+                timestamp,
+                job.CapturedWindowTitle,
+                job.CapturedProcessName);
+            CompleteApiDictationSession(job.ApiSessionId, new ApiDictationTranscription(
+                finalText,
+                rawText,
+                timestamp,
+                job.CapturedWindowTitle,
+                job.CapturedProcessName,
+                job.CapturedUrl,
+                audioDuration,
+                detectedLanguage,
+                engineUsed,
+                job.ActiveModelIdAtCapture,
+                wordsCount));
+
+            // Save to history before output delivery so paste/action failures do not lose text.
+            if (_settings.Current.SaveToHistoryEnabled)
+            {
+                string? audioFileName = null;
+                try
+                {
+                    audioFileName = $"{Guid.NewGuid():N}.wav";
+                    var safeAudioFileName = Path.GetFileName(audioFileName);
+                    if (string.IsNullOrEmpty(safeAudioFileName) || Path.IsPathRooted(safeAudioFileName))
+                        safeAudioFileName = $"{Guid.NewGuid():N}.wav";
+                    audioFileName = safeAudioFileName;
+                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName);
+                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
+                    await File.WriteAllBytesAsync(audioPath, wav, ct);
+                }
+                catch (IOException)
+                {
+                    audioFileName = null;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    audioFileName = null;
+                }
+
+                _history.AddRecord(new TranscriptionRecord
+                {
+                    Id = recordId,
+                    Timestamp = timestamp,
+                    RawText = rawText,
+                    FinalText = finalText,
+                    AppName = job.CapturedWindowTitle,
+                    AppProcessName = job.CapturedProcessName,
+                    AppUrl = job.CapturedUrl,
+                    DurationSeconds = audioDuration,
+                    Language = detectedLanguage,
+                    ProfileName = job.ActiveWorkflow?.Name,
+                    EngineUsed = engineUsed,
+                    ModelUsed = job.ActiveModelIdAtCapture,
+                    AudioFileName = audioFileName
+                });
+            }
+
             // Route to action plugin if configured
             var targetActionPluginId = job.ActiveWorkflow?.Output.TargetActionPluginId;
 
@@ -1283,68 +1390,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 await _modelManager.LoadModelAsync(_settings.Current.SelectedModelId);
             }
 
-            var timestamp = DateTime.UtcNow;
-            var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
-            var wordsCount = CountWords(finalText);
-            var recordId = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString();
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                LastTranscribedText = finalText;
-                LastTranscriptionLanguage = detectedLanguage;
-            });
-            _recentTranscriptions.RecordTranscription(
-                recordId,
-                finalText,
-                timestamp,
-                job.CapturedWindowTitle,
-                job.CapturedProcessName);
-            CompleteApiDictationSession(job.ApiSessionId, new ApiDictationTranscription(
-                finalText,
-                rawText,
-                timestamp,
-                job.CapturedWindowTitle,
-                job.CapturedProcessName,
-                job.CapturedUrl,
-                audioDuration,
-                detectedLanguage,
-                engineUsed,
-                job.ActiveModelIdAtCapture,
-                wordsCount));
-
-            // Save to history (if enabled)
-            if (_settings.Current.SaveToHistoryEnabled)
-            {
-                string? audioFileName = null;
-                try
-                {
-                    audioFileName = $"{Guid.NewGuid():N}.wav";
-                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, audioFileName);
-                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
-                    await File.WriteAllBytesAsync(audioPath, wav, ct);
-                }
-                catch
-                {
-                    audioFileName = null;
-                }
-
-                _history.AddRecord(new TranscriptionRecord
-                {
-                    Id = recordId,
-                    Timestamp = timestamp,
-                    RawText = rawText,
-                    FinalText = finalText,
-                    AppName = job.CapturedWindowTitle,
-                    AppProcessName = job.CapturedProcessName,
-                    AppUrl = job.CapturedUrl,
-                    DurationSeconds = audioDuration,
-                    Language = detectedLanguage,
-                    ProfileName = job.ActiveWorkflow?.Name,
-                    EngineUsed = engineUsed,
-                    ModelUsed = job.ActiveModelIdAtCapture,
-                    AudioFileName = audioFileName
-                });
-            }
-
             _sound.PlaySuccessSound();
             _speechFeedback.AnnounceTranscriptionComplete(finalText, detectedLanguage);
             _modelManager.ScheduleAutoUnload();
@@ -1375,7 +1420,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            FailApiDictationSession(job.ApiSessionId, ex.Message);
+            var apiSessionAlreadyCompleted = job.ApiSessionId is Guid completedApiSessionId
+                && GetApiDictationSession(completedApiSessionId)?.Status == ApiDictationSessionStatus.Completed;
+            if (!apiSessionAlreadyCompleted)
+                FailApiDictationSession(job.ApiSessionId, ex.Message);
+
             _errorLog.AddEntry(ex.Message, ErrorCategory.Transcription);
             _eventBus.Publish(new TranscriptionFailedEvent
             {
@@ -1637,7 +1686,7 @@ internal static class DictationFinalTextPolicy
         bool transcribeShortQuietClipsAggressively)
     {
         if (string.IsNullOrWhiteSpace(finalText))
-            return true;
+            return !hasPreviewText;
 
         return noSpeechProbability is > NoSpeechProbabilityThreshold
             && !transcribeShortQuietClipsAggressively
@@ -1655,7 +1704,11 @@ internal static class DictationFinalTextPolicy
 
     public static string SelectRawText(string? finalText, string? trustedLiveText)
     {
-        return SelectRawText(finalText);
+        var normalizedFinalText = SelectRawText(finalText);
+        if (!string.IsNullOrWhiteSpace(normalizedFinalText))
+            return normalizedFinalText;
+
+        return SelectRawText(SelectTrustedLiveText(trustedLiveText));
     }
 
     private static string NormalizeDictationArtifacts(string text) =>

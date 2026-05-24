@@ -237,17 +237,17 @@ public class DictationFinalTextPolicyTests
     {
         var result = DictationFinalTextPolicy.SelectRawText(null, "  confirmed live transcript  ");
 
-        Assert.Equal("", result);
+        Assert.Equal("confirmed live transcript", result);
     }
 
     [Fact]
-    public void SelectRawText_WhitespaceFinalTextDoesNotUseTrustedLiveText()
+    public void SelectRawText_WhitespaceFinalTextUsesTrustedLiveText()
     {
         var result = DictationFinalTextPolicy.SelectRawText(
             "   ",
             "Please send the updated draft tomorrow morning. Please send the updated draft tomorrow morning.");
 
-        Assert.Equal("", result);
+        Assert.Equal("Please send the updated draft tomorrow morning.", result);
     }
 
     [Fact]
@@ -273,7 +273,7 @@ public class DictationFinalTextPolicyTests
             hasPreviewText: true,
             transcribeShortQuietClipsAggressively: false);
 
-        Assert.True(reject);
+        Assert.False(reject);
     }
 
     [Fact]
