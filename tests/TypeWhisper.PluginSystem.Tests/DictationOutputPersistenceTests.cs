@@ -30,19 +30,23 @@ public sealed class DictationOutputPersistenceTests
         var completionIndex = processJob.IndexOf(
             "CompleteApiDictationSession(job.ApiSessionId,",
             StringComparison.Ordinal);
+        Assert.True(completionIndex >= 0, "API dictation sessions must be completed before output delivery.");
+
         var catchIndex = processJob.IndexOf("catch (Exception ex)", completionIndex, StringComparison.Ordinal);
+        Assert.True(catchIndex > completionIndex, "The output failure path should remain after session completion.");
+
         var completedGuardIndex = processJob.IndexOf(
             "GetApiDictationSession(completedApiSessionId)?.Status == ApiDictationSessionStatus.Completed",
             catchIndex,
             StringComparison.Ordinal);
+        Assert.True(completedGuardIndex > catchIndex, "Output failures must check for an already-completed API session.");
+
         var failIndex = processJob.IndexOf(
             "FailApiDictationSession(job.ApiSessionId, ex.Message);",
             catchIndex,
             StringComparison.Ordinal);
 
-        Assert.True(completionIndex >= 0, "API dictation sessions must be completed before output delivery.");
-        Assert.True(catchIndex > completionIndex, "The output failure path should remain after session completion.");
-        Assert.True(completedGuardIndex > catchIndex, "Output failures must check for an already-completed API session.");
+        Assert.True(failIndex > catchIndex, "The output failure path must still fail unfinished API sessions.");
         Assert.True(completedGuardIndex < failIndex, "The completed-session guard must run before marking a session failed.");
         Assert.Contains("if (!apiSessionAlreadyCompleted)", processJob);
     }
@@ -52,20 +56,24 @@ public sealed class DictationOutputPersistenceTests
     {
         var processJob = ReadProcessSingleJobAsync();
 
-        Assert.Contains(
-            "Path.Combine(TypeWhisperEnvironment.AudioPath, Path.GetFileName(audioFileName))",
-            processJob);
+        Assert.Contains("var safeAudioFileName = Path.GetFileName(audioFileName);", processJob);
+        Assert.Contains("if (string.IsNullOrEmpty(safeAudioFileName))", processJob);
+        Assert.Contains("safeAudioFileName = $\"{Guid.NewGuid():N}.wav\";", processJob);
+        Assert.Contains("Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName)", processJob);
     }
 
     [Fact]
     public void ProcessSingleJobAsync_AudioHistorySaveOnlyCatchesExpectedIoFailures()
     {
         var processJob = ReadProcessSingleJobAsync();
+        var audioSaveBlock = TestFile.ExtractBlock(
+            processJob,
+            "audioFileName = $\"{Guid.NewGuid():N}.wav\";",
+            900);
 
-        Assert.Contains("catch (IOException)", processJob);
-        Assert.Contains("catch (UnauthorizedAccessException)", processJob);
-        Assert.DoesNotContain("catch\r\n                {", processJob);
-        Assert.DoesNotContain("catch\n                {", processJob);
+        Assert.Contains("catch (IOException)", audioSaveBlock);
+        Assert.Contains("catch (UnauthorizedAccessException)", audioSaveBlock);
+        Assert.DoesNotMatch(@"catch\s*\{", audioSaveBlock);
     }
 
     private static string ReadProcessSingleJobAsync()

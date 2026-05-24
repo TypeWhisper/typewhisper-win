@@ -1274,7 +1274,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 try
                 {
                     audioFileName = $"{Guid.NewGuid():N}.wav";
-                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, Path.GetFileName(audioFileName));
+                    var safeAudioFileName = Path.GetFileName(audioFileName);
+                    if (string.IsNullOrEmpty(safeAudioFileName))
+                        safeAudioFileName = $"{Guid.NewGuid():N}.wav";
+                    audioFileName = safeAudioFileName;
+                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName);
                     var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
                     await File.WriteAllBytesAsync(audioPath, wav, ct);
                 }
