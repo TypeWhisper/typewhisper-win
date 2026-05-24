@@ -634,7 +634,7 @@ public class StabilizeTextTests
 public class StreamingTranscriptStateTests
 {
     [Fact]
-    public void StopSession_UsesOnlyConfirmedRealtimeText()
+    public void StopSession_FallsBackToOnlyInterimRealtimeText()
     {
         var sut = new StreamingTranscriptState();
         var sessionVersion = sut.StartSession();
@@ -650,7 +650,7 @@ public class StreamingTranscriptStateTests
 
         var finalText = sut.StopSession();
 
-        Assert.Equal("", finalText);
+        Assert.Equal("Hello world", finalText);
     }
 
     [Fact]
@@ -702,7 +702,7 @@ public class StreamingTranscriptStateTests
             out var interimDisplay));
         Assert.Equal("Confirmed still changing", interimDisplay);
 
-        Assert.Equal("", sut.StopSession());
+        Assert.Equal("Confirmed still changing", sut.StopSession());
     }
 
     [Fact]
