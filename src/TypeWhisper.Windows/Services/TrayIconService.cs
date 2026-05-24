@@ -7,7 +7,7 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
-public sealed class TrayIconService : IDisposable
+public sealed class TrayIconService : IAppNotificationService, IDisposable
 {
     private TaskbarIcon? _trayIcon;
     private bool _disposed;

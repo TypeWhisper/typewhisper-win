@@ -385,6 +385,8 @@ public partial class App : Application
         services.AddSingleton<CliInstallService>();
         services.AddSingleton<WatchFolderService>();
         services.AddSingleton<TrayIconService>();
+        services.AddSingleton<IAppNotificationService>(sp => sp.GetRequiredService<TrayIconService>());
+        services.AddSingleton<IAppRestartService, AppRestartService>();
         services.AddSingleton<UpdateService>();
         services.AddSingleton<PromptProcessingService>();
         services.AddSingleton<IWorkflowTextProcessor>(sp => sp.GetRequiredService<PromptProcessingService>());

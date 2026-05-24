@@ -148,6 +148,10 @@
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
   "Models.AccelerationStatusNoModel": "No local model selected",
+  "Models.AccelerationRestartRequiredMessage": "Restart TypeWhisper to apply this acceleration change.",
+  "Models.AccelerationRestartNow": "Restart now",
+  "Models.AccelerationRestartBalloonTitle": "Restart needed",
+  "Models.AccelerationRestartBalloonMessage": "TypeWhisper needs to restart to apply local model acceleration. Click to restart.",
 
   "Profiles.Title": "Profiles",
   "Profiles.SummaryFormat": "{0} profiles, {1} enabled",

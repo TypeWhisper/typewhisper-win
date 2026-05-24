@@ -16,9 +16,12 @@ public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private readonly IAppRestartService? _appRestart;
+    private readonly IAppNotificationService? _notifications;
     private readonly SemaphoreSlim _accelerationApplyLock = new(1, 1);
     private bool _isSyncingSelection;
     private bool _isSyncingAccelerationSelection;
+    private bool _accelerationRestartNotificationShown;
     private int _accelerationApplyVersion;
     private int _accelerationBusyVersion;
 
@@ -34,6 +37,8 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private bool _isActiveModelReady;
     [ObservableProperty] private bool _isActiveModelBusy;
     [ObservableProperty] private bool _isAccelerationSectionVisible;
+    [ObservableProperty] private bool _isAccelerationRestartRequired;
+    [ObservableProperty] private string _accelerationRestartMessage = "";
 
     public string SelectedAccelerationOptionValue
     {
@@ -60,10 +65,16 @@ public partial class ModelManagerViewModel : ObservableObject
         new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"])
     ];
 
-    public ModelManagerViewModel(ModelManagerService modelManager, ISettingsService settings)
+    public ModelManagerViewModel(
+        ModelManagerService modelManager,
+        ISettingsService settings,
+        IAppRestartService? appRestart = null,
+        IAppNotificationService? notifications = null)
     {
         _modelManager = modelManager;
         _settings = settings;
+        _appRestart = appRestart;
+        _notifications = notifications;
         _activeModelId = _modelManager.ActiveModelId;
         _selectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
             _settings.Current.LocalModelAcceleration);
@@ -234,6 +245,10 @@ public partial class ModelManagerViewModel : ObservableObject
         {
             if (IsCurrentAccelerationApply(applyVersion))
             {
+                RefreshAccelerationStatus();
+                if (IsAccelerationRestartRequired)
+                    return;
+
                 IsBusy = true;
                 managesBusyState = true;
                 _accelerationBusyVersion = applyVersion;
@@ -381,10 +396,36 @@ public partial class ModelManagerViewModel : ObservableObject
         if (!IsAccelerationSectionVisible)
         {
             AccelerationStatusText = "";
+            SyncAccelerationRestartPrompt(null);
             return;
         }
 
-        AccelerationStatusText = FormatAccelerationStatus(plugin!.AccelerationStatus);
+        var status = plugin!.AccelerationStatus;
+        AccelerationStatusText = FormatAccelerationStatus(status);
+        SyncAccelerationRestartPrompt(status);
+    }
+
+    private void SyncAccelerationRestartPrompt(TranscriptionAccelerationStatus? status)
+    {
+        if (status?.RequiresRestart != true)
+        {
+            IsAccelerationRestartRequired = false;
+            AccelerationRestartMessage = "";
+            _accelerationRestartNotificationShown = false;
+            return;
+        }
+
+        IsAccelerationRestartRequired = true;
+        AccelerationRestartMessage = Loc.Instance["Models.AccelerationRestartRequiredMessage"];
+
+        if (_accelerationRestartNotificationShown)
+            return;
+
+        _accelerationRestartNotificationShown = true;
+        _notifications?.ShowBalloon(
+            Loc.Instance["Models.AccelerationRestartBalloonTitle"],
+            Loc.Instance["Models.AccelerationRestartBalloonMessage"],
+            RestartForAcceleration);
     }
 
     private ITranscriptionEnginePlugin? GetDisplayTranscriptionPlugin()
@@ -423,6 +464,12 @@ public partial class ModelManagerViewModel : ObservableObject
     private void DeleteModel(string modelId)
     {
         _modelManager.DeleteModel(modelId);
+    }
+
+    [RelayCommand]
+    private void RestartForAcceleration()
+    {
+        _appRestart?.RestartMinimized();
     }
 }
 

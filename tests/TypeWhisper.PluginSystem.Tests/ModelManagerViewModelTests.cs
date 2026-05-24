@@ -151,6 +151,125 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public async Task SelectedAccelerationOptionValue_ShowsRestartPrompt_WhenProviderRequiresRestart()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true,
+            accelerationStatusFactory: preference => preference == TranscriptionAccelerationPreference.NvidiaCuda
+                ? new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "Restart TypeWhisper to switch sherpa-onnx to CUDA.",
+                    RequiresRestart: true)
+                : new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU"));
+        var notifications = new FakeNotificationService();
+
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(
+            modelManager,
+            settings,
+            new FakeAppRestartService(),
+            notifications);
+
+        await modelManager.LoadModelAsync(fullModelId);
+        plugin.LoadException = new InvalidOperationException("Restart TypeWhisper to switch sherpa-onnx to CUDA.");
+
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationNvidiaCuda;
+
+        Assert.True(
+            await WaitForConditionAsync(() => sut.IsAccelerationRestartRequired, TimeSpan.FromSeconds(1)),
+            "Acceleration changes that require a process restart should show a persistent restart prompt.");
+        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, settings.Current.LocalModelAcceleration);
+        Assert.Contains("Restart", sut.AccelerationStatusText, StringComparison.OrdinalIgnoreCase);
+        var notification = Assert.Single(notifications.Messages);
+        Assert.NotNull(notification.OnClick);
+    }
+
+    [Fact]
+    public async Task SelectedAccelerationOptionValue_ClearsRestartPrompt_WhenLatestSelectionLoadsWithoutRestart()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true,
+            accelerationStatusFactory: preference => preference == TranscriptionAccelerationPreference.NvidiaCuda
+                ? new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "Restart TypeWhisper to switch sherpa-onnx to CUDA.",
+                    RequiresRestart: true)
+                : new TranscriptionAccelerationStatus(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU"));
+
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(
+            modelManager,
+            settings,
+            new FakeAppRestartService(),
+            new FakeNotificationService());
+
+        await modelManager.LoadModelAsync(fullModelId);
+        plugin.LoadException = new InvalidOperationException("Restart TypeWhisper to switch sherpa-onnx to CUDA.");
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationNvidiaCuda;
+
+        Assert.True(await WaitForConditionAsync(() => sut.IsAccelerationRestartRequired, TimeSpan.FromSeconds(1)));
+
+        plugin.LoadException = null;
+        sut.SelectedAccelerationOptionValue = AppSettings.LocalModelAccelerationCpu;
+
+        Assert.True(
+            await WaitForConditionAsync(() => !sut.IsAccelerationRestartRequired, TimeSpan.FromSeconds(1)),
+            "A later acceleration selection that can be loaded in-process should clear the restart prompt.");
+    }
+
+    [Fact]
+    public void RestartForAccelerationCommand_RequestsMinimizedRestart()
+    {
+        var settings = new FakeSettingsService(new AppSettings());
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var restarts = new FakeAppRestartService();
+        var sut = new ModelManagerViewModel(
+            modelManager,
+            settings,
+            restarts,
+            new FakeNotificationService());
+
+        sut.RestartForAccelerationCommand.Execute(null);
+
+        Assert.Equal(1, restarts.RestartMinimizedCallCount);
+    }
+
+    [Fact]
     public async Task SelectedAccelerationOptionValue_AppliesLatestAcceleration_WhenChangesOverlap()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";
@@ -567,6 +686,23 @@ public class ModelManagerViewModelTests
         public void Close() { }
     }
 
+    private sealed class FakeAppRestartService : IAppRestartService
+    {
+        public int RestartMinimizedCallCount { get; private set; }
+
+        public void RestartMinimized() => RestartMinimizedCallCount++;
+    }
+
+    private sealed class FakeNotificationService : IAppNotificationService
+    {
+        public List<NotificationMessage> Messages { get; } = [];
+
+        public void ShowBalloon(string title, string message, Action? onClick = null) =>
+            Messages.Add(new NotificationMessage(title, message, onClick));
+    }
+
+    private sealed record NotificationMessage(string Title, string Message, Action? OnClick);
+
     private sealed class FakeSettingsService(AppSettings initialSettings) : ISettingsService
     {
         public AppSettings Current { get; private set; } = initialSettings;
@@ -591,7 +727,8 @@ public class ModelManagerViewModelTests
             bool configured,
             TranscriptionAccelerationStatus? accelerationStatus = null,
             bool supportsModelDownload = false,
-            IReadOnlyList<TranscriptionAccelerationBackend>? supportedAccelerationBackends = null)
+            IReadOnlyList<TranscriptionAccelerationBackend>? supportedAccelerationBackends = null,
+            Func<TranscriptionAccelerationPreference, TranscriptionAccelerationStatus>? accelerationStatusFactory = null)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
@@ -602,6 +739,7 @@ public class ModelManagerViewModelTests
                 "Using CPU");
             SupportsModelDownload = supportsModelDownload;
             SupportedAccelerationBackends = supportedAccelerationBackends ?? [TranscriptionAccelerationBackend.Cpu];
+            _accelerationStatusFactory = accelerationStatusFactory;
         }
 
         public string PluginId { get; }
@@ -615,7 +753,7 @@ public class ModelManagerViewModelTests
         public bool SupportsTranslation => false;
         public bool SupportsModelDownload { get; }
         public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; }
-        public TranscriptionAccelerationStatus AccelerationStatus { get; }
+        public TranscriptionAccelerationStatus AccelerationStatus { get; private set; }
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
         public int LoadCallCount { get; private set; }
@@ -623,13 +761,18 @@ public class ModelManagerViewModelTests
         public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
         private TaskCompletionSource? _nextLoadBlocker;
         private TaskCompletionSource? _activeLoadBlocker;
+        private readonly Func<TranscriptionAccelerationPreference, TranscriptionAccelerationStatus>? _accelerationStatusFactory;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
         public void SelectModel(string selectedModelId) => SelectedModelId = selectedModelId;
-        public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
+        public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
+        {
             LastAccelerationPreference = preference;
+            if (_accelerationStatusFactory is not null)
+                AccelerationStatus = _accelerationStatusFactory(preference);
+        }
 
         public void BlockNextLoad() =>
             _nextLoadBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

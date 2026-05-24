@@ -31,6 +31,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -53,6 +54,21 @@
                            Text="{Binding ModelManager.AccelerationStatusText}"
                            Foreground="{StaticResource HintBrush}" FontSize="12"
                            Margin="0,4,0,0"/>
+                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,8,0,0"
+                            Visibility="{Binding ModelManager.IsAccelerationRestartRequired, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding ModelManager.AccelerationRestartMessage}"
+                               Style="{StaticResource HintStyle}"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="360"
+                               Margin="0,0,10,0"/>
+                    <ui:Button Content="{loc:Str Models.AccelerationRestartNow}"
+                               Command="{Binding ModelManager.RestartForAccelerationCommand}"
+                               Appearance="Primary"/>
+                </StackPanel>
             </Grid>
 
             <ItemsControl ItemsSource="{Binding ModelManager.Providers}">
