@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using TypeWhisper.Windows.Services;
 using Velopack;
 using TypeWhisper.Core;
@@ -8,9 +9,15 @@ namespace TypeWhisper.Windows;
 public static class Program
 {
     private static Mutex? _singleInstanceMutex;
+    private static IReadOnlyList<string>? _restartArgs;
     private static readonly string CallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
     public static bool StartMinimized { get; private set; }
+
+    public static void RequestRestart(params string[] args)
+    {
+        _restartArgs = args.ToArray();
+    }
 
     [STAThread]
     public static void Main(string[] args)
@@ -46,8 +53,38 @@ public static class Program
         }
         finally
         {
+            var restartArgs = _restartArgs;
             _singleInstanceMutex.ReleaseMutex();
             _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+
+            if (restartArgs is not null)
+                StartRestartProcess(restartArgs);
+        }
+    }
+
+    private static void StartRestartProcess(IReadOnlyList<string> args)
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exePath))
+            return;
+
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = false
+            };
+
+            foreach (var arg in args)
+                startInfo.ArgumentList.Add(arg);
+
+            Process.Start(startInfo);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to restart TypeWhisper: {ex.Message}");
         }
     }
 }

@@ -148,6 +148,10 @@
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
   "Models.AccelerationStatusNoModel": "Kein lokales Modell ausgew\u00e4hlt",
+  "Models.AccelerationRestartRequiredMessage": "Starte TypeWhisper neu, um diese Beschleunigungs\u00e4nderung anzuwenden.",
+  "Models.AccelerationRestartNow": "Jetzt neu starten",
+  "Models.AccelerationRestartBalloonTitle": "Neustart erforderlich",
+  "Models.AccelerationRestartBalloonMessage": "TypeWhisper muss neu starten, um die lokale Modellbeschleunigung anzuwenden. Zum Neustart klicken.",
 
   "Profiles.Title": "Profile",
   "Profiles.SummaryFormat": "{0} Profile, {1} aktiv",
