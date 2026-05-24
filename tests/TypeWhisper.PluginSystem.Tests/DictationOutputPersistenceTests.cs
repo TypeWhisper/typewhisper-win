@@ -57,7 +57,9 @@ public sealed class DictationOutputPersistenceTests
         var processJob = ReadProcessSingleJobAsync();
 
         Assert.Contains("var safeAudioFileName = Path.GetFileName(audioFileName);", processJob);
-        Assert.Contains("if (string.IsNullOrEmpty(safeAudioFileName))", processJob);
+        Assert.Contains(
+            "if (string.IsNullOrEmpty(safeAudioFileName) || Path.IsPathRooted(safeAudioFileName))",
+            processJob);
         Assert.Contains("safeAudioFileName = $\"{Guid.NewGuid():N}.wav\";", processJob);
         Assert.Contains("Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName)", processJob);
     }

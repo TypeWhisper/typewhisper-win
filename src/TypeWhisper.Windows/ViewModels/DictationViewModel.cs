@@ -1275,7 +1275,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 {
                     audioFileName = $"{Guid.NewGuid():N}.wav";
                     var safeAudioFileName = Path.GetFileName(audioFileName);
-                    if (string.IsNullOrEmpty(safeAudioFileName))
+                    if (string.IsNullOrEmpty(safeAudioFileName) || Path.IsPathRooted(safeAudioFileName))
                         safeAudioFileName = $"{Guid.NewGuid():N}.wav";
                     audioFileName = safeAudioFileName;
                     var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName);
