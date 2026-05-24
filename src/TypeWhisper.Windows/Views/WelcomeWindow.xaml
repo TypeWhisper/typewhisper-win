@@ -467,7 +467,7 @@
                                     <ComboBox ItemsSource="{Binding IndustryPresets}"
                                               SelectedValue="{Binding SelectedIndustryPresetId}"
                                               SelectedValuePath="Id"
-                                              DisplayMemberPath="Name"
+                                              DisplayMemberPath="DisplayName"
                                               Margin="0,0,0,10"/>
                                     <TextBlock Text="{loc:Str Welcome.IndustryLicenseHint}"
                                                Style="{StaticResource HintStyle}"
