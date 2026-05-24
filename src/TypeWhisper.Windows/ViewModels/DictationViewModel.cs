@@ -1274,11 +1274,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 try
                 {
                     audioFileName = $"{Guid.NewGuid():N}.wav";
-                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, audioFileName);
+                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, Path.GetFileName(audioFileName));
                     var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
                     await File.WriteAllBytesAsync(audioPath, wav, ct);
                 }
-                catch
+                catch (IOException)
+                {
+                    audioFileName = null;
+                }
+                catch (UnauthorizedAccessException)
                 {
                     audioFileName = null;
                 }
@@ -1412,7 +1416,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            FailApiDictationSession(job.ApiSessionId, ex.Message);
+            var apiSessionAlreadyCompleted = job.ApiSessionId is Guid completedApiSessionId
+                && GetApiDictationSession(completedApiSessionId)?.Status == ApiDictationSessionStatus.Completed;
+            if (!apiSessionAlreadyCompleted)
+                FailApiDictationSession(job.ApiSessionId, ex.Message);
+
             _errorLog.AddEntry(ex.Message, ErrorCategory.Transcription);
             _eventBus.Publish(new TranscriptionFailedEvent
             {
