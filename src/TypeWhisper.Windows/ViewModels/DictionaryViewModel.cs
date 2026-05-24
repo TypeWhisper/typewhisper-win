@@ -13,7 +13,7 @@ namespace TypeWhisper.Windows.ViewModels;
 
 public sealed record LocalizedIndustryPresetOption(string Id, string DisplayName, string? TermPackId);
 
-public partial class DictionaryViewModel : ObservableObject
+public partial class DictionaryViewModel : ObservableObject, IDisposable
 {
     private readonly IDictionaryService _dictionary;
     private readonly ISettingsService _settings;
@@ -96,6 +96,14 @@ public partial class DictionaryViewModel : ObservableObject
         InitializeIndustryPresets();
         InitializePacks();
         _ = LoadRemotePacksAsync();
+    }
+
+    public void Dispose()
+    {
+        _dictionary.EntriesChanged -= RefreshEntries;
+        if (_license is not null)
+            _license.PropertyChanged -= OnLicenseChanged;
+        Loc.Instance.LanguageChanged -= OnLanguageChanged;
     }
 
     partial void OnSelectedTabChanged(int value)

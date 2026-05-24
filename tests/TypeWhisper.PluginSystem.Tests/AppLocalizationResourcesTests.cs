@@ -68,11 +68,10 @@ public class AppLocalizationResourcesTests
         var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
         var localization = LoadLocalization(localizationDir, language);
 
-        foreach (var preset in IndustryPreset.All)
+        foreach (var key in IndustryPreset.All.Select(preset => $"IndustryPreset.{preset.Id}.Name"))
         {
-            var key = $"IndustryPreset.{preset.Id}.Name";
-            Assert.True(localization.ContainsKey(key), $"{language} should define {key}.");
-            Assert.False(string.IsNullOrWhiteSpace(localization[key]));
+            Assert.True(localization.TryGetValue(key, out var value), $"{language} should define {key}.");
+            Assert.False(string.IsNullOrWhiteSpace(value));
         }
     }
 
