@@ -1173,11 +1173,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             // Build LLM handler if the active workflow has prompt behavior.
             Func<string, CancellationToken, Task<string>>? llmHandler = null;
+            var workflowRequiresLlm = false;
             if (job.ActiveWorkflow?.SystemPrompt(
                     fallbackTranslationTarget: job.ActiveWorkflow.Behavior.TranslationTarget,
                     detectedLanguage: detectedLanguage,
                     configuredLanguage: job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage) is { } systemPrompt)
             {
+                workflowRequiresLlm = true;
                 if (_workflowTextProcessor.IsAnyProviderAvailable)
                 {
                     var behavior = job.ActiveWorkflow.Behavior;
@@ -1190,9 +1192,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 }
                 else
                 {
-                    FeedbackText = Loc.Instance["Error.NoLlmProvider"];
-                    FeedbackIsError = true;
-                    ShowFeedback = true;
+                    var errorMessage = Loc.Instance["Error.NoLlmProvider"];
+                    llmHandler = (_, _) => throw new InvalidOperationException(errorMessage);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        FeedbackText = errorMessage;
+                        FeedbackIsError = true;
+                        ShowFeedback = true;
+                    });
                 }
             }
 
@@ -1220,6 +1227,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     return t;
                 }),
                 LlmHandler = llmHandler,
+                RequireLlmSuccess = workflowRequiresLlm,
                 TranslationHandler = !string.IsNullOrEmpty(translationTarget)
                     ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                     : null,

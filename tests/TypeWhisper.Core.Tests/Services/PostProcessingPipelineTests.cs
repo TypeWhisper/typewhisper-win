@@ -51,6 +51,32 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_RequiredLlmHandlerFailure_Throws()
+    {
+        var options = new PipelineOptions
+        {
+            LlmHandler = (_, _) => throw new InvalidOperationException("LLM failed"),
+            RequireLlmSuccess = true
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ProcessAsync("raw transcript", options));
+        Assert.Equal("LLM failed", ex.Message);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RequiredLlmWithoutHandler_Throws()
+    {
+        var options = new PipelineOptions
+        {
+            RequireLlmSuccess = true
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ProcessAsync("raw transcript", options));
+    }
+
+    [Fact]
     public async Task ProcessAsync_Translation_Applied()
     {
         var options = new PipelineOptions

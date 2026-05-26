@@ -22,6 +22,37 @@ public static class OpenAiChatHelper
     /// <param name="userText">User message text.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The assistant's response content text.</returns>
+    public static Task<string> SendChatCompletionAsync(
+        HttpClient httpClient, string baseUrl, string apiKey,
+        string model, string systemPrompt, string userText, CancellationToken ct) =>
+        SendChatCompletionAsync(
+            httpClient,
+            baseUrl,
+            apiKey,
+            model,
+            systemPrompt,
+            userText,
+            ct,
+            maxOutputTokens: 2048,
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: null,
+            temperature: 0.1);
+
+    /// <summary>
+    /// Sends a chat completion request to an OpenAI-compatible API endpoint.
+    /// </summary>
+    /// <param name="httpClient">HTTP client to use for the request.</param>
+    /// <param name="baseUrl">API base URL (e.g. "https://api.openai.com").</param>
+    /// <param name="apiKey">Bearer token for authentication.</param>
+    /// <param name="model">Model identifier (e.g. "gpt-4o").</param>
+    /// <param name="systemPrompt">System prompt text.</param>
+    /// <param name="userText">User message text.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="maxOutputTokens">Optional response token cap.</param>
+    /// <param name="maxOutputTokenParameter">Provider-specific token cap parameter name.</param>
+    /// <param name="reasoningEffort">Optional reasoning effort value for providers that support it.</param>
+    /// <param name="temperature">Optional sampling temperature.</param>
+    /// <returns>The assistant's response content text.</returns>
     public static async Task<string> SendChatCompletionAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, string systemPrompt, string userText, CancellationToken ct,
