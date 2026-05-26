@@ -1157,9 +1157,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 {
                     var errorMessage = Loc.Instance["Error.NoLlmProvider"];
                     llmHandler = (_, _) => throw new InvalidOperationException(errorMessage);
-                    FeedbackText = Loc.Instance["Error.NoLlmProvider"];
-                    FeedbackIsError = true;
-                    ShowFeedback = true;
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        FeedbackText = errorMessage;
+                        FeedbackIsError = true;
+                        ShowFeedback = true;
+                    });
                 }
             }
 
