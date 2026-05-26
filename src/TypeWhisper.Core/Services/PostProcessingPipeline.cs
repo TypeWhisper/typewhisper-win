@@ -26,6 +26,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
         PipelineOptions options,
         CancellationToken ct = default)
     {
+        if (options.RequireLlmSuccess && options.LlmHandler is null)
+            throw new InvalidOperationException("Required LLM post-processing is not configured.");
+
         var steps = BuildSteps(options);
         var text = rawText;
 
@@ -44,6 +47,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"PostProcessingPipeline: Step '{name}' failed: {ex.Message}");
+                if (name == "LLM" && options.RequireLlmSuccess)
+                    throw;
+
                 // Continue with current text — don't let one step break the pipeline
             }
         }
