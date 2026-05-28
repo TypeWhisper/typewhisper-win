@@ -562,5 +562,24 @@
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": null
+  },
+  {
+    "id": "com.typewhisper.reson8",
+    "name": "Reson8",
+    "version": "1.0.0",
+    "minHostVersion": null,
+    "author": "Y. Vos",
+    "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
+    "category": "transcription",
+    "categories": [
+      "transcription"
+    ],
+    "size": 26086,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-reson8-v1.0.0/com.typewhisper.reson8-1.0.0.zip",
+    "iconSystemName": "waveform.badge.mic",
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Cloud-Transkription ueber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+    }
   }
 ]
