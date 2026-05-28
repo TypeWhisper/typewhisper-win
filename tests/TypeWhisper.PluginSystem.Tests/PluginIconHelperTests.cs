@@ -57,6 +57,15 @@ public sealed class PluginIconHelperTests : IDisposable
         Assert.Equal("#2563EB", PluginIconHelper.GetGradientEnd("com.typewhisper.smallest-ai"));
     }
 
+    [Fact]
+    public void GetLogoPath_Reson8_UsesSpeechFallbackIconAndGradient()
+    {
+        Assert.Null(PluginIconHelper.GetLogoPath("com.typewhisper.reson8", _baseDirectory));
+        Assert.Equal("\U0001F399", PluginIconHelper.GetIcon("com.typewhisper.reson8"));
+        Assert.Equal("#0F766E", PluginIconHelper.GetGradientStart("com.typewhisper.reson8"));
+        Assert.Equal("#0891B2", PluginIconHelper.GetGradientEnd("com.typewhisper.reson8"));
+    }
+
     [Theory]
     [InlineData("com.typewhisper.openai", "openai.png")]
     [InlineData("com.typewhisper.groq", "groq.png")]

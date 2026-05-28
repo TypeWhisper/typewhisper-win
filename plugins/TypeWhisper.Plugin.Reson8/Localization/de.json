@@ -1,0 +1,23 @@
+{
+  "Settings.ApiKeyLabel": "API-Schlüssel",
+  "Settings.Test": "Testen",
+  "Settings.Save": "Speichern",
+  "Settings.Remove": "Entfernen",
+  "Settings.Saved": "Gespeichert",
+  "Settings.EnterApiKey": "Bitte zuerst einen API-Schlüssel eingeben",
+  "Settings.ApiKeyHint": "Wird sicher gespeichert und für Reson8-Transkription verwendet.",
+  "Settings.Testing": "Teste...",
+  "Settings.ApiKeyValid": "API-Schlüssel gültig!",
+  "Settings.ApiKeyInvalid": "Ungültiger API-Schlüssel",
+  "Settings.Model": "Modell",
+  "Settings.Refresh": "Aktualisieren",
+  "Settings.Refreshing": "Aktualisiere...",
+  "Settings.ModelsFetched": "{0} eigene(s) Modell(e) geladen",
+  "Settings.ModelsRefreshFailed": "Eigene Modelle konnten nicht geladen werden",
+  "Settings.NoCustomModels": "Noch keine eigenen Modelle - Standardmodell wird verwendet",
+  "Settings.Advanced": "Erweitert",
+  "Settings.CustomBaseUrl": "Eigene Basis-URL",
+  "Settings.CustomAuthHeader": "Eigener Auth-Header",
+  "Settings.AdvancedHint": "Für ein LiveKit-Gateway oder einen eigenen Proxy.",
+  "Settings.Error": "Fehler: {0}"
+}
