@@ -1321,6 +1321,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
             var targetActionPluginId = job.ActiveWorkflow?.Output.TargetActionPluginId;
 
             InsertionResult insertResult;
+            var textInsertedEventText = finalText;
             if (!string.IsNullOrEmpty(targetActionPluginId))
             {
                 var actionPlugin = _modelManager.PluginManager.ActionPlugins
@@ -1361,11 +1362,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                         State = DictationState.Inserting;
                         StatusText = Loc.Instance["Status.Inserting"];
                     });
+                    var insertionText = DictationInsertionTextFormatter.TextForInsertion(finalText);
                     insertResult = await _textInsertion.InsertTextAsync(
-                        finalText,
+                        insertionText,
                         _settings.Current.AutoPaste,
                         job.ActiveWorkflow?.Output.AutoEnter == true,
                         job.CapturedWindowHandle);
+                    textInsertedEventText = insertionText;
                 }
             }
             else
@@ -1376,16 +1379,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     State = DictationState.Inserting;
                     StatusText = Loc.Instance["Status.Inserting"];
                 });
+                var insertionText = DictationInsertionTextFormatter.TextForInsertion(finalText);
                 insertResult = await _textInsertion.InsertTextAsync(
-                    finalText,
+                    insertionText,
                     _settings.Current.AutoPaste,
                     job.ActiveWorkflow?.Output.AutoEnter == true,
                     job.CapturedWindowHandle);
+                textInsertedEventText = insertionText;
             }
 
             _eventBus.Publish(new TextInsertedEvent
             {
-                Text = finalText,
+                Text = textInsertedEventText,
                 TargetApp = job.CapturedProcessName,
                 RecordingId = job.RecordingId
             });
@@ -1862,6 +1867,17 @@ internal static class DictationFinalTextPolicy
     }
 
     private readonly record struct WordToken(int Start, int End, string Normalized);
+}
+
+internal static class DictationInsertionTextFormatter
+{
+    public static string TextForInsertion(string text)
+    {
+        if (string.IsNullOrEmpty(text) || char.IsWhiteSpace(text[^1]))
+            return text;
+
+        return text + " ";
+    }
 }
 
 internal static class DictationShortSpeechPolicy

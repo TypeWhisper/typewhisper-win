@@ -23,6 +23,36 @@ public sealed class DictationOutputPersistenceTests
     }
 
     [Fact]
+    public void ProcessSingleJobAsync_UsesInsertionTextOnlyForDirectTextInsertion()
+    {
+        var processJob = ReadProcessSingleJobAsync();
+        var normalizedProcessJob = processJob.Replace("\r\n", "\n");
+
+        var finalTextIndex = processJob.IndexOf("var finalText = pipelineResult.Text;", StringComparison.Ordinal);
+        var insertionTextIndex = processJob.IndexOf(
+            "var insertionText = DictationInsertionTextFormatter.TextForInsertion(finalText);",
+            StringComparison.Ordinal);
+        var directInsertionArgs = System.Text.RegularExpressions.Regex
+            .Matches(processJob, @"_textInsertion\.InsertTextAsync\(\s*(?<arg>\w+),")
+            .Select(match => match.Groups["arg"].Value)
+            .ToArray();
+        var actionOutputIndex = processJob.IndexOf("actionPlugin.ExecuteAsync(finalText,", StringComparison.Ordinal);
+        var eventTextAssignmentIndex = processJob.IndexOf("textInsertedEventText = insertionText;", StringComparison.Ordinal);
+        var eventIndex = processJob.IndexOf("Text = textInsertedEventText,", StringComparison.Ordinal);
+
+        Assert.True(insertionTextIndex > finalTextIndex, "Insertion text must be derived after post-processing.");
+        Assert.Equal(["insertionText", "insertionText"], directInsertionArgs);
+        Assert.True(actionOutputIndex > 0, "Action plugins should continue receiving the clean final text.");
+        Assert.True(eventTextAssignmentIndex > insertionTextIndex, "Direct insertion should capture the inserted text for the event.");
+        Assert.True(eventIndex > eventTextAssignmentIndex, "TextInsertedEvent should report the text that was inserted.");
+        Assert.Contains("LastTranscribedText = finalText;", processJob);
+        Assert.Contains("CompleteApiDictationSession(job.ApiSessionId, new ApiDictationTranscription(\n                finalText,", normalizedProcessJob);
+        Assert.Contains("_recentTranscriptions.RecordTranscription(\n                recordId,\n                finalText,", normalizedProcessJob);
+        Assert.Contains("FinalText = finalText,", processJob);
+        Assert.Contains("_speechFeedback.AnnounceTranscriptionComplete(finalText, detectedLanguage);", processJob);
+    }
+
+    [Fact]
     public void ProcessSingleJobAsync_PreservesCompletedApiSessionWhenOutputDeliveryFails()
     {
         var processJob = ReadProcessSingleJobAsync();

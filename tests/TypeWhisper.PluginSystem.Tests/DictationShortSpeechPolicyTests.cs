@@ -300,3 +300,38 @@ public class DictationFinalTextPolicyTests
         Assert.False(reject);
     }
 }
+
+public class DictationInsertionTextFormatterTests
+{
+    [Fact]
+    public void TextForInsertion_AddsTrailingSpaceToTextWithoutTrailingWhitespace()
+    {
+        var result = DictationInsertionTextFormatter.TextForInsertion("Hello");
+
+        Assert.Equal("Hello ", result);
+    }
+
+    [Fact]
+    public void TextForInsertion_LeavesExistingTrailingSpaceUntouched()
+    {
+        var result = DictationInsertionTextFormatter.TextForInsertion("Hello ");
+
+        Assert.Equal("Hello ", result);
+    }
+
+    [Fact]
+    public void TextForInsertion_LeavesExistingTrailingNewlineUntouched()
+    {
+        var result = DictationInsertionTextFormatter.TextForInsertion("Hello\n");
+
+        Assert.Equal("Hello\n", result);
+    }
+
+    [Fact]
+    public void TextForInsertion_LeavesEmptyTextUntouched()
+    {
+        var result = DictationInsertionTextFormatter.TextForInsertion("");
+
+        Assert.Equal("", result);
+    }
+}
