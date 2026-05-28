@@ -45,6 +45,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai" => "\U0001F916",          // OpenAI - robot
         "com.typewhisper.openai-compatible" => "\U0001F310", // OpenAI Compatible - globe
         "com.typewhisper.smallest-ai" => "\U0001F399",        // Smallest AI Pulse - studio microphone
+        "com.typewhisper.reson8" => "\U0001F399",             // Reson8 - studio microphone
         "com.typewhisper.sherpa-onnx" => "\U0001F3AF",     // SherpaOnnx - local/target
         "com.typewhisper.elevenlabs" => "\U0001F399",       // ElevenLabs - studio microphone
         "com.typewhisper.supertonic-tts" => "\U0001F50A",   // Supertonic TTS - speaker
@@ -59,6 +60,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai" => "#10A37F",
         "com.typewhisper.openai-compatible" => "#6366F1",
         "com.typewhisper.smallest-ai" => "#14B8A6",
+        "com.typewhisper.reson8" => "#0F766E",
         "com.typewhisper.sherpa-onnx" => "#F59E0B",
         "com.typewhisper.elevenlabs" => "#111827",
         "com.typewhisper.supertonic-tts" => "#00A6A6",
@@ -73,6 +75,7 @@ internal static class PluginIconHelper
         "com.typewhisper.openai" => "#0D8A6A",
         "com.typewhisper.openai-compatible" => "#4F46E5",
         "com.typewhisper.smallest-ai" => "#2563EB",
+        "com.typewhisper.reson8" => "#0891B2",
         "com.typewhisper.sherpa-onnx" => "#D97706",
         "com.typewhisper.elevenlabs" => "#F97316",
         "com.typewhisper.supertonic-tts" => "#2563EB",
