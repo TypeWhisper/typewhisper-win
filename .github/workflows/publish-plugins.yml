@@ -139,12 +139,21 @@ jobs:
           $runtimesDir = Join-Path $outputDir 'runtimes'
           if (Test-Path $runtimesDir) {
             New-Item -ItemType Directory -Path "$stagingDir/runtimes" -Force | Out-Null
-            foreach ($runtimeName in @('win-x64', 'win-arm64')) {
+            foreach ($runtimeName in @('win-x64', 'win-arm64', 'cuda/win-x64')) {
               $runtimeDir = Join-Path $runtimesDir $runtimeName
               if (Test-Path $runtimeDir) {
-                Copy-Item -Path $runtimeDir -Destination "$stagingDir/runtimes" -Recurse
+                $runtimeDestination = Join-Path "$stagingDir/runtimes" $runtimeName
+                New-Item -ItemType Directory -Path $runtimeDestination -Force | Out-Null
+                Copy-Item -Path (Join-Path $runtimeDir '*') -Destination $runtimeDestination -Recurse -Force
                 Write-Host "  Included native runtime: $runtimeName"
               }
+            }
+          }
+
+          if ($env:PLUGIN_NAME -eq 'whisper-cpp') {
+            $cudaRuntime = Join-Path $stagingDir 'runtimes/cuda/win-x64/ggml-cuda-whisper.dll'
+            if (-not (Test-Path $cudaRuntime)) {
+              throw "Missing required whisper.cpp CUDA runtime: $cudaRuntime"
             }
           }
 

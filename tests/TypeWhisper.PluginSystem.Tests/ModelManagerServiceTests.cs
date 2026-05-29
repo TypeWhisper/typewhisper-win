@@ -170,6 +170,41 @@ public class ModelManagerServiceTests
         Assert.Equal(expectedPreference, plugin.AccelerationPreferenceAtLoad);
     }
 
+    [Fact]
+    public async Task LoadModelAsync_UsesCompactCudaUnavailableModelStatusOnCudaLoadFailure()
+    {
+        const string pluginId = "com.typewhisper.whisper-cpp";
+        const string modelId = "whisper";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.Cpu,
+                "CUDA unavailable",
+                "CUDA runtime could not be loaded. Missing CUDA/cuBLAS runtime dependency cublas64_13.dll."),
+            LoadException = new InvalidOperationException(
+                "CUDA runtime could not be loaded. Missing CUDA/cuBLAS runtime dependency cublas64_13.dll.")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.LoadModelAsync(fullModelId));
+
+        var status = sut.GetStatus(fullModelId);
+        Assert.Equal(ModelStatusType.Error, status.Type);
+        Assert.Equal("CUDA unavailable", status.ErrorMessage);
+    }
+
     private PluginManager CreatePluginManager(params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -222,6 +257,10 @@ public class ModelManagerServiceTests
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
         public TranscriptionAccelerationPreference? AccelerationPreferenceAtLoad { get; private set; }
+        public TranscriptionAccelerationStatus? AccelerationStatusOverride { get; init; }
+        public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
+            ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
+        public Exception? LoadException { get; init; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -235,6 +274,9 @@ public class ModelManagerServiceTests
             LoadCallCount++;
             AccelerationPreferenceAtLoad = LastAccelerationPreference;
             AccelerationPreferencesAtLoad.Add(LastAccelerationPreference);
+            if (LoadException is not null)
+                throw LoadException;
+
             LastLoadedModelId = modelId;
             SelectedModelId = modelId;
             return Task.CompletedTask;
