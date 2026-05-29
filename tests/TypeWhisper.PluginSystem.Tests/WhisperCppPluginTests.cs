@@ -311,6 +311,18 @@ public class WhisperCppPluginTests
         Assert.Equal("Restart required", sut.AccelerationStatus.DisplayText);
         Assert.Contains("Restart TypeWhisper", sut.AccelerationStatus.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Restart TypeWhisper", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+        Assert.True(sut.AccelerationStatus.RequiresRestart);
+        Assert.Equal("Restart required", sut.AccelerationStatus.DisplayText);
+
+        var secondTask = Assert.IsAssignableFrom<Task>(method.Invoke(sut, [CancellationToken.None]));
+        var secondEx = await Assert.ThrowsAsync<InvalidOperationException>(() => secondTask);
+
+        Assert.Equal(1, installer.EnsureInstalledCallCount);
+        Assert.True(sut.AccelerationStatus.RequiresRestart);
+        Assert.Equal("Restart required", sut.AccelerationStatus.DisplayText);
+        Assert.Contains("Restart TypeWhisper", secondEx.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
