@@ -11,7 +11,7 @@ public partial class SonioxSettingsView : UserControl
 
     private readonly SonioxPlugin _plugin;
     private CancellationTokenSource? _saveDebounceCts;
-    private bool _suppressPasswordChanged;
+    private readonly bool _suppressPasswordChanged;
 
     public SonioxSettingsView(SonioxPlugin plugin)
     {

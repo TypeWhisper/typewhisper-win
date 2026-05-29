@@ -168,11 +168,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         if (normalized is null)
             return false;
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-        AddAuthorization(request, normalized);
-
         try
         {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
+            AddAuthorization(request, normalized);
             using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
@@ -180,7 +179,15 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         {
             throw;
         }
-        catch
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+        catch (FormatException)
         {
             return false;
         }
@@ -302,7 +309,11 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
                     $"Soniox cleanup could not delete {resourceName}: {(int)response.StatusCode} {ExtractApiError(json)}");
             }
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
+        {
+            _host?.Log(PluginLogLevel.Warning, $"Soniox cleanup could not delete {resourceName}: {ex.Message}");
+        }
+        catch (TaskCanceledException ex)
         {
             _host?.Log(PluginLogLevel.Warning, $"Soniox cleanup could not delete {resourceName}: {ex.Message}");
         }
