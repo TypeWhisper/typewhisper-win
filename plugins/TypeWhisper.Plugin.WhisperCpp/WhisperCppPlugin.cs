@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Controls;
@@ -12,6 +13,13 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 
 public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
 {
+    private const string CudaRuntimeDependencyHint =
+        "Missing CUDA/cuBLAS runtime dependency cublas64_13.dll. TypeWhisper can download it when NVIDIA CUDA is selected.";
+    private const string CudaFallbackDetail =
+        "CUDA runtime could not be loaded; using CPU. " + CudaRuntimeDependencyHint;
+    private const string CudaLoadFailureDetail =
+        "CUDA runtime could not be loaded. " + CudaRuntimeDependencyHint;
+
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
         new("tiny", "Tiny", GgmlType.Tiny, QuantizationType.NoQuantization, "ggml-tiny.bin", "~75 MB", 75, 99, false),
@@ -31,6 +39,8 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly HttpClient _httpClient = new();
+    private IWhisperCppCudaRuntimeInstaller? _cudaRuntimeInstaller;
     private IPluginHostServices? _host;
     private WhisperFactory? _factory;
     private string? _selectedModelId;
@@ -41,9 +51,18 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
 
+    public WhisperCppPlugin()
+    {
+    }
+
+    internal WhisperCppPlugin(IWhisperCppCudaRuntimeInstaller cudaRuntimeInstaller)
+    {
+        _cudaRuntimeInstaller = cudaRuntimeInstaller;
+    }
+
     public string PluginId => "com.typewhisper.whisper-cpp";
     public string PluginName => "whisper.cpp (Local)";
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     public string ProviderId => "whisper-cpp";
     public string ProviderDisplayName => "Local (whisper.cpp)";
@@ -73,6 +92,8 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         _host = host;
         _pluginDirectory = Path.GetDirectoryName(typeof(WhisperCppPlugin).Assembly.Location);
+        if (_pluginDirectory is not null)
+            _cudaRuntimeInstaller ??= new WhisperCppCudaRuntimeInstaller(_pluginDirectory, _httpClient);
         _selectedModelId = host.GetSetting<string>("selectedModel");
         host.Log(PluginLogLevel.Info, "Activated");
         return Task.CompletedTask;
@@ -91,7 +112,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         _accelerationPreference = preference;
         ApplyRuntimeLibraryOrder(preference);
-        _accelerationStatus = CreatePendingAccelerationStatus(preference);
+        _accelerationStatus = CreatePendingAccelerationStatus(
+            preference,
+            _cudaRuntimeInstaller?.IsInstalled == true);
     }
 
     public void SelectModel(string modelId)
@@ -177,14 +200,20 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         {
             DisposeFactoryUnsafe();
             ApplyRuntimeLibraryOrder(_accelerationPreference);
+            await EnsureCudaRuntimeAvailableForLoadAsync(ct);
             try
             {
                 _factory = WhisperFactory.FromPath(modelPath);
             }
             catch (Exception ex) when (IsNativeLoadFailure(ex))
             {
-                _accelerationStatus = CreateNativeLoadFailureStatus(ex);
-                throw CreateNativeLoadFailureException(ex);
+                var loadException = CreateNativeLoadFailureException(ex);
+                _accelerationStatus = CreateNativeLoadFailureStatus(
+                    loadException,
+                    _accelerationPreference);
+                throw _accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda
+                    ? new InvalidOperationException(_accelerationStatus.Detail, loadException)
+                    : loadException;
             }
 
             var loadedLibrary = RuntimeOptions.LoadedLibrary;
@@ -282,6 +311,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public void Dispose()
     {
         DisposeFactoryUnsafe();
+        if (_cudaRuntimeInstaller is IDisposable disposableInstaller)
+            disposableInstaller.Dispose();
+        _httpClient.Dispose();
         _gate.Dispose();
     }
 
@@ -301,13 +333,18 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         RuntimeOptions.RuntimeLibraryOrder = GetRuntimeLibraryOrder(preference).ToList();
 
     private static TranscriptionAccelerationStatus CreatePendingAccelerationStatus(
-        TranscriptionAccelerationPreference preference) =>
+        TranscriptionAccelerationPreference preference,
+        bool cudaRuntimeInstalled) =>
         preference switch
         {
+            TranscriptionAccelerationPreference.NvidiaCuda when cudaRuntimeInstalled => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "CUDA will be used when the model loads."),
             TranscriptionAccelerationPreference.NvidiaCuda => new(
-                TranscriptionAccelerationBackend.Cpu,
-                "Using CPU",
-                "CUDA will be used when the model loads."),
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "CUDA support will be downloaded when the model loads."),
             _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
         };
 
@@ -322,15 +359,79 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                     TranscriptionAccelerationBackend.Cpu,
                     "Using CPU",
                     "CUDA runtime was not selected or could not be loaded.")
+                : preference == TranscriptionAccelerationPreference.NvidiaCuda
+                    ? new(
+                        TranscriptionAccelerationBackend.Cpu,
+                        "CUDA unavailable",
+                        CudaFallbackDetail)
                 : new(TranscriptionAccelerationBackend.Cpu, "Using CPU"),
             _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
         };
 
-    private static TranscriptionAccelerationStatus CreateNativeLoadFailureStatus(Exception error) =>
+    private static TranscriptionAccelerationStatus CreateNativeLoadFailureStatus(
+        Exception error,
+        TranscriptionAccelerationPreference preference) =>
+        new(
+            TranscriptionAccelerationBackend.Cpu,
+            preference == TranscriptionAccelerationPreference.NvidiaCuda
+                ? "CUDA unavailable"
+                : "Native runtime unavailable",
+            preference == TranscriptionAccelerationPreference.NvidiaCuda
+                ? CudaLoadFailureDetail
+                : error.Message);
+
+    private async Task EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
+    {
+        if (_accelerationPreference != TranscriptionAccelerationPreference.NvidiaCuda)
+            return;
+
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
+                "NVIDIA CUDA acceleration for whisper.cpp is only available on Windows x64.");
+            throw new InvalidOperationException(_accelerationStatus.Detail);
+        }
+
+        var installer = _cudaRuntimeInstaller
+            ?? throw new InvalidOperationException("The whisper.cpp CUDA runtime installer is not available.");
+
+        if (installer.IsInstalled)
+            return;
+
+        _accelerationStatus = new(
+            TranscriptionAccelerationBackend.Cpu,
+            "Installing CUDA support",
+            "Downloading the NVIDIA CUDA runtime needed for whisper.cpp.");
+        _host?.Log(PluginLogLevel.Info, "Installing NVIDIA CUDA runtime for whisper.cpp.");
+
+        try
+        {
+            await installer.EnsureInstalledAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
+                "CUDA support download failed. " + ex.Message);
+            throw new InvalidOperationException(_accelerationStatus.Detail, ex);
+        }
+
+        if (!installer.IsInstalled)
+        {
+            _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
+                "CUDA support download completed, but the required NVIDIA runtime files are still missing.");
+            throw new InvalidOperationException(_accelerationStatus.Detail);
+        }
+
+        _host?.Log(
+            PluginLogLevel.Info,
+            $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
+    }
+
+    private static TranscriptionAccelerationStatus CreateCudaRuntimeInstallFailureStatus(string detail) =>
         new(
             TranscriptionAccelerationBackend.Cpu,
             "CUDA unavailable",
-            error.Message);
+            detail);
 
     private string GetModelPath(string modelId)
     {
@@ -353,12 +454,14 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         var cudaRuntimeDirectory = Path.Join(pluginDirectory, "runtimes", "cuda", safeRuntimeIdentifier);
         const string requiredFiles =
             "whisper.dll, ggml-whisper.dll, ggml-base-whisper.dll, ggml-cpu-whisper.dll, " +
-            "ggml-cuda-whisper.dll (for CUDA), msvcp140.dll, vcruntime140.dll, " +
+            "ggml-cuda-whisper.dll (for CUDA), cublas64_13.dll (for CUDA/cuBLAS), " +
+            "msvcp140.dll, vcruntime140.dll, " +
             "vcruntime140_1.dll, VCOMP140.DLL";
 
         return "Unable to load the whisper.cpp native runtime. " +
             $"Expected CPU native DLLs under '{runtimeDirectory}' and CUDA native DLLs under " +
             $"'{cudaRuntimeDirectory}', including {requiredFiles}. " +
+            CudaRuntimeDependencyHint + " " +
             "Reinstall or update the whisper.cpp plugin. If the problem persists, install the " +
             "Microsoft Visual C++ 2015-2022 Redistributable for your Windows architecture. " +
             $"Original error: {error.Message}";

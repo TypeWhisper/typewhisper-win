@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.whisper-cpp",
   "name": "whisper.cpp (Local)",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "TypeWhisper",
   "description": "Offline transcription via whisper.cpp using Whisper.net",
   "category": "transcription",

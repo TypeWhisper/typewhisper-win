@@ -205,9 +205,24 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex)
         {
-            SetStatus(modelId, ModelStatus.Failed(ex.Message));
+            SetStatus(modelId, ModelStatus.Failed(GetModelLoadFailureMessage(plugin, ex)));
             throw;
         }
+    }
+
+    private static string GetModelLoadFailureMessage(ITranscriptionEnginePlugin plugin, Exception error)
+    {
+        var accelerationStatus = plugin.AccelerationStatus;
+        if (accelerationStatus.ActiveBackend == TranscriptionAccelerationBackend.Cpu
+            && string.Equals(
+                accelerationStatus.DisplayText,
+                "CUDA unavailable",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return accelerationStatus.DisplayText;
+        }
+
+        return error.Message;
     }
 
     internal static TranscriptionAccelerationPreference GetAccelerationPreference(string? value) =>
