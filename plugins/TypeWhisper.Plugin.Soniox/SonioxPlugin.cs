@@ -58,7 +58,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     public string PluginId => "com.typewhisper.soniox";
     public string PluginName => "Soniox";
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     public async Task ActivateAsync(IPluginHostServices host)
     {
@@ -106,7 +106,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         if (translate)
             throw new InvalidOperationException("Soniox does not support translation.");
 
-        if (!IsConfigured)
+        var apiKey = _apiKey;
+        if (string.IsNullOrEmpty(apiKey))
             throw new InvalidOperationException("Plugin not configured. API key required.");
 
         string? fileId = null;
@@ -114,15 +115,15 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
         try
         {
-            fileId = await UploadFileAsync(wavAudio, ct);
-            transcriptionId = await CreateTranscriptionAsync(fileId, language, ct);
-            var completedDetails = await WaitUntilCompletedAsync(transcriptionId, ct);
-            var transcriptJson = await FetchTranscriptAsync(transcriptionId, ct);
+            fileId = await UploadFileAsync(wavAudio, apiKey, ct);
+            transcriptionId = await CreateTranscriptionAsync(fileId, language, apiKey, ct);
+            var completedDetails = await WaitUntilCompletedAsync(transcriptionId, apiKey, ct);
+            var transcriptJson = await FetchTranscriptAsync(transcriptionId, apiKey, ct);
             return ParseTranscript(transcriptJson, completedDetails, NormalizeLanguage(language));
         }
         finally
         {
-            await CleanupAsync(transcriptionId, fileId);
+            await CleanupAsync(transcriptionId, fileId, apiKey);
         }
     }
 
@@ -142,7 +143,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             var wasConfigured = IsConfigured;
             var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
-            _apiKey = normalized;
+            if (!changed)
+                return;
+
             if (_host is not null)
             {
                 if (normalized is null)
@@ -150,9 +153,13 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
                 else
                     await _host.StoreSecretAsync(ApiKeySecretName, normalized);
 
-                if (changed && wasConfigured != IsConfigured)
-                    hostToNotify = _host;
+                hostToNotify = _host;
             }
+
+            _apiKey = normalized;
+
+            if (wasConfigured == IsConfigured)
+                hostToNotify = null;
         }
         finally
         {
@@ -193,7 +200,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         }
     }
 
-    private async Task<string> UploadFileAsync(byte[] wavAudio, CancellationToken ct)
+    private async Task<string> UploadFileAsync(byte[] wavAudio, string apiKey, CancellationToken ct)
     {
         using var form = new MultipartFormDataContent();
         var fileContent = new ByteArrayContent(wavAudio);
@@ -201,7 +208,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         form.Add(fileContent, "file", "audio.wav");
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/files");
-        AddAuthorization(request);
+        AddAuthorization(request, apiKey);
         request.Content = form;
 
         var json = await SendJsonAsync(request, "Soniox file upload", ct);
@@ -210,7 +217,11 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ?? throw new InvalidOperationException("Soniox file upload response did not include a file id.");
     }
 
-    private async Task<string> CreateTranscriptionAsync(string fileId, string? language, CancellationToken ct)
+    private async Task<string> CreateTranscriptionAsync(
+        string fileId,
+        string? language,
+        string apiKey,
+        CancellationToken ct)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -222,7 +233,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             payload["language_hints"] = new[] { normalizedLanguage };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/transcriptions");
-        AddAuthorization(request);
+        AddAuthorization(request, apiKey);
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         var json = await SendJsonAsync(request, "Soniox transcription creation", ct);
@@ -231,14 +242,14 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ?? throw new InvalidOperationException("Soniox transcription response did not include a transcription id.");
     }
 
-    private async Task<JsonElement> WaitUntilCompletedAsync(string transcriptionId, CancellationToken ct)
+    private async Task<JsonElement> WaitUntilCompletedAsync(string transcriptionId, string apiKey, CancellationToken ct)
     {
         for (var attempt = 0; attempt < _maxPollAttempts; attempt++)
         {
             ct.ThrowIfCancellationRequested();
 
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/transcriptions/{transcriptionId}");
-            AddAuthorization(request);
+            AddAuthorization(request, apiKey);
 
             var json = await SendJsonAsync(request, "Soniox transcription status", ct);
             using var doc = JsonDocument.Parse(json);
@@ -259,12 +270,12 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             $"Soniox transcription {transcriptionId} did not complete within the configured polling window.");
     }
 
-    private async Task<string> FetchTranscriptAsync(string transcriptionId, CancellationToken ct)
+    private async Task<string> FetchTranscriptAsync(string transcriptionId, string apiKey, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"{BaseUrl}/v1/transcriptions/{transcriptionId}/transcript");
-        AddAuthorization(request);
+        AddAuthorization(request, apiKey);
 
         return await SendJsonAsync(request, "Soniox transcript retrieval", ct);
     }
@@ -283,20 +294,20 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         return json;
     }
 
-    private async Task CleanupAsync(string? transcriptionId, string? fileId)
+    private async Task CleanupAsync(string? transcriptionId, string? fileId, string apiKey)
     {
         if (transcriptionId is not null)
-            await DeleteBestEffortAsync($"{BaseUrl}/v1/transcriptions/{transcriptionId}", "transcription");
+            await DeleteBestEffortAsync($"{BaseUrl}/v1/transcriptions/{transcriptionId}", "transcription", apiKey);
 
         if (fileId is not null)
-            await DeleteBestEffortAsync($"{BaseUrl}/v1/files/{fileId}", "file");
+            await DeleteBestEffortAsync($"{BaseUrl}/v1/files/{fileId}", "file", apiKey);
     }
 
-    private async Task DeleteBestEffortAsync(string uri, string resourceName)
+    private async Task DeleteBestEffortAsync(string uri, string resourceName, string apiKey)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
-        AddAuthorization(request);
+        AddAuthorization(request, apiKey);
 
         try
         {
@@ -364,9 +375,6 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         };
     }
 
-    private void AddAuthorization(HttpRequestMessage request) =>
-        AddAuthorization(request, _apiKey ?? throw new InvalidOperationException("Plugin not configured. API key required."));
-
     private static void AddAuthorization(HttpRequestMessage request, string apiKey) =>
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
@@ -420,10 +428,14 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
 
-    private static string? NormalizeLanguage(string? language) =>
-        string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)
-            ? null
-            : language.Trim();
+    private static string? NormalizeLanguage(string? language)
+    {
+        var trimmed = language?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed)
+            || trimmed.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+    }
 
     private static string? GetString(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var property)
