@@ -295,7 +295,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         var targetAccelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
         if (ActiveModelId == targetModelId
-            && _activeModelAccelerationPreference == targetAccelerationPreference)
+            && _activeModelAccelerationPreference == targetAccelerationPreference
+            && IsActiveAccelerationSatisfied(targetAccelerationPreference))
         {
             CancelAutoUnload();
             return true;
@@ -312,6 +313,19 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         await LoadModelAsync(targetModelId, cancellationToken);
         return true;
+    }
+
+    private bool IsActiveAccelerationSatisfied(TranscriptionAccelerationPreference targetPreference)
+    {
+        var status = ActiveTranscriptionPlugin?.AccelerationStatus;
+        if (status is null)
+            return true;
+
+        if (status.RequiresRestart)
+            return false;
+
+        return targetPreference != TranscriptionAccelerationPreference.NvidiaCuda
+            || status.ActiveBackend == TranscriptionAccelerationBackend.NvidiaCuda;
     }
 
     internal async Task<TranscriptionRequestModelScope> BeginTranscriptionRequestAsync(
