@@ -440,19 +440,17 @@
   {
     "id": "com.typewhisper.whisper-cpp",
     "name": "whisper.cpp (Local)",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Offline transcription via whisper.cpp using Whisper.net",
     "category": "transcription",
-    "size": 2561624,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.0.1/com.typewhisper.whisper-cpp-1.0.1.zip",
+    "size": 68121935,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-whisper-cpp-v1.0.2/com.typewhisper.whisper-cpp-1.0.2.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
-    "categories": [
-      "transcription"
-    ]
+    "categories": "transcription"
   },
   {
     "id": "com.typewhisper.elevenlabs",
