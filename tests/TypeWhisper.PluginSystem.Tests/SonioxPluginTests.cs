@@ -69,6 +69,41 @@ public class SonioxPluginTests
     }
 
     [Fact]
+    public async Task SetApiKeyAsync_DoesNotConfigurePluginWhenStoreSecretFails()
+    {
+        var host = new TestPluginHostServices
+        {
+            StoreSecretException = new InvalidOperationException("store failed")
+        };
+        var sut = new SonioxPlugin();
+        await sut.ActivateAsync(host);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetApiKeyAsync("soniox-key"));
+
+        Assert.False(sut.IsConfigured);
+        Assert.Null(sut.ApiKey);
+        Assert.False(host.Secrets.ContainsKey("api-key"));
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task SetApiKeyAsync_KeepsExistingConfigurationWhenDeleteSecretFails()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        var sut = new SonioxPlugin();
+        await sut.ActivateAsync(host);
+        host.DeleteSecretException = new InvalidOperationException("delete failed");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetApiKeyAsync(""));
+
+        Assert.True(sut.IsConfigured);
+        Assert.Equal("soniox-key", sut.ApiKey);
+        Assert.Equal("soniox-key", host.Secrets["api-key"]);
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
     public async Task ValidateApiKeyAsync_UsesModelsEndpointAndBearerHeader()
     {
         var handler = new CapturingHandler((request, _) =>
@@ -160,6 +195,50 @@ public class SonioxPluginTests
     }
 
     [Fact]
+    public async Task TranscribeAsync_UsesInitialApiKeyForWholeAsyncFlow()
+    {
+        var seenAuthorizations = new List<string?>();
+        SonioxPlugin? sut = null;
+        var handler = new AsyncCapturingHandler(async (request, _, _) =>
+        {
+            seenAuthorizations.Add(request.Headers.Authorization?.ToString());
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                await sut!.SetApiKeyAsync("");
+                return JsonResponse("""{ "id": "84c32fc6-4fb5-4e7a-b656-b5ec70493753" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+                return JsonResponse("""{ "id": "73d4357d-cad2-4338-a60d-ec6f2044f721", "status": "queued" }""", HttpStatusCode.Created);
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/73d4357d-cad2-4338-a60d-ec6f2044f721")
+                return JsonResponse("""{ "status": "completed", "audio_duration_ms": 1000 }""");
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/73d4357d-cad2-4338-a60d-ec6f2044f721/transcript")
+                return JsonResponse("""{ "text": "Hello", "tokens": [] }""");
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "initial-key";
+        using var httpClient = new HttpClient(handler);
+        sut = new SonioxPlugin(httpClient, pollDelay: TimeSpan.Zero, maxPollAttempts: 2);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None);
+
+        Assert.Equal("Hello", result.Text);
+        Assert.False(sut.IsConfigured);
+        Assert.DoesNotContain("api-key", host.Secrets.Keys);
+        Assert.All(seenAuthorizations, authorization => Assert.Equal("Bearer initial-key", authorization));
+    }
+
+    [Fact]
     public async Task TranscribeAsync_OmitsLanguageHintsForAuto()
     {
         var handler = new SonioxFlowHandler((createBody) =>
@@ -177,6 +256,27 @@ public class SonioxPluginTests
         var result = await sut.TranscribeAsync([1, 2, 3], "auto", translate: false, prompt: null, CancellationToken.None);
 
         Assert.Equal("Hello", result.Text);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_OmitsLanguageHintsForWhitespacePaddedAuto()
+    {
+        var handler = new SonioxFlowHandler((createBody) =>
+        {
+            using var doc = JsonDocument.Parse(createBody);
+            Assert.False(doc.RootElement.TryGetProperty("language_hints", out _));
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(httpClient, pollDelay: TimeSpan.Zero, maxPollAttempts: 2);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync([1, 2, 3], " auto ", translate: false, prompt: null, CancellationToken.None);
+
+        Assert.Equal("Hello", result.Text);
+        Assert.Null(result.DetectedLanguage);
     }
 
     [Fact]
@@ -357,6 +457,20 @@ public class SonioxPluginTests
         }
     }
 
+    private sealed class AsyncCapturingHandler(
+        Func<HttpRequestMessage, byte[]?, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var body = request.Content is null
+                ? null
+                : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+            return await responder(request, body, cancellationToken);
+        }
+    }
+
     private sealed class TestPluginHostServices : IPluginHostServices
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -367,9 +481,14 @@ public class SonioxPluginTests
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
+        public Exception? StoreSecretException { get; init; }
+        public Exception? DeleteSecretException { get; set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
+            if (StoreSecretException is not null)
+                throw StoreSecretException;
+
             Secrets[key] = value;
             return Task.CompletedTask;
         }
@@ -379,6 +498,9 @@ public class SonioxPluginTests
 
         public Task DeleteSecretAsync(string key)
         {
+            if (DeleteSecretException is not null)
+                throw DeleteSecretException;
+
             Secrets.Remove(key);
             return Task.CompletedTask;
         }
