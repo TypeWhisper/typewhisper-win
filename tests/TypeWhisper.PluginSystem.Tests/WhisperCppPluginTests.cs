@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -253,7 +254,8 @@ public class WhisperCppPluginTests
         Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
         await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
 
-        _ = await Record.ExceptionAsync(() => sut.LoadModelAsync("tiny", CancellationToken.None));
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => sut.LoadModelAsync("tiny", CancellationToken.None));
 
         Assert.Equal(1, installer.EnsureInstalledCallCount);
     }
@@ -284,6 +286,22 @@ public class WhisperCppPluginTests
         Assert.Contains("network offline", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Dispose_DisposesCudaRuntimeInstaller()
+    {
+        var installer = new FakeCudaRuntimeInstaller(Path.Join(
+            Path.GetTempPath(),
+            "typewhisper-tests",
+            "runtimes",
+            "cuda",
+            "win-x64"));
+        var sut = new WhisperCppPlugin(installer);
+
+        sut.Dispose();
+
+        Assert.True(installer.DisposeCalled);
+    }
+
     private static byte[] CreateZipArchive(params (string Path, string Content)[] entries)
     {
         using var output = new MemoryStream();
@@ -302,19 +320,27 @@ public class WhisperCppPluginTests
 
     private sealed class StaticArchiveHandler(byte[] archiveBytes) : HttpMessageHandler
     {
+        [SuppressMessage(
+            "Reliability",
+            "CA2000:Dispose objects before losing scope",
+            Justification = "The response is returned to HttpClient, which disposes it after the request pipeline completes.")]
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(archiveBytes)
-            });
+            };
+            return Task.FromResult(response);
+        }
     }
 
-    private sealed class FakeCudaRuntimeInstaller(string runtimeDirectory) : IWhisperCppCudaRuntimeInstaller
+    private sealed class FakeCudaRuntimeInstaller(string runtimeDirectory) : IWhisperCppCudaRuntimeInstaller, IDisposable
     {
         private bool _isInstalled;
         public int EnsureInstalledCallCount { get; private set; }
+        public bool DisposeCalled { get; private set; }
         public Exception? InstallException { get; init; }
         public bool IsInstalledOverride { get; init; }
         public bool IsInstalled => _isInstalled || IsInstalledOverride;
@@ -329,6 +355,8 @@ public class WhisperCppPluginTests
             _isInstalled = true;
             return Task.CompletedTask;
         }
+
+        public void Dispose() => DisposeCalled = true;
     }
 
     private sealed class FakePluginHostServices(string pluginDataDirectory) : IPluginHostServices
@@ -370,7 +398,7 @@ public class WhisperCppPluginTests
 
     private sealed class TempDirectory : IDisposable
     {
-        public string Path { get; } = System.IO.Path.Combine(
+        public string Path { get; } = System.IO.Path.Join(
             System.IO.Path.GetTempPath(),
             $"typewhisper-tests-{Guid.NewGuid():N}");
 
@@ -383,8 +411,13 @@ public class WhisperCppPluginTests
                 if (Directory.Exists(Path))
                     Directory.Delete(Path, recursive: true);
             }
-            catch
+            catch (IOException ex)
             {
+                Console.Error.WriteLine($"Failed to delete temporary test directory '{Path}': {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.Error.WriteLine($"Failed to delete temporary test directory '{Path}': {ex.Message}");
             }
         }
     }

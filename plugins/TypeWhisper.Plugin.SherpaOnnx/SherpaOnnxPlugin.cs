@@ -73,7 +73,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     // ITypeWhisperPlugin
     public string PluginId => "com.typewhisper.sherpa-onnx";
     public string PluginName => "Lokale Modelle (sherpa-onnx)";
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     // ITranscriptionEnginePlugin
     public string ProviderId => "sherpa-onnx";
@@ -231,7 +231,16 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                         PluginLogLevel.Warning,
                         $"CUDA provider failed for {modelId}; falling back to CPU: {ex.Message}");
                     activeProvider = "cpu";
-                    _recognizer = CreateRecognizerForLoad(model, dir, activeProvider);
+                    try
+                    {
+                        _recognizer = CreateRecognizerForLoad(model, dir, activeProvider);
+                    }
+                    catch (Exception cpuEx)
+                    {
+                        _accelerationStatus = CreateNativeRuntimeUnavailableStatus(
+                            "CPU fallback failed after CUDA provider failed. " + cpuEx.Message);
+                        throw;
+                    }
                 }
 
                 _loadedModelId = modelId;
@@ -298,10 +307,11 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
 
         if (_accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda)
         {
+            ISherpaCudaRuntimeInstaller installer;
             try
             {
                 EnsureCudaPlatformSupported();
-                var installer = _cudaRuntimeInstaller
+                installer = _cudaRuntimeInstaller
                     ?? throw new InvalidOperationException("The sherpa-onnx CUDA runtime installer is not available.");
 
                 if (!installer.IsInstalled)
@@ -313,16 +323,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 throw;
             }
 
-            var resolvedInstaller = _cudaRuntimeInstaller
-                ?? throw new InvalidOperationException("The sherpa-onnx CUDA runtime installer is not available.");
-            if (!resolvedInstaller.IsInstalled || string.IsNullOrWhiteSpace(resolvedInstaller.RuntimeDirectory))
+            if (!installer.IsInstalled || string.IsNullOrWhiteSpace(installer.RuntimeDirectory))
             {
                 _accelerationStatus = CreateCudaUnavailableStatus(
                     "The sherpa-onnx CUDA runtime could not be installed.");
                 throw new InvalidOperationException(_accelerationStatus.Detail);
             }
 
-            SherpaOnnxNativeRuntime.ConfigureCudaRuntime(resolvedInstaller.RuntimeDirectory);
+            SherpaOnnxNativeRuntime.ConfigureCudaRuntime(installer.RuntimeDirectory);
             desiredProvider = "cuda";
         }
         else if (desiredProvider == "cuda" && _cudaRuntimeInstaller?.RuntimeDirectory is { } runtimeDirectory)
@@ -387,6 +395,12 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         new(
             TranscriptionAccelerationBackend.Cpu,
             "CUDA unavailable",
+            detail);
+
+    private static TranscriptionAccelerationStatus CreateNativeRuntimeUnavailableStatus(string detail) =>
+        new(
+            TranscriptionAccelerationBackend.Cpu,
+            "Native runtime unavailable",
             detail);
 
     private static TranscriptionAccelerationStatus CreateRestartRequiredStatus(

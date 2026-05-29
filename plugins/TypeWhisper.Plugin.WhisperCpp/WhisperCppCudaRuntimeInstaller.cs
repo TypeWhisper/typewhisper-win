@@ -19,9 +19,10 @@ internal sealed record WhisperCppCudaRuntimePackage(
     string Sha256,
     IReadOnlyList<string> RequiredDlls);
 
-internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeInstaller
+internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeInstaller, IDisposable
 {
     private const string CudaRuntimeIdentifier = "win-x64";
+    private static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(10);
 
     private static readonly WhisperCppCudaRuntimePackage DefaultPackage = new(
         "cuda-13.3.0-cublas-13.5.1.27",
@@ -91,22 +92,37 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
 
     private async Task DownloadArchiveAsync(string archivePath, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, _package.DownloadUrl);
-        using var response = await _httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
+        using var timeoutCts = new CancellationTokenSource(DownloadTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCts.Token);
+        var downloadToken = linkedCts.Token;
 
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var output = new FileStream(
-            archivePath,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            81920,
-            useAsync: true);
-        await input.CopyToAsync(output, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, _package.DownloadUrl);
+        try
+        {
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                downloadToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var input = await response.Content.ReadAsStreamAsync(downloadToken);
+            await using var output = new FileStream(
+                archivePath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                useAsync: true);
+            await input.CopyToAsync(output, downloadToken);
+        }
+        catch (OperationCanceledException ex) when (
+            !cancellationToken.IsCancellationRequested
+            && timeoutCts.IsCancellationRequested)
+        {
+            throw new TimeoutException("The NVIDIA CUDA runtime download timed out.", ex);
+        }
     }
 
     private async Task ValidateArchiveHashAsync(string archivePath, CancellationToken cancellationToken)
@@ -175,4 +191,6 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
             Debug.WriteLine($"Failed to delete temporary CUDA runtime file '{path}': {ex.Message}");
         }
     }
+
+    public void Dispose() => _gate.Dispose();
 }

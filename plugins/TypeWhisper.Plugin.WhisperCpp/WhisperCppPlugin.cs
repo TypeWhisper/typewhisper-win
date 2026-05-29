@@ -311,6 +311,8 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public void Dispose()
     {
         DisposeFactoryUnsafe();
+        if (_cudaRuntimeInstaller is IDisposable disposableInstaller)
+            disposableInstaller.Dispose();
         _httpClient.Dispose();
         _gate.Dispose();
     }

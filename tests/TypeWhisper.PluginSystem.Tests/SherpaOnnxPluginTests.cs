@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.SherpaOnnx;
 using TypeWhisper.PluginSDK.Models;
@@ -8,6 +9,28 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public class SherpaOnnxPluginTests
 {
+    [Fact]
+    public void PluginVersion_MatchesManifestVersion()
+    {
+        var repoRoot = Path.GetFullPath(Path.Join(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", ".."));
+        var manifestPath = Path.Join(
+            repoRoot,
+            "plugins",
+            "TypeWhisper.Plugin.SherpaOnnx",
+            "manifest.json");
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(
+            File.ReadAllText(manifestPath),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var sut = new SherpaOnnxPlugin();
+
+        Assert.NotNull(manifest);
+        Assert.Equal("1.0.2", manifest.Version);
+        Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
     [Theory]
     [InlineData(TranscriptionAccelerationPreference.Auto, false, "cpu")]
     [InlineData(TranscriptionAccelerationPreference.Auto, true, "cuda")]
@@ -97,6 +120,39 @@ public class SherpaOnnxPluginTests
             Assert.Equal(TranscriptionAccelerationBackend.Cpu, sut.AccelerationStatus.ActiveBackend);
             Assert.Equal("CUDA unavailable", sut.AccelerationStatus.DisplayText);
             Assert.Contains("CUDA provider failed to initialize", sut.AccelerationStatus.Detail);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadModelAsync_AutoCudaAndCpuFailureReportsCpuFallbackFailure()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-load-{Guid.NewGuid():N}");
+        try
+        {
+            var installer = new FakeCudaRuntimeInstaller(isInstalled: true);
+            var sut = new SherpaOnnxPlugin(
+                installer,
+                (_, _, provider) => throw new InvalidOperationException(
+                    $"{provider} provider failed to initialize."));
+            var host = new FakePluginHostServices(tempDir);
+            CreateParakeetModelFiles(tempDir);
+
+            await sut.ActivateAsync(host);
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sut.LoadModelAsync("parakeet-tdt-0.6b", CancellationToken.None));
+
+            Assert.Contains("cpu provider failed to initialize", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(TranscriptionAccelerationBackend.Cpu, sut.AccelerationStatus.ActiveBackend);
+            Assert.Equal("Native runtime unavailable", sut.AccelerationStatus.DisplayText);
+            Assert.Contains("cpu provider failed to initialize", sut.AccelerationStatus.Detail, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("CUDA unavailable", sut.AccelerationStatus.DisplayText, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
