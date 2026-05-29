@@ -123,7 +123,12 @@ public class ModelManagerServiceTests
             pluginId,
             configured: true,
             selectedModelId: null,
-            supportsModelDownload: true);
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.NvidiaCuda,
+                "Using CUDA")
+        };
         var pluginManager = CreatePluginManager(plugin);
         var sut = new ModelManagerService(pluginManager, _settings.Object);
 
@@ -134,6 +139,43 @@ public class ModelManagerServiceTests
         Assert.Equal(1, plugin.LoadCallCount);
         Assert.Equal(
             [TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+    }
+
+    [Fact]
+    public async Task EnsureModelLoadedAsync_ReloadsExplicitCudaActiveModel_WhenBackendIsCpu()
+    {
+        const string pluginId = "com.typewhisper.whisper-cpp";
+        const string modelId = "whisper";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.Cpu,
+                "CUDA unavailable",
+                "CUDA runtime was installed after the model had already loaded.")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.EnsureModelLoadedAsync();
+        var loaded = await sut.EnsureModelLoadedAsync();
+
+        Assert.True(loaded);
+        Assert.Equal(2, plugin.LoadCallCount);
+        Assert.Equal(
+            [TranscriptionAccelerationPreference.NvidiaCuda, TranscriptionAccelerationPreference.NvidiaCuda],
             plugin.AccelerationPreferencesAtLoad);
     }
 

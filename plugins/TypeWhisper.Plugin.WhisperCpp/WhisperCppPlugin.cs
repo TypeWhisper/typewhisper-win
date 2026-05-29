@@ -425,6 +425,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _host?.Log(
             PluginLogLevel.Info,
             $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
+
+        _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+        throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 
     private static TranscriptionAccelerationStatus CreateCudaRuntimeInstallFailureStatus(string detail) =>
@@ -432,6 +435,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             TranscriptionAccelerationBackend.Cpu,
             "CUDA unavailable",
             detail);
+
+    private static TranscriptionAccelerationStatus CreateCudaRuntimeInstalledRestartRequiredStatus() =>
+        new(
+            TranscriptionAccelerationBackend.Cpu,
+            "Restart required",
+            "CUDA support was installed. Restart TypeWhisper to load the CUDA runtime.",
+            RequiresRestart: true);
 
     private string GetModelPath(string modelId)
     {

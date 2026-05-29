@@ -287,6 +287,33 @@ public class WhisperCppPluginTests
     }
 
     [Fact]
+    public async Task EnsureCudaRuntimeAvailableForLoadAsync_ExplicitCudaRuntimeInstallRequiresRestart()
+    {
+        using var temp = new TempDirectory();
+        var host = new FakePluginHostServices(temp.Path);
+        var installer = new FakeCudaRuntimeInstaller(
+            Path.Join(temp.Path, "plugin", "runtimes", "cuda", "win-x64"));
+        var sut = new WhisperCppPlugin(installer);
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+
+        var method = typeof(WhisperCppPlugin).GetMethod(
+            "EnsureCudaRuntimeAvailableForLoadAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        Assert.NotNull(method);
+
+        var task = Assert.IsAssignableFrom<Task>(method.Invoke(sut, [CancellationToken.None]));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
+
+        Assert.Equal(1, installer.EnsureInstalledCallCount);
+        Assert.True(sut.AccelerationStatus.RequiresRestart);
+        Assert.Equal("Restart required", sut.AccelerationStatus.DisplayText);
+        Assert.Contains("Restart TypeWhisper", sut.AccelerationStatus.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Restart TypeWhisper", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dispose_DisposesCudaRuntimeInstaller()
     {
         var installer = new FakeCudaRuntimeInstaller(Path.Join(
