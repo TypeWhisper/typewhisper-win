@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Xai\TypeWhisper.Plugin.Xai.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.ElevenLabs\TypeWhisper.Plugin.ElevenLabs.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Reson8\TypeWhisper.Plugin.Reson8.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Soniox\TypeWhisper.Plugin.Soniox.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.WhisperCpp\TypeWhisper.Plugin.WhisperCpp.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SherpaOnnx\TypeWhisper.Plugin.SherpaOnnx.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SupertonicTts\TypeWhisper.Plugin.SupertonicTts.csproj" />
