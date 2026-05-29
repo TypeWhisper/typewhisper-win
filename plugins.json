@@ -450,7 +450,9 @@
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
-    "categories": "transcription"
+    "categories": [
+      "transcription"
+    ]
   },
   {
     "id": "com.typewhisper.elevenlabs",
