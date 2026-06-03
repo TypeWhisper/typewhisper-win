@@ -19,6 +19,8 @@ public sealed partial class LicenseService : ObservableObject
 {
     private const string BaseUrl = "https://api.polar.sh/v1/customer-portal/license-keys";
     private const string OrganizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4";
+    private const string CredentialStoreFileName = "licenses.dat";
+    private const string LegacyCredentialFileName = "license.json";
     private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
     private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
     private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
@@ -129,8 +131,8 @@ public sealed partial class LicenseService : ObservableObject
     internal LicenseService(HttpClient http, string dataPath)
     {
         _http = http;
-        _credentialPath = Path.Combine(dataPath, "licenses.dat");
-        _legacyCredentialPath = Path.Combine(dataPath, "license.json");
+        _credentialPath = ResolveDataFilePath(dataPath, CredentialStoreFileName);
+        _legacyCredentialPath = ResolveDataFilePath(dataPath, LegacyCredentialFileName);
         LoadStore();
     }
 
@@ -209,6 +211,7 @@ public sealed partial class LicenseService : ObservableObject
         if (string.IsNullOrWhiteSpace(trimmed))
             return null;
 
+        ct.ThrowIfCancellationRequested();
         IsLicenseActivating = true;
         LicenseActivationError = null;
         CommercialActivationError = null;
@@ -220,7 +223,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             return await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Any, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             LicenseActivationError = ex.Message;
             return null;
@@ -237,6 +244,7 @@ public sealed partial class LicenseService : ObservableObject
         if (string.IsNullOrWhiteSpace(trimmed))
             return;
 
+        ct.ThrowIfCancellationRequested();
         IsCommercialActivating = true;
         CommercialActivationError = null;
         CommercialDeactivationError = null;
@@ -246,7 +254,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Commercial, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             CommercialActivationError = ex.Message;
         }
@@ -271,7 +283,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             await ValidateCommercialLicenseCoreAsync(reportErrors: true, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             CommercialRefreshError = ex.Message;
         }
@@ -319,7 +335,11 @@ public sealed partial class LicenseService : ObservableObject
             PersistStore();
             NotifyStateChanged();
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             if (IsPolarResourceMissing(ex))
             {
@@ -340,6 +360,7 @@ public sealed partial class LicenseService : ObservableObject
         if (string.IsNullOrWhiteSpace(trimmed))
             return;
 
+        ct.ThrowIfCancellationRequested();
         IsSupporterActivating = true;
         SupporterActivationError = null;
         SupporterDeactivationError = null;
@@ -349,7 +370,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Supporter, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             SupporterActivationError = ex.Message;
         }
@@ -374,7 +399,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             await ValidateSupporterCoreAsync(reportErrors: true, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             SupporterRefreshError = ex.Message;
         }
@@ -445,7 +474,11 @@ public sealed partial class LicenseService : ObservableObject
             PersistStore();
             NotifyStateChanged();
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             if (IsPolarResourceMissing(ex))
             {
@@ -500,6 +533,7 @@ public sealed partial class LicenseService : ObservableObject
         if (!HasCommercialActivation)
             return;
 
+        ct.ThrowIfCancellationRequested();
         var key = _commercialLicenseKey!;
         var activationId = _commercialActivationId!;
 
@@ -512,7 +546,11 @@ public sealed partial class LicenseService : ObservableObject
             PersistStore();
             NotifyStateChanged();
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             if (IsPolarResourceMissing(ex))
             {
@@ -533,6 +571,7 @@ public sealed partial class LicenseService : ObservableObject
         if (!HasSupporterActivation)
             return;
 
+        ct.ThrowIfCancellationRequested();
         var key = _supporterLicenseKey!;
         var activationId = _supporterActivationId!;
 
@@ -545,7 +584,11 @@ public sealed partial class LicenseService : ObservableObject
             PersistStore();
             NotifyStateChanged();
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             if (IsPolarResourceMissing(ex))
             {
@@ -744,7 +787,11 @@ public sealed partial class LicenseService : ObservableObject
         {
             await DeactivateCoreAsync(key, activationId, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (IsLicenseOperationException(ex))
         {
             Debug.WriteLine($"Best-effort license deactivation failed: {ex.Message}");
         }
@@ -802,6 +849,27 @@ public sealed partial class LicenseService : ObservableObject
 
     private static string JoinBenefitText(params string?[] values) =>
         string.Join(" ", values.Where(value => !string.IsNullOrWhiteSpace(value))).ToLowerInvariant();
+
+    private static bool IsLicenseOperationException(Exception ex) =>
+        ex is HttpRequestException
+            or InvalidOperationException
+            or JsonException
+            or NotSupportedException
+            or OperationCanceledException;
+
+    private static string ResolveDataFilePath(string dataPath, string fileName)
+    {
+        var root = Path.GetFullPath(dataPath);
+        var path = Path.GetFullPath(fileName, root);
+        var relative = Path.GetRelativePath(root, path);
+        if (relative == "." ||
+            (!relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
+        {
+            return path;
+        }
+
+        throw new InvalidOperationException("License data path must stay inside the configured data directory.");
+    }
 
     private static PolarApiException CreatePolarException(string? json, string fallback, int statusCode)
     {

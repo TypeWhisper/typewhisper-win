@@ -22,6 +22,7 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private const string CheckoutUrlSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4";
 
     private CommercialLicenseTier _selectedCommercialPlanTier = CommercialLicenseTier.Individual;
+    private ActivatedLicenseEntitlementKind? _activationNoticeKind;
 
     public LicenseSectionViewModel(LicenseService license, SupporterDiscordService discord)
     {
@@ -57,7 +58,7 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         ActivateLicenseCommand = new AsyncRelayCommand(ActivateLicenseAsync, CanActivateLicense);
         RefreshCommercialLicenseCommand = new AsyncRelayCommand(() => License.RefreshCommercialLicenseAsync(), CanManageCommercialLicense);
         RefreshSupporterLicenseCommand = new AsyncRelayCommand(() => License.RefreshSupporterLicenseAsync(), CanManageSupporterLicense);
-        DeactivateCommercialLicenseCommand = new AsyncRelayCommand(() => License.DeactivateCommercialLicenseAsync(), CanManageCommercialLicense);
+        DeactivateCommercialLicenseCommand = new AsyncRelayCommand(DeactivateCommercialLicenseAsync, CanManageCommercialLicense);
         DeactivateSupporterLicenseCommand = new AsyncRelayCommand(DeactivateSupporterLicenseAsync, CanManageSupporterLicense);
         ConnectDiscordCommand = new AsyncRelayCommand(ConnectDiscordAsync, CanConnectDiscord);
         ReconnectDiscordCommand = new AsyncRelayCommand(ReconnectDiscordAsync, CanReconnectDiscord);
@@ -274,6 +275,7 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private async Task ActivateLicenseAsync()
     {
         LicenseActivationNotice = null;
+        _activationNoticeKind = null;
 
         var entitlement = await License.ActivateAnyLicenseKeyAsync(LicenseKeyInput.Trim());
         if (entitlement is not null)
@@ -285,16 +287,27 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
             }
 
             LicenseKeyInput = string.Empty;
+            _activationNoticeKind = entitlement.Kind;
             LicenseActivationNotice = ActivationSuccessText(entitlement);
         }
 
         RefreshComputedProperties();
     }
 
+    private async Task DeactivateCommercialLicenseAsync()
+    {
+        await License.DeactivateCommercialLicenseAsync();
+        ClearStaleActivationNotice();
+        RefreshComputedProperties();
+    }
+
     private async Task DeactivateSupporterLicenseAsync()
     {
         await License.DeactivateSupporterLicenseAsync();
-        Discord.HandleSupporterEntitlementRemoved();
+        if (!License.HasSupporterActivation)
+            Discord.HandleSupporterEntitlementRemoved();
+
+        ClearStaleActivationNotice();
         RefreshComputedProperties();
     }
 
@@ -349,7 +362,27 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         ConnectDiscordCommand.NotifyCanExecuteChanged();
         ReconnectDiscordCommand.NotifyCanExecuteChanged();
         RefreshDiscordStatusCommand.NotifyCanExecuteChanged();
+        ClearStaleActivationNotice();
         RefreshComputedProperties();
+    }
+
+    private void ClearStaleActivationNotice()
+    {
+        if (LicenseActivationNotice is null)
+            return;
+
+        var shouldClear = _activationNoticeKind switch
+        {
+            ActivatedLicenseEntitlementKind.Commercial => !License.HasCommercialActivation,
+            ActivatedLicenseEntitlementKind.Supporter => !License.HasSupporterActivation,
+            _ => !License.HasCommercialActivation && !License.HasSupporterActivation,
+        };
+
+        if (!shouldClear)
+            return;
+
+        _activationNoticeKind = null;
+        LicenseActivationNotice = null;
     }
 
     private void RefreshComputedProperties()
@@ -392,18 +425,18 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private static string CommercialTierText(CommercialLicenseTier tier) =>
         tier switch
         {
-            CommercialLicenseTier.Individual => "Individual",
-            CommercialLicenseTier.Team => "Team",
-            CommercialLicenseTier.Enterprise => "Enterprise",
+            CommercialLicenseTier.Individual => Loc.Instance["License.TierIndividualName"],
+            CommercialLicenseTier.Team => Loc.Instance["License.TierTeamName"],
+            CommercialLicenseTier.Enterprise => Loc.Instance["License.TierEnterpriseName"],
             _ => tier.ToString(),
         };
 
     private static string SupporterTierText(SupporterTier tier) =>
         tier switch
         {
-            SupporterTier.Bronze => "Bronze",
-            SupporterTier.Silver => "Silver",
-            SupporterTier.Gold => "Gold",
+            SupporterTier.Bronze => Loc.Instance["License.SupporterBronzeName"],
+            SupporterTier.Silver => Loc.Instance["License.SupporterSilverName"],
+            SupporterTier.Gold => Loc.Instance["License.SupporterGoldName"],
             _ => tier.ToString(),
         };
 }

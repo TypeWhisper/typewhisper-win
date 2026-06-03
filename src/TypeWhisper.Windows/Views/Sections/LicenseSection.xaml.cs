@@ -10,6 +10,8 @@ namespace TypeWhisper.Windows.Views.Sections;
 public partial class LicenseSection : UserControl
 {
     private readonly LicenseSectionViewModel _viewModel;
+    private bool _isInitialized;
+    private bool _isViewModelAttached;
 
     public LicenseSection()
     {
@@ -20,27 +22,47 @@ public partial class LicenseSection : UserControl
             App.Services.GetRequiredService<SupporterDiscordService>());
 
         ContentRoot.DataContext = _viewModel;
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        AttachViewModel();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
+        AttachViewModel();
+        if (_isInitialized)
+            return;
+
+        _isInitialized = true;
         await _viewModel.InitializeAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        Loaded -= OnLoaded;
-        Unloaded -= OnUnloaded;
-        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        DetachViewModel();
     }
 
     private void OnLicenseKeyChanged(object sender, RoutedEventArgs e)
     {
         _viewModel.LicenseKeyInput = LicenseKeyBox.Password;
+    }
+
+    private void AttachViewModel()
+    {
+        if (_isViewModelAttached)
+            return;
+
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _isViewModelAttached = true;
+    }
+
+    private void DetachViewModel()
+    {
+        if (!_isViewModelAttached)
+            return;
+
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _isViewModelAttached = false;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

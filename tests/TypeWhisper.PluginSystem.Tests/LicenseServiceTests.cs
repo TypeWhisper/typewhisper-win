@@ -166,6 +166,19 @@ public sealed class LicenseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ActivateAnyLicenseKeyAsync_PropagatesCancellation()
+    {
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => service.ActivateAnyLicenseKeyAsync("TYPEWHISPER-COM-123", cts.Token));
+
+        Assert.Null(service.LicenseActivationError);
+    }
+
+    [Fact]
     public async Task ValidateCommercialLicenseAsync_MovesStoredSupporterActivationOutOfCommercialSlot()
     {
         var service = CreateService((request, _) => Json(
@@ -182,6 +195,23 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.Equal(LicenseStatus.Active, service.SupporterStatus);
         Assert.Equal(SupporterTier.Silver, service.SupporterTier);
         Assert.True(service.HasSupporterActivation);
+    }
+
+    [Fact]
+    public async Task ValidateCommercialLicenseAsync_PropagatesCancellation()
+    {
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+        SetPrivateField(service, "_commercialLicenseKey", "TYPEWHISPER-COM-123");
+        SetPrivateField(service, "_commercialActivationId", "activation-123");
+        service.CommercialStatus = LicenseStatus.Active;
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => service.ValidateCommercialLicenseAsync(cts.Token));
+
+        Assert.Equal(LicenseStatus.Active, service.CommercialStatus);
+        Assert.True(service.HasCommercialActivation);
     }
 
     [Fact]
@@ -221,6 +251,34 @@ public sealed class LicenseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SupporterDiscordService_RefreshStatusIfNeededClearsStaleClaimActivation()
+    {
+        var statusCalls = 0;
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+        SetPrivateField(service, "_supporterLicenseKey", "TYPEWHISPER-SUP-999");
+        SetPrivateField(service, "_supporterActivationId", "activation-current");
+        service.SupporterStatus = LicenseStatus.Active;
+        service.SupporterTier = SupporterTier.Gold;
+        var discord = CreateDiscordService((request, _) =>
+        {
+            if (request.RequestUri?.AbsolutePath == "/claims/polar/status")
+                statusCalls++;
+
+            return Json(HttpStatusCode.OK, """{"status":"linked","discord_username":"marco"}""");
+        });
+        discord.ClaimState = SupporterDiscordClaimState.Linked;
+        discord.ClaimActivationId = "activation-stale";
+        discord.SessionId = "session-stale";
+
+        await discord.RefreshStatusIfNeededAsync(service);
+
+        Assert.Equal(0, statusCalls);
+        Assert.Equal(SupporterDiscordClaimState.Unavailable, discord.ClaimState);
+        Assert.Null(discord.ClaimActivationId);
+        Assert.Null(discord.SessionId);
+    }
+
+    [Fact]
     public async Task LicenseSectionViewModel_ActivateLicenseCommandClearsSharedInputOnSuccess()
     {
         var service = CreateService((request, _) => request.RequestUri?.AbsolutePath switch
@@ -229,7 +287,7 @@ public sealed class LicenseServiceTests : IDisposable
             "/v1/customer-portal/license-keys/validate" => Json(HttpStatusCode.OK, """{"id":"activation-123","status":"granted","benefit_id":"5138b20a-57ba-48aa-a664-2139cd6df0de"}"""),
             _ => Json(HttpStatusCode.InternalServerError, """{"detail":"unexpected"}"""),
         });
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService())
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService())
         {
             LicenseKeyInput = "TYPEWHISPER-COM-123"
         };
@@ -246,7 +304,7 @@ public sealed class LicenseServiceTests : IDisposable
     public void LicenseSectionViewModel_CustomerPortalShortcutIsVisibleWithoutStoredActivation()
     {
         var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService());
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
 
         Assert.False(viewModel.ShowCommercialManage);
         Assert.False(viewModel.ShowSupporterManage);
@@ -258,7 +316,7 @@ public sealed class LicenseServiceTests : IDisposable
     public void LicenseSectionViewModel_ExposesFourSelectablePlanOptions()
     {
         var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService());
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
         var planOptionsProperty = typeof(LicenseSectionViewModel).GetProperty("PlanOptions");
         var selectPlanCommandProperty = typeof(LicenseSectionViewModel).GetProperty("SelectPlanCommand");
 
@@ -289,7 +347,7 @@ public sealed class LicenseServiceTests : IDisposable
     public void LicenseSectionViewModel_HidesPlanAndActivationInputsWhenCommercialLicenseIsActive()
     {
         var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService());
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
         viewModel.SelectPlanCommand.Execute(viewModel.PlanOptions.Single(option => option.Id == "enterprise"));
         service.CommercialStatus = LicenseStatus.Active;
         service.CommercialTier = CommercialLicenseTier.Individual;
@@ -313,7 +371,7 @@ public sealed class LicenseServiceTests : IDisposable
         SetPrivateField(service, "_supporterActivationId", "activation-999");
         service.CommercialStatus = LicenseStatus.Expired;
         service.SupporterStatus = LicenseStatus.Expired;
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService());
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
 
         Assert.True(viewModel.ShowCommercialManage);
         Assert.True(viewModel.ShowSupporterManage);
@@ -332,11 +390,34 @@ public sealed class LicenseServiceTests : IDisposable
         SetPrivateField(service, "_commercialLicenseKey", "TYPEWHISPER-COM-123");
         SetPrivateField(service, "_commercialActivationId", "activation-123");
         service.CommercialStatus = LicenseStatus.Active;
-        var viewModel = new LicenseSectionViewModel(service, new SupporterDiscordService());
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
 
         await viewModel.RefreshCommercialLicenseCommand.ExecuteAsync(null);
 
         Assert.Equal("Polar is down", service.CommercialRefreshError);
+    }
+
+    [Fact]
+    public async Task LicenseSectionViewModel_DeactivateCommercialLicenseCommandClearsActivationNotice()
+    {
+        var service = CreateService((request, _) => request.RequestUri?.AbsolutePath switch
+        {
+            "/v1/customer-portal/license-keys/activate" => Json(HttpStatusCode.OK, """{"id":"activation-123"}"""),
+            "/v1/customer-portal/license-keys/validate" => Json(HttpStatusCode.OK, """{"id":"activation-123","status":"granted","benefit_id":"4eb5fa60-ed43-475d-a9b1-c837e67307e5"}"""),
+            "/v1/customer-portal/license-keys/deactivate" => Json(HttpStatusCode.OK, """{"ok":true}"""),
+            _ => Json(HttpStatusCode.InternalServerError, """{"detail":"unexpected"}"""),
+        });
+        var viewModel = new LicenseSectionViewModel(service, CreateDiscordService())
+        {
+            LicenseKeyInput = "TYPEWHISPER-COM-123"
+        };
+        await viewModel.ActivateLicenseCommand.ExecuteAsync(null);
+        Assert.NotNull(viewModel.LicenseActivationNotice);
+
+        await viewModel.DeactivateCommercialLicenseCommand.ExecuteAsync(null);
+
+        Assert.Null(viewModel.LicenseActivationNotice);
+        Assert.False(viewModel.ShowCommercialManage);
     }
 
     public void Dispose()
@@ -348,7 +429,11 @@ public sealed class LicenseServiceTests : IDisposable
                 if (Directory.Exists(dir))
                     Directory.Delete(dir, recursive: true);
             }
-            catch
+            catch (IOException)
+            {
+                // Best-effort cleanup only.
+            }
+            catch (UnauthorizedAccessException)
             {
                 // Best-effort cleanup only.
             }
@@ -357,13 +442,32 @@ public sealed class LicenseServiceTests : IDisposable
 
     private LicenseService CreateService(Func<HttpRequestMessage, string, HttpResponseMessage> responder)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "TypeWhisperLicenseTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        _tempDirs.Add(tempDir);
+        var tempDir = CreateTempDir();
 
         return new LicenseService(
             new HttpClient(new CapturingHandler(responder)) { Timeout = TimeSpan.FromSeconds(5) },
             tempDir);
+    }
+
+    private SupporterDiscordService CreateDiscordService(Func<HttpRequestMessage, string, HttpResponseMessage>? responder = null)
+    {
+        var tempDir = CreateTempDir();
+        return new SupporterDiscordService(
+            new HttpClient(new CapturingHandler(responder ?? ((_, _) => Json(HttpStatusCode.OK, "{}"))))
+            {
+                Timeout = TimeSpan.FromSeconds(5)
+            },
+            tempDir);
+    }
+
+    private string CreateTempDir()
+    {
+        var tempRoot = Path.GetFullPath(Path.GetTempPath());
+        var suiteRoot = Path.GetFullPath("TypeWhisperLicenseTests", tempRoot);
+        var tempDir = Path.GetFullPath(Guid.NewGuid().ToString("N"), suiteRoot);
+        Directory.CreateDirectory(tempDir);
+        _tempDirs.Add(tempDir);
+        return tempDir;
     }
 
     private static HttpResponseMessage Json(HttpStatusCode statusCode, string body) =>

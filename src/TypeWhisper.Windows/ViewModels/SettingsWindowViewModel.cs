@@ -84,7 +84,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         AppearanceIndicatorPreviewPresentation.ShouldShowPartialText(
             LiveTranscriptionEnabled,
             IndicatorStyle);
-    public bool ShowSupporterPremiumNotice => License.IsSupporter && !License.HasCommercialLicense;
+    public bool ShowSupporterPremiumNotice => License.IsSupporter && License.CommercialStatus != LicenseStatus.Active;
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
@@ -356,8 +356,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
     private void OnLicensePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(LicenseService.IsSupporter) or nameof(LicenseService.HasCommercialLicense))
+        if (e.PropertyName is nameof(LicenseService.IsSupporter)
+            or nameof(LicenseService.HasCommercialLicense)
+            or nameof(LicenseService.CommercialStatus))
+        {
             OnPropertyChanged(nameof(ShowSupporterPremiumNotice));
+        }
     }
 
     private void TickIndicatorPreview()
