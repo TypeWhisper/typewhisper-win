@@ -106,12 +106,26 @@ public class WhisperCppPluginTests
     [Fact]
     public void SetAccelerationPreference_ExplicitRocmWithoutHookExplainsEnvironmentVariable()
     {
-        var sut = new WhisperCppPlugin();
+        var previous = Environment.GetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable);
+        var previousLibraryPath = RuntimeOptions.LibraryPath;
+        var previousLoadedLibrary = RuntimeOptions.LoadedLibrary;
+        try
+        {
+            Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, null);
+            RuntimeOptions.LoadedLibrary = null;
+            var sut = new WhisperCppPlugin();
 
-        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdRocm);
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdRocm);
 
-        Assert.Equal("ROCm unavailable", sut.AccelerationStatus.DisplayText);
-        Assert.Contains("TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH", sut.AccelerationStatus.Detail);
+            Assert.Equal("ROCm unavailable", sut.AccelerationStatus.DisplayText);
+            Assert.Contains("TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH", sut.AccelerationStatus.Detail);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, previous);
+            RuntimeOptions.LibraryPath = previousLibraryPath;
+            RuntimeOptions.LoadedLibrary = previousLoadedLibrary;
+        }
     }
 
     [Fact]
@@ -133,9 +147,11 @@ public class WhisperCppPluginTests
         File.WriteAllText(Path.Join(temp.Path, "whisper.dll"), "native");
         var previous = Environment.GetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable);
         var previousLibraryPath = RuntimeOptions.LibraryPath;
+        var previousLoadedLibrary = RuntimeOptions.LoadedLibrary;
         try
         {
             Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, temp.Path);
+            RuntimeOptions.LoadedLibrary = null;
             var sut = new WhisperCppPlugin();
 
             sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdRocm);
@@ -147,6 +163,7 @@ public class WhisperCppPluginTests
         {
             Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, previous);
             RuntimeOptions.LibraryPath = previousLibraryPath;
+            RuntimeOptions.LoadedLibrary = previousLoadedLibrary;
         }
     }
 
