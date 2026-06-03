@@ -16,6 +16,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private const string ApiKeySecretName = "api-key";
     private const string SonioxAsyncModelId = "stt-async-v4";
     private const int DefaultMaxPollAttempts = 3600;
+    private const int MaxSubtitleSegmentCharacters = 84;
+    private const int MinSentenceSegmentCharacters = 20;
+    private const double MaxSubtitleSegmentDurationSeconds = 6.0;
+    private const double SubtitleSegmentPauseSplitSeconds = 0.75;
 
     private static readonly TimeSpan DefaultPollDelay = TimeSpan.FromSeconds(1);
 
@@ -342,8 +346,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ? durationMs / 1000.0
             : 0.0;
 
-        var segments = new List<PluginTranscriptionSegment>();
+        var segmentTokens = new List<SonioxTimedToken>();
         string? detectedLanguage = null;
+        var transcriptCursor = 0;
 
         if (root.TryGetProperty("tokens", out var tokens)
             && tokens.ValueKind == JsonValueKind.Array)
@@ -364,15 +369,156 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
                 var start = startMs / 1000.0;
                 var end = endMs / 1000.0;
-                segments.Add(new PluginTranscriptionSegment(tokenText.Trim(), start, end));
+                var displayText = ResolveDisplayText(text, tokenText, ref transcriptCursor);
+                if (end <= start)
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(displayText))
+                    segmentTokens.Add(new SonioxTimedToken(displayText, start, end));
+
                 duration = Math.Max(duration, end);
             }
         }
 
         return new PluginTranscriptionResult(text, detectedLanguage ?? fallbackLanguage, duration, NoSpeechProbability: null)
         {
-            Segments = segments
+            Segments = BuildSubtitleSegments(segmentTokens)
         };
+    }
+
+    private static List<PluginTranscriptionSegment> BuildSubtitleSegments(IReadOnlyList<SonioxTimedToken> tokens)
+    {
+        var segments = new List<PluginTranscriptionSegment>();
+        var text = new StringBuilder();
+        var start = 0.0;
+        var end = 0.0;
+        var hasSegment = false;
+
+        foreach (var token in tokens)
+        {
+            if (hasSegment && ShouldStartNewSubtitleSegment(token, text, start, end))
+                FlushSegment();
+
+            if (!hasSegment)
+            {
+                text.Clear();
+                start = token.Start;
+                hasSegment = true;
+            }
+
+            text.Append(token.Text);
+            end = token.End;
+
+            if (ShouldEndSubtitleSegment(text, start, end))
+                FlushSegment();
+        }
+
+        FlushSegment();
+        return segments;
+
+        void FlushSegment()
+        {
+            if (!hasSegment)
+                return;
+
+            var normalizedText = NormalizeSubtitleText(text.ToString());
+            if (normalizedText.Length > 0)
+                segments.Add(new PluginTranscriptionSegment(normalizedText, start, end));
+
+            text.Clear();
+            hasSegment = false;
+        }
+    }
+
+    private static bool ShouldStartNewSubtitleSegment(
+        SonioxTimedToken token,
+        StringBuilder currentText,
+        double currentStart,
+        double currentEnd)
+    {
+        if (token.Start - currentEnd > SubtitleSegmentPauseSplitSeconds)
+            return true;
+
+        if (token.End - currentStart > MaxSubtitleSegmentDurationSeconds)
+            return true;
+
+        var currentLength = NormalizeSubtitleText(currentText.ToString()).Length;
+        var tokenLength = NormalizeSubtitleText(token.Text).Length;
+        return currentLength > 0 && currentLength + tokenLength > MaxSubtitleSegmentCharacters;
+    }
+
+    private static bool ShouldEndSubtitleSegment(StringBuilder currentText, double start, double end)
+    {
+        var normalizedText = NormalizeSubtitleText(currentText.ToString());
+        if (normalizedText.Length >= MinSentenceSegmentCharacters
+            && EndsWithSentenceTerminator(normalizedText))
+        {
+            return true;
+        }
+
+        return end - start >= MaxSubtitleSegmentDurationSeconds;
+    }
+
+    private static string ResolveDisplayText(string transcriptText, string tokenText, ref int transcriptCursor)
+    {
+        var trimmedToken = tokenText.Trim();
+        if (trimmedToken.Length == 0)
+            return "";
+
+        if (transcriptText.Length > 0 && transcriptCursor <= transcriptText.Length)
+        {
+            var match = transcriptText.IndexOf(trimmedToken, transcriptCursor, StringComparison.Ordinal);
+            if (match >= 0)
+            {
+                var end = match + trimmedToken.Length;
+                var displayText = transcriptText[transcriptCursor..end];
+                transcriptCursor = end;
+                return displayText;
+            }
+        }
+
+        return trimmedToken;
+    }
+
+    private static string NormalizeSubtitleText(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0)
+            return "";
+
+        var sb = new StringBuilder(trimmed.Length);
+        var previousWasWhitespace = false;
+
+        foreach (var ch in trimmed)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                if (!previousWasWhitespace)
+                    sb.Append(' ');
+
+                previousWasWhitespace = true;
+                continue;
+            }
+
+            sb.Append(ch);
+            previousWasWhitespace = false;
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool EndsWithSentenceTerminator(string text)
+    {
+        for (var i = text.Length - 1; i >= 0; i--)
+        {
+            var ch = text[i];
+            if (ch is '"' or '\'' or ')' or ']' or '}')
+                continue;
+
+            return ch is '.' or '!' or '?';
+        }
+
+        return false;
     }
 
     private static void AddAuthorization(HttpRequestMessage request, string apiKey) =>
@@ -457,6 +603,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     }
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromMinutes(5) };
+
+    private sealed record SonioxTimedToken(string Text, double Start, double End);
 
     public void Dispose()
     {
