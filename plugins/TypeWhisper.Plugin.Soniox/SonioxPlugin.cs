@@ -370,6 +370,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
                 var start = startMs / 1000.0;
                 var end = endMs / 1000.0;
                 var displayText = ResolveDisplayText(text, tokenText, ref transcriptCursor);
+                if (end <= start)
+                    continue;
+
                 if (!string.IsNullOrWhiteSpace(displayText))
                     segmentTokens.Add(new SonioxTimedToken(displayText, start, end));
 

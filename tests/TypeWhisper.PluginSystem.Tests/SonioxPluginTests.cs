@@ -260,6 +260,30 @@ public class SonioxPluginTests
     }
 
     [Fact]
+    public void ParseTranscript_SkipsInvalidTokenTimingsWithoutReusingSkippedText()
+    {
+        using var completedDetails = JsonDocument.Parse("""{ "audio_duration_ms": 2000 }""");
+
+        var result = SonioxPlugin.ParseTranscript(
+            """
+            {
+              "text": "Bad good",
+              "tokens": [
+                { "text": "Bad", "start_ms": 1000, "end_ms": 1000, "language": "en" },
+                { "text": "good", "start_ms": 1200, "end_ms": 1500, "language": "en" }
+              ]
+            }
+            """,
+            completedDetails.RootElement,
+            fallbackLanguage: null);
+
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal("good", segment.Text);
+        Assert.Equal(1.2, segment.Start);
+        Assert.Equal(1.5, segment.End);
+    }
+
+    [Fact]
     public async Task TranscribeAsync_UsesInitialApiKeyForWholeAsyncFlow()
     {
         var seenAuthorizations = new List<string?>();
