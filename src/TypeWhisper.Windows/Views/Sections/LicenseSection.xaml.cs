@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.ViewModels;
@@ -33,8 +34,15 @@ public partial class LicenseSection : UserControl
         if (_isInitialized)
             return;
 
-        _isInitialized = true;
-        await _viewModel.InitializeAsync();
+        try
+        {
+            await _viewModel.InitializeAsync();
+            _isInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"License section initialization failed: {ex.Message}");
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

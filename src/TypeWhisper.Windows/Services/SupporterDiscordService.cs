@@ -219,7 +219,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
         if (candidates.Count == 0 || ClearStaleClaimActivation(candidates))
             return;
 
-        var activationId = ClaimActivationId ?? candidates.FirstOrDefault()?.ActivationId;
+        var activationId = string.IsNullOrWhiteSpace(ClaimActivationId)
+            ? candidates.FirstOrDefault()?.ActivationId
+            : ClaimActivationId;
         if (string.IsNullOrWhiteSpace(activationId))
         {
             HandleSupporterEntitlementRemoved();

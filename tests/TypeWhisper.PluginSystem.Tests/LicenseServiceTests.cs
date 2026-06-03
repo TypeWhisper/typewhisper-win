@@ -279,6 +279,32 @@ public sealed class LicenseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SupporterDiscordService_RefreshClaimStatusUsesCurrentCandidateWhenClaimActivationIdIsWhitespace()
+    {
+        string? requestedQuery = null;
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+        SetPrivateField(service, "_supporterLicenseKey", "TYPEWHISPER-SUP-999");
+        SetPrivateField(service, "_supporterActivationId", "activation-current");
+        service.SupporterStatus = LicenseStatus.Active;
+        service.SupporterTier = SupporterTier.Gold;
+        var discord = CreateDiscordService((request, _) =>
+        {
+            requestedQuery = request.RequestUri?.Query;
+            return Json(HttpStatusCode.OK, """{"status":"linked","discord_username":"marco"}""");
+        });
+        discord.ClaimState = SupporterDiscordClaimState.Linked;
+        discord.ClaimActivationId = "   ";
+        discord.SessionId = "session-current";
+
+        await discord.RefreshClaimStatusAsync(service);
+
+        Assert.Contains("activation_id=activation-current", requestedQuery);
+        Assert.Contains("session_id=session-current", requestedQuery);
+        Assert.Equal(SupporterDiscordClaimState.Linked, discord.ClaimState);
+        Assert.Equal("marco", discord.DiscordUsername);
+    }
+
+    [Fact]
     public async Task LicenseSectionViewModel_ActivateLicenseCommandClearsSharedInputOnSuccess()
     {
         var service = CreateService((request, _) => request.RequestUri?.AbsolutePath switch
