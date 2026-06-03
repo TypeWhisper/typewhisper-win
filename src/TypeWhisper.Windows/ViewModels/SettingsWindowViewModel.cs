@@ -431,49 +431,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         NavigationGroups.Clear();
         _navigationLookup.Clear();
 
-        NavigationGroups.Add(CreateGroup(SettingsGroup.Overview, Loc.Instance["SettingsGroup.Overview"],
-        [
-            new SettingsNavigationItem(SettingsRoute.Dashboard, Loc.Instance["Nav.Dashboard"], "\uE80F")
-        ]));
-
-        NavigationGroups.Add(CreateGroup(SettingsGroup.Capture, Loc.Instance["SettingsGroup.Capture"],
-        [
-            new SettingsNavigationItem(SettingsRoute.Dictation, Loc.Instance["Nav.Dictation"], "\uE720"),
-            new SettingsNavigationItem(SettingsRoute.Shortcuts, Loc.Instance["Nav.Shortcuts"], "\uE765"),
-            new SettingsNavigationItem(SettingsRoute.FileTranscription, Loc.Instance["Nav.FileTranscription"], "\uE8A5"),
-            new SettingsNavigationItem(SettingsRoute.Recorder, Loc.Instance["Nav.Recorder"], "\uE189")
-        ]));
-
-        NavigationGroups.Add(CreateGroup(SettingsGroup.Library, Loc.Instance["SettingsGroup.Library"],
-        [
-            new SettingsNavigationItem(SettingsRoute.History, Loc.Instance["Nav.History"], "\uE81C"),
-            new SettingsNavigationItem(SettingsRoute.Dictionary, Loc.Instance["Nav.Dictionary"], "\uE8D2"),
-            new SettingsNavigationItem(SettingsRoute.Snippets, Loc.Instance["Nav.Snippets"], "\uE8C8")
-        ]));
-
-        NavigationGroups.Add(CreateGroup(SettingsGroup.AI, Loc.Instance["SettingsGroup.AI"],
-        [
-            new SettingsNavigationItem(SettingsRoute.Workflows, Loc.Instance["Nav.Workflows"], "\uE8F1"),
-            new SettingsNavigationItem(SettingsRoute.Integrations, Loc.Instance["Nav.Plugins"], "\uE943")
-        ]));
-
-        NavigationGroups.Add(CreateGroup(SettingsGroup.System, Loc.Instance["SettingsGroup.System"],
-        [
-            new SettingsNavigationItem(SettingsRoute.General, Loc.Instance["Nav.General"], "\uE713"),
-            new SettingsNavigationItem(SettingsRoute.Appearance, Loc.Instance["Nav.Appearance"], "\uE790"),
-            new SettingsNavigationItem(SettingsRoute.Advanced, Loc.Instance["Nav.Advanced"], "\uE9CE"),
-            new SettingsNavigationItem(SettingsRoute.Premium, Loc.Instance["Nav.Premium"], "\uE735"),
-            new SettingsNavigationItem(SettingsRoute.License, Loc.Instance["Nav.License"], "\uE72E"),
-            new SettingsNavigationItem(SettingsRoute.About, Loc.Instance["Nav.About"], "\uE946")
-        ]));
-    }
-
-    private SettingsNavigationGroup CreateGroup(SettingsGroup group, string title, IReadOnlyList<SettingsNavigationItem> items)
-    {
-        foreach (var item in items)
-            _navigationLookup[item.Route] = item;
-
-        return new SettingsNavigationGroup(group, title, items);
+        foreach (var group in SettingsNavigationCatalog.Build(key => Loc.Instance[key]))
+        {
+            NavigationGroups.Add(group);
+            foreach (var item in group.Items)
+                _navigationLookup[item.Route] = item;
+        }
     }
 
     private void SyncNavigationSelection()

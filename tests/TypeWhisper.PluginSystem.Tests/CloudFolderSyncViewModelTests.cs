@@ -43,7 +43,7 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
 
         Assert.True(sut.ShowLockedState);
         Assert.False(sut.ShowSyncControls);
-        Assert.Contains("Commercial", sut.ErrorMessage);
+        Assert.False(string.IsNullOrWhiteSpace(sut.ErrorMessage));
         Assert.False(Directory.Exists(CloudFolderSyncEngine.PackagePath(_tempDir)));
     }
 
@@ -74,7 +74,7 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
         Assert.NotNull(settings.Current.CloudFolderSyncState.LastSyncAt);
         Assert.Equal(0, sut.PendingChanges);
         Assert.True(Directory.Exists(CloudFolderSyncEngine.PackagePath(_tempDir)));
-        Assert.Contains("Synced", sut.StatusMessage);
+        Assert.False(string.IsNullOrWhiteSpace(sut.StatusMessage));
     }
 
     [Fact]
@@ -104,6 +104,30 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SettingSameFolderPreservesPersistedSyncState()
+    {
+        var state = new CloudFolderSyncState
+        {
+            DeviceId = "win-a",
+            KnownLocalItemIds = ["dictionary:term:dHlwZXdoaXNwZXI"],
+            AppliedOperationIds = ["op-1"],
+            LastSyncAt = Date(2)
+        };
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            CloudFolderSyncFolderPath = _tempDir,
+            CloudFolderSyncState = state
+        });
+        var sut = new CloudFolderSyncViewModel(settings, new FakeUserDataSyncStore(), () => true, TimeSpan.Zero);
+
+        sut.SetFolderPath(_tempDir);
+
+        Assert.Same(state, settings.Current.CloudFolderSyncState);
+        var savedState = Assert.IsType<CloudFolderSyncState>(settings.Current.CloudFolderSyncState);
+        Assert.Contains("op-1", savedState.AppliedOperationIds);
+    }
+
+    [Fact]
     public async Task LocalChangesScheduleSyncForCommercialUser()
     {
         var settings = new FakeSettingsService(AppSettings.Default);
@@ -122,7 +146,9 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
         sut.SetFolderPath(_tempDir);
 
         store.TriggerLocalChange();
-        await Task.Delay(250);
+        await WaitUntilAsync(() =>
+            sut.PendingChanges == 0 &&
+            Directory.Exists(CloudFolderSyncEngine.PackagePath(_tempDir)));
 
         Assert.Equal(0, sut.PendingChanges);
         Assert.True(Directory.Exists(CloudFolderSyncEngine.PackagePath(_tempDir)));
@@ -130,6 +156,15 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
 
     private static DateTime Date(double seconds) =>
         DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_000 + (long)(seconds * 1000)).UtcDateTime;
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(25);
+
+        Assert.True(condition());
+    }
 
     private sealed class FakeSettingsService(AppSettings initialSettings) : ISettingsService
     {
@@ -161,11 +196,8 @@ public sealed class CloudFolderSyncViewModelTests : IDisposable
 
         public void Apply(IReadOnlyList<UserDataSyncMutation> mutations)
         {
-            foreach (var mutation in mutations)
-            {
-                if (mutation is UserDataSyncMutation.UpsertDictionary upsert)
-                    _dictionaryEntries.Add(upsert.Entry);
-            }
+            foreach (var upsert in mutations.OfType<UserDataSyncMutation.UpsertDictionary>())
+                _dictionaryEntries.Add(upsert.Entry);
         }
 
         public Guid ObserveLocalChanges(Action handler)

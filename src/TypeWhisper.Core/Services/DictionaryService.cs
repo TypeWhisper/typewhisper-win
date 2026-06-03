@@ -8,6 +8,8 @@ namespace TypeWhisper.Core.Services;
 
 public sealed class DictionaryService : IDictionaryService
 {
+    private const string PackEntryPrefix = "pack:";
+
     private readonly string _filePath;
     private List<DictionaryEntry> _cache = [];
     private bool _cacheLoaded;
@@ -31,7 +33,7 @@ public sealed class DictionaryService : IDictionaryService
     public void AddEntry(DictionaryEntry entry)
     {
         EnsureCacheLoaded();
-        _cache.Add(entry);
+        _cache.Add(BackfillTimestamps(entry));
         SaveToDisk();
         EntriesChanged?.Invoke();
     }
@@ -39,7 +41,7 @@ public sealed class DictionaryService : IDictionaryService
     public void AddEntries(IEnumerable<DictionaryEntry> entries)
     {
         EnsureCacheLoaded();
-        _cache.AddRange(entries);
+        _cache.AddRange(entries.Select(BackfillTimestamps));
         SaveToDisk();
         EntriesChanged?.Invoke();
     }
@@ -48,7 +50,11 @@ public sealed class DictionaryService : IDictionaryService
     {
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(e => e.Id == entry.Id);
-        if (idx >= 0) _cache[idx] = entry with { UpdatedAt = DateTime.UtcNow };
+        if (idx >= 0)
+        {
+            var existing = _cache[idx];
+            _cache[idx] = BackfillTimestamps(entry) with { UpdatedAt = NextUpdatedAt(existing.UpdatedAt) };
+        }
         SaveToDisk();
         EntriesChanged?.Invoke();
     }
@@ -140,7 +146,12 @@ public sealed class DictionaryService : IDictionaryService
                 var idx = _cache.FindIndex(e => e.Id == entry.Id);
                 if (idx >= 0)
                 {
-                    var updated = entry with { Original = desiredTerm, IsEnabled = true, UpdatedAt = DateTime.UtcNow };
+                    var updated = entry with
+                    {
+                        Original = desiredTerm,
+                        IsEnabled = true,
+                        UpdatedAt = NextUpdatedAt(entry.UpdatedAt)
+                    };
                     _cache[idx] = updated;
                     touchedTerms.Add(updated);
                 }
@@ -156,6 +167,7 @@ public sealed class DictionaryService : IDictionaryService
         }
 
         var existingKeys = existingTerms.Select(e => TermKey(e.Original)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var now = DateTime.UtcNow;
         var addedTerms = normalized
             .Where(term => !existingKeys.Contains(TermKey(term)))
             .Select(term => new DictionaryEntry
@@ -163,8 +175,8 @@ public sealed class DictionaryService : IDictionaryService
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Term,
                 Original = term,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = now,
+                UpdatedAt = now
             })
             .ToList();
         _cache.AddRange(addedTerms);
@@ -229,12 +241,13 @@ public sealed class DictionaryService : IDictionaryService
                     Replacement = replacement,
                     CaseSensitive = caseSensitive,
                     IsEnabled = true,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = NextUpdatedAt(existing.UpdatedAt)
                 };
             }
         }
         else
         {
+            var now = DateTime.UtcNow;
             _cache.Add(new DictionaryEntry
             {
                 Id = Guid.NewGuid().ToString(),
@@ -242,8 +255,8 @@ public sealed class DictionaryService : IDictionaryService
                 Original = original,
                 Replacement = replacement,
                 CaseSensitive = caseSensitive,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = now,
+                UpdatedAt = now
             });
         }
 
@@ -280,14 +293,15 @@ public sealed class DictionaryService : IDictionaryService
         }
         else
         {
+            var now = DateTime.UtcNow;
             AddEntry(new DictionaryEntry
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Correction,
                 Original = original,
                 Replacement = replacement,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = now,
+                UpdatedAt = now
             });
         }
     }
@@ -303,13 +317,17 @@ public sealed class DictionaryService : IDictionaryService
 
         var newEntries = pack.Terms
             .Where(t => !existingOriginals.Contains(t))
-            .Select(t => new DictionaryEntry
+            .Select(t =>
             {
-                Id = $"pack:{pack.Id}:{t}",
-                EntryType = DictionaryEntryType.Term,
-                Original = t,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                var now = DateTime.UtcNow;
+                return new DictionaryEntry
+                {
+                    Id = $"{PackEntryPrefix}{pack.Id}:{t}",
+                    EntryType = DictionaryEntryType.Term,
+                    Original = t,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
             })
             .ToList();
 
@@ -349,7 +367,7 @@ public sealed class DictionaryService : IDictionaryService
     {
         EnsureCacheLoaded();
         return _cache
-            .Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal))
+            .Where(IsUserAuthored)
             .Select(entry => new UserDataSyncDictionaryEntry(
                 entry.EntryType == DictionaryEntryType.Term
                     ? UserDataSyncDictionaryEntryType.Term
@@ -398,6 +416,7 @@ public sealed class DictionaryService : IDictionaryService
 
         var idx = _cache.FindIndex(entry =>
             entry.EntryType == targetType &&
+            IsUserAuthored(entry) &&
             UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == targetId);
 
         if (idx >= 0)
@@ -431,6 +450,7 @@ public sealed class DictionaryService : IDictionaryService
     private bool DeleteSyncedDictionaryEntry(string itemId)
     {
         var removed = _cache.RemoveAll(entry =>
+            IsUserAuthored(entry) &&
             UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId);
         return removed > 0;
     }
@@ -445,6 +465,7 @@ public sealed class DictionaryService : IDictionaryService
             {
                 var json = File.ReadAllText(_filePath);
                 _cache = JsonSerializer.Deserialize<List<DictionaryEntry>>(json) ?? [];
+                _cache = _cache.Select(BackfillTimestamps).ToList();
             }
         }
         catch
@@ -499,4 +520,24 @@ public sealed class DictionaryService : IDictionaryService
     }
 
     private static string TermKey(string term) => term.Trim().ToUpperInvariant();
+
+    private static bool IsUserAuthored(DictionaryEntry entry) =>
+        !entry.Id.StartsWith(PackEntryPrefix, StringComparison.Ordinal);
+
+    private static DictionaryEntry BackfillTimestamps(DictionaryEntry entry)
+    {
+        var createdAt = entry.CreatedAt == default ? DateTime.UtcNow : NormalizeUtc(entry.CreatedAt);
+        var updatedAt = entry.UpdatedAt == default ? createdAt : NormalizeUtc(entry.UpdatedAt);
+        return entry with { CreatedAt = createdAt, UpdatedAt = updatedAt };
+    }
+
+    private static DateTime NextUpdatedAt(DateTime previousUpdatedAt)
+    {
+        var previous = previousUpdatedAt == default ? DateTime.UtcNow : NormalizeUtc(previousUpdatedAt);
+        var now = DateTime.UtcNow;
+        return now > previous ? now : previous.AddTicks(1);
+    }
+
+    private static DateTime NormalizeUtc(DateTime date) =>
+        date.Kind == DateTimeKind.Utc ? date : date.ToUniversalTime();
 }

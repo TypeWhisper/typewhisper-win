@@ -161,7 +161,7 @@ public static class CloudFolderSyncEngine
     private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(90);
 
     public static string PackagePath(string folderPath) =>
-        Path.Combine(folderPath, PackageDirectoryName);
+        Path.Combine(folderPath, EnsureRelativePathSegment(PackageDirectoryName, nameof(PackageDirectoryName)));
 
     public static Task<CloudFolderSyncResult> SyncAsync(
         string folderPath,
@@ -177,14 +177,19 @@ public static class CloudFolderSyncEngine
             throw new CloudFolderSyncMissingStoreException();
 
         var syncNow = NormalizeUtc(now ?? DateTime.UtcNow);
+        var deviceId = EnsureRelativePathSegment(state.DeviceId, nameof(state.DeviceId));
         var packagePath = PackagePath(folderPath);
-        var operationsPath = Path.Combine(packagePath, OperationsDirectoryName);
-        var deviceOperationsPath = Path.Combine(operationsPath, state.DeviceId);
-        var devicesPath = Path.Combine(packagePath, DevicesDirectoryName);
+        var operationsPath = Path.Combine(
+            packagePath,
+            EnsureRelativePathSegment(OperationsDirectoryName, nameof(OperationsDirectoryName)));
+        var deviceOperationsPath = Path.Combine(operationsPath, deviceId);
+        var devicesPath = Path.Combine(
+            packagePath,
+            EnsureRelativePathSegment(DevicesDirectoryName, nameof(DevicesDirectoryName)));
 
         Directory.CreateDirectory(deviceOperationsPath);
         Directory.CreateDirectory(devicesPath);
-        WritePackageMetadata(packagePath, devicesPath, state.DeviceId, syncNow);
+        WritePackageMetadata(packagePath, devicesPath, deviceId, syncNow);
 
         var initialRecords = RecordsFrom(store.Snapshot());
         var localOperations = MakeLocalOperations(initialRecords, state, syncNow);
@@ -249,18 +254,8 @@ public static class CloudFolderSyncEngine
     {
         var winners = new Dictionary<string, CloudFolderSyncOperation>(StringComparer.Ordinal);
 
-        foreach (var operation in operations)
+        foreach (var operation in operations.Where(IsValidOperation))
         {
-            if (operation.SchemaVersion != 1)
-                continue;
-
-            if (operation.Kind != CloudFolderSyncOperationKind.Delete &&
-                operation.Dictionary is null &&
-                operation.Snippet is null)
-            {
-                continue;
-            }
-
             if (!winners.TryGetValue(operation.ItemId, out var existing) ||
                 Prefers(operation, existing))
             {
@@ -270,6 +265,12 @@ public static class CloudFolderSyncEngine
 
         return winners;
     }
+
+    private static bool IsValidOperation(CloudFolderSyncOperation operation) =>
+        operation.SchemaVersion == 1 &&
+        (operation.Kind == CloudFolderSyncOperationKind.Delete ||
+         operation.Dictionary is not null ||
+         operation.Snippet is not null);
 
     private static void Merge(
         CloudFolderSyncRecord candidate,
@@ -359,15 +360,15 @@ public static class CloudFolderSyncEngine
     {
         var mutations = new List<UserDataSyncMutation>();
 
-        foreach (var operation in winners.Values.OrderBy(operation => operation.ItemId, StringComparer.Ordinal))
+        foreach (var operation in winners.Values
+                     .OrderBy(operation => operation.ItemId, StringComparer.Ordinal)
+                     .Where(operation => !appliedOperationIds.Contains(operation.OperationId))
+                     .Where(operation =>
+                     {
+                         localRecords.TryGetValue(operation.ItemId, out var local);
+                         return ShouldApply(operation, local, localDeviceId);
+                     }))
         {
-            if (appliedOperationIds.Contains(operation.OperationId))
-                continue;
-
-            localRecords.TryGetValue(operation.ItemId, out var local);
-            if (!ShouldApply(operation, local, localDeviceId))
-                continue;
-
             switch (operation.Kind, operation.Collection)
             {
                 case (CloudFolderSyncOperationKind.Delete, UserDataSyncCollection.Dictionary):
@@ -420,11 +421,11 @@ public static class CloudFolderSyncEngine
     {
         WriteJson(
             new CloudFolderSyncManifest(1, "TypeWhisper", now),
-            Path.Combine(packagePath, ManifestFileName));
+            Path.Combine(packagePath, EnsureRelativePathSegment(ManifestFileName, nameof(ManifestFileName))));
 
         WriteJson(
             new CloudFolderSyncDeviceRecord(deviceId, "Windows", CurrentAppVersion(), now),
-            Path.Combine(devicesPath, $"{deviceId}.json"));
+            Path.Combine(devicesPath, $"{EnsureRelativePathSegment(deviceId, nameof(deviceId))}.json"));
     }
 
     private static void Write(IReadOnlyList<CloudFolderSyncOperation> operations, string directory, DateTime now)
@@ -511,6 +512,19 @@ public static class CloudFolderSyncEngine
 
     private static DateTime NormalizeUtc(DateTime date) =>
         date.Kind == DateTimeKind.Utc ? date : date.ToUniversalTime();
+
+    private static string EnsureRelativePathSegment(string segment, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(segment) ||
+            Path.IsPathRooted(segment) ||
+            segment.Contains(Path.DirectorySeparatorChar) ||
+            segment.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new ArgumentException("Expected a relative file name segment.", parameterName);
+        }
+
+        return segment;
+    }
 
     private static string CurrentAppVersion() =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";

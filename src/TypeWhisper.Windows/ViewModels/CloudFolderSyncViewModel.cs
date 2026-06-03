@@ -51,7 +51,7 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         _localChangeObserverId = _store.ObserveLocalChanges(ScheduleSyncAfterLocalChange);
 
         SyncNowCommand = new AsyncRelayCommand(SyncNowAsync, CanRunSyncNow);
-        ClearFolderCommand = new RelayCommand(ClearFolder, () => HasSelectedFolder);
+        ClearFolderCommand = new RelayCommand(ClearFolder, () => HasSelectedFolder && !IsSyncing);
     }
 
     public IAsyncRelayCommand SyncNowCommand { get; }
@@ -71,10 +71,11 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
 
     public void SetFolderPath(string folderPath)
     {
-        if (string.IsNullOrWhiteSpace(folderPath))
+        if (IsSyncing || string.IsNullOrWhiteSpace(folderPath))
             return;
 
-        if (!string.Equals(SelectedFolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+        var pathChanged = !string.Equals(SelectedFolderPath, folderPath, StringComparison.OrdinalIgnoreCase);
+        if (pathChanged)
         {
             _scheduledSync?.Cancel();
             _state = new CloudFolderSyncState();
@@ -88,13 +89,16 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         _settings.Save(_settings.Current with
         {
             CloudFolderSyncFolderPath = folderPath,
-            CloudFolderSyncState = null
+            CloudFolderSyncState = pathChanged ? null : _state
         });
         RefreshComputedProperties();
     }
 
     public void ClearFolder()
     {
+        if (IsSyncing)
+            return;
+
         _scheduledSync?.Cancel();
         SelectedFolderPath = null;
         _state = new CloudFolderSyncState();
@@ -112,6 +116,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
 
     public async Task SyncNowAsync()
     {
+        var folderPath = SelectedFolderPath;
+        var state = _state;
+
         if (!HasSelectedFolder)
         {
             ErrorMessage = Text("Premium.ErrorChooseFolder", "Choose a sync folder first.");
@@ -134,10 +141,16 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         try
         {
             var result = await CloudFolderSyncEngine.SyncAsync(
-                SelectedFolderPath!,
+                folderPath!,
                 _store,
-                _state,
+                state,
                 new PaidEntitlements(CanUseCloudFolderSync: true));
+
+            if (!string.Equals(SelectedFolderPath, folderPath, StringComparison.OrdinalIgnoreCase) ||
+                !ReferenceEquals(_state, state))
+            {
+                return;
+            }
 
             LastSyncDate = result.SyncedAt;
             PendingChanges = 0;
@@ -147,8 +160,8 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
                 result.OperationsWritten + result.MutationsApplied);
             _settings.Save(_settings.Current with
             {
-                CloudFolderSyncFolderPath = SelectedFolderPath,
-                CloudFolderSyncState = _state
+                CloudFolderSyncFolderPath = folderPath,
+                CloudFolderSyncState = state
             });
         }
         catch (Exception ex)

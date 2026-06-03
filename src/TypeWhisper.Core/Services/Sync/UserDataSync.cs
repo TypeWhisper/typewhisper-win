@@ -78,11 +78,9 @@ public static class UserDataSyncIdentity
         var trimmed = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
         var builder = new StringBuilder(trimmed.Length);
 
-        foreach (var ch in trimmed)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
-                builder.Append(ch);
-        }
+        foreach (var ch in trimmed.Where(ch =>
+                     CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark))
+            builder.Append(ch);
 
         return builder.ToString().Normalize(NormalizationForm.FormC);
     }

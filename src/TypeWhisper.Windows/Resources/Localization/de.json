@@ -86,6 +86,7 @@
   "Premium.Never": "Nie",
   "Premium.NoFolderSelected": "Kein Ordner ausgewählt",
   "Premium.ChooseFolder": "Ordner wählen",
+  "Premium.SelectSyncFolder": "Sync-Ordner auswählen",
   "Premium.SyncNow": "Jetzt synchronisieren",
   "Premium.Clear": "Zurücksetzen",
   "Premium.StatusSyncedFormat": "{0} Änderungen synchronisiert.",

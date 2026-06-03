@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
@@ -16,9 +17,12 @@ public partial class PremiumSection : UserControl
 
     private void OnChooseFolder(object sender, RoutedEventArgs e)
     {
+        if (ViewModel?.CloudFolderSync.IsSyncing == true)
+            return;
+
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "Select sync folder"
+            Title = Loc.Instance["Premium.SelectSyncFolder"]
         };
 
         var current = ViewModel?.CloudFolderSync.SelectedFolderPath;

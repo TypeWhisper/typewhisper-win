@@ -86,6 +86,7 @@
   "Premium.Never": "Never",
   "Premium.NoFolderSelected": "No folder selected",
   "Premium.ChooseFolder": "Choose folder",
+  "Premium.SelectSyncFolder": "Select sync folder",
   "Premium.SyncNow": "Sync now",
   "Premium.Clear": "Clear",
   "Premium.StatusSyncedFormat": "Synced {0} changes.",

@@ -133,6 +133,27 @@ public sealed class CloudFolderSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task InvalidDeviceIdIsRejectedBeforeCreatingDeviceFolder()
+    {
+        var store = new InMemoryUserDataSyncStore(dictionaryEntries:
+        [
+            DictionaryEntry(original: "TypeWhisper", updatedAt: Date(10))
+        ]);
+        var state = new CloudFolderSyncState { DeviceId = @"..\outside" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            CloudFolderSyncEngine.SyncAsync(
+                _tempDir,
+                store,
+                state,
+                new PaidEntitlements(CanUseCloudFolderSync: true),
+                now: Date(20)));
+
+        Assert.False(Directory.Exists(Path.Combine(CloudFolderSyncEngine.PackagePath(_tempDir), "ops")));
+    }
+
+
+    [Fact]
     public async Task TwoSimulatedDevicesShareAppendOnlyOperations()
     {
         var firstEntry = DictionaryEntry(original: "TypeWhisper", updatedAt: Date(10));

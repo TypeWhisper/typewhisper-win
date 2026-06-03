@@ -86,6 +86,7 @@
   "Premium.Never": "未実行",
   "Premium.NoFolderSelected": "フォルダーが選択されていません",
   "Premium.ChooseFolder": "フォルダーを選択",
+  "Premium.SelectSyncFolder": "同期フォルダーを選択",
   "Premium.SyncNow": "今すぐ同期",
   "Premium.Clear": "クリア",
   "Premium.StatusSyncedFormat": "{0}件の変更を同期しました。",

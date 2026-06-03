@@ -86,6 +86,7 @@
   "Premium.Never": "Никогда",
   "Premium.NoFolderSelected": "Папка не выбрана",
   "Premium.ChooseFolder": "Выбрать папку",
+  "Premium.SelectSyncFolder": "Выберите папку синхронизации",
   "Premium.SyncNow": "Синхронизировать",
   "Premium.Clear": "Очистить",
   "Premium.StatusSyncedFormat": "Синхронизировано изменений: {0}.",

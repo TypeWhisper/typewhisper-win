@@ -246,6 +246,44 @@ public class SnippetServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpdateSnippet_KeepsUpdatedAtMonotonic()
+    {
+        var futureUpdatedAt = new DateTime(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddSnippet(new Snippet
+        {
+            Id = "1",
+            Trigger = ";sig",
+            Replacement = "Signature",
+            UpdatedAt = futureUpdatedAt
+        });
+
+        _sut.UpdateSnippet(_sut.Snippets[0] with { Replacement = "Updated signature" });
+
+        Assert.Equal(futureUpdatedAt.AddTicks(1), _sut.Snippets[0].UpdatedAt);
+    }
+
+    [Fact]
+    public void LegacySnippetsMissingUpdatedAtUseCreatedAt()
+    {
+        var createdAt = new DateTime(2024, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+        File.WriteAllText(_filePath, $$"""
+        [
+          {
+            "Id": "legacy",
+            "Trigger": ";sig",
+            "Replacement": "Signature",
+            "CreatedAt": "{{createdAt:O}}"
+          }
+        ]
+        """);
+        var sut = new SnippetService(_filePath);
+
+        var snippet = Assert.Single(sut.Snippets);
+
+        Assert.Equal(createdAt, snippet.UpdatedAt);
+    }
+
+    [Fact]
     public void ApplySnippets_IncrementsUsageWithoutChangingUpdatedAt()
     {
         var updatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);

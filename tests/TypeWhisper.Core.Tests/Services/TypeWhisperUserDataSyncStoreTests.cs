@@ -163,6 +163,46 @@ public sealed class TypeWhisperUserDataSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public void RemoteDictionaryMutationsDoNotTouchPackBackedTerms()
+    {
+        var dictionary = new DictionaryService(_dictionaryPath);
+        var snippets = new SnippetService(_snippetsPath);
+        dictionary.AddEntry(new DictionaryEntry
+        {
+            Id = "pack:test:React",
+            EntryType = DictionaryEntryType.Term,
+            Original = "React"
+        });
+
+        var store = new TypeWhisperUserDataSyncStore(dictionary, snippets);
+        store.Apply([
+            new UserDataSyncMutation.UpsertDictionary(new UserDataSyncDictionaryEntry(
+                UserDataSyncDictionaryEntryType.Term,
+                "react",
+                null,
+                true,
+                false,
+                Date(3),
+                Date(4)))
+        ]);
+
+        Assert.Equal(2, dictionary.Entries.Count);
+        Assert.Contains(dictionary.Entries, entry => entry.Id == "pack:test:React" && entry.Original == "React");
+        var synced = Assert.Single(dictionary.Entries, entry => entry.Id != "pack:test:React");
+        Assert.Equal("react", synced.Original);
+        Assert.True(synced.CaseSensitive);
+        Assert.False(synced.IsEnabled);
+
+        store.Apply([
+            new UserDataSyncMutation.DeleteDictionary(
+                UserDataSyncIdentity.DictionaryItemId(UserDataSyncDictionaryEntryType.Term, "REACT"))
+        ]);
+
+        var remaining = Assert.Single(dictionary.Entries);
+        Assert.Equal("pack:test:React", remaining.Id);
+    }
+
+    [Fact]
     public void RemoteApplyDoesNotNotifyLocalChangeObservers()
     {
         var dictionary = new DictionaryService(_dictionaryPath);
