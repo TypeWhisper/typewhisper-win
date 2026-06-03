@@ -19,6 +19,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         "CUDA runtime could not be loaded; using CPU. " + CudaRuntimeDependencyHint;
     private const string CudaLoadFailureDetail =
         "CUDA runtime could not be loaded. " + CudaRuntimeDependencyHint;
+    internal const string RocmLibraryPathEnvironmentVariable = "TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH";
+    private const string VulkanFallbackDetail =
+        "Vulkan runtime could not be loaded; using CPU. Make sure the AMD Vulkan driver is installed.";
+    private const string VulkanLoadFailureDetail =
+        "Vulkan runtime could not be loaded. Make sure the AMD Vulkan driver is installed.";
+    private const string RocmHookMissingDetail =
+        "Set TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH to a custom ROCm whisper.dll path and restart TypeWhisper.";
 
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
@@ -47,6 +54,8 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private string? _loadedModelId;
     private string? _pluginDirectory;
     private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
+    private bool _customRocmRuntimeLoaded;
+    private bool _runtimeRestartRequired;
     private TranscriptionAccelerationStatus _accelerationStatus = new(
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
@@ -74,7 +83,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
     [
         TranscriptionAccelerationBackend.Cpu,
-        TranscriptionAccelerationBackend.NvidiaCuda
+        TranscriptionAccelerationBackend.NvidiaCuda,
+        TranscriptionAccelerationBackend.AmdVulkan,
+        TranscriptionAccelerationBackend.AmdRocm
     ];
     public TranscriptionAccelerationPreference AccelerationPreference => _accelerationPreference;
     public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
@@ -110,11 +121,17 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
 
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
+        _runtimeRestartRequired = RequiresRuntimeRestart(preference);
         _accelerationPreference = preference;
-        ApplyRuntimeLibraryOrder(preference);
-        _accelerationStatus = CreatePendingAccelerationStatus(
-            preference,
-            _cudaRuntimeInstaller?.IsInstalled == true);
+        if (!_runtimeRestartRequired)
+            ApplyRuntimeConfiguration(preference);
+
+        _accelerationStatus = _runtimeRestartRequired
+            ? CreateRuntimeRestartStatus(preference)
+            : CreatePendingAccelerationStatus(
+                preference,
+                _cudaRuntimeInstaller?.IsInstalled == true,
+                ResolveRocmLibraryPathFromEnvironment() is not null);
     }
 
     public void SelectModel(string modelId)
@@ -198,9 +215,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         await _gate.WaitAsync(ct);
         try
         {
+            if (_accelerationStatus.RequiresRestart)
+                throw new InvalidOperationException(_accelerationStatus.Detail);
+
             DisposeFactoryUnsafe();
-            ApplyRuntimeLibraryOrder(_accelerationPreference);
+            ApplyRuntimeConfiguration(_accelerationPreference);
             await EnsureCudaRuntimeAvailableForLoadAsync(ct);
+            EnsureRocmRuntimeAvailableForLoad();
             try
             {
                 _factory = WhisperFactory.FromPath(modelPath);
@@ -220,6 +241,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             _accelerationStatus = CreateLoadedAccelerationStatus(
                 loadedLibrary,
                 _accelerationPreference);
+            _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             _host?.SetSetting("selectedModel", modelId);
@@ -326,15 +348,23 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         {
             TranscriptionAccelerationPreference.Cpu => [RuntimeLibrary.Cpu],
             TranscriptionAccelerationPreference.NvidiaCuda => [RuntimeLibrary.Cuda],
-            _ => [RuntimeLibrary.Cuda, RuntimeLibrary.Cpu]
+            TranscriptionAccelerationPreference.AmdVulkan => [RuntimeLibrary.Vulkan],
+            TranscriptionAccelerationPreference.AmdRocm => [],
+            _ => [RuntimeLibrary.Cuda, RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu]
         };
 
-    private static void ApplyRuntimeLibraryOrder(TranscriptionAccelerationPreference preference) =>
+    private static void ApplyRuntimeConfiguration(TranscriptionAccelerationPreference preference)
+    {
+        RuntimeOptions.LibraryPath = preference == TranscriptionAccelerationPreference.AmdRocm
+            ? ResolveRocmLibraryPathFromEnvironment()
+            : null;
         RuntimeOptions.RuntimeLibraryOrder = GetRuntimeLibraryOrder(preference).ToList();
+    }
 
     private static TranscriptionAccelerationStatus CreatePendingAccelerationStatus(
         TranscriptionAccelerationPreference preference,
-        bool cudaRuntimeInstalled) =>
+        bool cudaRuntimeInstalled,
+        bool rocmLibraryConfigured) =>
         preference switch
         {
             TranscriptionAccelerationPreference.NvidiaCuda when cudaRuntimeInstalled => new(
@@ -345,40 +375,59 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                     TranscriptionAccelerationBackend.Cpu,
                     "Using CPU",
                     "CUDA support will be downloaded when the model loads."),
+            TranscriptionAccelerationPreference.AmdVulkan => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "Vulkan will be used when the model loads."),
+            TranscriptionAccelerationPreference.AmdRocm when rocmLibraryConfigured => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Using CPU",
+                    "ROCm will be used when the model loads."),
+            TranscriptionAccelerationPreference.AmdRocm => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "ROCm unavailable",
+                    RocmHookMissingDetail),
             _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
         };
 
     private static TranscriptionAccelerationStatus CreateLoadedAccelerationStatus(
         RuntimeLibrary? loadedLibrary,
-        TranscriptionAccelerationPreference preference) =>
-        loadedLibrary switch
+        TranscriptionAccelerationPreference preference)
+    {
+        if (preference == TranscriptionAccelerationPreference.AmdRocm)
+            return new(TranscriptionAccelerationBackend.AmdRocm, "Using ROCm");
+
+        return loadedLibrary switch
         {
             RuntimeLibrary.Cuda => new(TranscriptionAccelerationBackend.NvidiaCuda, "Using CUDA"),
-            RuntimeLibrary.Cpu => preference == TranscriptionAccelerationPreference.Auto
-                ? new(
+            RuntimeLibrary.Vulkan => new(TranscriptionAccelerationBackend.AmdVulkan, "Using Vulkan"),
+            RuntimeLibrary.Cpu => preference switch
+            {
+                TranscriptionAccelerationPreference.Auto => new(
                     TranscriptionAccelerationBackend.Cpu,
                     "Using CPU",
-                    "CUDA runtime was not selected or could not be loaded.")
-                : preference == TranscriptionAccelerationPreference.NvidiaCuda
-                    ? new(
-                        TranscriptionAccelerationBackend.Cpu,
-                        "CUDA unavailable",
-                        CudaFallbackDetail)
-                : new(TranscriptionAccelerationBackend.Cpu, "Using CPU"),
+                    "CUDA/Vulkan runtime was not selected or could not be loaded."),
+                TranscriptionAccelerationPreference.NvidiaCuda => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "CUDA unavailable",
+                    CudaFallbackDetail),
+                TranscriptionAccelerationPreference.AmdVulkan => new(
+                    TranscriptionAccelerationBackend.Cpu,
+                    "Vulkan unavailable",
+                    VulkanFallbackDetail),
+                _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
+            },
             _ => new(TranscriptionAccelerationBackend.Cpu, "Using CPU")
         };
+    }
 
     private static TranscriptionAccelerationStatus CreateNativeLoadFailureStatus(
         Exception error,
         TranscriptionAccelerationPreference preference) =>
         new(
             TranscriptionAccelerationBackend.Cpu,
-            preference == TranscriptionAccelerationPreference.NvidiaCuda
-                ? "CUDA unavailable"
-                : "Native runtime unavailable",
-            preference == TranscriptionAccelerationPreference.NvidiaCuda
-                ? CudaLoadFailureDetail
-                : error.Message);
+            GetUnavailableDisplayText(preference),
+            GetNativeLoadFailureDetail(error, preference));
 
     private async Task EnsureCudaRuntimeAvailableForLoadAsync(CancellationToken cancellationToken)
     {
@@ -433,6 +482,31 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             "CUDA unavailable",
             detail);
 
+    private void EnsureRocmRuntimeAvailableForLoad()
+    {
+        if (_accelerationPreference != TranscriptionAccelerationPreference.AmdRocm)
+            return;
+
+        if (_runtimeRestartRequired)
+        {
+            _accelerationStatus = CreateRuntimeRestartStatus(_accelerationPreference);
+            throw new InvalidOperationException(_accelerationStatus.Detail);
+        }
+
+        var libraryPath = ResolveRocmLibraryPathFromEnvironment();
+        if (libraryPath is not null)
+        {
+            RuntimeOptions.LibraryPath = libraryPath;
+            return;
+        }
+
+        _accelerationStatus = new(
+            TranscriptionAccelerationBackend.Cpu,
+            "ROCm unavailable",
+            RocmHookMissingDetail);
+        throw new InvalidOperationException(_accelerationStatus.Detail);
+    }
+
     private string GetModelPath(string modelId)
     {
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
@@ -452,16 +526,20 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
 
         var runtimeDirectory = Path.Join(pluginDirectory, "runtimes", safeRuntimeIdentifier);
         var cudaRuntimeDirectory = Path.Join(pluginDirectory, "runtimes", "cuda", safeRuntimeIdentifier);
+        var vulkanRuntimeDirectory = Path.Join(pluginDirectory, "runtimes", "vulkan", safeRuntimeIdentifier);
         const string requiredFiles =
             "whisper.dll, ggml-whisper.dll, ggml-base-whisper.dll, ggml-cpu-whisper.dll, " +
             "ggml-cuda-whisper.dll (for CUDA), cublas64_13.dll (for CUDA/cuBLAS), " +
+            "ggml-vulkan-whisper.dll (for Vulkan), " +
             "msvcp140.dll, vcruntime140.dll, " +
             "vcruntime140_1.dll, VCOMP140.DLL";
 
         return "Unable to load the whisper.cpp native runtime. " +
             $"Expected CPU native DLLs under '{runtimeDirectory}' and CUDA native DLLs under " +
-            $"'{cudaRuntimeDirectory}', including {requiredFiles}. " +
+            $"'{cudaRuntimeDirectory}', Vulkan native DLLs under '{vulkanRuntimeDirectory}', " +
+            $"including {requiredFiles}. " +
             CudaRuntimeDependencyHint + " " +
+            $"For ROCm, set {RocmLibraryPathEnvironmentVariable} to a custom ROCm whisper.dll. " +
             "Reinstall or update the whisper.cpp plugin. If the problem persists, install the " +
             "Microsoft Visual C++ 2015-2022 Redistributable for your Windows architecture. " +
             $"Original error: {error.Message}";
@@ -501,6 +579,124 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _factory?.Dispose();
         _factory = null;
     }
+
+    internal static string? ResolveRocmLibraryPath(string? configuredPath)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+            return null;
+
+        string candidate;
+        try
+        {
+            candidate = Path.GetFullPath(configuredPath.Trim());
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException
+                or NotSupportedException
+                or PathTooLongException
+                or System.Security.SecurityException)
+        {
+            return null;
+        }
+
+        if (Directory.Exists(candidate))
+            candidate = Path.Join(candidate, "whisper.dll");
+
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    private static string? ResolveRocmLibraryPathFromEnvironment() =>
+        ResolveRocmLibraryPath(Environment.GetEnvironmentVariable(RocmLibraryPathEnvironmentVariable));
+
+    private bool RequiresRuntimeRestart(TranscriptionAccelerationPreference targetPreference)
+    {
+        if (_customRocmRuntimeLoaded)
+            return targetPreference != TranscriptionAccelerationPreference.AmdRocm;
+
+        if (targetPreference == TranscriptionAccelerationPreference.AmdRocm)
+            return RuntimeOptions.LoadedLibrary is not null;
+
+        return RuntimeOptions.LoadedLibrary is { } loadedLibrary
+            && !IsLoadedLibraryCompatibleWithPreference(loadedLibrary, targetPreference);
+    }
+
+    private static bool IsLoadedLibraryCompatibleWithPreference(
+        RuntimeLibrary loadedLibrary,
+        TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.Auto => true,
+            TranscriptionAccelerationPreference.Cpu => loadedLibrary == RuntimeLibrary.Cpu,
+            TranscriptionAccelerationPreference.NvidiaCuda => loadedLibrary == RuntimeLibrary.Cuda,
+            TranscriptionAccelerationPreference.AmdVulkan => loadedLibrary == RuntimeLibrary.Vulkan,
+            TranscriptionAccelerationPreference.AmdRocm => false,
+            _ => false
+        };
+
+    private TranscriptionAccelerationStatus CreateRuntimeRestartStatus(
+        TranscriptionAccelerationPreference targetPreference) =>
+        new(
+            GetCurrentRuntimeBackend(),
+            GetCurrentRuntimeDisplayText(),
+            $"Restart TypeWhisper to switch whisper.cpp to {GetPreferenceDisplayName(targetPreference)}.",
+            RequiresRestart: true);
+
+    private TranscriptionAccelerationBackend GetCurrentRuntimeBackend()
+    {
+        if (_customRocmRuntimeLoaded)
+            return TranscriptionAccelerationBackend.AmdRocm;
+
+        return RuntimeOptions.LoadedLibrary switch
+        {
+            RuntimeLibrary.Cuda => TranscriptionAccelerationBackend.NvidiaCuda,
+            RuntimeLibrary.Vulkan => TranscriptionAccelerationBackend.AmdVulkan,
+            _ => TranscriptionAccelerationBackend.Cpu
+        };
+    }
+
+    private string GetCurrentRuntimeDisplayText()
+    {
+        if (_customRocmRuntimeLoaded)
+            return "Using ROCm";
+
+        return RuntimeOptions.LoadedLibrary switch
+        {
+            RuntimeLibrary.Cuda => "Using CUDA",
+            RuntimeLibrary.Vulkan => "Using Vulkan",
+            _ => "Using CPU"
+        };
+    }
+
+    private static string GetPreferenceDisplayName(TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.Cpu => "CPU",
+            TranscriptionAccelerationPreference.NvidiaCuda => "CUDA",
+            TranscriptionAccelerationPreference.AmdVulkan => "Vulkan",
+            TranscriptionAccelerationPreference.AmdRocm => "ROCm",
+            _ => "automatic acceleration"
+        };
+
+    private static string GetUnavailableDisplayText(TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.NvidiaCuda => "CUDA unavailable",
+            TranscriptionAccelerationPreference.AmdVulkan => "Vulkan unavailable",
+            TranscriptionAccelerationPreference.AmdRocm => "ROCm unavailable",
+            _ => "Native runtime unavailable"
+        };
+
+    private static string GetNativeLoadFailureDetail(
+        Exception error,
+        TranscriptionAccelerationPreference preference) =>
+        preference switch
+        {
+            TranscriptionAccelerationPreference.NvidiaCuda => CudaLoadFailureDetail,
+            TranscriptionAccelerationPreference.AmdVulkan => VulkanLoadFailureDetail,
+            TranscriptionAccelerationPreference.AmdRocm =>
+                $"ROCm runtime could not be loaded from {RocmLibraryPathEnvironmentVariable}. {error.Message}",
+            _ => error.Message
+        };
 
     private static void TryDeleteFile(string path)
     {

@@ -143,6 +143,8 @@
   "Models.AccelerationAuto": "Авто",
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationAmdVulkan": "AMD Vulkan",
+  "Models.AccelerationAmdRocm": "AMD ROCm",
   "Models.AccelerationStatusNoModel": "Локальная модель не выбрана",
   "Models.AccelerationRestartRequiredMessage": "Перезапустите TypeWhisper, чтобы применить это изменение ускорения.",
   "Models.AccelerationRestartNow": "Перезапустить",

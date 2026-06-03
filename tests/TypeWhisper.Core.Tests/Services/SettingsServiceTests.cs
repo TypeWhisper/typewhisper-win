@@ -41,7 +41,7 @@ public class SettingsServiceTests : IDisposable
             VocabularyBoostingEnabled = true,
             FileTranscriptionEngineOverride = "groq",
             FileTranscriptionModelOverride = "whisper-large-v3",
-            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationAmdRocm,
             WatchFolderPath = @"C:\Watch",
             WatchFolderOutputPath = @"C:\Output",
             WatchFolderOutputFormat = "srt",
@@ -70,7 +70,7 @@ public class SettingsServiceTests : IDisposable
         Assert.True(sut2.Current.VocabularyBoostingEnabled);
         Assert.Equal("groq", sut2.Current.FileTranscriptionEngineOverride);
         Assert.Equal("whisper-large-v3", sut2.Current.FileTranscriptionModelOverride);
-        Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, sut2.Current.LocalModelAcceleration);
+        Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, sut2.Current.LocalModelAcceleration);
         Assert.Equal(@"C:\Watch", sut2.Current.WatchFolderPath);
         Assert.Equal(@"C:\Output", sut2.Current.WatchFolderOutputPath);
         Assert.Equal("srt", sut2.Current.WatchFolderOutputFormat);

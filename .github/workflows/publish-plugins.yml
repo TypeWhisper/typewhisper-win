@@ -139,7 +139,7 @@ jobs:
           $runtimesDir = Join-Path $outputDir 'runtimes'
           if (Test-Path $runtimesDir) {
             New-Item -ItemType Directory -Path "$stagingDir/runtimes" -Force | Out-Null
-            foreach ($runtimeName in @('win-x64', 'win-arm64', 'cuda/win-x64')) {
+            foreach ($runtimeName in @('win-x64', 'win-arm64', 'cuda/win-x64', 'vulkan/win-x64')) {
               $runtimeDir = Join-Path $runtimesDir $runtimeName
               if (Test-Path $runtimeDir) {
                 $runtimeDestination = Join-Path "$stagingDir/runtimes" $runtimeName
@@ -154,6 +154,10 @@ jobs:
             $cudaRuntime = Join-Path $stagingDir 'runtimes/cuda/win-x64/ggml-cuda-whisper.dll'
             if (-not (Test-Path $cudaRuntime)) {
               throw "Missing required whisper.cpp CUDA runtime: $cudaRuntime"
+            }
+            $vulkanRuntime = Join-Path $stagingDir 'runtimes/vulkan/win-x64/ggml-vulkan-whisper.dll'
+            if (-not (Test-Path $vulkanRuntime)) {
+              throw "Missing required whisper.cpp Vulkan runtime: $vulkanRuntime"
             }
           }
 

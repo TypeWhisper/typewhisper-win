@@ -12,6 +12,8 @@ public record AppSettings
     public const string LocalModelAccelerationAuto = "auto";
     public const string LocalModelAccelerationCpu = "cpu";
     public const string LocalModelAccelerationNvidiaCuda = "nvidia-cuda";
+    public const string LocalModelAccelerationAmdVulkan = "amd-vulkan";
+    public const string LocalModelAccelerationAmdRocm = "amd-rocm";
 
     public string ToggleHotkey { get; init; } = "Ctrl+Shift+F9";
     public string PushToTalkHotkey { get; init; } = "Ctrl+Shift";
@@ -144,9 +146,18 @@ public record AppSettings
             LocalModelAccelerationAuto => LocalModelAccelerationAuto,
             LocalModelAccelerationCpu => LocalModelAccelerationCpu,
             LocalModelAccelerationNvidiaCuda => LocalModelAccelerationNvidiaCuda,
+            LocalModelAccelerationAmdVulkan => LocalModelAccelerationAmdVulkan,
+            LocalModelAccelerationAmdRocm => LocalModelAccelerationAmdRocm,
             "cuda" => LocalModelAccelerationNvidiaCuda,
             "nvidia cuda" => LocalModelAccelerationNvidiaCuda,
             "nvidia_cuda" => LocalModelAccelerationNvidiaCuda,
+            "vulkan" => LocalModelAccelerationAmdVulkan,
+            "amd vulkan" => LocalModelAccelerationAmdVulkan,
+            "amd_vulkan" => LocalModelAccelerationAmdVulkan,
+            "rocm" => LocalModelAccelerationAmdRocm,
+            "hip" => LocalModelAccelerationAmdRocm,
+            "amd rocm" => LocalModelAccelerationAmdRocm,
+            "amd_rocm" => LocalModelAccelerationAmdRocm,
             _ => LocalModelAccelerationAuto
         };
     }

@@ -62,7 +62,9 @@ public partial class ModelManagerViewModel : ObservableObject
     [
         new(AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
         new(AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
-        new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"])
+        new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"]),
+        new(AppSettings.LocalModelAccelerationAmdVulkan, Loc.Instance["Models.AccelerationAmdVulkan"]),
+        new(AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"])
     ];
 
     public ModelManagerViewModel(

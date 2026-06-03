@@ -147,6 +147,8 @@
   "Models.AccelerationAuto": "Auto",
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationAmdVulkan": "AMD Vulkan",
+  "Models.AccelerationAmdRocm": "AMD ROCm",
   "Models.AccelerationStatusNoModel": "Kein lokales Modell ausgew\u00e4hlt",
   "Models.AccelerationRestartRequiredMessage": "Starte TypeWhisper neu, um diese Beschleunigungs\u00e4nderung anzuwenden.",
   "Models.AccelerationRestartNow": "Jetzt neu starten",

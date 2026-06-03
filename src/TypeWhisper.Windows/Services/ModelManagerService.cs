@@ -214,9 +214,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         var accelerationStatus = plugin.AccelerationStatus;
         if (accelerationStatus.ActiveBackend == TranscriptionAccelerationBackend.Cpu
-            && string.Equals(
-                accelerationStatus.DisplayText,
-                "CUDA unavailable",
+            && accelerationStatus.DisplayText.EndsWith(
+                " unavailable",
                 StringComparison.OrdinalIgnoreCase))
         {
             return accelerationStatus.DisplayText;
@@ -230,6 +229,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             AppSettings.LocalModelAccelerationCpu => TranscriptionAccelerationPreference.Cpu,
             AppSettings.LocalModelAccelerationNvidiaCuda => TranscriptionAccelerationPreference.NvidiaCuda,
+            AppSettings.LocalModelAccelerationAmdVulkan => TranscriptionAccelerationPreference.AmdVulkan,
+            AppSettings.LocalModelAccelerationAmdRocm => TranscriptionAccelerationPreference.AmdRocm,
             _ => TranscriptionAccelerationPreference.Auto
         };
 

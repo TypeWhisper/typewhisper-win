@@ -4,13 +4,17 @@ public enum TranscriptionAccelerationPreference
 {
     Auto,
     Cpu,
-    NvidiaCuda
+    NvidiaCuda,
+    AmdVulkan,
+    AmdRocm
 }
 
 public enum TranscriptionAccelerationBackend
 {
     Cpu,
-    NvidiaCuda
+    NvidiaCuda,
+    AmdVulkan,
+    AmdRocm
 }
 
 public sealed record TranscriptionAccelerationStatus(

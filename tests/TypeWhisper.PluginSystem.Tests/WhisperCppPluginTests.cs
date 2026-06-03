@@ -3,11 +3,14 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.WhisperCpp;
 using TypeWhisper.PluginSDK.Models;
+using Whisper.net;
 using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -37,9 +40,11 @@ public class WhisperCppPluginTests
     }
 
     [Theory]
-    [InlineData(TranscriptionAccelerationPreference.Auto, RuntimeLibrary.Cuda, RuntimeLibrary.Cpu)]
+    [InlineData(TranscriptionAccelerationPreference.Auto, RuntimeLibrary.Cuda, RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu)]
     [InlineData(TranscriptionAccelerationPreference.Cpu, RuntimeLibrary.Cpu)]
     [InlineData(TranscriptionAccelerationPreference.NvidiaCuda, RuntimeLibrary.Cuda)]
+    [InlineData(TranscriptionAccelerationPreference.AmdVulkan, RuntimeLibrary.Vulkan)]
+    [InlineData(TranscriptionAccelerationPreference.AmdRocm)]
     public void GetRuntimeLibraryOrder_MapsAccelerationPreference(
         TranscriptionAccelerationPreference preference,
         params RuntimeLibrary[] expectedOrder)
@@ -64,7 +69,9 @@ public class WhisperCppPluginTests
         var project = File.ReadAllText(projectPath);
 
         Assert.Contains("Whisper.net.Runtime.Cuda.Windows", project);
+        Assert.Contains("Whisper.net.Runtime.Vulkan", project);
         Assert.Contains("ggml-cuda-whisper.dll", project);
+        Assert.Contains("ggml-vulkan-whisper.dll", project);
     }
 
     [Fact]
@@ -82,7 +89,121 @@ public class WhisperCppPluginTests
         var workflow = File.ReadAllText(workflowPath);
 
         Assert.Contains("cuda/win-x64", workflow);
+        Assert.Contains("vulkan/win-x64", workflow);
         Assert.Contains("ggml-cuda-whisper.dll", workflow);
+        Assert.Contains("ggml-vulkan-whisper.dll", workflow);
+    }
+
+    [Fact]
+    public void SupportedAccelerationBackends_IncludeVulkanAndRocm()
+    {
+        var sut = new WhisperCppPlugin();
+
+        Assert.Contains(TranscriptionAccelerationBackend.AmdVulkan, sut.SupportedAccelerationBackends);
+        Assert.Contains(TranscriptionAccelerationBackend.AmdRocm, sut.SupportedAccelerationBackends);
+    }
+
+    [Fact]
+    public void SetAccelerationPreference_ExplicitRocmWithoutHookExplainsEnvironmentVariable()
+    {
+        var sut = new WhisperCppPlugin();
+
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdRocm);
+
+        Assert.Equal("ROCm unavailable", sut.AccelerationStatus.DisplayText);
+        Assert.Contains("TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH", sut.AccelerationStatus.Detail);
+    }
+
+    [Fact]
+    public void ResolveRocmLibraryPath_AcceptsDirectoryContainingWhisperDll()
+    {
+        using var temp = new TempDirectory();
+        var libraryPath = Path.Join(temp.Path, "whisper.dll");
+        File.WriteAllText(libraryPath, "native");
+
+        var resolved = WhisperCppPlugin.ResolveRocmLibraryPath(temp.Path);
+
+        Assert.Equal(libraryPath, resolved);
+    }
+
+    [Fact]
+    public void SetAccelerationPreference_ExplicitRocmWithHookShowsPendingLoad()
+    {
+        using var temp = new TempDirectory();
+        File.WriteAllText(Path.Join(temp.Path, "whisper.dll"), "native");
+        var previous = Environment.GetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable);
+        var previousLibraryPath = RuntimeOptions.LibraryPath;
+        try
+        {
+            Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, temp.Path);
+            var sut = new WhisperCppPlugin();
+
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdRocm);
+
+            Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
+            Assert.Contains("ROCm will be used", sut.AccelerationStatus.Detail);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(WhisperCppPlugin.RocmLibraryPathEnvironmentVariable, previous);
+            RuntimeOptions.LibraryPath = previousLibraryPath;
+        }
+    }
+
+    [Fact]
+    public void SetAccelerationPreference_ExplicitVulkanAfterCudaLoadedRequiresRestart()
+    {
+        var previousLoadedLibrary = RuntimeOptions.LoadedLibrary;
+        try
+        {
+            RuntimeOptions.LoadedLibrary = RuntimeLibrary.Cuda;
+            var sut = new WhisperCppPlugin();
+
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdVulkan);
+
+            Assert.True(sut.AccelerationStatus.RequiresRestart);
+            Assert.Equal("Using CUDA", sut.AccelerationStatus.DisplayText);
+            Assert.Contains("Restart TypeWhisper", sut.AccelerationStatus.Detail);
+            Assert.Contains("Vulkan", sut.AccelerationStatus.Detail);
+        }
+        finally
+        {
+            RuntimeOptions.LoadedLibrary = previousLoadedLibrary;
+        }
+    }
+
+    [Fact]
+    public async Task LoadModelAsync_WhenRuntimeSwitchRequiresRestart_KeepsPreviouslyLoadedModel()
+    {
+        var previousLoadedLibrary = RuntimeOptions.LoadedLibrary;
+        try
+        {
+            RuntimeOptions.LoadedLibrary = RuntimeLibrary.Cpu;
+            using var temp = new TempDirectory();
+            var host = new FakePluginHostServices(temp.Path);
+            var sut = new WhisperCppPlugin();
+            await sut.ActivateAsync(host);
+
+            Directory.CreateDirectory(Path.Join(temp.Path, "Models"));
+            await File.WriteAllTextAsync(Path.Join(temp.Path, "Models", "ggml-tiny.bin"), "not a real model");
+
+            var factory = (WhisperFactory)RuntimeHelpers.GetUninitializedObject(typeof(WhisperFactory));
+            SetPrivateField(sut, "_factory", factory);
+            SetPrivateField(sut, "_loadedModelId", "tiny");
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.AmdVulkan);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sut.LoadModelAsync("tiny", CancellationToken.None));
+
+            Assert.Same(factory, GetPrivateField<WhisperFactory>(sut, "_factory"));
+            Assert.Equal("tiny", GetPrivateField<string>(sut, "_loadedModelId"));
+
+            SetPrivateField<WhisperFactory?>(sut, "_factory", null);
+        }
+        finally
+        {
+            RuntimeOptions.LoadedLibrary = previousLoadedLibrary;
+        }
     }
 
     [Fact]
@@ -300,6 +421,20 @@ public class WhisperCppPluginTests
         sut.Dispose();
 
         Assert.True(installer.DisposeCalled);
+    }
+
+    private static T? GetPrivateField<T>(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
+        return (T?)field.GetValue(target);
+    }
+
+    private static void SetPrivateField<T>(object target, string fieldName, T value)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
+        field.SetValue(target, value);
     }
 
     private static byte[] CreateZipArchive(params (string Path, string Content)[] entries)

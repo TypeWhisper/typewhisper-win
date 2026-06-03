@@ -311,6 +311,55 @@ public class HttpApiServiceTests : IDisposable
         Assert.True(acceleration.GetProperty("requires_restart").GetBoolean());
     }
 
+    [Theory]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdVulkan,
+        TranscriptionAccelerationBackend.AmdVulkan,
+        AppSettings.LocalModelAccelerationAmdVulkan,
+        "Using Vulkan")]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdRocm,
+        TranscriptionAccelerationBackend.AmdRocm,
+        AppSettings.LocalModelAccelerationAmdRocm,
+        "Using ROCm")]
+    public async Task Status_FormatsAmdAccelerationBackends(
+        string preference,
+        TranscriptionAccelerationBackend activeBackend,
+        string expectedBackend,
+        string displayText)
+    {
+        var plugin = new FakeTranscriptionPlugin
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                activeBackend,
+                displayText)
+        };
+        var (service, modelManager) = CreateServiceWithModelManager(
+            new AppSettings
+            {
+                SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"),
+                LocalModelAcceleration = preference,
+                SaveToHistoryEnabled = true
+            },
+            plugin);
+
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"));
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var json = JsonObject(response);
+        var acceleration = json["acceleration"];
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(preference, acceleration.GetProperty("preference").GetString());
+        Assert.Equal(expectedBackend, acceleration.GetProperty("active_backend").GetString());
+        Assert.Equal(displayText, acceleration.GetProperty("display_text").GetString());
+    }
+
     [Fact]
     public async Task HistorySearch_IncludesRaycastCompatibleAliases()
     {
