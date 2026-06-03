@@ -31,7 +31,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
     private const string CallbackHost = "community";
     private const string CallbackPath = "/claim-result";
 
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http;
     private readonly string _statusPath;
 
     [ObservableProperty]
@@ -63,14 +63,20 @@ public sealed partial class SupporterDiscordService : ObservableObject
     private bool _isHelperUnavailable;
 
     public SupporterDiscordService()
+        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
+    }
+
+    internal SupporterDiscordService(HttpClient http, string dataPath)
+    {
+        _http = http;
         _http.DefaultRequestHeaders.UserAgent.Clear();
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("TypeWhisper", GetAppVersion()));
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(Windows)"));
         _http.DefaultRequestHeaders.Accept.Clear();
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        _statusPath = Path.Combine(TypeWhisperEnvironment.DataPath, "supporter-discord.json");
+        _statusPath = ResolveDataFilePath(dataPath, "supporter-discord.json");
         LoadPersistedStatus();
     }
 
@@ -193,11 +199,15 @@ public sealed partial class SupporterDiscordService : ObservableObject
 
     public async Task RefreshStatusIfNeededAsync(LicenseService license, CancellationToken ct = default)
     {
-        if (license.SupporterClaimProof is null)
+        var candidates = license.GetDiscordClaimProofCandidates();
+        if (candidates.Count == 0)
         {
             HandleSupporterEntitlementRemoved();
             return;
         }
+
+        if (ClearStaleClaimActivation(candidates))
+            return;
 
         if (ClaimState is SupporterDiscordClaimState.Pending or SupporterDiscordClaimState.Linked || !string.IsNullOrWhiteSpace(SessionId))
             await RefreshClaimStatusAsync(license, ct);
@@ -205,7 +215,13 @@ public sealed partial class SupporterDiscordService : ObservableObject
 
     public async Task RefreshClaimStatusAsync(LicenseService license, CancellationToken ct = default)
     {
-        var activationId = ClaimActivationId ?? license.GetDiscordClaimProofCandidates().FirstOrDefault()?.ActivationId;
+        var candidates = license.GetDiscordClaimProofCandidates();
+        if (candidates.Count == 0 || ClearStaleClaimActivation(candidates))
+            return;
+
+        var activationId = string.IsNullOrWhiteSpace(ClaimActivationId)
+            ? candidates.FirstOrDefault()?.ActivationId
+            : ClaimActivationId;
         if (string.IsNullOrWhiteSpace(activationId))
         {
             HandleSupporterEntitlementRemoved();
@@ -265,6 +281,21 @@ public sealed partial class SupporterDiscordService : ObservableObject
         SessionId = null;
         ClaimActivationId = null;
         PersistStatus();
+    }
+
+    private bool ClearStaleClaimActivation(IReadOnlyList<SupporterClaimProof> candidates)
+    {
+        if (string.IsNullOrWhiteSpace(ClaimActivationId))
+            return false;
+
+        if (candidates.Any(candidate =>
+                string.Equals(candidate.ActivationId, ClaimActivationId, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        HandleSupporterEntitlementRemoved();
+        return true;
     }
 
     public async Task<bool> HandleCallbackUriAsync(Uri uri, LicenseService license, CancellationToken ct = default)
@@ -423,6 +454,20 @@ public sealed partial class SupporterDiscordService : ObservableObject
         message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("could not be found", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("supporter entitlement", StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveDataFilePath(string dataPath, string fileName)
+    {
+        var root = Path.GetFullPath(dataPath);
+        var path = Path.GetFullPath(fileName, root);
+        var relative = Path.GetRelativePath(root, path);
+        if (relative == "." ||
+            (!relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
+        {
+            return path;
+        }
+
+        throw new InvalidOperationException("Supporter Discord data path must stay inside the configured data directory.");
+    }
 
     private static SupporterDiscordCallbackPayload? ParseCallbackUri(Uri uri)
     {
