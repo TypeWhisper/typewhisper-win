@@ -147,6 +147,8 @@
   "Models.AccelerationAuto": "Auto",
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationAmdVulkan": "AMD Vulkan",
+  "Models.AccelerationAmdRocm": "AMD ROCm",
   "Models.AccelerationStatusNoModel": "No local model selected",
   "Models.AccelerationRestartRequiredMessage": "Restart TypeWhisper to apply this acceleration change.",
   "Models.AccelerationRestartNow": "Restart now",

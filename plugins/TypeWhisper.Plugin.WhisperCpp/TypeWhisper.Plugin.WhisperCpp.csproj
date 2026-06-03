@@ -18,6 +18,7 @@
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.9.0" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -47,6 +48,9 @@
       <_RuntimeFiles Include="$(TargetDir)runtimes\cuda\win-x64\**\*.*">
         <RuntimeIdentifier>cuda\win-x64</RuntimeIdentifier>
       </_RuntimeFiles>
+      <_RuntimeFiles Include="$(TargetDir)runtimes\vulkan\win-x64\**\*.*">
+        <RuntimeIdentifier>vulkan\win-x64</RuntimeIdentifier>
+      </_RuntimeFiles>
     </ItemGroup>
 
     <RemoveDir Directories="$(PluginOutputDir)" Condition="Exists('$(PluginOutputDir)')" />
@@ -66,6 +70,7 @@
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\ggml-whisper.dll" />
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\whisper.dll" />
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\cuda\win-x64\ggml-cuda-whisper.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\vulkan\win-x64\ggml-vulkan-whisper.dll" />
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\msvcp140.dll" />
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\vcruntime140.dll" />
       <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\vcruntime140_1.dll" />

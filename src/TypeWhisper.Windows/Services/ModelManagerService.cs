@@ -214,9 +214,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         var accelerationStatus = plugin.AccelerationStatus;
         if (accelerationStatus.ActiveBackend == TranscriptionAccelerationBackend.Cpu
-            && string.Equals(
-                accelerationStatus.DisplayText,
-                "CUDA unavailable",
+            && accelerationStatus.DisplayText.EndsWith(
+                " unavailable",
                 StringComparison.OrdinalIgnoreCase))
         {
             return accelerationStatus.DisplayText;
@@ -230,6 +229,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             AppSettings.LocalModelAccelerationCpu => TranscriptionAccelerationPreference.Cpu,
             AppSettings.LocalModelAccelerationNvidiaCuda => TranscriptionAccelerationPreference.NvidiaCuda,
+            AppSettings.LocalModelAccelerationAmdVulkan => TranscriptionAccelerationPreference.AmdVulkan,
+            AppSettings.LocalModelAccelerationAmdRocm => TranscriptionAccelerationPreference.AmdRocm,
             _ => TranscriptionAccelerationPreference.Auto
         };
 
@@ -324,8 +325,14 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (status.RequiresRestart)
             return false;
 
-        return targetPreference != TranscriptionAccelerationPreference.NvidiaCuda
-            || status.ActiveBackend == TranscriptionAccelerationBackend.NvidiaCuda;
+        return targetPreference switch
+        {
+            TranscriptionAccelerationPreference.Cpu => status.ActiveBackend == TranscriptionAccelerationBackend.Cpu,
+            TranscriptionAccelerationPreference.NvidiaCuda => status.ActiveBackend == TranscriptionAccelerationBackend.NvidiaCuda,
+            TranscriptionAccelerationPreference.AmdVulkan => status.ActiveBackend == TranscriptionAccelerationBackend.AmdVulkan,
+            TranscriptionAccelerationPreference.AmdRocm => status.ActiveBackend == TranscriptionAccelerationBackend.AmdRocm,
+            _ => true
+        };
     }
 
     internal async Task<TranscriptionRequestModelScope> BeginTranscriptionRequestAsync(

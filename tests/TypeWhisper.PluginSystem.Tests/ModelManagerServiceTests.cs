@@ -142,8 +142,23 @@ public class ModelManagerServiceTests
             plugin.AccelerationPreferencesAtLoad);
     }
 
-    [Fact]
-    public async Task EnsureModelLoadedAsync_ReloadsExplicitCudaActiveModel_WhenBackendIsCpu()
+    [Theory]
+    [InlineData(
+        AppSettings.LocalModelAccelerationNvidiaCuda,
+        TranscriptionAccelerationPreference.NvidiaCuda,
+        "CUDA unavailable")]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdVulkan,
+        TranscriptionAccelerationPreference.AmdVulkan,
+        "Vulkan unavailable")]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdRocm,
+        TranscriptionAccelerationPreference.AmdRocm,
+        "ROCm unavailable")]
+    public async Task EnsureModelLoadedAsync_ReloadsExplicitActiveModel_WhenBackendIsCpu(
+        string savedAcceleration,
+        TranscriptionAccelerationPreference expectedPreference,
+        string displayText)
     {
         const string pluginId = "com.typewhisper.whisper-cpp";
         const string modelId = "whisper";
@@ -152,7 +167,7 @@ public class ModelManagerServiceTests
         _settings.Setup(s => s.Current).Returns(new AppSettings
         {
             SelectedModelId = fullModelId,
-            LocalModelAcceleration = AppSettings.LocalModelAccelerationNvidiaCuda
+            LocalModelAcceleration = savedAcceleration
         });
 
         var plugin = new FakeTranscriptionPlugin(
@@ -163,8 +178,8 @@ public class ModelManagerServiceTests
         {
             AccelerationStatusOverride = new TranscriptionAccelerationStatus(
                 TranscriptionAccelerationBackend.Cpu,
-                "CUDA unavailable",
-                "CUDA runtime was installed after the model had already loaded.")
+                displayText,
+                "Requested acceleration was not active after the model had already loaded.")
         };
         var pluginManager = CreatePluginManager(plugin);
         var sut = new ModelManagerService(pluginManager, _settings.Object);
@@ -175,7 +190,7 @@ public class ModelManagerServiceTests
         Assert.True(loaded);
         Assert.Equal(2, plugin.LoadCallCount);
         Assert.Equal(
-            [TranscriptionAccelerationPreference.NvidiaCuda, TranscriptionAccelerationPreference.NvidiaCuda],
+            [expectedPreference, expectedPreference],
             plugin.AccelerationPreferencesAtLoad);
     }
 
@@ -183,7 +198,11 @@ public class ModelManagerServiceTests
     [InlineData(AppSettings.LocalModelAccelerationAuto, TranscriptionAccelerationPreference.Auto)]
     [InlineData(AppSettings.LocalModelAccelerationCpu, TranscriptionAccelerationPreference.Cpu)]
     [InlineData(AppSettings.LocalModelAccelerationNvidiaCuda, TranscriptionAccelerationPreference.NvidiaCuda)]
+    [InlineData(AppSettings.LocalModelAccelerationAmdVulkan, TranscriptionAccelerationPreference.AmdVulkan)]
+    [InlineData(AppSettings.LocalModelAccelerationAmdRocm, TranscriptionAccelerationPreference.AmdRocm)]
     [InlineData("CUDA", TranscriptionAccelerationPreference.NvidiaCuda)]
+    [InlineData("vulkan", TranscriptionAccelerationPreference.AmdVulkan)]
+    [InlineData("hip", TranscriptionAccelerationPreference.AmdRocm)]
     [InlineData("directml", TranscriptionAccelerationPreference.Auto)]
     public async Task LoadModelAsync_AppliesSavedAccelerationPreferenceBeforeLoading(
         string savedAcceleration,
@@ -210,6 +229,44 @@ public class ModelManagerServiceTests
 
         Assert.Equal(expectedPreference, plugin.LastAccelerationPreference);
         Assert.Equal(expectedPreference, plugin.AccelerationPreferenceAtLoad);
+    }
+
+    [Theory]
+    [InlineData("Vulkan unavailable", AppSettings.LocalModelAccelerationAmdVulkan)]
+    [InlineData("ROCm unavailable", AppSettings.LocalModelAccelerationAmdRocm)]
+    public async Task LoadModelAsync_UsesCompactAccelerationUnavailableModelStatusOnExplicitFailure(
+        string displayText,
+        string savedAcceleration)
+    {
+        const string pluginId = "com.typewhisper.whisper-cpp";
+        const string modelId = "whisper";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            LocalModelAcceleration = savedAcceleration
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.Cpu,
+                displayText,
+                $"{displayText}: native runtime could not be loaded."),
+            LoadException = new InvalidOperationException($"{displayText}: native runtime could not be loaded.")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.LoadModelAsync(fullModelId));
+
+        var status = sut.GetStatus(fullModelId);
+        Assert.Equal(ModelStatusType.Error, status.Type);
+        Assert.Equal(displayText, status.ErrorMessage);
     }
 
     [Fact]

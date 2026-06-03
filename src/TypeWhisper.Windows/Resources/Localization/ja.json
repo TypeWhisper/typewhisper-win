@@ -143,6 +143,8 @@
   "Models.AccelerationAuto": "自動",
   "Models.AccelerationCpu": "CPU",
   "Models.AccelerationNvidiaCuda": "NVIDIA CUDA",
+  "Models.AccelerationAmdVulkan": "AMD Vulkan",
+  "Models.AccelerationAmdRocm": "AMD ROCm",
   "Models.AccelerationStatusNoModel": "ローカルモデルが選択されていません",
   "Models.AccelerationRestartRequiredMessage": "このアクセラレーション変更を適用するにはTypeWhisperを再起動してください。",
   "Models.AccelerationRestartNow": "今すぐ再起動",

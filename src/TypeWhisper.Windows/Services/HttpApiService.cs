@@ -1044,6 +1044,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         backend switch
         {
             TranscriptionAccelerationBackend.NvidiaCuda => AppSettings.LocalModelAccelerationNvidiaCuda,
+            TranscriptionAccelerationBackend.AmdVulkan => AppSettings.LocalModelAccelerationAmdVulkan,
+            TranscriptionAccelerationBackend.AmdRocm => AppSettings.LocalModelAccelerationAmdRocm,
             _ => AppSettings.LocalModelAccelerationCpu
         };
 

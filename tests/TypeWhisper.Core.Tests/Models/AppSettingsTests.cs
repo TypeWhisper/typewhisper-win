@@ -67,6 +67,13 @@ public class AppSettingsTests
     [InlineData("cpu", AppSettings.LocalModelAccelerationCpu)]
     [InlineData("NVIDIA CUDA", AppSettings.LocalModelAccelerationNvidiaCuda)]
     [InlineData("cuda", AppSettings.LocalModelAccelerationNvidiaCuda)]
+    [InlineData("vulkan", AppSettings.LocalModelAccelerationAmdVulkan)]
+    [InlineData("AMD Vulkan", AppSettings.LocalModelAccelerationAmdVulkan)]
+    [InlineData("amd_vulkan", AppSettings.LocalModelAccelerationAmdVulkan)]
+    [InlineData("rocm", AppSettings.LocalModelAccelerationAmdRocm)]
+    [InlineData("HIP", AppSettings.LocalModelAccelerationAmdRocm)]
+    [InlineData("AMD ROCm", AppSettings.LocalModelAccelerationAmdRocm)]
+    [InlineData("amd_rocm", AppSettings.LocalModelAccelerationAmdRocm)]
     [InlineData("directml", AppSettings.LocalModelAccelerationAuto)]
     public void NormalizeLocalModelAcceleration_ReturnsSupportedStorageValue(
         string? value,

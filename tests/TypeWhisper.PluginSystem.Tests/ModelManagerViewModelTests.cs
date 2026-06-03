@@ -63,6 +63,8 @@ public class ModelManagerViewModelTests
         Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationAuto);
         Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationCpu);
         Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationNvidiaCuda);
+        Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationAmdVulkan);
+        Assert.Contains(sut.AccelerationOptions, o => o.Value == AppSettings.LocalModelAccelerationAmdRocm);
     }
 
     [Fact]
@@ -81,6 +83,24 @@ public class ModelManagerViewModelTests
 
         Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, settings.Current.LocalModelAcceleration);
         Assert.Equal(AppSettings.LocalModelAccelerationNvidiaCuda, sut.SelectedAccelerationOptionValue);
+    }
+
+    [Fact]
+    public void SelectedAccelerationOptionValue_StoresAmdRocmAliasAsNormalizedSetting()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationAuto
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        sut.SelectedAccelerationOptionValue = "hip";
+
+        Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, settings.Current.LocalModelAcceleration);
+        Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, sut.SelectedAccelerationOptionValue);
     }
 
     [Fact]
