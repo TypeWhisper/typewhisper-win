@@ -189,9 +189,74 @@ public class SonioxPluginTests
         Assert.Equal("Hallo Welt", result.Text);
         Assert.Equal("de", result.DetectedLanguage);
         Assert.Equal(660.0, result.DurationSeconds);
-        Assert.Equal(["Hallo", "Welt"], result.Segments.Select(s => s.Text).ToArray());
+        Assert.Equal(["Hallo Welt"], result.Segments.Select(s => s.Text).ToArray());
         Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/73d4357d-cad2-4338-a60d-ec6f2044f721", seen);
         Assert.Contains("DELETE https://api.soniox.com/v1/files/84c32fc6-4fb5-4e7a-b656-b5ec70493753", seen);
+    }
+
+    [Fact]
+    public void ParseTranscript_GroupsTokenTimestampsIntoReadableSubtitleSegments()
+    {
+        using var completedDetails = JsonDocument.Parse("""{ "audio_duration_ms": 5200 }""");
+
+        var result = SonioxPlugin.ParseTranscript(
+            """
+            {
+              "text": "Well, this is an illustration. It has another sentence.",
+              "tokens": [
+                { "text": "W", "start_ms": 900, "end_ms": 960, "language": "en" },
+                { "text": "ell,", "start_ms": 960, "end_ms": 1020, "language": "en" },
+                { "text": "this", "start_ms": 1139, "end_ms": 1200, "language": "en" },
+                { "text": "is", "start_ms": 1260, "end_ms": 1320, "language": "en" },
+                { "text": "an", "start_ms": 1379, "end_ms": 1440, "language": "en" },
+                { "text": "ill", "start_ms": 1560, "end_ms": 1620, "language": "en" },
+                { "text": "ustration.", "start_ms": 1680, "end_ms": 2100, "language": "en" },
+                { "text": "It", "start_ms": 2600, "end_ms": 2700, "language": "en" },
+                { "text": "has", "start_ms": 2760, "end_ms": 2860, "language": "en" },
+                { "text": "another", "start_ms": 2920, "end_ms": 3160, "language": "en" },
+                { "text": "sentence.", "start_ms": 3220, "end_ms": 3600, "language": "en" }
+              ]
+            }
+            """,
+            completedDetails.RootElement,
+            fallbackLanguage: null);
+
+        Assert.Equal("Well, this is an illustration. It has another sentence.", result.Text);
+        Assert.Equal("en", result.DetectedLanguage);
+        Assert.Equal(5.2, result.DurationSeconds);
+        Assert.Equal(["Well, this is an illustration.", "It has another sentence."], result.Segments.Select(s => s.Text).ToArray());
+        Assert.Equal(0.9, result.Segments[0].Start);
+        Assert.Equal(2.1, result.Segments[0].End);
+        Assert.Equal(2.6, result.Segments[1].Start);
+        Assert.Equal(3.6, result.Segments[1].End);
+    }
+
+    [Fact]
+    public void ParseTranscript_SplitsSubtitleSegmentsOnLongPauses()
+    {
+        using var completedDetails = JsonDocument.Parse("""{ "audio_duration_ms": 4000 }""");
+
+        var result = SonioxPlugin.ParseTranscript(
+            """
+            {
+              "text": "First phrase continues after pause",
+              "tokens": [
+                { "text": "First", "start_ms": 0, "end_ms": 300, "language": "en" },
+                { "text": "phrase", "start_ms": 350, "end_ms": 700, "language": "en" },
+                { "text": "continues", "start_ms": 2000, "end_ms": 2400, "language": "en" },
+                { "text": "after", "start_ms": 2450, "end_ms": 2700, "language": "en" },
+                { "text": "pause", "start_ms": 2750, "end_ms": 3100, "language": "en" }
+              ]
+            }
+            """,
+            completedDetails.RootElement,
+            fallbackLanguage: null);
+
+        Assert.Equal(["First phrase", "continues after pause"], result.Segments.Select(s => s.Text).ToArray());
+        Assert.Equal(0.0, result.Segments[0].Start);
+        Assert.Equal(0.7, result.Segments[0].End);
+        Assert.Equal(2.0, result.Segments[1].Start);
+        Assert.Equal(3.1, result.Segments[1].End);
     }
 
     [Fact]
