@@ -123,7 +123,12 @@ public class ModelManagerServiceTests
             pluginId,
             configured: true,
             selectedModelId: null,
-            supportsModelDownload: true);
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.NvidiaCuda,
+                "Using CUDA")
+        };
         var pluginManager = CreatePluginManager(plugin);
         var sut = new ModelManagerService(pluginManager, _settings.Object);
 
@@ -134,6 +139,58 @@ public class ModelManagerServiceTests
         Assert.Equal(1, plugin.LoadCallCount);
         Assert.Equal(
             [TranscriptionAccelerationPreference.NvidiaCuda],
+            plugin.AccelerationPreferencesAtLoad);
+    }
+
+    [Theory]
+    [InlineData(
+        AppSettings.LocalModelAccelerationNvidiaCuda,
+        TranscriptionAccelerationPreference.NvidiaCuda,
+        "CUDA unavailable")]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdVulkan,
+        TranscriptionAccelerationPreference.AmdVulkan,
+        "Vulkan unavailable")]
+    [InlineData(
+        AppSettings.LocalModelAccelerationAmdRocm,
+        TranscriptionAccelerationPreference.AmdRocm,
+        "ROCm unavailable")]
+    public async Task EnsureModelLoadedAsync_ReloadsExplicitActiveModel_WhenBackendIsCpu(
+        string savedAcceleration,
+        TranscriptionAccelerationPreference expectedPreference,
+        string displayText)
+    {
+        const string pluginId = "com.typewhisper.whisper-cpp";
+        const string modelId = "whisper";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = savedAcceleration
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            AccelerationStatusOverride = new TranscriptionAccelerationStatus(
+                TranscriptionAccelerationBackend.Cpu,
+                displayText,
+                "Requested acceleration was not active after the model had already loaded.")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.EnsureModelLoadedAsync();
+        var loaded = await sut.EnsureModelLoadedAsync();
+
+        Assert.True(loaded);
+        Assert.Equal(2, plugin.LoadCallCount);
+        Assert.Equal(
+            [expectedPreference, expectedPreference],
             plugin.AccelerationPreferencesAtLoad);
     }
 

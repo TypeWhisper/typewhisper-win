@@ -53,6 +53,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private string? _selectedModelId;
     private string? _loadedModelId;
     private string? _pluginDirectory;
+    private bool _cudaRuntimeRestartRequired;
     private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
     private bool _customRocmRuntimeLoaded;
     private bool _runtimeRestartRequired;
@@ -121,10 +122,17 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
 
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
-        _runtimeRestartRequired = RequiresRuntimeRestart(preference);
+        _runtimeRestartRequired = RequiresRuntimeRestart(preference)
+            || preference == TranscriptionAccelerationPreference.NvidiaCuda && _cudaRuntimeRestartRequired;
         _accelerationPreference = preference;
         if (!_runtimeRestartRequired)
             ApplyRuntimeConfiguration(preference);
+
+        if (preference == TranscriptionAccelerationPreference.NvidiaCuda && _cudaRuntimeRestartRequired)
+        {
+            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+            return;
+        }
 
         _accelerationStatus = _runtimeRestartRequired
             ? CreateRuntimeRestartStatus(preference)
@@ -218,10 +226,10 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             if (_accelerationStatus.RequiresRestart)
                 throw new InvalidOperationException(_accelerationStatus.Detail);
 
-            DisposeFactoryUnsafe();
             ApplyRuntimeConfiguration(_accelerationPreference);
             await EnsureCudaRuntimeAvailableForLoadAsync(ct);
             EnsureRocmRuntimeAvailableForLoad();
+            DisposeFactoryUnsafe();
             try
             {
                 _factory = WhisperFactory.FromPath(modelPath);
@@ -434,6 +442,12 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         if (_accelerationPreference != TranscriptionAccelerationPreference.NvidiaCuda)
             return;
 
+        if (_cudaRuntimeRestartRequired)
+        {
+            _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+            throw new InvalidOperationException(_accelerationStatus.Detail);
+        }
+
         if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
         {
             _accelerationStatus = CreateCudaRuntimeInstallFailureStatus(
@@ -474,6 +488,10 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _host?.Log(
             PluginLogLevel.Info,
             $"Installed NVIDIA CUDA runtime for whisper.cpp at {installer.RuntimeDirectory}.");
+
+        _cudaRuntimeRestartRequired = true;
+        _accelerationStatus = CreateCudaRuntimeInstalledRestartRequiredStatus();
+        throw new InvalidOperationException(_accelerationStatus.Detail);
     }
 
     private static TranscriptionAccelerationStatus CreateCudaRuntimeInstallFailureStatus(string detail) =>
@@ -506,6 +524,13 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             RocmHookMissingDetail);
         throw new InvalidOperationException(_accelerationStatus.Detail);
     }
+
+    private static TranscriptionAccelerationStatus CreateCudaRuntimeInstalledRestartRequiredStatus() =>
+        new(
+            TranscriptionAccelerationBackend.Cpu,
+            "Restart required",
+            "CUDA support was installed. Restart TypeWhisper to load the CUDA runtime.",
+            RequiresRestart: true);
 
     private string GetModelPath(string modelId)
     {

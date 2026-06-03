@@ -296,7 +296,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         var targetAccelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
         if (ActiveModelId == targetModelId
-            && _activeModelAccelerationPreference == targetAccelerationPreference)
+            && _activeModelAccelerationPreference == targetAccelerationPreference
+            && IsActiveAccelerationSatisfied(targetAccelerationPreference))
         {
             CancelAutoUnload();
             return true;
@@ -313,6 +314,25 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         await LoadModelAsync(targetModelId, cancellationToken);
         return true;
+    }
+
+    private bool IsActiveAccelerationSatisfied(TranscriptionAccelerationPreference targetPreference)
+    {
+        var status = ActiveTranscriptionPlugin?.AccelerationStatus;
+        if (status is null)
+            return true;
+
+        if (status.RequiresRestart)
+            return false;
+
+        return targetPreference switch
+        {
+            TranscriptionAccelerationPreference.Cpu => status.ActiveBackend == TranscriptionAccelerationBackend.Cpu,
+            TranscriptionAccelerationPreference.NvidiaCuda => status.ActiveBackend == TranscriptionAccelerationBackend.NvidiaCuda,
+            TranscriptionAccelerationPreference.AmdVulkan => status.ActiveBackend == TranscriptionAccelerationBackend.AmdVulkan,
+            TranscriptionAccelerationPreference.AmdRocm => status.ActiveBackend == TranscriptionAccelerationBackend.AmdRocm,
+            _ => true
+        };
     }
 
     internal async Task<TranscriptionRequestModelScope> BeginTranscriptionRequestAsync(
