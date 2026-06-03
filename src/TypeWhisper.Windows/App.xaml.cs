@@ -7,6 +7,7 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.Sync;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
@@ -359,6 +360,9 @@ public partial class App : Application
         services.AddSingleton<IVocabularyBoostingService, VocabularyBoostingService>();
         services.AddSingleton<ISnippetService>(
             new SnippetService(Path.Combine(dataPath, "snippets.json")));
+        services.AddSingleton<IUserDataSyncStore>(sp => new TypeWhisperUserDataSyncStore(
+            sp.GetRequiredService<IDictionaryService>(),
+            sp.GetRequiredService<ISnippetService>()));
         services.AddSingleton<IWorkflowService>(
             new WorkflowService(Path.Combine(dataPath, "workflows.json")));
 
@@ -405,6 +409,7 @@ public partial class App : Application
         services.AddSingleton<SnippetsViewModel>();
         services.AddSingleton<WorkflowsViewModel>();
         services.AddSingleton<PluginsViewModel>();
+        services.AddSingleton<CloudFolderSyncViewModel>();
         services.AddSingleton<SettingsWindowViewModel>();
         services.AddSingleton<FileTranscriptionViewModel>();
         services.AddSingleton<DashboardViewModel>();

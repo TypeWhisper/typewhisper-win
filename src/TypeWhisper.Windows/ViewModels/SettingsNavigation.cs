@@ -17,6 +17,7 @@ public enum SettingsRoute
     General,
     Appearance,
     Advanced,
+    Premium,
     License,
     About
 }
@@ -74,4 +75,48 @@ public sealed class SettingsNavigationGroup
     public SettingsGroup Group { get; }
     public string Title { get; }
     public IReadOnlyList<SettingsNavigationItem> Items { get; }
+}
+
+public static class SettingsNavigationCatalog
+{
+    public static IReadOnlyList<SettingsNavigationGroup> Build(Func<string, string> text) =>
+    [
+        CreateGroup(SettingsGroup.Overview, text("SettingsGroup.Overview"),
+        [
+            new SettingsNavigationItem(SettingsRoute.Dashboard, text("Nav.Dashboard"), "\uE80F")
+        ]),
+        CreateGroup(SettingsGroup.Capture, text("SettingsGroup.Capture"),
+        [
+            new SettingsNavigationItem(SettingsRoute.Dictation, text("Nav.Dictation"), "\uE720"),
+            new SettingsNavigationItem(SettingsRoute.Shortcuts, text("Nav.Shortcuts"), "\uE765"),
+            new SettingsNavigationItem(SettingsRoute.FileTranscription, text("Nav.FileTranscription"), "\uE8A5"),
+            new SettingsNavigationItem(SettingsRoute.Recorder, text("Nav.Recorder"), "\uE189")
+        ]),
+        CreateGroup(SettingsGroup.Library, text("SettingsGroup.Library"),
+        [
+            new SettingsNavigationItem(SettingsRoute.History, text("Nav.History"), "\uE81C"),
+            new SettingsNavigationItem(SettingsRoute.Dictionary, text("Nav.Dictionary"), "\uE8D2"),
+            new SettingsNavigationItem(SettingsRoute.Snippets, text("Nav.Snippets"), "\uE8C8")
+        ]),
+        CreateGroup(SettingsGroup.AI, text("SettingsGroup.AI"),
+        [
+            new SettingsNavigationItem(SettingsRoute.Workflows, text("Nav.Workflows"), "\uE8F1"),
+            new SettingsNavigationItem(SettingsRoute.Integrations, text("Nav.Plugins"), "\uE943")
+        ]),
+        CreateGroup(SettingsGroup.System, text("SettingsGroup.System"),
+        [
+            new SettingsNavigationItem(SettingsRoute.General, text("Nav.General"), "\uE713"),
+            new SettingsNavigationItem(SettingsRoute.Appearance, text("Nav.Appearance"), "\uE790"),
+            new SettingsNavigationItem(SettingsRoute.Advanced, text("Nav.Advanced"), "\uE9CE"),
+            new SettingsNavigationItem(SettingsRoute.Premium, text("Nav.Premium"), "\uE735"),
+            new SettingsNavigationItem(SettingsRoute.License, text("Nav.License"), "\uE72E"),
+            new SettingsNavigationItem(SettingsRoute.About, text("Nav.About"), "\uE946")
+        ])
+    ];
+
+    private static SettingsNavigationGroup CreateGroup(
+        SettingsGroup group,
+        string title,
+        IReadOnlyList<SettingsNavigationItem> items) =>
+        new(group, title, items);
 }

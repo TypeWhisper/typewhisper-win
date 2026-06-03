@@ -1,3 +1,5 @@
+using TypeWhisper.Core.Services.Sync;
+
 namespace TypeWhisper.Core.Models;
 
 public record AppSettings
@@ -115,6 +117,10 @@ public record AppSettings
 
     // Memory extraction
     public bool MemoryEnabled { get; init; }
+
+    // Premium Cloud Folder Sync
+    public string? CloudFolderSyncFolderPath { get; init; }
+    public CloudFolderSyncState? CloudFolderSyncState { get; init; }
 
     // UI Language (null = auto-detect from system)
     public string? UiLanguage { get; init; }

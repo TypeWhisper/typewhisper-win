@@ -249,6 +249,80 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpdateEntry_RefreshesUpdatedAt()
+    {
+        var originalUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Term,
+            Original = "React",
+            UpdatedAt = originalUpdatedAt
+        });
+
+        _sut.UpdateEntry(_sut.Entries[0] with { Original = "React.js" });
+
+        Assert.True(_sut.Entries[0].UpdatedAt > originalUpdatedAt);
+    }
+
+    [Fact]
+    public void UpdateEntry_KeepsUpdatedAtMonotonic()
+    {
+        var futureUpdatedAt = new DateTime(2100, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Term,
+            Original = "React",
+            UpdatedAt = futureUpdatedAt
+        });
+
+        _sut.UpdateEntry(_sut.Entries[0] with { Original = "React.js" });
+
+        Assert.Equal(futureUpdatedAt.AddTicks(1), _sut.Entries[0].UpdatedAt);
+    }
+
+    [Fact]
+    public void LegacyEntriesMissingUpdatedAtUseCreatedAt()
+    {
+        var createdAt = new DateTime(2024, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+        File.WriteAllText(_filePath, $$"""
+        [
+          {
+            "Id": "legacy",
+            "EntryType": 0,
+            "Original": "React",
+            "CreatedAt": "{{createdAt:O}}"
+          }
+        ]
+        """);
+        var sut = new DictionaryService(_filePath);
+
+        var entry = Assert.Single(sut.Entries);
+
+        Assert.Equal(createdAt, entry.UpdatedAt);
+    }
+
+    [Fact]
+    public void ApplyCorrections_IncrementsUsageWithoutChangingUpdatedAt()
+    {
+        var updatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "teh",
+            Replacement = "the",
+            UpdatedAt = updatedAt
+        });
+
+        _sut.ApplyCorrections("teh");
+
+        Assert.Equal(1, _sut.Entries[0].UsageCount);
+        Assert.Equal(updatedAt, _sut.Entries[0].UpdatedAt);
+    }
+
+    [Fact]
     public void EntriesChanged_FiresOnModification()
     {
         var fired = 0;

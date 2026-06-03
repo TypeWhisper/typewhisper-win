@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Services;
 
@@ -44,7 +45,7 @@ public sealed partial class SnippetService : ISnippetService
     public void AddSnippet(Snippet snippet)
     {
         EnsureCacheLoaded();
-        _cache.Add(snippet);
+        _cache.Add(BackfillTimestamps(snippet));
         SaveToDisk();
         SnippetsChanged?.Invoke();
     }
@@ -53,7 +54,11 @@ public sealed partial class SnippetService : ISnippetService
     {
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(s => s.Id == snippet.Id);
-        if (idx >= 0) _cache[idx] = snippet;
+        if (idx >= 0)
+        {
+            var existing = _cache[idx];
+            _cache[idx] = BackfillTimestamps(snippet) with { UpdatedAt = NextUpdatedAt(existing.UpdatedAt) };
+        }
         SaveToDisk();
         SnippetsChanged?.Invoke();
     }
@@ -112,7 +117,7 @@ public sealed partial class SnippetService : ISnippetService
         {
             if (existingTriggers.Contains(snippet.Trigger)) continue;
 
-            var newSnippet = snippet with { Id = Guid.NewGuid().ToString() };
+            var newSnippet = BackfillTimestamps(snippet with { Id = Guid.NewGuid().ToString() });
             _cache.Add(newSnippet);
             existingTriggers.Add(newSnippet.Trigger);
             count++;
@@ -166,6 +171,89 @@ public sealed partial class SnippetService : ISnippetService
         }
     }
 
+    public IReadOnlyList<UserDataSyncSnippet> GetUserDataSyncSnippets()
+    {
+        EnsureCacheLoaded();
+        return _cache
+            .Select(snippet => new UserDataSyncSnippet(
+                snippet.Trigger,
+                snippet.Replacement,
+                snippet.CaseSensitive,
+                snippet.IsEnabled,
+                snippet.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                snippet.CreatedAt,
+                snippet.UpdatedAt))
+            .ToList();
+    }
+
+    public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
+    {
+        EnsureCacheLoaded();
+
+        var changed = false;
+        foreach (var mutation in mutations)
+        {
+            switch (mutation)
+            {
+                case UserDataSyncMutation.UpsertSnippet upsert:
+                    changed |= UpsertSyncedSnippet(upsert.Snippet);
+                    break;
+                case UserDataSyncMutation.DeleteSnippet delete:
+                    changed |= DeleteSyncedSnippet(delete.ItemId);
+                    break;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        SaveToDisk();
+        SnippetsChanged?.Invoke();
+    }
+
+    private bool UpsertSyncedSnippet(UserDataSyncSnippet synced)
+    {
+        var targetId = UserDataSyncIdentity.SnippetItemId(synced.Trigger);
+        var idx = _cache.FindIndex(snippet =>
+            UserDataSyncIdentity.SnippetItemId(snippet.Trigger) == targetId);
+        var tags = string.Join(",", synced.Tags);
+
+        if (idx >= 0)
+        {
+            var existing = _cache[idx];
+            _cache[idx] = existing with
+            {
+                Trigger = synced.Trigger,
+                Replacement = synced.Replacement,
+                CaseSensitive = synced.CaseSensitive,
+                IsEnabled = synced.IsEnabled,
+                Tags = tags,
+                UpdatedAt = synced.UpdatedAt
+            };
+            return true;
+        }
+
+        _cache.Add(new Snippet
+        {
+            Id = Guid.NewGuid().ToString(),
+            Trigger = synced.Trigger,
+            Replacement = synced.Replacement,
+            CaseSensitive = synced.CaseSensitive,
+            IsEnabled = synced.IsEnabled,
+            Tags = tags,
+            CreatedAt = synced.CreatedAt,
+            UpdatedAt = synced.UpdatedAt
+        });
+        return true;
+    }
+
+    private bool DeleteSyncedSnippet(string itemId)
+    {
+        var removed = _cache.RemoveAll(snippet =>
+            UserDataSyncIdentity.SnippetItemId(snippet.Trigger) == itemId);
+        return removed > 0;
+    }
+
     private void EnsureCacheLoaded()
     {
         if (_cacheLoaded) return;
@@ -176,6 +264,7 @@ public sealed partial class SnippetService : ISnippetService
             {
                 var json = File.ReadAllText(_filePath);
                 _cache = JsonSerializer.Deserialize<List<Snippet>>(json) ?? [];
+                _cache = _cache.Select(BackfillTimestamps).ToList();
             }
         }
         catch
@@ -199,6 +288,23 @@ public sealed partial class SnippetService : ISnippetService
         }
         catch { }
     }
+
+    private static Snippet BackfillTimestamps(Snippet snippet)
+    {
+        var createdAt = snippet.CreatedAt == default ? DateTime.UtcNow : NormalizeUtc(snippet.CreatedAt);
+        var updatedAt = snippet.UpdatedAt == default ? createdAt : NormalizeUtc(snippet.UpdatedAt);
+        return snippet with { CreatedAt = createdAt, UpdatedAt = updatedAt };
+    }
+
+    private static DateTime NextUpdatedAt(DateTime previousUpdatedAt)
+    {
+        var previous = previousUpdatedAt == default ? DateTime.UtcNow : NormalizeUtc(previousUpdatedAt);
+        var now = DateTime.UtcNow;
+        return now > previous ? now : previous.AddTicks(1);
+    }
+
+    private static DateTime NormalizeUtc(DateTime date) =>
+        date.Kind == DateTimeKind.Utc ? date : date.ToUniversalTime();
 }
 
 [JsonSerializable(typeof(List<Snippet>))]
