@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Services;
 
@@ -47,7 +48,7 @@ public sealed class DictionaryService : IDictionaryService
     {
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(e => e.Id == entry.Id);
-        if (idx >= 0) _cache[idx] = entry;
+        if (idx >= 0) _cache[idx] = entry with { UpdatedAt = DateTime.UtcNow };
         SaveToDisk();
         EntriesChanged?.Invoke();
     }
@@ -139,7 +140,7 @@ public sealed class DictionaryService : IDictionaryService
                 var idx = _cache.FindIndex(e => e.Id == entry.Id);
                 if (idx >= 0)
                 {
-                    var updated = entry with { Original = desiredTerm, IsEnabled = true };
+                    var updated = entry with { Original = desiredTerm, IsEnabled = true, UpdatedAt = DateTime.UtcNow };
                     _cache[idx] = updated;
                     touchedTerms.Add(updated);
                 }
@@ -161,7 +162,9 @@ public sealed class DictionaryService : IDictionaryService
             {
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Term,
-                Original = term
+                Original = term,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             })
             .ToList();
         _cache.AddRange(addedTerms);
@@ -225,7 +228,8 @@ public sealed class DictionaryService : IDictionaryService
                     Original = original,
                     Replacement = replacement,
                     CaseSensitive = caseSensitive,
-                    IsEnabled = true
+                    IsEnabled = true,
+                    UpdatedAt = DateTime.UtcNow
                 };
             }
         }
@@ -237,7 +241,9 @@ public sealed class DictionaryService : IDictionaryService
                 EntryType = DictionaryEntryType.Correction,
                 Original = original,
                 Replacement = replacement,
-                CaseSensitive = caseSensitive
+                CaseSensitive = caseSensitive,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
         }
 
@@ -279,7 +285,9 @@ public sealed class DictionaryService : IDictionaryService
                 Id = Guid.NewGuid().ToString(),
                 EntryType = DictionaryEntryType.Correction,
                 Original = original,
-                Replacement = replacement
+                Replacement = replacement,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
         }
     }
@@ -299,7 +307,9 @@ public sealed class DictionaryService : IDictionaryService
             {
                 Id = $"pack:{pack.Id}:{t}",
                 EntryType = DictionaryEntryType.Term,
-                Original = t
+                Original = t,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             })
             .ToList();
 
@@ -333,6 +343,96 @@ public sealed class DictionaryService : IDictionaryService
             _cache[idx] = _cache[idx] with { UsageCount = _cache[idx].UsageCount + 1 };
             SaveToDisk();
         }
+    }
+
+    public IReadOnlyList<UserDataSyncDictionaryEntry> GetUserDataSyncEntries()
+    {
+        EnsureCacheLoaded();
+        return _cache
+            .Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal))
+            .Select(entry => new UserDataSyncDictionaryEntry(
+                entry.EntryType == DictionaryEntryType.Term
+                    ? UserDataSyncDictionaryEntryType.Term
+                    : UserDataSyncDictionaryEntryType.Correction,
+                entry.Original,
+                entry.EntryType == DictionaryEntryType.Correction ? entry.Replacement ?? string.Empty : null,
+                entry.CaseSensitive,
+                entry.IsEnabled,
+                entry.CreatedAt,
+                entry.UpdatedAt))
+            .ToList();
+    }
+
+    public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
+    {
+        EnsureCacheLoaded();
+
+        var changed = false;
+        foreach (var mutation in mutations)
+        {
+            switch (mutation)
+            {
+                case UserDataSyncMutation.UpsertDictionary upsert:
+                    changed |= UpsertSyncedDictionaryEntry(upsert.Entry);
+                    break;
+                case UserDataSyncMutation.DeleteDictionary delete:
+                    changed |= DeleteSyncedDictionaryEntry(delete.ItemId);
+                    break;
+            }
+        }
+
+        if (!changed)
+            return;
+
+        SaveToDisk();
+        EntriesChanged?.Invoke();
+    }
+
+    private bool UpsertSyncedDictionaryEntry(UserDataSyncDictionaryEntry synced)
+    {
+        var targetType = synced.EntryType == UserDataSyncDictionaryEntryType.Term
+            ? DictionaryEntryType.Term
+            : DictionaryEntryType.Correction;
+        var targetId = UserDataSyncIdentity.DictionaryItemId(synced.EntryType, synced.Original);
+        var replacement = targetType == DictionaryEntryType.Correction ? synced.Replacement ?? string.Empty : null;
+
+        var idx = _cache.FindIndex(entry =>
+            entry.EntryType == targetType &&
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == targetId);
+
+        if (idx >= 0)
+        {
+            var existing = _cache[idx];
+            _cache[idx] = existing with
+            {
+                Original = synced.Original,
+                Replacement = replacement,
+                CaseSensitive = synced.CaseSensitive,
+                IsEnabled = synced.IsEnabled,
+                UpdatedAt = synced.UpdatedAt
+            };
+            return true;
+        }
+
+        _cache.Add(new DictionaryEntry
+        {
+            Id = Guid.NewGuid().ToString(),
+            EntryType = targetType,
+            Original = synced.Original,
+            Replacement = replacement,
+            CaseSensitive = synced.CaseSensitive,
+            IsEnabled = synced.IsEnabled,
+            CreatedAt = synced.CreatedAt,
+            UpdatedAt = synced.UpdatedAt
+        });
+        return true;
+    }
+
+    private bool DeleteSyncedDictionaryEntry(string itemId)
+    {
+        var removed = _cache.RemoveAll(entry =>
+            UserDataSyncIdentity.DictionaryItemId(entry.EntryType, entry.Original) == itemId);
+        return removed > 0;
     }
 
     private void EnsureCacheLoaded()

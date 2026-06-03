@@ -10,6 +10,7 @@ public sealed record DictionaryEntry
     public bool IsEnabled { get; init; } = true;
     public int UsageCount { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
 }
 
 public enum DictionaryEntryType

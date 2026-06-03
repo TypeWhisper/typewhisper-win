@@ -24,6 +24,7 @@ public partial class SettingsWindow : FluentWindow
         viewModel.RegisterSection(SettingsRoute.General, () => new GeneralSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Appearance, () => new AppearanceSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Advanced, () => new AdvancedSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Premium, () => new PremiumSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.License, () => new LicenseSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.About, () => new InfoSection { DataContext = viewModel });
 

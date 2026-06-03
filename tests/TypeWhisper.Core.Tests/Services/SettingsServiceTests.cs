@@ -1,6 +1,7 @@
 using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Tests.Services;
 
@@ -59,7 +60,19 @@ public class SettingsServiceTests : IDisposable
             OnlineAsrBatchLiveTranscriptionEnabled = true,
             LiveTranscriptionFontSize = 15.5,
             PreviewBubbleAutoHideMilliseconds = 3750,
-            SelectedIndustryPresetId = "architecture"
+            SelectedIndustryPresetId = "architecture",
+            CloudFolderSyncFolderPath = @"C:\Users\Marco\OneDrive\TypeWhisper",
+            CloudFolderSyncState = new CloudFolderSyncState
+            {
+                DeviceId = "win-a",
+                KnownLocalItemIds = ["dictionary:term:dHlwZXdoaXNwZXI"],
+                ExportedItemVersions = new Dictionary<string, string>
+                {
+                    ["dictionary:term:dHlwZXdoaXNwZXI"] = "2026-06-03T08:00:00.000Z"
+                },
+                AppliedOperationIds = ["op-1"],
+                LastSyncAt = new DateTime(2026, 6, 3, 8, 30, 0, DateTimeKind.Utc)
+            }
         };
 
         sut.Save(settings);
@@ -89,6 +102,13 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal(15.5, sut2.Current.LiveTranscriptionFontSize);
         Assert.Equal(3750, sut2.Current.PreviewBubbleAutoHideMilliseconds);
         Assert.Equal("architecture", sut2.Current.SelectedIndustryPresetId);
+        Assert.Equal(@"C:\Users\Marco\OneDrive\TypeWhisper", sut2.Current.CloudFolderSyncFolderPath);
+        Assert.NotNull(sut2.Current.CloudFolderSyncState);
+        Assert.Equal("win-a", sut2.Current.CloudFolderSyncState.DeviceId);
+        Assert.Contains("dictionary:term:dHlwZXdoaXNwZXI", sut2.Current.CloudFolderSyncState.KnownLocalItemIds);
+        Assert.Equal("2026-06-03T08:00:00.000Z", sut2.Current.CloudFolderSyncState.ExportedItemVersions["dictionary:term:dHlwZXdoaXNwZXI"]);
+        Assert.Contains("op-1", sut2.Current.CloudFolderSyncState.AppliedOperationIds);
+        Assert.Equal(new DateTime(2026, 6, 3, 8, 30, 0, DateTimeKind.Utc), sut2.Current.CloudFolderSyncState.LastSyncAt);
     }
 
     [Fact]

@@ -28,6 +28,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public WorkflowsViewModel Workflows { get; }
     public DashboardViewModel Dashboard { get; }
     public PluginsViewModel Plugins { get; }
+    public CloudFolderSyncViewModel CloudFolderSync { get; }
     public AudioRecorderViewModel Recorder { get; }
     public FileTranscriptionViewModel FileTranscription { get; }
 
@@ -96,6 +97,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         WorkflowsViewModel workflows,
         DashboardViewModel dashboard,
         PluginsViewModel plugins,
+        CloudFolderSyncViewModel cloudFolderSync,
         AudioRecorderViewModel recorder,
         FileTranscriptionViewModel fileTranscription,
         UpdateService updateService,
@@ -110,6 +112,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Workflows = workflows;
         Dashboard = dashboard;
         Plugins = plugins;
+        CloudFolderSync = cloudFolderSync;
         Recorder = recorder;
         FileTranscription = fileTranscription;
         _updateService = updateService;
@@ -459,6 +462,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             new SettingsNavigationItem(SettingsRoute.General, Loc.Instance["Nav.General"], "\uE713"),
             new SettingsNavigationItem(SettingsRoute.Appearance, Loc.Instance["Nav.Appearance"], "\uE790"),
             new SettingsNavigationItem(SettingsRoute.Advanced, Loc.Instance["Nav.Advanced"], "\uE9CE"),
+            new SettingsNavigationItem(SettingsRoute.Premium, Loc.Instance["Nav.Premium"], "\uE735"),
             new SettingsNavigationItem(SettingsRoute.License, Loc.Instance["Nav.License"], "\uE72E"),
             new SettingsNavigationItem(SettingsRoute.About, Loc.Instance["Nav.About"], "\uE946")
         ]));
@@ -504,6 +508,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.General => Loc.Instance["Nav.General"],
             SettingsRoute.Appearance => Loc.Instance["Nav.Appearance"],
             SettingsRoute.Advanced => Loc.Instance["Nav.Advanced"],
+            SettingsRoute.Premium => Loc.Instance["Nav.Premium"],
             SettingsRoute.License => Loc.Instance["Nav.License"],
             SettingsRoute.About => Loc.Instance["Nav.About"],
             _ => Loc.Instance["Settings.WindowTitle"]
@@ -524,6 +529,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.General => Loc.Instance["Page.GeneralSubtitle"],
             SettingsRoute.Appearance => Loc.Instance["Page.AppearanceSubtitle"],
             SettingsRoute.Advanced => Loc.Instance["Page.AdvancedSubtitle"],
+            SettingsRoute.Premium => Loc.Instance["Page.PremiumSubtitle"],
             SettingsRoute.License => Loc.Instance["Page.LicenseSubtitle"],
             SettingsRoute.About => Loc.Instance["Page.AboutSubtitle"],
             _ => string.Empty

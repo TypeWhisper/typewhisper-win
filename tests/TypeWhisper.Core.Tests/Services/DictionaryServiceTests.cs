@@ -249,6 +249,42 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void UpdateEntry_RefreshesUpdatedAt()
+    {
+        var originalUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Term,
+            Original = "React",
+            UpdatedAt = originalUpdatedAt
+        });
+
+        _sut.UpdateEntry(_sut.Entries[0] with { Original = "React.js" });
+
+        Assert.True(_sut.Entries[0].UpdatedAt > originalUpdatedAt);
+    }
+
+    [Fact]
+    public void ApplyCorrections_IncrementsUsageWithoutChangingUpdatedAt()
+    {
+        var updatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "teh",
+            Replacement = "the",
+            UpdatedAt = updatedAt
+        });
+
+        _sut.ApplyCorrections("teh");
+
+        Assert.Equal(1, _sut.Entries[0].UsageCount);
+        Assert.Equal(updatedAt, _sut.Entries[0].UpdatedAt);
+    }
+
+    [Fact]
     public void EntriesChanged_FiresOnModification()
     {
         var fired = 0;

@@ -173,7 +173,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
             Id = Guid.NewGuid().ToString(),
             EntryType = NewEntryType,
             Original = NewOriginal.Trim(),
-            Replacement = string.IsNullOrWhiteSpace(NewReplacement) ? null : NewReplacement.Trim(),
+            Replacement = NewEntryType == DictionaryEntryType.Correction ? NewReplacement.Trim() : null,
             CaseSensitive = NewCaseSensitive
         });
 
@@ -215,7 +215,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         _dictionary.UpdateEntry(EditEntry with
         {
             Original = EditOriginal.Trim(),
-            Replacement = string.IsNullOrWhiteSpace(EditReplacement) ? null : EditReplacement.Trim(),
+            Replacement = EditEntry.EntryType == DictionaryEntryType.Correction ? EditReplacement.Trim() : null,
             CaseSensitive = EditCaseSensitive
         });
 

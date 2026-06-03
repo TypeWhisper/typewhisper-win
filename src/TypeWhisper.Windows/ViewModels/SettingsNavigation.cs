@@ -17,6 +17,7 @@ public enum SettingsRoute
     General,
     Appearance,
     Advanced,
+    Premium,
     License,
     About
 }

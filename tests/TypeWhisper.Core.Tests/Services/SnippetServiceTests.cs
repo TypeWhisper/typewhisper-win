@@ -228,6 +228,41 @@ public class SnippetServiceTests : IDisposable
         Assert.Equal("Neu", freshService.Snippets[0].Tags);
     }
 
+    [Fact]
+    public void UpdateSnippet_RefreshesUpdatedAt()
+    {
+        var originalUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddSnippet(new Snippet
+        {
+            Id = "1",
+            Trigger = "mfg",
+            Replacement = "Grüße",
+            UpdatedAt = originalUpdatedAt
+        });
+
+        _sut.UpdateSnippet(_sut.Snippets[0] with { Replacement = "Viele Grüße" });
+
+        Assert.True(_sut.Snippets[0].UpdatedAt > originalUpdatedAt);
+    }
+
+    [Fact]
+    public void ApplySnippets_IncrementsUsageWithoutChangingUpdatedAt()
+    {
+        var updatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _sut.AddSnippet(new Snippet
+        {
+            Id = "1",
+            Trigger = "mfg",
+            Replacement = "Grüße",
+            UpdatedAt = updatedAt
+        });
+
+        _sut.ApplySnippets("mfg");
+
+        Assert.Equal(1, _sut.Snippets[0].UsageCount);
+        Assert.Equal(updatedAt, _sut.Snippets[0].UpdatedAt);
+    }
+
     public void Dispose()
     {
         if (File.Exists(_filePath)) File.Delete(_filePath);
