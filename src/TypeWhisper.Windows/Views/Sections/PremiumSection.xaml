@@ -24,6 +24,14 @@
                            Style="{StaticResource PageSubtitleStyle}"
                            Margin="0,0,0,16"/>
 
+                <Border Style="{StaticResource SettingsSummaryBarStyle}"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding ShowSupporterPremiumNotice, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="{loc:Str Premium.SupporterRequiresCommercial}"
+                               Style="{StaticResource HintStyle}"
+                               TextWrapping="Wrap"/>
+                </Border>
+
                 <Border Style="{StaticResource SettingsActionBarStyle}"
                         Visibility="{Binding CloudFolderSync.ShowLockedState, Converter={StaticResource BoolToVisibility}}">
                     <Grid>

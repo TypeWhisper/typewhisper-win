@@ -29,24 +29,95 @@
                        Style="{StaticResource PageSubtitleStyle}"
                        Margin="0,0,0,16"/>
 
-            <Border Style="{StaticResource SettingsActionBarStyle}">
+            <Border Style="{StaticResource SettingsActionBarStyle}"
+                    Visibility="{Binding ShowPlanSelection, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel>
-                    <TextBlock Text="{loc:Str License.UserTypeTitle}"
+                    <TextBlock Text="{loc:Str License.PlanSelectionTitle}"
                                Style="{StaticResource SettingsGroupTitleStyle}"
                                Margin="0,0,0,4"/>
-                    <TextBlock Text="{loc:Str License.UserTypeHint}"
+                    <TextBlock Text="{loc:Str License.PlanSelectionHint}"
                                Style="{StaticResource HintStyle}"
                                Margin="0,0,0,10"/>
-                    <StackPanel Orientation="Horizontal">
-                        <RadioButton Content="{loc:Str License.UserTypePrivate}"
-                                     Style="{StaticResource TabRadioStyle}"
-                                     IsChecked="{Binding IsPrivateUser, Mode=OneWay}"
-                                     Command="{Binding SelectPrivateUserCommand}"/>
-                        <RadioButton Content="{loc:Str License.UserTypeBusiness}"
-                                     Style="{StaticResource TabRadioStyle}"
-                                     IsChecked="{Binding IsBusinessUser, Mode=OneWay}"
-                                     Command="{Binding SelectBusinessUserCommand}"/>
-                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding PlanOptions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <primitives:UniformGrid Columns="2"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.SelectPlanCommand, ElementName=ContentRoot}"
+                                        CommandParameter="{Binding}"
+                                        Style="{StaticResource SidebarButtonStyle}"
+                                        HorizontalContentAlignment="Stretch"
+                                        MinHeight="132"
+                                        Margin="0,0,10,10">
+                                    <Border Margin="0"
+                                            MinHeight="118">
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource SettingsCardStyle}">
+                                                <Setter Property="Background" Value="#12000000"/>
+                                                <Setter Property="BorderBrush" Value="#16FFFFFF"/>
+                                                <Setter Property="CornerRadius" Value="8"/>
+                                                <Setter Property="Margin" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Background" Value="#162437"/>
+                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding IconGlyph}"
+                                                       FontFamily="Segoe Fluent Icons"
+                                                       Foreground="{StaticResource LabelBrush}"
+                                                       FontSize="18"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,10,0"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Title}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="15"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="&#xE73E;"
+                                                       FontFamily="Segoe Fluent Icons"
+                                                       Foreground="{StaticResource AccentBrush}"
+                                                       FontSize="15"
+                                                       Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"/>
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="0"
+                                                       Grid.ColumnSpan="3"
+                                                       Text="{Binding Price}"
+                                                       Foreground="{StaticResource LabelBrush}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,8,0,0"/>
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="0"
+                                                       Grid.ColumnSpan="3"
+                                                       Text="{Binding Detail}"
+                                                       Style="{StaticResource HintStyle}"
+                                                       Margin="0,10,0,0"
+                                                       TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
 
@@ -54,6 +125,60 @@
                        Style="{StaticResource PageSubtitleStyle}"
                        Margin="0,0,0,16"
                        Visibility="{Binding IsPrivateUser, Converter={StaticResource BoolToVisibility}}"/>
+
+            <Border Style="{StaticResource SettingsSectionFormStyle}"
+                    Visibility="{Binding ShowLicenseActivation, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Margin="18,16">
+                    <TextBlock Text="{loc:Str License.AlreadyHaveAnyKey}"
+                               Style="{StaticResource SettingsGroupTitleStyle}"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str License.AnyKeyHint}"
+                               Style="{StaticResource HintStyle}"
+                               Margin="0,0,0,10"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <PasswordBox x:Name="LicenseKeyBox"
+                                     Style="{StaticResource InputPasswordBoxStyle}"
+                                     PasswordChanged="OnLicenseKeyChanged"/>
+                        <ui:Button Grid.Column="1"
+                                   Content="{loc:Str License.Activate}"
+                                   Appearance="Primary"
+                                   Margin="10,0,0,0"
+                                   Command="{Binding ActivateLicenseCommand}"/>
+                    </Grid>
+                    <TextBlock Text="{Binding License.LicenseActivationError}"
+                               Foreground="{StaticResource DangerBrush}"
+                               FontSize="12"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding License.LicenseActivationError, Converter={StaticResource NonEmptyToVisibility}}"/>
+                    <TextBlock Text="{Binding LicenseActivationNotice}"
+                               Foreground="{StaticResource AccentBrush}"
+                               FontSize="12"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding LicenseActivationNotice, Converter={StaticResource NonEmptyToVisibility}}"/>
+                    <Grid Margin="0,12,0,0"
+                          Visibility="{Binding ShowCustomerPortalShortcut, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str License.CustomerPortalHint}"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,12,0"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap"/>
+                        <ui:Button Grid.Column="1"
+                                   Content="{loc:Str License.ManagePurchase}"
+                                   Appearance="Secondary"
+                                   Command="{Binding OpenCustomerPortalCommand}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
 
             <Border Style="{StaticResource SettingsSummaryBarStyle}"
                     Visibility="{Binding IsBusinessUser, Converter={StaticResource BoolToVisibility}}">
@@ -146,62 +271,53 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SettingsSectionFormStyle}">
-                    <StackPanel Margin="18,16">
-                        <TextBlock Text="{loc:Str License.AlreadyHaveKey}"
-                                   Style="{StaticResource SettingsGroupTitleStyle}"
-                                   Margin="0,0,0,8"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <PasswordBox x:Name="CommercialLicenseKeyBox"
-                                         Style="{StaticResource InputPasswordBoxStyle}"
-                                         PasswordChanged="OnCommercialLicenseKeyChanged"/>
-                            <ui:Button Grid.Column="1"
-                                       Content="{loc:Str License.Activate}"
-                                       Appearance="Primary"
-                                       Margin="10,0,0,0"
-                                       Command="{Binding ActivateCommercialLicenseCommand}"/>
-                        </Grid>
-                        <TextBlock Text="{Binding License.CommercialActivationError}"
-                                   Foreground="{StaticResource DangerBrush}"
-                                   FontSize="12"
-                                   Margin="0,8,0,0"
-                                   TextWrapping="Wrap"
-                                   Visibility="{Binding License.CommercialActivationError, Converter={StaticResource NonEmptyToVisibility}}"/>
-                    </StackPanel>
-                </Border>
             </StackPanel>
 
             <Border Style="{StaticResource SettingsActionBarStyle}"
                     Visibility="{Binding ShowCommercialManage, Converter={StaticResource BoolToVisibility}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock Text="{loc:Str License.ManageCommercialTitle}"
-                                   Style="{StaticResource SettingsGroupTitleStyle}"
-                                   Margin="0,0,0,4"/>
-                        <TextBlock Text="{loc:Str License.ManageCommercialHint}"
-                                   Style="{StaticResource HintStyle}"
-                                   Margin="0,0,0,0"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <ui:Button Content="{loc:Str License.ManagePurchase}"
-                                   Appearance="Secondary"
-                                   Margin="0,0,8,0"
-                                   Command="{Binding OpenCustomerPortalCommand}"/>
-                        <Button Content="{loc:Str License.Deactivate}"
-                                Style="{StaticResource LinkButtonStyle}"
-                                Command="{Binding DeactivateCommercialLicenseCommand}"
-                                Foreground="{StaticResource DangerBrush}"
-                                VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Grid>
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str License.ManageCommercialTitle}"
+                                       Style="{StaticResource SettingsGroupTitleStyle}"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="{loc:Str License.ManageCommercialHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       Margin="0,0,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <ui:Button Content="{loc:Str License.ManagePurchase}"
+                                       Appearance="Secondary"
+                                       Margin="0,0,8,0"
+                                       Command="{Binding OpenCustomerPortalCommand}"/>
+                            <ui:Button Content="{loc:Str License.Refresh}"
+                                       Appearance="Secondary"
+                                       Margin="0,0,8,0"
+                                       Command="{Binding RefreshCommercialLicenseCommand}"/>
+                            <Button Content="{loc:Str License.Deactivate}"
+                                    Style="{StaticResource LinkButtonStyle}"
+                                    Command="{Binding DeactivateCommercialLicenseCommand}"
+                                    Foreground="{StaticResource DangerBrush}"
+                                    VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="{Binding License.CommercialRefreshError}"
+                               Foreground="{StaticResource DangerBrush}"
+                               FontSize="12"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding License.CommercialRefreshError, Converter={StaticResource NonEmptyToVisibility}}"/>
+                    <TextBlock Text="{Binding License.CommercialDeactivationError}"
+                               Foreground="{StaticResource DangerBrush}"
+                               FontSize="12"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding License.CommercialDeactivationError, Converter={StaticResource NonEmptyToVisibility}}"/>
+                </StackPanel>
             </Border>
 
             <Border Style="{StaticResource SettingsSummaryBarStyle}">
@@ -264,65 +380,57 @@
                     </StackPanel>
                 </Border>
 
-                <Border Style="{StaticResource SettingsSectionFormStyle}">
-                    <StackPanel Margin="18,16">
-                        <TextBlock Text="{loc:Str License.AlreadyHaveSupporterKey}"
-                                   Style="{StaticResource SettingsGroupTitleStyle}"
-                                   Margin="0,0,0,8"/>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding ShowSupporterManage, Converter={StaticResource BoolToVisibility}}">
+                <Border Style="{StaticResource SettingsActionBarStyle}">
+                    <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <PasswordBox x:Name="SupporterLicenseKeyBox"
-                                         Style="{StaticResource InputPasswordBoxStyle}"
-                                         PasswordChanged="OnSupporterLicenseKeyChanged"/>
-                            <ui:Button Grid.Column="1"
-                                       Content="{loc:Str License.Activate}"
-                                       Appearance="Primary"
-                                       Margin="10,0,0,0"
-                                       Command="{Binding ActivateSupporterLicenseCommand}"/>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str License.ManageSupporterTitle}"
+                                           Style="{StaticResource SettingsGroupTitleStyle}"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Text="{loc:Str License.ManageSupporterHint}"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <ui:Button Content="{loc:Str License.ManagePurchase}"
+                                           Appearance="Secondary"
+                                           Margin="0,0,8,0"
+                                           Command="{Binding OpenCustomerPortalCommand}"/>
+                                <ui:Button Content="{loc:Str License.Refresh}"
+                                           Appearance="Secondary"
+                                           Margin="0,0,8,0"
+                                           Command="{Binding RefreshSupporterLicenseCommand}"/>
+                                <Button Content="{loc:Str License.Deactivate}"
+                                        Style="{StaticResource LinkButtonStyle}"
+                                        Command="{Binding DeactivateSupporterLicenseCommand}"
+                                        Foreground="{StaticResource DangerBrush}"
+                                        VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Grid>
-                        <TextBlock Text="{Binding License.SupporterActivationError}"
+                        <TextBlock Text="{Binding License.SupporterRefreshError}"
                                    Foreground="{StaticResource DangerBrush}"
                                    FontSize="12"
                                    Margin="0,8,0,0"
                                    TextWrapping="Wrap"
-                                   Visibility="{Binding License.SupporterActivationError, Converter={StaticResource NonEmptyToVisibility}}"/>
+                                   Visibility="{Binding License.SupporterRefreshError, Converter={StaticResource NonEmptyToVisibility}}"/>
+                        <TextBlock Text="{Binding License.SupporterDeactivationError}"
+                                   Foreground="{StaticResource DangerBrush}"
+                                   FontSize="12"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding License.SupporterDeactivationError, Converter={StaticResource NonEmptyToVisibility}}"/>
                     </StackPanel>
                 </Border>
-            </StackPanel>
 
-            <StackPanel Visibility="{Binding ShowSupporterManage, Converter={StaticResource BoolToVisibility}}">
-                <Border Style="{StaticResource SettingsActionBarStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="{loc:Str License.ManageSupporterTitle}"
-                                       Style="{StaticResource SettingsGroupTitleStyle}"
-                                       Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str License.ManageSupporterHint}"
-                                       Style="{StaticResource HintStyle}"
-                                       Margin="0,0,0,0"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <ui:Button Content="{loc:Str License.ManagePurchase}"
-                                       Appearance="Secondary"
-                                       Margin="0,0,8,0"
-                                       Command="{Binding OpenCustomerPortalCommand}"/>
-                            <Button Content="{loc:Str License.Deactivate}"
-                                    Style="{StaticResource LinkButtonStyle}"
-                                    Command="{Binding DeactivateSupporterLicenseCommand}"
-                                    Foreground="{StaticResource DangerBrush}"
-                                    VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border Style="{StaticResource SettingsSectionFormStyle}">
+                <Border Style="{StaticResource SettingsSectionFormStyle}"
+                        Visibility="{Binding ShowDiscordSection, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Margin="18,16">
                         <TextBlock Text="{loc:Str License.DiscordClaimTitle}"
                                    Style="{StaticResource SettingsGroupTitleStyle}"

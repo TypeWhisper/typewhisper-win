@@ -21,6 +21,8 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private const string CheckoutUrlSupporterSilver = "https://buy.polar.sh/polar_cl_lXFAqnanhrrPd1RZ95SCb2L05L3lNrUQIkYVd0ZmK5b";
     private const string CheckoutUrlSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4";
 
+    private CommercialLicenseTier _selectedCommercialPlanTier = CommercialLicenseTier.Individual;
+
     public LicenseSectionViewModel(LicenseService license, SupporterDiscordService discord)
     {
         License = license;
@@ -49,12 +51,14 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
         SelectPrivateUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.PrivateUser));
         SelectBusinessUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.Business));
+        SelectPlanCommand = new RelayCommand<LicensePlanOption>(SelectPlan);
         OpenUrlCommand = new RelayCommand<string>(OpenUrl);
         OpenCustomerPortalCommand = new RelayCommand(() => OpenUrl(CustomerPortalUrl));
-        ActivateCommercialLicenseCommand = new AsyncRelayCommand(ActivateCommercialLicenseAsync, CanActivateCommercialLicense);
-        ActivateSupporterLicenseCommand = new AsyncRelayCommand(ActivateSupporterLicenseAsync, CanActivateSupporterLicense);
-        DeactivateCommercialLicenseCommand = new AsyncRelayCommand(() => License.DeactivateCommercialLicenseAsync());
-        DeactivateSupporterLicenseCommand = new AsyncRelayCommand(DeactivateSupporterLicenseAsync);
+        ActivateLicenseCommand = new AsyncRelayCommand(ActivateLicenseAsync, CanActivateLicense);
+        RefreshCommercialLicenseCommand = new AsyncRelayCommand(() => License.RefreshCommercialLicenseAsync(), CanManageCommercialLicense);
+        RefreshSupporterLicenseCommand = new AsyncRelayCommand(() => License.RefreshSupporterLicenseAsync(), CanManageSupporterLicense);
+        DeactivateCommercialLicenseCommand = new AsyncRelayCommand(() => License.DeactivateCommercialLicenseAsync(), CanManageCommercialLicense);
+        DeactivateSupporterLicenseCommand = new AsyncRelayCommand(DeactivateSupporterLicenseAsync, CanManageSupporterLicense);
         ConnectDiscordCommand = new AsyncRelayCommand(ConnectDiscordAsync, CanConnectDiscord);
         ReconnectDiscordCommand = new AsyncRelayCommand(ReconnectDiscordAsync, CanReconnectDiscord);
         RefreshDiscordStatusCommand = new AsyncRelayCommand(RefreshDiscordStatusAsync, CanRefreshDiscord);
@@ -69,19 +73,59 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions { get; }
     public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions { get; }
     public IReadOnlyList<LicensePurchaseOption> SupporterOptions { get; }
+    public IReadOnlyList<LicensePlanOption> PlanOptions =>
+    [
+        new(
+            "gpl",
+            Loc.Instance["License.PlanGplTitle"],
+            Loc.Instance["License.PlanGplPrice"],
+            Loc.Instance["License.PlanGplDetail"],
+            "\uE73E",
+            null,
+            IsPrivateUser && License.CommercialStatus != LicenseStatus.Active),
+        new(
+            "individual",
+            Loc.Instance["License.PlanIndividualTitle"],
+            Loc.Instance["License.PlanIndividualPrice"],
+            Loc.Instance["License.PlanIndividualDetail"],
+            "\uE8EC",
+            CommercialLicenseTier.Individual,
+            IsCommercialPlanSelected(CommercialLicenseTier.Individual)),
+        new(
+            "team",
+            Loc.Instance["License.PlanTeamTitle"],
+            Loc.Instance["License.PlanTeamPrice"],
+            Loc.Instance["License.PlanTeamDetail"],
+            "\uE716",
+            CommercialLicenseTier.Team,
+            IsCommercialPlanSelected(CommercialLicenseTier.Team)),
+        new(
+            "enterprise",
+            Loc.Instance["License.PlanEnterpriseTitle"],
+            Loc.Instance["License.PlanEnterprisePrice"],
+            Loc.Instance["License.PlanEnterpriseDetail"],
+            "\uE80F",
+            CommercialLicenseTier.Enterprise,
+            IsCommercialPlanSelected(CommercialLicenseTier.Enterprise)),
+    ];
 
     [ObservableProperty]
-    private string _commercialLicenseKeyInput = string.Empty;
+    private string _licenseKeyInput = string.Empty;
 
     [ObservableProperty]
-    private string _supporterLicenseKeyInput = string.Empty;
+    private string? _licenseActivationNotice;
 
     public bool IsPrivateUser => License.IsPrivateUser;
     public bool IsBusinessUser => License.IsBusinessUser;
-    public bool ShowCommercialPurchase => License.CommercialStatus != LicenseStatus.Active;
-    public bool ShowCommercialManage => License.CommercialStatus == LicenseStatus.Active;
+    public bool ShowPlanSelection => License.CommercialStatus != LicenseStatus.Active;
+    public bool ShowLicenseActivation => License.CommercialStatus != LicenseStatus.Active;
+    public bool ShowCommercialPurchase =>
+        License.CommercialStatus != LicenseStatus.Active
+        && (IsBusinessUser || License.HasCommercialActivation);
+    public bool ShowCommercialManage => License.HasCommercialActivation;
     public bool ShowSupporterPurchase => !License.HasSupporterLicense;
-    public bool ShowSupporterManage => License.HasSupporterLicense;
+    public bool ShowSupporterManage => License.HasSupporterActivation;
+    public bool ShowCustomerPortalShortcut => !License.HasCommercialActivation && !License.HasSupporterActivation;
     public bool ShowDiscordSection => License.HasSupporterLicense;
     public bool ShowDiscordConnect => ShowDiscordSection && Discord.ClaimState is SupporterDiscordClaimState.Unavailable or SupporterDiscordClaimState.Unlinked;
     public bool ShowDiscordRefresh => ShowDiscordSection && (Discord.IsHelperUnavailable || Discord.ClaimState is SupporterDiscordClaimState.Pending or SupporterDiscordClaimState.Linked or SupporterDiscordClaimState.Failed);
@@ -97,6 +141,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     {
         get
         {
+            if (License.CommercialStatus == LicenseStatus.Expired)
+                return Loc.Instance["License.CommercialExpiredDetail"];
+
             if (License.CommercialStatus != LicenseStatus.Active)
                 return Loc.Instance["License.CommercialInactiveDetail"];
 
@@ -110,13 +157,20 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         }
     }
 
-    public string SupporterStatusTitle => License.HasSupporterLicense
-        ? Loc.Instance["License.SupporterActiveTitle"]
-        : Loc.Instance["License.SupporterInactiveTitle"];
+    public string SupporterStatusTitle => License.SupporterStatus switch
+    {
+        LicenseStatus.Active => Loc.Instance["License.SupporterActiveTitle"],
+        LicenseStatus.Expired => Loc.Instance["License.SupporterExpiredTitle"],
+        _ => Loc.Instance["License.SupporterInactiveTitle"],
+    };
 
-    public string SupporterStatusDetail => License.HasSupporterLicense && !string.IsNullOrWhiteSpace(License.SupporterTierDisplayName)
-        ? Loc.Instance.GetString("License.SupporterActiveDetailFormat", License.SupporterTierDisplayName ?? string.Empty)
-        : Loc.Instance["License.SupporterInactiveDetail"];
+    public string SupporterStatusDetail => License.SupporterStatus switch
+    {
+        LicenseStatus.Active when !string.IsNullOrWhiteSpace(License.SupporterTierDisplayName)
+            => Loc.Instance.GetString("License.SupporterActiveDetailFormat", License.SupporterTierDisplayName ?? string.Empty),
+        LicenseStatus.Expired => Loc.Instance["License.SupporterExpiredDetail"],
+        _ => Loc.Instance["License.SupporterInactiveDetail"],
+    };
 
     public string DiscordStatusTitle => Discord.ClaimState switch
     {
@@ -153,11 +207,13 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
     public RelayCommand SelectPrivateUserCommand { get; }
     public RelayCommand SelectBusinessUserCommand { get; }
+    public RelayCommand<LicensePlanOption> SelectPlanCommand { get; }
     public RelayCommand<string> OpenUrlCommand { get; }
     public RelayCommand OpenCustomerPortalCommand { get; }
     public RelayCommand OpenGitHubSponsorsClaimCommand { get; }
-    public AsyncRelayCommand ActivateCommercialLicenseCommand { get; }
-    public AsyncRelayCommand ActivateSupporterLicenseCommand { get; }
+    public AsyncRelayCommand ActivateLicenseCommand { get; }
+    public AsyncRelayCommand RefreshCommercialLicenseCommand { get; }
+    public AsyncRelayCommand RefreshSupporterLicenseCommand { get; }
     public AsyncRelayCommand DeactivateCommercialLicenseCommand { get; }
     public AsyncRelayCommand DeactivateSupporterLicenseCommand { get; }
     public AsyncRelayCommand ConnectDiscordCommand { get; }
@@ -171,17 +227,17 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         RefreshComputedProperties();
     }
 
-    partial void OnCommercialLicenseKeyInputChanged(string value) =>
-        ActivateCommercialLicenseCommand.NotifyCanExecuteChanged();
+    partial void OnLicenseKeyInputChanged(string value) =>
+        ActivateLicenseCommand.NotifyCanExecuteChanged();
 
-    partial void OnSupporterLicenseKeyInputChanged(string value) =>
-        ActivateSupporterLicenseCommand.NotifyCanExecuteChanged();
+    private bool CanActivateLicense() =>
+        !string.IsNullOrWhiteSpace(LicenseKeyInput) && !License.IsLicenseActivating;
 
-    private bool CanActivateCommercialLicense() =>
-        !string.IsNullOrWhiteSpace(CommercialLicenseKeyInput) && !License.IsCommercialActivating;
+    private bool CanManageCommercialLicense() =>
+        License.HasCommercialActivation && !License.IsCommercialRefreshing;
 
-    private bool CanActivateSupporterLicense() =>
-        !string.IsNullOrWhiteSpace(SupporterLicenseKeyInput) && !License.IsSupporterActivating;
+    private bool CanManageSupporterLicense() =>
+        License.HasSupporterActivation && !License.IsSupporterRefreshing;
 
     private bool CanConnectDiscord() =>
         License.HasSupporterLicense && !Discord.IsWorking;
@@ -192,19 +248,46 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private bool CanRefreshDiscord() =>
         License.HasSupporterLicense && !Discord.IsWorking;
 
-    private async Task ActivateCommercialLicenseAsync()
+    private bool IsCommercialPlanSelected(CommercialLicenseTier tier) =>
+        License.CommercialStatus == LicenseStatus.Active
+            ? License.CommercialTier == tier
+            : IsBusinessUser && _selectedCommercialPlanTier == tier;
+
+    private void SelectPlan(LicensePlanOption? option)
     {
-        await License.ActivateCommercialLicenseAsync(CommercialLicenseKeyInput.Trim());
-        if (License.CommercialStatus == LicenseStatus.Active)
-            CommercialLicenseKeyInput = string.Empty;
+        if (option is null)
+            return;
+
+        if (option.CommercialTier is { } tier)
+        {
+            _selectedCommercialPlanTier = tier;
+            License.SetUserType(LicenseUserType.Business);
+        }
+        else
+        {
+            License.SetUserType(LicenseUserType.PrivateUser);
+        }
+
         RefreshComputedProperties();
     }
 
-    private async Task ActivateSupporterLicenseAsync()
+    private async Task ActivateLicenseAsync()
     {
-        await License.ActivateSupporterKeyAsync(SupporterLicenseKeyInput.Trim());
-        if (License.HasSupporterLicense)
-            SupporterLicenseKeyInput = string.Empty;
+        LicenseActivationNotice = null;
+
+        var entitlement = await License.ActivateAnyLicenseKeyAsync(LicenseKeyInput.Trim());
+        if (entitlement is not null)
+        {
+            if (entitlement.CommercialTier is { } tier)
+            {
+                _selectedCommercialPlanTier = tier;
+                License.SetUserType(LicenseUserType.Business);
+            }
+
+            LicenseKeyInput = string.Empty;
+            LicenseActivationNotice = ActivationSuccessText(entitlement);
+        }
+
         RefreshComputedProperties();
     }
 
@@ -258,8 +341,11 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
     private void OnServicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        ActivateCommercialLicenseCommand.NotifyCanExecuteChanged();
-        ActivateSupporterLicenseCommand.NotifyCanExecuteChanged();
+        ActivateLicenseCommand.NotifyCanExecuteChanged();
+        RefreshCommercialLicenseCommand.NotifyCanExecuteChanged();
+        RefreshSupporterLicenseCommand.NotifyCanExecuteChanged();
+        DeactivateCommercialLicenseCommand.NotifyCanExecuteChanged();
+        DeactivateSupporterLicenseCommand.NotifyCanExecuteChanged();
         ConnectDiscordCommand.NotifyCanExecuteChanged();
         ReconnectDiscordCommand.NotifyCanExecuteChanged();
         RefreshDiscordStatusCommand.NotifyCanExecuteChanged();
@@ -270,10 +356,14 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsPrivateUser));
         OnPropertyChanged(nameof(IsBusinessUser));
+        OnPropertyChanged(nameof(PlanOptions));
+        OnPropertyChanged(nameof(ShowPlanSelection));
+        OnPropertyChanged(nameof(ShowLicenseActivation));
         OnPropertyChanged(nameof(ShowCommercialPurchase));
         OnPropertyChanged(nameof(ShowCommercialManage));
         OnPropertyChanged(nameof(ShowSupporterPurchase));
         OnPropertyChanged(nameof(ShowSupporterManage));
+        OnPropertyChanged(nameof(ShowCustomerPortalShortcut));
         OnPropertyChanged(nameof(ShowDiscordSection));
         OnPropertyChanged(nameof(ShowDiscordConnect));
         OnPropertyChanged(nameof(ShowDiscordRefresh));
@@ -285,6 +375,46 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         OnPropertyChanged(nameof(DiscordStatusTitle));
         OnPropertyChanged(nameof(DiscordStatusDetail));
     }
+
+    private static string ActivationSuccessText(ActivatedLicenseEntitlement entitlement) =>
+        entitlement.Kind switch
+        {
+            ActivatedLicenseEntitlementKind.Commercial when entitlement.CommercialTier is { } tier =>
+                Loc.Instance.GetString(
+                    "License.ActivationDetectedCommercialFormat",
+                    CommercialTierText(tier),
+                    entitlement.IsLifetime ? Loc.Instance["License.LifetimeSuffix"] : string.Empty),
+            ActivatedLicenseEntitlementKind.Supporter when entitlement.SupporterTier is { } tier =>
+                Loc.Instance.GetString("License.ActivationDetectedSupporterFormat", SupporterTierText(tier)),
+            _ => Loc.Instance["License.ActivationDetectedGeneric"],
+        };
+
+    private static string CommercialTierText(CommercialLicenseTier tier) =>
+        tier switch
+        {
+            CommercialLicenseTier.Individual => "Individual",
+            CommercialLicenseTier.Team => "Team",
+            CommercialLicenseTier.Enterprise => "Enterprise",
+            _ => tier.ToString(),
+        };
+
+    private static string SupporterTierText(SupporterTier tier) =>
+        tier switch
+        {
+            SupporterTier.Bronze => "Bronze",
+            SupporterTier.Silver => "Silver",
+            SupporterTier.Gold => "Gold",
+            _ => tier.ToString(),
+        };
 }
+
+public sealed record LicensePlanOption(
+    string Id,
+    string Title,
+    string Price,
+    string Detail,
+    string IconGlyph,
+    CommercialLicenseTier? CommercialTier,
+    bool IsSelected);
 
 public sealed record LicensePurchaseOption(string Title, string Price, string Detail, string Url);

@@ -193,7 +193,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
 
     public async Task RefreshStatusIfNeededAsync(LicenseService license, CancellationToken ct = default)
     {
-        if (license.SupporterClaimProof is null)
+        if (license.GetDiscordClaimProofCandidates().Count == 0)
         {
             HandleSupporterEntitlementRemoved();
             return;

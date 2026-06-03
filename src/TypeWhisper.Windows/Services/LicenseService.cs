@@ -22,8 +22,24 @@ public sealed partial class LicenseService : ObservableObject
     private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
     private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
     private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
+    private static readonly Dictionary<string, CommercialLicenseTier> KnownCommercialBenefitIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["a4c0b152-0b91-4588-b8f8-779870affba9"] = CommercialLicenseTier.Individual,
+        ["4eb5fa60-ed43-475d-a9b1-c837e67307e5"] = CommercialLicenseTier.Individual,
+        ["5138b20a-57ba-48aa-a664-2139cd6df0de"] = CommercialLicenseTier.Team,
+        ["afc8fac1-0e8f-4bb7-a1bc-60c8250b9923"] = CommercialLicenseTier.Team,
+        ["40b82917-f74e-4cc3-8165-937f1f47b294"] = CommercialLicenseTier.Enterprise,
+        ["1857c2ed-3f80-4a8a-93c7-c1d67e02db2e"] = CommercialLicenseTier.Enterprise,
+    };
 
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private static readonly Dictionary<string, SupporterTier> KnownSupporterBenefitIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["d3eef5ed-bc8c-469d-809b-79fdfe5fc8e8"] = global::TypeWhisper.Windows.Services.SupporterTier.Bronze,
+        ["9ca12e41-b407-4368-9745-76b72ff2c7c2"] = global::TypeWhisper.Windows.Services.SupporterTier.Silver,
+        ["0c695b7a-2f3a-4797-81c7-1410dbb76cc2"] = global::TypeWhisper.Windows.Services.SupporterTier.Gold,
+    };
+
+    private readonly HttpClient _http;
     private readonly string _credentialPath;
     private readonly string _legacyCredentialPath;
 
@@ -54,6 +70,12 @@ public sealed partial class LicenseService : ObservableObject
     private bool _commercialIsLifetime;
 
     [ObservableProperty]
+    private bool _isLicenseActivating;
+
+    [ObservableProperty]
+    private string? _licenseActivationError;
+
+    [ObservableProperty]
     private bool _isCommercialActivating;
 
     [ObservableProperty]
@@ -61,6 +83,12 @@ public sealed partial class LicenseService : ObservableObject
 
     [ObservableProperty]
     private string? _commercialDeactivationError;
+
+    [ObservableProperty]
+    private bool _isCommercialRefreshing;
+
+    [ObservableProperty]
+    private string? _commercialRefreshError;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSupporterLicense))]
@@ -85,12 +113,24 @@ public sealed partial class LicenseService : ObservableObject
     [ObservableProperty]
     private string? _supporterDeactivationError;
 
+    [ObservableProperty]
+    private bool _isSupporterRefreshing;
+
+    [ObservableProperty]
+    private string? _supporterRefreshError;
+
     public event Action? StatusChanged;
 
     public LicenseService()
+        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
-        _credentialPath = Path.Combine(TypeWhisperEnvironment.DataPath, "licenses.dat");
-        _legacyCredentialPath = Path.Combine(TypeWhisperEnvironment.DataPath, "license.json");
+    }
+
+    internal LicenseService(HttpClient http, string dataPath)
+    {
+        _http = http;
+        _credentialPath = Path.Combine(dataPath, "licenses.dat");
+        _legacyCredentialPath = Path.Combine(dataPath, "license.json");
         LoadStore();
     }
 
@@ -98,6 +138,8 @@ public sealed partial class LicenseService : ObservableObject
     public bool IsBusinessUser => UserType == LicenseUserType.Business;
     public bool HasCommercialLicense => CommercialStatus == LicenseStatus.Active;
     public bool HasSupporterLicense => SupporterStatus == LicenseStatus.Active;
+    public bool HasCommercialActivation => !string.IsNullOrWhiteSpace(_commercialLicenseKey) && !string.IsNullOrWhiteSpace(_commercialActivationId);
+    public bool HasSupporterActivation => !string.IsNullOrWhiteSpace(_supporterLicenseKey) && !string.IsNullOrWhiteSpace(_supporterActivationId);
     public bool IsSupporter => SupporterStatus == LicenseStatus.Active && EffectiveSupporterTier is not null;
     public bool ShouldShowReminder => IsBusinessUser && !HasCommercialLicense;
     public SupporterTier SupporterBadgeTier => EffectiveSupporterTier ?? global::TypeWhisper.Windows.Services.SupporterTier.None;
@@ -161,38 +203,48 @@ public sealed partial class LicenseService : ObservableObject
         NotifyStateChanged();
     }
 
-    public async Task ActivateCommercialLicenseAsync(string key, CancellationToken ct = default)
+    public async Task<ActivatedLicenseEntitlement?> ActivateAnyLicenseKeyAsync(string key, CancellationToken ct = default)
     {
-        IsCommercialActivating = true;
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        IsLicenseActivating = true;
+        LicenseActivationError = null;
         CommercialActivationError = null;
         CommercialDeactivationError = null;
+        SupporterActivationError = null;
+        SupporterDeactivationError = null;
 
         try
         {
-            var activation = await ActivateCoreAsync(key, ct);
-            _commercialLicenseKey = key;
-            _commercialActivationId = activation.Id ?? throw new InvalidOperationException("Activation failed: Polar did not return an activation id.");
+            return await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Any, ct);
+        }
+        catch (Exception ex)
+        {
+            LicenseActivationError = ex.Message;
+            return null;
+        }
+        finally
+        {
+            IsLicenseActivating = false;
+        }
+    }
 
-            CommercialStatus = LicenseStatus.Active;
-            CommercialTier = null;
-            CommercialIsLifetime = false;
+    public async Task ActivateCommercialLicenseAsync(string key, CancellationToken ct = default)
+    {
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return;
 
-            try
-            {
-                var validation = await ValidateCoreAsync(key, _commercialActivationId, ct);
-                CommercialStatus = validation.Status == "granted" ? LicenseStatus.Active : LicenseStatus.Expired;
-                CommercialTier = DetectCommercialTier(validation.Benefit?.Description);
-                CommercialIsLifetime = validation.ExpiresAt is null;
-                _commercialLastValidated = DateTime.UtcNow;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Commercial validation after activation failed: {ex.Message}");
-                _commercialLastValidated = DateTime.UtcNow;
-            }
+        IsCommercialActivating = true;
+        CommercialActivationError = null;
+        CommercialDeactivationError = null;
+        LicenseActivationError = null;
 
-            PersistStore();
-            NotifyStateChanged();
+        try
+        {
+            await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Commercial, ct);
         }
         catch (Exception ex)
         {
@@ -204,31 +256,34 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
-    public async Task ValidateCommercialLicenseAsync(CancellationToken ct = default)
+    public Task ValidateCommercialLicenseAsync(CancellationToken ct = default) =>
+        ValidateCommercialLicenseCoreAsync(reportErrors: false, ct);
+
+    public async Task RefreshCommercialLicenseAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_commercialLicenseKey) || string.IsNullOrWhiteSpace(_commercialActivationId))
+        if (!HasCommercialActivation)
             return;
+
+        IsCommercialRefreshing = true;
+        CommercialRefreshError = null;
 
         try
         {
-            var validation = await ValidateCoreAsync(_commercialLicenseKey, _commercialActivationId, ct);
-            CommercialStatus = validation.Status == "granted" ? LicenseStatus.Active : LicenseStatus.Expired;
-            CommercialTier = DetectCommercialTier(validation.Benefit?.Description);
-            CommercialIsLifetime = validation.ExpiresAt is null;
-            _commercialLastValidated = DateTime.UtcNow;
-            CommercialActivationError = null;
-            PersistStore();
-            NotifyStateChanged();
+            await ValidateCommercialLicenseCoreAsync(reportErrors: true, ct);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Commercial license validation failed: {ex.Message}");
+            CommercialRefreshError = ex.Message;
+        }
+        finally
+        {
+            IsCommercialRefreshing = false;
         }
     }
 
     public async Task ValidateCommercialIfNeededAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_commercialLicenseKey) || string.IsNullOrWhiteSpace(_commercialActivationId))
+        if (!HasCommercialActivation)
         {
             if (CommercialStatus != LicenseStatus.Unlicensed || CommercialTier is not null || CommercialIsLifetime)
             {
@@ -250,55 +305,49 @@ public sealed partial class LicenseService : ObservableObject
 
     public async Task DeactivateCommercialLicenseAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_commercialLicenseKey) || string.IsNullOrWhiteSpace(_commercialActivationId))
+        if (!HasCommercialActivation)
             return;
 
+        var key = _commercialLicenseKey!;
+        var activationId = _commercialActivationId!;
         CommercialDeactivationError = null;
 
         try
         {
-            await DeactivateCoreAsync(_commercialLicenseKey, _commercialActivationId, ct);
+            await DeactivateCoreAsync(key, activationId, ct);
             ResetCommercialState(clearSecrets: true);
             PersistStore();
             NotifyStateChanged();
         }
         catch (Exception ex)
         {
-            CommercialDeactivationError = ex.Message;
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetCommercialState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+            else
+            {
+                CommercialDeactivationError = ex.Message;
+            }
         }
     }
 
     public async Task ActivateSupporterKeyAsync(string key, CancellationToken ct = default)
     {
+        var trimmed = key.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return;
+
         IsSupporterActivating = true;
         SupporterActivationError = null;
         SupporterDeactivationError = null;
+        LicenseActivationError = null;
 
         try
         {
-            var activation = await ActivateCoreAsync(key, ct);
-            _supporterLicenseKey = key;
-            _supporterActivationId = activation.Id ?? throw new InvalidOperationException("Activation failed: Polar did not return an activation id.");
-
-            SupporterStatus = LicenseStatus.Active;
-            SupporterTier = null;
-
-            try
-            {
-                var validation = await ValidateCoreAsync(key, _supporterActivationId, ct);
-                SupporterStatus = validation.Status == "granted" ? LicenseStatus.Active : LicenseStatus.Expired;
-                SupporterTier = DetectSupporterTier(validation.Benefit?.Description) ?? global::TypeWhisper.Windows.Services.SupporterTier.Bronze;
-                _supporterLastValidated = DateTime.UtcNow;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Supporter validation after activation failed: {ex.Message}");
-                SupporterTier = global::TypeWhisper.Windows.Services.SupporterTier.Bronze;
-                _supporterLastValidated = DateTime.UtcNow;
-            }
-
-            PersistStore();
-            NotifyStateChanged();
+            await ActivateKeyAsync(trimmed, ExpectedLicenseEntitlementKind.Supporter, ct);
         }
         catch (Exception ex)
         {
@@ -310,32 +359,34 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
-    public async Task ValidateSupporterAsync(CancellationToken ct = default)
+    public Task ValidateSupporterAsync(CancellationToken ct = default) =>
+        ValidateSupporterCoreAsync(reportErrors: false, ct);
+
+    public async Task RefreshSupporterLicenseAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_supporterLicenseKey) || string.IsNullOrWhiteSpace(_supporterActivationId))
+        if (!HasSupporterActivation)
             return;
+
+        IsSupporterRefreshing = true;
+        SupporterRefreshError = null;
 
         try
         {
-            var validation = await ValidateCoreAsync(_supporterLicenseKey, _supporterActivationId, ct);
-            SupporterStatus = validation.Status == "granted" ? LicenseStatus.Active : LicenseStatus.Expired;
-            SupporterTier = validation.Status == "granted"
-                ? DetectSupporterTier(validation.Benefit?.Description) ?? global::TypeWhisper.Windows.Services.SupporterTier.Bronze
-                : null;
-            _supporterLastValidated = DateTime.UtcNow;
-            SupporterActivationError = null;
-            PersistStore();
-            NotifyStateChanged();
+            await ValidateSupporterCoreAsync(reportErrors: true, ct);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Supporter validation failed: {ex.Message}");
+            SupporterRefreshError = ex.Message;
+        }
+        finally
+        {
+            IsSupporterRefreshing = false;
         }
     }
 
     public async Task ValidateSupporterIfNeededAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_supporterLicenseKey) || string.IsNullOrWhiteSpace(_supporterActivationId))
+        if (!HasSupporterActivation)
         {
             if (SupporterStatus != LicenseStatus.Unlicensed || SupporterTier is not null)
             {
@@ -380,21 +431,32 @@ public sealed partial class LicenseService : ObservableObject
 
     public async Task DeactivateSupporterLicenseAsync(CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(_supporterLicenseKey) || string.IsNullOrWhiteSpace(_supporterActivationId))
+        if (!HasSupporterActivation)
             return;
 
+        var key = _supporterLicenseKey!;
+        var activationId = _supporterActivationId!;
         SupporterDeactivationError = null;
 
         try
         {
-            await DeactivateCoreAsync(_supporterLicenseKey, _supporterActivationId, ct);
+            await DeactivateCoreAsync(key, activationId, ct);
             ResetSupporterState(clearSecrets: true);
             PersistStore();
             NotifyStateChanged();
         }
         catch (Exception ex)
         {
-            SupporterDeactivationError = ex.Message;
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetSupporterState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+            }
+            else
+            {
+                SupporterDeactivationError = ex.Message;
+            }
         }
     }
 
@@ -404,6 +466,242 @@ public sealed partial class LicenseService : ObservableObject
         await ValidateSupporterIfNeededAsync(ct);
     }
 
+    private async Task<ActivatedLicenseEntitlement> ActivateKeyAsync(
+        string key,
+        ExpectedLicenseEntitlementKind expectedEntitlement,
+        CancellationToken ct)
+    {
+        var activation = await ActivateCoreAsync(key, ct);
+        var activationId = activation.Id
+            ?? throw new InvalidOperationException("Activation failed: Polar did not return an activation id.");
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This entitlement is not active.");
+
+            var entitlement = ClassifyGrantedValidation(validation);
+            EnsureExpectedEntitlement(entitlement, expectedEntitlement);
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            PersistStore();
+            NotifyStateChanged();
+            return entitlement;
+        }
+        catch
+        {
+            await TryDeactivateCoreAsync(key, activationId, ct);
+            throw;
+        }
+    }
+
+    private async Task ValidateCommercialLicenseCoreAsync(bool reportErrors, CancellationToken ct)
+    {
+        if (!HasCommercialActivation)
+            return;
+
+        var key = _commercialLicenseKey!;
+        var activationId = _commercialActivationId!;
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            ApplyStoredCommercialValidation(key, activationId, validation, reportErrors);
+            CommercialActivationError = null;
+            CommercialRefreshError = null;
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (Exception ex)
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetCommercialState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+                return;
+            }
+
+            Debug.WriteLine($"Commercial license validation failed: {ex.Message}");
+            if (reportErrors)
+                throw;
+        }
+    }
+
+    private async Task ValidateSupporterCoreAsync(bool reportErrors, CancellationToken ct)
+    {
+        if (!HasSupporterActivation)
+            return;
+
+        var key = _supporterLicenseKey!;
+        var activationId = _supporterActivationId!;
+
+        try
+        {
+            var validation = await ValidateCoreAsync(key, activationId, ct);
+            ApplyStoredSupporterValidation(key, activationId, validation, reportErrors);
+            SupporterActivationError = null;
+            SupporterRefreshError = null;
+            PersistStore();
+            NotifyStateChanged();
+        }
+        catch (Exception ex)
+        {
+            if (IsPolarResourceMissing(ex))
+            {
+                ResetSupporterState(clearSecrets: true);
+                PersistStore();
+                NotifyStateChanged();
+                return;
+            }
+
+            Debug.WriteLine($"Supporter validation failed: {ex.Message}");
+            if (reportErrors)
+                throw;
+        }
+    }
+
+    private void ApplyStoredCommercialValidation(
+        string key,
+        string activationId,
+        PolarValidationResponse validation,
+        bool reportErrors)
+    {
+        if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+        {
+            MarkCommercialActivationExpired();
+            return;
+        }
+
+        var entitlement = TryClassifyGrantedValidation(validation);
+        if (entitlement is null)
+        {
+            MarkCommercialActivationExpired();
+            if (reportErrors)
+                throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+            return;
+        }
+
+        if (entitlement.Kind == ActivatedLicenseEntitlementKind.Commercial)
+        {
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            return;
+        }
+
+        ApplyActivatedEntitlement(entitlement, key, activationId);
+        ResetCommercialState(clearSecrets: true);
+    }
+
+    private void ApplyStoredSupporterValidation(
+        string key,
+        string activationId,
+        PolarValidationResponse validation,
+        bool reportErrors)
+    {
+        if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
+        {
+            MarkSupporterActivationExpired();
+            return;
+        }
+
+        var entitlement = TryClassifyGrantedValidation(validation);
+        if (entitlement is null)
+        {
+            MarkSupporterActivationExpired();
+            if (reportErrors)
+                throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+            return;
+        }
+
+        if (entitlement.Kind == ActivatedLicenseEntitlementKind.Supporter)
+        {
+            ApplyActivatedEntitlement(entitlement, key, activationId);
+            return;
+        }
+
+        ApplyActivatedEntitlement(entitlement, key, activationId);
+        ResetSupporterState(clearSecrets: true);
+    }
+
+    private void ApplyActivatedEntitlement(ActivatedLicenseEntitlement entitlement, string key, string activationId)
+    {
+        switch (entitlement.Kind)
+        {
+            case ActivatedLicenseEntitlementKind.Commercial:
+                _commercialLicenseKey = key;
+                _commercialActivationId = activationId;
+                CommercialStatus = LicenseStatus.Active;
+                CommercialTier = entitlement.CommercialTier;
+                CommercialIsLifetime = entitlement.IsLifetime;
+                _commercialLastValidated = DateTime.UtcNow;
+                CommercialActivationError = null;
+                CommercialDeactivationError = null;
+                CommercialRefreshError = null;
+                break;
+
+            case ActivatedLicenseEntitlementKind.Supporter:
+                _supporterLicenseKey = key;
+                _supporterActivationId = activationId;
+                SupporterStatus = LicenseStatus.Active;
+                SupporterTier = entitlement.SupporterTier ?? global::TypeWhisper.Windows.Services.SupporterTier.Bronze;
+                _supporterLastValidated = DateTime.UtcNow;
+                SupporterActivationError = null;
+                SupporterDeactivationError = null;
+                SupporterRefreshError = null;
+                break;
+        }
+    }
+
+    private static ActivatedLicenseEntitlement ClassifyGrantedValidation(PolarValidationResponse validation) =>
+        TryClassifyGrantedValidation(validation)
+        ?? throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+
+    private static ActivatedLicenseEntitlement? TryClassifyGrantedValidation(PolarValidationResponse validation)
+    {
+        var benefitId = validation.ResolvedBenefitId;
+        var benefitDescription = validation.ResolvedBenefitDescription;
+
+        if (DetectCommercialTier(benefitId, benefitDescription) is { } commercialTier)
+            return ActivatedLicenseEntitlement.Commercial(commercialTier, validation.ExpiresAt is null);
+
+        if (DetectSupporterTier(benefitId, benefitDescription) is { } supporterTier)
+            return ActivatedLicenseEntitlement.Supporter(supporterTier);
+
+        return null;
+    }
+
+    private static void EnsureExpectedEntitlement(
+        ActivatedLicenseEntitlement entitlement,
+        ExpectedLicenseEntitlementKind expectedEntitlement)
+    {
+        if (expectedEntitlement == ExpectedLicenseEntitlementKind.Commercial &&
+            entitlement.Kind != ActivatedLicenseEntitlementKind.Commercial)
+        {
+            throw new InvalidOperationException("This key belongs to a supporter tier, not a commercial license.");
+        }
+
+        if (expectedEntitlement == ExpectedLicenseEntitlementKind.Supporter &&
+            entitlement.Kind != ActivatedLicenseEntitlementKind.Supporter)
+        {
+            throw new InvalidOperationException("This key belongs to a commercial license, not a supporter tier.");
+        }
+    }
+
+    private void MarkCommercialActivationExpired()
+    {
+        CommercialStatus = LicenseStatus.Expired;
+        CommercialTier = null;
+        CommercialIsLifetime = false;
+        _commercialLastValidated = DateTime.UtcNow;
+    }
+
+    private void MarkSupporterActivationExpired()
+    {
+        SupporterStatus = LicenseStatus.Expired;
+        SupporterTier = null;
+        _supporterLastValidated = DateTime.UtcNow;
+    }
+
     private async Task<PolarActivationResponse> ActivateCoreAsync(string key, CancellationToken ct)
     {
         var body = new { key, organization_id = OrganizationId, label = Environment.MachineName };
@@ -411,7 +709,7 @@ public sealed partial class LicenseService : ObservableObject
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(ParsePolarError(json, $"Activation failed (HTTP {(int)response.StatusCode})"));
+            throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
 
         return JsonSerializer.Deserialize<PolarActivationResponse>(json)
             ?? throw new InvalidOperationException("Activation failed: Polar returned an empty response.");
@@ -424,7 +722,7 @@ public sealed partial class LicenseService : ObservableObject
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(ParsePolarError(json, $"Validation failed (HTTP {(int)response.StatusCode})"));
+            throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
             ?? throw new InvalidOperationException("Validation failed: Polar returned an empty response.");
@@ -437,45 +735,116 @@ public sealed partial class LicenseService : ObservableObject
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(ParsePolarError(json, $"Deactivation failed (HTTP {(int)response.StatusCode})"));
+            throw CreatePolarException(json, $"Deactivation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
     }
 
-    private static CommercialLicenseTier? DetectCommercialTier(string? benefitDescription)
+    private async Task TryDeactivateCoreAsync(string key, string activationId, CancellationToken ct)
     {
-        var description = benefitDescription?.ToLowerInvariant() ?? "";
-        if (description.Contains("enterprise")) return CommercialLicenseTier.Enterprise;
-        if (description.Contains("team")) return CommercialLicenseTier.Team;
-        if (description.Contains("individual")) return CommercialLicenseTier.Individual;
+        try
+        {
+            await DeactivateCoreAsync(key, activationId, ct);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Best-effort license deactivation failed: {ex.Message}");
+        }
+    }
+
+    internal static CommercialLicenseTier? DetectCommercialTier(string? benefitId, string? benefitDescription)
+    {
+        var normalizedBenefitId = NormalizeBenefitIdentifier(benefitId);
+        if (normalizedBenefitId is not null && KnownCommercialBenefitIds.TryGetValue(normalizedBenefitId, out var tier))
+            return tier;
+
+        var description = JoinBenefitText(benefitId, benefitDescription);
+        if (description.Contains("enterprise") || description.Contains("unlimited device"))
+            return CommercialLicenseTier.Enterprise;
+        if (description.Contains("team") || description.Contains("10 device") || description.Contains("small teams"))
+            return CommercialLicenseTier.Team;
+        if (description.Contains("individual") ||
+            description.Contains("single-seat") ||
+            description.Contains("single seat") ||
+            description.Contains("freelancer") ||
+            description.Contains("2 device"))
+        {
+            return CommercialLicenseTier.Individual;
+        }
+
         return null;
     }
 
-    private static SupporterTier? DetectSupporterTier(string? benefitDescription)
+    internal static SupporterTier? DetectSupporterTier(string? benefitId, string? benefitDescription)
     {
-        var description = benefitDescription?.ToLowerInvariant() ?? "";
+        var normalizedBenefitId = NormalizeBenefitIdentifier(benefitId);
+        if (normalizedBenefitId is not null && KnownSupporterBenefitIds.TryGetValue(normalizedBenefitId, out var tier))
+            return tier;
+
+        var description = JoinBenefitText(benefitId, benefitDescription);
+        if (!description.Contains("supporter") &&
+            !description.Contains("bronze") &&
+            !description.Contains("silver") &&
+            !description.Contains("gold"))
+        {
+            return null;
+        }
+
         if (description.Contains("gold")) return global::TypeWhisper.Windows.Services.SupporterTier.Gold;
         if (description.Contains("silver")) return global::TypeWhisper.Windows.Services.SupporterTier.Silver;
         if (description.Contains("bronze")) return global::TypeWhisper.Windows.Services.SupporterTier.Bronze;
-        return null;
+        return global::TypeWhisper.Windows.Services.SupporterTier.Bronze;
     }
 
-    private static string ParsePolarError(string? json, string fallback)
+    private static string? NormalizeBenefitIdentifier(string? benefitId)
+    {
+        var normalized = benefitId?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static string JoinBenefitText(params string?[] values) =>
+        string.Join(" ", values.Where(value => !string.IsNullOrWhiteSpace(value))).ToLowerInvariant();
+
+    private static PolarApiException CreatePolarException(string? json, string fallback, int statusCode)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return fallback;
+            return new PolarApiException(fallback, statusCode);
 
         try
         {
             var error = JsonSerializer.Deserialize<PolarErrorResponse>(json);
             if (!string.IsNullOrWhiteSpace(error?.Detail))
-                return $"Activation failed: {error.Detail}";
+                return new PolarApiException(error.Detail, statusCode, error.Detail, error.Type);
+
+            if (!string.IsNullOrWhiteSpace(error?.Type))
+                return new PolarApiException(error.Type, statusCode, null, error.Type);
         }
         catch
         {
             // Ignore malformed responses and fall back.
         }
 
-        return fallback;
+        return new PolarApiException(fallback, statusCode);
     }
+
+    private static bool IsPolarResourceMissing(Exception ex)
+    {
+        if (ex is PolarApiException { StatusCode: 404 })
+            return true;
+
+        if (ex is PolarApiException polar &&
+            (ContainsResourceMissingSignal(polar.Detail) || ContainsResourceMissingSignal(polar.Type)))
+        {
+            return true;
+        }
+
+        return ContainsResourceMissingSignal(ex.Message);
+    }
+
+    private static bool ContainsResourceMissingSignal(string? value) =>
+        value?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("resource not found", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("resourcenotfound", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("does not exist", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Contains("no licensekeyactivation", StringComparison.OrdinalIgnoreCase) == true;
 
     private void ResetCommercialState(bool clearSecrets)
     {
@@ -484,6 +853,7 @@ public sealed partial class LicenseService : ObservableObject
         CommercialIsLifetime = false;
         CommercialActivationError = null;
         CommercialDeactivationError = null;
+        CommercialRefreshError = null;
         _commercialLastValidated = null;
 
         if (clearSecrets)
@@ -499,6 +869,7 @@ public sealed partial class LicenseService : ObservableObject
         SupporterTier = null;
         SupporterActivationError = null;
         SupporterDeactivationError = null;
+        SupporterRefreshError = null;
         _supporterLastValidated = null;
 
         if (clearSecrets)
@@ -536,6 +907,7 @@ public sealed partial class LicenseService : ObservableObject
 
             var json = JsonSerializer.Serialize(data);
             var protectedPayload = Protect(json);
+            Directory.CreateDirectory(Path.GetDirectoryName(_credentialPath)!);
             File.WriteAllText(_credentialPath, protectedPayload, Encoding.UTF8);
         }
         catch (Exception ex)
@@ -699,6 +1071,8 @@ public sealed partial class LicenseService : ObservableObject
     {
         OnPropertyChanged(nameof(HasCommercialLicense));
         OnPropertyChanged(nameof(HasSupporterLicense));
+        OnPropertyChanged(nameof(HasCommercialActivation));
+        OnPropertyChanged(nameof(HasSupporterActivation));
         OnPropertyChanged(nameof(IsSupporter));
         OnPropertyChanged(nameof(SupporterBadgeTier));
         OnPropertyChanged(nameof(IsPrivateUser));
@@ -770,7 +1144,11 @@ public sealed partial class LicenseService : ObservableObject
         [JsonPropertyName("id")] public string? Id { get; init; }
         [JsonPropertyName("status")] public string? Status { get; init; }
         [JsonPropertyName("expires_at")] public string? ExpiresAt { get; init; }
+        [JsonPropertyName("benefit_id")] public string? BenefitId { get; init; }
         [JsonPropertyName("benefit")] public PolarBenefit? Benefit { get; init; }
+
+        public string? ResolvedBenefitId => Benefit?.Id ?? BenefitId;
+        public string? ResolvedBenefitDescription => Benefit?.Description;
     }
 
     private sealed record PolarBenefit
@@ -783,6 +1161,28 @@ public sealed partial class LicenseService : ObservableObject
     {
         [JsonPropertyName("detail")] public string? Detail { get; init; }
         [JsonPropertyName("type")] public string? Type { get; init; }
+    }
+
+    private enum ExpectedLicenseEntitlementKind
+    {
+        Any,
+        Commercial,
+        Supporter,
+    }
+
+    private sealed class PolarApiException : InvalidOperationException
+    {
+        public PolarApiException(string message, int statusCode, string? detail = null, string? type = null)
+            : base(message)
+        {
+            StatusCode = statusCode;
+            Detail = detail;
+            Type = type;
+        }
+
+        public int StatusCode { get; }
+        public string? Detail { get; }
+        public string? Type { get; }
     }
 }
 
@@ -812,6 +1212,25 @@ public enum SupporterTier
     Bronze,
     Silver,
     Gold,
+}
+
+public enum ActivatedLicenseEntitlementKind
+{
+    Commercial,
+    Supporter,
+}
+
+public sealed record ActivatedLicenseEntitlement(
+    ActivatedLicenseEntitlementKind Kind,
+    CommercialLicenseTier? CommercialTier = null,
+    SupporterTier? SupporterTier = null,
+    bool IsLifetime = false)
+{
+    public static ActivatedLicenseEntitlement Commercial(CommercialLicenseTier tier, bool isLifetime) =>
+        new(ActivatedLicenseEntitlementKind.Commercial, tier, null, isLifetime);
+
+    public static ActivatedLicenseEntitlement Supporter(SupporterTier tier) =>
+        new(ActivatedLicenseEntitlementKind.Supporter, null, tier);
 }
 
 public sealed record SupporterClaimProof(string Key, string ActivationId, SupporterTier Tier);

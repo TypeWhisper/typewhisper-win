@@ -29,6 +29,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     public DashboardViewModel Dashboard { get; }
     public PluginsViewModel Plugins { get; }
     public CloudFolderSyncViewModel CloudFolderSync { get; }
+    public LicenseService License { get; }
     public AudioRecorderViewModel Recorder { get; }
     public FileTranscriptionViewModel FileTranscription { get; }
 
@@ -83,6 +84,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         AppearanceIndicatorPreviewPresentation.ShouldShowPartialText(
             LiveTranscriptionEnabled,
             IndicatorStyle);
+    public bool ShowSupporterPremiumNotice => License.IsSupporter && !License.HasCommercialLicense;
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
@@ -98,6 +100,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         DashboardViewModel dashboard,
         PluginsViewModel plugins,
         CloudFolderSyncViewModel cloudFolderSync,
+        LicenseService license,
         AudioRecorderViewModel recorder,
         FileTranscriptionViewModel fileTranscription,
         UpdateService updateService,
@@ -113,6 +116,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Dashboard = dashboard;
         Plugins = plugins;
         CloudFolderSync = cloudFolderSync;
+        License = license;
         Recorder = recorder;
         FileTranscription = fileTranscription;
         _updateService = updateService;
@@ -139,6 +143,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         RefreshErrorLog();
         _errorLog.EntriesChanged += RefreshErrorLog;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
+        License.PropertyChanged += OnLicensePropertyChanged;
         _settingsService.SettingsChanged += SyncSelectedUpdateChannel;
         _indicatorPreviewTimer.Interval = TimeSpan.FromMilliseconds(140);
         _indicatorPreviewTimer.Tick += (_, _) => TickIndicatorPreview();
@@ -347,6 +352,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         if (e.PropertyName == nameof(SettingsViewModel.OverlayRightWidget))
             OnPropertyChanged(nameof(RightWidget));
+    }
+
+    private void OnLicensePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(LicenseService.IsSupporter) or nameof(LicenseService.HasCommercialLicense))
+            OnPropertyChanged(nameof(ShowSupporterPremiumNotice));
     }
 
     private void TickIndicatorPreview()
