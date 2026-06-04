@@ -5,6 +5,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Translation;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Services.Localization;
@@ -15,6 +16,7 @@ namespace TypeWhisper.Windows.Services;
 public sealed class TranslationService : ITranslationService, IDisposable
 {
     private readonly PluginManager _pluginManager;
+    private readonly ISettingsService _settings;
     private readonly HttpClient _httpClient = new();
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1);
     private readonly Dictionary<string, LoadedTranslationModel> _loadedModels = new();
@@ -25,9 +27,10 @@ public sealed class TranslationService : ITranslationService, IDisposable
         "You are a professional translator. Translate the given text accurately and naturally. " +
         "Output ONLY the translation, nothing else. Do not add explanations, notes, or formatting.";
 
-    public TranslationService(PluginManager pluginManager)
+    public TranslationService(PluginManager pluginManager, ISettingsService settings)
     {
         _pluginManager = pluginManager;
+        _settings = settings;
     }
 
     public bool IsModelReady(string sourceLang, string targetLang)
@@ -113,7 +116,9 @@ public sealed class TranslationService : ITranslationService, IDisposable
             var modelInfo = TranslationModelInfo.FindModel(sourceLang, targetLang)
                 ?? throw new NotSupportedException($"No translation model for {sourceLang}->{targetLang}");
 
-            var modelDir = Path.Combine(TypeWhisperEnvironment.ModelsPath, modelInfo.SubDirectory);
+            var modelDir = Path.Combine(
+                LocalModelStorageService.ResolveAvailableModelStoragePath(_settings.Current),
+                modelInfo.SubDirectory);
             Directory.CreateDirectory(modelDir);
 
             await DownloadMissingFilesAsync(modelInfo, modelDir, ct);

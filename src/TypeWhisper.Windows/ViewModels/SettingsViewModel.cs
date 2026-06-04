@@ -46,6 +46,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _previewBubbleAutoHideSeconds = AppSettings.DefaultPreviewBubbleAutoHideMilliseconds / 1000d;
     [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
     [ObservableProperty] private string _transcriptionTask = "transcribe";
+    [ObservableProperty] private bool _quickTranslationModeEnabled;
     [ObservableProperty] private int? _selectedMicrophoneDevice;
     [ObservableProperty] private float _previewLevel;
     [ObservableProperty] private bool _saveToHistoryEnabled = true;
@@ -169,6 +170,32 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnLiveTranscriptionFontSizeChanged(double value) =>
         OnPropertyChanged(nameof(LiveTranscriptionFontSizeText));
+
+    partial void OnQuickTranslationModeEnabledChanged(bool value)
+    {
+        if (_isLoading) return;
+
+        if (value)
+        {
+            if (string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            {
+                TranslationTargetLanguage =
+                    _settings.Current.LastTranslationTargetLanguage
+                    ?? DefaultQuickTranslationTargetLanguage();
+            }
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            TranslationTargetLanguage = null;
+    }
+
+    partial void OnTranslationTargetLanguageChanged(string? value)
+    {
+        if (_isLoading) return;
+
+        SetQuickTranslationModeSilently(!string.IsNullOrWhiteSpace(value));
+    }
 
     public SettingsViewModel(
         ISettingsService settings,
@@ -343,7 +370,8 @@ public partial class SettingsViewModel : ObservableObject
             HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
             TranscriptionTask = TranscriptionTask,
             SelectedMicrophoneDevice = SelectedMicrophoneDevice,
-            TranslationTargetLanguage = TranslationTargetLanguage,
+            TranslationTargetLanguage = NormalizeTranslationTarget(TranslationTargetLanguage),
+            LastTranslationTargetLanguage = ResolveLastTranslationTarget(),
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
             ApiServerRequiresAuthentication = ApiServerRequiresAuthentication,
@@ -430,6 +458,7 @@ public partial class SettingsViewModel : ObservableObject
         TranscriptionTask = s.TranscriptionTask;
         SelectedMicrophoneDevice = s.SelectedMicrophoneDevice;
         TranslationTargetLanguage = s.TranslationTargetLanguage;
+        QuickTranslationModeEnabled = !string.IsNullOrWhiteSpace(s.TranslationTargetLanguage);
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
         ApiServerRequiresAuthentication = s.ApiServerRequiresAuthentication;
@@ -533,6 +562,31 @@ public partial class SettingsViewModel : ObservableObject
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
         RefreshMicrophones();
     }
+
+    private string? ResolveLastTranslationTarget()
+    {
+        var target = NormalizeTranslationTarget(TranslationTargetLanguage);
+        return target ?? _settings.Current.LastTranslationTargetLanguage;
+    }
+
+    private static string? NormalizeTranslationTarget(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private void SetQuickTranslationModeSilently(bool enabled)
+    {
+        if (QuickTranslationModeEnabled == enabled)
+            return;
+
+        var wasLoading = _isLoading;
+        _isLoading = true;
+        QuickTranslationModeEnabled = enabled;
+        _isLoading = wasLoading;
+    }
+
+    private static string DefaultQuickTranslationTargetLanguage() =>
+        TranslationModelInfo.SupportedLanguages.Any(language => language.Code == "en")
+            ? "en"
+            : TranslationModelInfo.SupportedLanguages.FirstOrDefault()?.Code ?? "en";
 
     private void OnTtsProvidersChanged(object? sender, EventArgs e)
     {

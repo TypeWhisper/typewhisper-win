@@ -3,8 +3,10 @@ using System.IO;
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services;
 using AppLocalization = TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services.Plugins;
@@ -63,6 +65,11 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
             Directory.CreateDirectory(_pluginDataDirectory);
             return _pluginDataDirectory;
         }
+    }
+
+    public string PluginAssetDirectory
+    {
+        get => LocalModelStorageService.ResolveAvailablePluginAssetDirectory(_settings?.Current, _pluginId);
     }
 
     public string? ActiveAppProcessName => _activeWindow.GetActiveWindowProcessName();

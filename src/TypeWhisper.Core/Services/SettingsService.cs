@@ -154,7 +154,9 @@ public sealed class SettingsService : ISettingsService
             LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(
                 settings.LiveTranscriptionFontSize),
             LocalModelAcceleration = AppSettings.NormalizeLocalModelAcceleration(
-                settings.LocalModelAcceleration)
+                settings.LocalModelAcceleration),
+            LocalModelStoragePath = AppSettings.NormalizeLocalModelStoragePath(
+                settings.LocalModelStoragePath)
         };
 
         return settings;

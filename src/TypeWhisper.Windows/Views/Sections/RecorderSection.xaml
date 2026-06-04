@@ -23,6 +23,61 @@
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                     CornerRadius="8" Padding="24" HorizontalAlignment="Center" Margin="0,0,0,24">
                 <StackPanel HorizontalAlignment="Center">
+                    <!-- Mode -->
+                    <Grid Width="280" Margin="0,0,0,18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{loc:Str Recorder.ModeDictation}"
+                                   HorizontalAlignment="Right"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"
+                                   FontSize="12.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
+                                            <Setter Property="FontWeight" Value="Normal"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <ui:ToggleSwitch Grid.Column="1"
+                                         IsChecked="{Binding Settings.QuickTranslationModeEnabled}"
+                                         OnContent=""
+                                         OffContent=""
+                                         VerticalAlignment="Center"/>
+
+                        <TextBlock Grid.Column="2"
+                                   Text="{loc:Str Recorder.ModeTranslate}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,0,0"
+                                   FontSize="12.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
+                                    <Setter Property="FontWeight" Value="Normal"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+
                     <!-- Duration -->
                     <TextBlock Text="{Binding Recorder.DurationText}"
                                FontSize="48" FontFamily="Consolas"

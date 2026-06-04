@@ -34,6 +34,18 @@ public class AppSettingsTests
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);
     }
 
+    [Fact]
+    public void DefaultLocalModelStoragePath_IsNull()
+    {
+        Assert.Null(AppSettings.Default.LocalModelStoragePath);
+    }
+
+    [Fact]
+    public void DefaultLastTranslationTargetLanguage_IsNull()
+    {
+        Assert.Null(AppSettings.Default.LastTranslationTargetLanguage);
+    }
+
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(0, 0)]
@@ -80,5 +92,18 @@ public class AppSettingsTests
         string expected)
     {
         Assert.Equal(expected, AppSettings.NormalizeLocalModelAcceleration(value));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("D:\\TypeWhisperModels", "D:\\TypeWhisperModels")]
+    [InlineData("  D:\\TypeWhisperModels  ", "D:\\TypeWhisperModels")]
+    public void NormalizeLocalModelStoragePath_TrimsEmptyToNull(
+        string? value,
+        string? expected)
+    {
+        Assert.Equal(expected, AppSettings.NormalizeLocalModelStoragePath(value));
     }
 }

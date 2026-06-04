@@ -105,7 +105,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
-        _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginDataDirectory, _httpClient);
+        _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
         SherpaOnnxNativeRuntime.RegisterResolver();
         if (_cudaRuntimeInstaller.IsInstalled && _cudaRuntimeInstaller.RuntimeDirectory is { } runtimeDirectory)
             SherpaOnnxNativeRuntime.ConfigureCudaRuntime(runtimeDirectory);
@@ -422,7 +422,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     }
 
     private string GetModelDirectory(string modelId) =>
-        Path.Combine(_host?.PluginDataDirectory ?? ".", "Models", modelId);
+        Path.Combine(_host?.PluginAssetDirectory ?? ".", "Models", modelId);
 
     private static ModelDefinition GetModelDefinition(string modelId) =>
         Models.FirstOrDefault(m => m.Id == modelId)

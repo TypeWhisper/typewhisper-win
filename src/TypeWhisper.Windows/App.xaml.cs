@@ -340,6 +340,9 @@ public partial class App : Application
 
         // Model manager (plugin-based)
         services.AddSingleton<ModelManagerService>();
+        services.AddSingleton(sp => new LocalModelStorageService(
+            sp.GetRequiredService<ISettingsService>(),
+            () => sp.GetRequiredService<ModelManagerService>().UnloadModel()));
         services.AddSingleton<IFileTranscriptionProcessor, FileTranscriptionProcessor>();
 
         // Audio
@@ -371,7 +374,9 @@ public partial class App : Application
 
         // Translation (uses plugin manager for LLM providers)
         services.AddSingleton<ITranslationService>(sp =>
-            new TranslationService(sp.GetRequiredService<PluginManager>()));
+            new TranslationService(
+                sp.GetRequiredService<PluginManager>(),
+                sp.GetRequiredService<ISettingsService>()));
 
         // Services
         services.AddSingleton<SpeechFeedbackService>();

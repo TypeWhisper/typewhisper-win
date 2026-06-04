@@ -50,6 +50,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
                 if (name == "LLM" && options.RequireLlmSuccess)
                     throw;
 
+                if (name == "Translation" && options.RequireTranslationSuccess)
+                    throw;
+
                 // Continue with current text — don't let one step break the pipeline
             }
         }

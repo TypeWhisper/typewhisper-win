@@ -536,7 +536,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
         var model = GetModel(modelId);
-        return Path.Combine(host.PluginDataDirectory, "Models", model.FileName);
+        return Path.Combine(host.PluginAssetDirectory, "Models", model.FileName);
     }
 
     internal static string BuildNativeLoadFailureMessage(

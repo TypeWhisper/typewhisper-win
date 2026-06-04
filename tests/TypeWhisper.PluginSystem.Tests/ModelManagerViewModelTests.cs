@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using Moq;
 using TypeWhisper.Core.Interfaces;
@@ -583,6 +584,76 @@ public class ModelManagerViewModelTests
         var sut = new ModelManagerViewModel(modelManager, settings);
 
         Assert.Equal("Using CUDA", sut.AccelerationStatusText);
+    }
+
+    [Fact]
+    public void Constructor_ExposesConfiguredModelStoragePath()
+    {
+        var storagePath = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelStoragePath = storagePath
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        Assert.Equal(Path.GetFullPath(storagePath), sut.ModelStoragePath);
+        Assert.Equal(Path.GetFullPath(storagePath), sut.ResolvedModelStoragePath);
+    }
+
+    [Fact]
+    public async Task MoveModelStorageCommand_MigratesDownloadsAndRefreshesPath()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var oldRoot = Path.Combine(tempDir, "old");
+        var newRoot = Path.Combine(tempDir, "new");
+        Directory.CreateDirectory(Path.Combine(oldRoot, "translation-en-fr"));
+        await File.WriteAllTextAsync(Path.Combine(oldRoot, "translation-en-fr", "config.json"), "{}");
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelStoragePath = oldRoot
+        });
+
+        try
+        {
+            var pluginManager = CreatePluginManager(settings);
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            var sut = new ModelManagerViewModel(modelManager, settings);
+
+            sut.ModelStoragePath = newRoot;
+            await sut.MoveModelStorageCommand.ExecuteAsync(null);
+
+            Assert.Equal(Path.GetFullPath(newRoot), settings.Current.LocalModelStoragePath);
+            Assert.Equal(Path.GetFullPath(newRoot), sut.ResolvedModelStoragePath);
+            Assert.True(File.Exists(Path.Combine(newRoot, "translation-en-fr", "config.json")));
+            Assert.False(sut.IsModelStorageBusy);
+            Assert.False(sut.HasModelStorageError);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ResetModelStoragePathCommand_ClearsCustomStoragePath()
+    {
+        var storagePath = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelStoragePath = storagePath
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        sut.ResetModelStoragePathCommand.Execute(null);
+
+        Assert.Null(settings.Current.LocalModelStoragePath);
+        Assert.Equal(LocalModelStorageService.DefaultModelStoragePath, sut.ResolvedModelStoragePath);
     }
 
     [Fact]

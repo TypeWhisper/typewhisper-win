@@ -91,6 +91,37 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_TranslationFailureRequired_Throws()
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = (_, _, _, _) => throw new IOException("storage unavailable"),
+            TranslationTarget = "fr",
+            DetectedLanguage = "en",
+            RequireTranslationSuccess = true
+        };
+
+        var ex = await Assert.ThrowsAsync<IOException>(
+            () => _sut.ProcessAsync("hello", options));
+        Assert.Equal("storage unavailable", ex.Message);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_TranslationFailureNotRequired_KeepsCurrentText()
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = (_, _, _, _) => throw new IOException("storage unavailable"),
+            TranslationTarget = "fr",
+            DetectedLanguage = "en"
+        };
+
+        var result = await _sut.ProcessAsync("hello", options);
+
+        Assert.Equal("hello", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Translation_SkippedWhenEffectiveLanguageMatchesTarget()
     {
         var options = new PipelineOptions

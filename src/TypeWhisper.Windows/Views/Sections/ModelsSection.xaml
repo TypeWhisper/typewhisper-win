@@ -25,6 +25,87 @@
                        Margin="0,0,0,8"
                        Visibility="{Binding ModelManager.IsBusy, Converter={StaticResource BoolToVis}}"/>
 
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Models.StorageTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="320"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Text="{loc:Str Models.StoragePath}"
+                                               Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{Binding ModelManager.ResolvedModelStoragePath}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,5,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <TextBox Grid.Column="1"
+                                         Style="{StaticResource InputTextBoxStyle}"
+                                         Text="{Binding ModelManager.ModelStoragePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         MinWidth="240"
+                                         VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding ModelManager.ModelStorageStatusText}"
+                                           Margin="0,0,18,0"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource HintStyle}">
+                                            <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ModelManager.HasModelStorageError}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <WrapPanel Grid.Column="1"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center">
+                                    <ui:Button Content="{loc:Str Models.StorageBrowse}"
+                                               Click="BrowseModelStorage_Click"
+                                               Appearance="Secondary"
+                                               Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Models.StorageReset}"
+                                               Command="{Binding ModelManager.ResetModelStoragePathCommand}"
+                                               Appearance="Secondary"
+                                               Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Models.StorageMove}"
+                                               Command="{Binding ModelManager.MoveModelStorageCommand}"
+                                               Appearance="Primary"/>
+                                </WrapPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
             <Grid Margin="0,0,0,16"
                   Visibility="{Binding ModelManager.IsAccelerationSectionVisible, Converter={StaticResource BoolToVis}}">
                 <Grid.RowDefinitions>

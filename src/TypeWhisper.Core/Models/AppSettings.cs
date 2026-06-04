@@ -34,6 +34,7 @@ public record AppSettings
     // Model
     public string? SelectedModelId { get; init; }
     public string LocalModelAcceleration { get; init; } = LocalModelAccelerationAuto;
+    public string? LocalModelStoragePath { get; init; }
 
     // Manual file transcription
     public string? FileTranscriptionEngineOverride { get; init; }
@@ -74,6 +75,7 @@ public record AppSettings
     // Translation
     public string TranscriptionTask { get; init; } = "transcribe";
     public string? TranslationTargetLanguage { get; init; }
+    public string? LastTranslationTargetLanguage { get; init; }
 
     // Watch folder automation
     public string? WatchFolderPath { get; init; }
@@ -166,6 +168,14 @@ public record AppSettings
             "amd_rocm" => LocalModelAccelerationAmdRocm,
             _ => LocalModelAccelerationAuto
         };
+    }
+
+    public static string? NormalizeLocalModelStoragePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
     }
 }
 

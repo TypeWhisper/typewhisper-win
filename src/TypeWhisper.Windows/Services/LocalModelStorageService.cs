@@ -1,0 +1,229 @@
+using System.IO;
+using System.Globalization;
+using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
+using TypeWhisper.Windows.Services.Localization;
+
+namespace TypeWhisper.Windows.Services;
+
+public sealed class LocalModelStorageService
+{
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> PluginAssetEntries =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["com.typewhisper.whisper-cpp"] = ["Models"],
+            ["com.typewhisper.sherpa-onnx"] = ["Models", "Runtimes"],
+            ["com.typewhisper.gemma-local"] = ["Models"],
+            ["com.typewhisper.supertonic-tts"] = ["Models"],
+            ["com.typewhisper.granite-speech"] =
+            [
+                "python",
+                "hf-cache",
+                ".setup-complete",
+                "python-embed.zip",
+                "get-pip.py"
+            ]
+        };
+
+    private readonly ISettingsService _settings;
+    private readonly Action? _unloadActiveModels;
+
+    public LocalModelStorageService(ISettingsService settings, Action? unloadActiveModels = null)
+    {
+        _settings = settings;
+        _unloadActiveModels = unloadActiveModels;
+    }
+
+    public string ResolvedModelStoragePath =>
+        LocalModelStoragePaths.ResolveModelStoragePath(_settings.Current);
+
+    public static string DefaultModelStoragePath => LocalModelStoragePaths.DefaultModelStoragePath;
+
+    public static string ResolveAvailableModelStoragePath(AppSettings settings)
+    {
+        var root = LocalModelStoragePaths.ResolveModelStoragePath(settings);
+        if (AppSettings.NormalizeLocalModelStoragePath(settings.LocalModelStoragePath) is null)
+        {
+            Directory.CreateDirectory(root);
+            return root;
+        }
+
+        EnsureExistingWritableCustomRoot(root);
+        return root;
+    }
+
+    public static string ResolveAvailablePluginAssetDirectory(AppSettings? settings, string pluginId)
+    {
+        var directory = LocalModelStoragePaths.ResolvePluginAssetDirectory(settings, pluginId);
+        if (settings is null
+            || AppSettings.NormalizeLocalModelStoragePath(settings.LocalModelStoragePath) is null)
+        {
+            Directory.CreateDirectory(directory);
+            return directory;
+        }
+
+        ResolveAvailableModelStoragePath(settings);
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    public async Task MoveDownloadsAndUsePathAsync(string targetPath, CancellationToken ct = default)
+    {
+        var targetRoot = PrepareWritableTarget(targetPath);
+        var sourceRoot = ResolvedModelStoragePath;
+
+        if (PathsEqual(sourceRoot, targetRoot))
+        {
+            _settings.Save(_settings.Current with { LocalModelStoragePath = targetRoot });
+            return;
+        }
+
+        _unloadActiveModels?.Invoke();
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            MigrateModelRootContents(sourceRoot, targetRoot, ct);
+            MigratePluginAssets(sourceRoot, targetRoot, ct);
+        }, ct);
+
+        _settings.Save(_settings.Current with { LocalModelStoragePath = targetRoot });
+    }
+
+    public void ResetToDefault() =>
+        _settings.Save(_settings.Current with { LocalModelStoragePath = null });
+
+    private static string PrepareWritableTarget(string targetPath)
+    {
+        var normalized = AppSettings.NormalizeLocalModelStoragePath(targetPath)
+            ?? throw new ArgumentException(Loc.Instance["Models.StoragePathRequired"], nameof(targetPath));
+
+        var fullPath = Path.GetFullPath(normalized);
+        Directory.CreateDirectory(fullPath);
+
+        EnsureWritable(fullPath);
+
+        return fullPath;
+    }
+
+    private static void EnsureExistingWritableCustomRoot(string fullPath)
+    {
+        if (!Directory.Exists(fullPath))
+        {
+            throw new LocalModelStorageUnavailableException(
+                FormatStorageMessage(
+                    "Models.StorageMissingFormat",
+                    "Model storage folder does not exist: {0}",
+                    fullPath));
+        }
+
+        EnsureWritable(fullPath);
+    }
+
+    private static void EnsureWritable(string fullPath)
+    {
+        var probePath = Path.Combine(fullPath, $".typewhisper-write-test-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(probePath, "");
+            File.Delete(probePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new LocalModelStorageUnavailableException(
+                FormatStorageMessage(
+                    "Models.StorageUnwritableFormat",
+                    "Model storage folder is not writable: {0}",
+                    fullPath),
+                ex);
+        }
+    }
+
+    private static string FormatStorageMessage(string key, string fallbackFormat, string path)
+    {
+        var localized = Loc.Instance.GetString(key, path);
+        return string.Equals(localized, key, StringComparison.Ordinal)
+            ? string.Format(CultureInfo.InvariantCulture, fallbackFormat, path)
+            : localized;
+    }
+
+    private static void MigrateModelRootContents(string sourceRoot, string targetRoot, CancellationToken ct)
+    {
+        if (!Directory.Exists(sourceRoot))
+            return;
+
+        Directory.CreateDirectory(targetRoot);
+
+        foreach (var entry in Directory.EnumerateFileSystemEntries(sourceRoot))
+        {
+            ct.ThrowIfCancellationRequested();
+            var name = Path.GetFileName(entry);
+            if (string.Equals(name, LocalModelStoragePaths.PluginDataFolderName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            MoveEntry(entry, Path.Combine(targetRoot, name));
+        }
+    }
+
+    private static void MigratePluginAssets(string sourceRoot, string targetRoot, CancellationToken ct)
+    {
+        foreach (var (pluginId, entries) in PluginAssetEntries)
+        {
+            ct.ThrowIfCancellationRequested();
+            var sourcePluginDir = Path.Combine(sourceRoot, LocalModelStoragePaths.PluginDataFolderName, pluginId);
+            if (!Directory.Exists(sourcePluginDir))
+                continue;
+
+            var targetPluginDir = Path.Combine(targetRoot, LocalModelStoragePaths.PluginDataFolderName, pluginId);
+            foreach (var entryName in entries)
+            {
+                ct.ThrowIfCancellationRequested();
+                var sourceEntry = Path.Combine(sourcePluginDir, entryName);
+                var targetEntry = Path.Combine(targetPluginDir, entryName);
+                MoveEntry(sourceEntry, targetEntry);
+            }
+        }
+    }
+
+    private static void MoveEntry(string source, string target)
+    {
+        if (Directory.Exists(source))
+        {
+            Directory.CreateDirectory(target);
+            foreach (var child in Directory.EnumerateFileSystemEntries(source))
+                MoveEntry(child, Path.Combine(target, Path.GetFileName(child)));
+
+            TryDeleteDirectoryIfEmpty(source);
+            return;
+        }
+
+        if (!File.Exists(source) || File.Exists(target))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.Copy(source, target);
+        File.Delete(source);
+    }
+
+    private static void TryDeleteDirectoryIfEmpty(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
+                Directory.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+}

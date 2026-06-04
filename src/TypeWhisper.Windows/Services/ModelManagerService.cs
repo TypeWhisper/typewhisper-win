@@ -131,12 +131,35 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return ModelStatus.NotDownloaded;
 
         if (plugin.SupportsModelDownload)
-            return plugin.IsModelDownloaded(pluginModelId) ? ModelStatus.Ready : ModelStatus.NotDownloaded;
+        {
+            try
+            {
+                return IsDownloadedCore(plugin, pluginModelId)
+                    ? ModelStatus.Ready
+                    : ModelStatus.NotDownloaded;
+            }
+            catch (LocalModelStorageUnavailableException ex)
+            {
+                return ModelStatus.Failed(ex.Message);
+            }
+        }
 
         return plugin.IsConfigured ? ModelStatus.Ready : ModelStatus.NotDownloaded;
     }
 
     public bool IsDownloaded(string modelId)
+    {
+        try
+        {
+            return IsDownloadedCore(modelId);
+        }
+        catch (LocalModelStorageUnavailableException)
+        {
+            return false;
+        }
+    }
+
+    private bool IsDownloadedCore(string modelId)
     {
         if (!IsPluginModel(modelId))
             return false;
@@ -149,10 +172,13 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return false;
 
         if (plugin.SupportsModelDownload)
-            return plugin.IsModelDownloaded(pluginModelId);
+            return IsDownloadedCore(plugin, pluginModelId);
 
         return plugin.IsConfigured;
     }
+
+    private static bool IsDownloadedCore(ITranscriptionEnginePlugin plugin, string pluginModelId) =>
+        plugin.IsModelDownloaded(pluginModelId);
 
     public async Task DownloadAndLoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
@@ -164,7 +190,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             .FirstOrDefault(e => e.PluginId == pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
 
-        if (plugin.SupportsModelDownload && !plugin.IsModelDownloaded(pluginModelId))
+        bool needsDownload;
+        try
+        {
+            needsDownload = plugin.SupportsModelDownload && !IsDownloadedCore(plugin, pluginModelId);
+        }
+        catch (LocalModelStorageUnavailableException ex)
+        {
+            SetStatus(modelId, ModelStatus.Failed(ex.Message));
+            throw;
+        }
+
+        if (needsDownload)
         {
             SetStatus(modelId, ModelStatus.DownloadingModel(0));
 
@@ -309,7 +346,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return true;
         }
 
-        if (!IsDownloaded(targetModelId))
+        if (!IsDownloadedCore(targetModelId))
             return false;
 
         await LoadModelAsync(targetModelId, cancellationToken);
@@ -357,7 +394,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                 var plugin = _pluginManager.TranscriptionEngines
                     .FirstOrDefault(e => e.PluginId == pluginId);
 
-                if (plugin?.SupportsModelDownload == true && !plugin.IsModelDownloaded(pluginModelId))
+                if (plugin?.SupportsModelDownload == true && !IsDownloadedCore(plugin, pluginModelId))
                 {
                     await DownloadAndLoadModelAsync(targetModelId, cancellationToken);
                     return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
@@ -470,11 +507,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                 $"Model '{modelId}' is not offered by engine '{engine.ProviderId}'");
         }
 
-        if (engine.SupportsModelDownload && !engine.IsModelDownloaded(modelId) && !awaitDownload)
+        try
         {
-            throw new ModelManagerRequestException(
-                409,
-                $"Engine '{engine.ProviderId}' is not configured (missing API key or downloaded weights). Pass ?await_download=1 to wait for restore.");
+            if (engine.SupportsModelDownload && !IsDownloadedCore(engine, modelId) && !awaitDownload)
+            {
+                throw new ModelManagerRequestException(
+                    409,
+                    $"Engine '{engine.ProviderId}' is not configured (missing API key or downloaded weights). Pass ?await_download=1 to wait for restore.");
+            }
+        }
+        catch (LocalModelStorageUnavailableException ex)
+        {
+            throw new ModelManagerRequestException(503, ex.Message);
         }
 
         if (!engine.SupportsModelDownload && !engine.IsConfigured)

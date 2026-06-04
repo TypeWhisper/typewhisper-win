@@ -100,7 +100,7 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     {
         _host = host;
         _assetManager = _injectedAssetManager
-            ?? new SupertonicAssetManager(Path.Combine(host.PluginDataDirectory, "Models", SupertonicPaths.ModelDirectoryName));
+            ?? new SupertonicAssetManager(Path.Combine(host.PluginAssetDirectory, "Models", SupertonicPaths.ModelDirectoryName));
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         Speed = NormalizeSpeed(host.GetSetting<double?>(SpeedSettingName) ?? DefaultSpeed);
         DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);
