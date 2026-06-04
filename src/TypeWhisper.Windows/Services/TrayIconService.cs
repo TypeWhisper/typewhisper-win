@@ -7,20 +7,47 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides tray icon service behavior.
+/// </summary>
 public sealed class TrayIconService : IAppNotificationService, IDisposable
 {
     private TaskbarIcon? _trayIcon;
     private bool _disposed;
     private Action? _pendingBalloonClick;
 
+    /// <summary>
+    /// Raised when show settings requested.
+    /// </summary>
     public event EventHandler? ShowSettingsRequested;
+    /// <summary>
+    /// Raised when show file transcription requested.
+    /// </summary>
     public event EventHandler? ShowFileTranscriptionRequested;
+    /// <summary>
+    /// Raised when show recent transcriptions requested.
+    /// </summary>
     public event EventHandler? ShowRecentTranscriptionsRequested;
+    /// <summary>
+    /// Raised when copy last transcription requested.
+    /// </summary>
     public event EventHandler? CopyLastTranscriptionRequested;
+    /// <summary>
+    /// Raised when read back last transcription requested.
+    /// </summary>
     public event EventHandler? ReadBackLastTranscriptionRequested;
+    /// <summary>
+    /// Raised when update check requested.
+    /// </summary>
     public event EventHandler? UpdateCheckRequested;
+    /// <summary>
+    /// Raised when exit requested.
+    /// </summary>
     public event EventHandler? ExitRequested;
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize()
     {
         _trayIcon = new TaskbarIcon
@@ -43,12 +70,18 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         _trayIcon.ForceCreate();
     }
 
+    /// <summary>
+    /// Updates tooltip.
+    /// </summary>
     public void UpdateTooltip(string text)
     {
         if (_trayIcon is not null)
             _trayIcon.ToolTipText = text;
     }
 
+    /// <summary>
+    /// Shows balloon.
+    /// </summary>
     public void ShowBalloon(string title, string message, Action? onClick = null)
     {
         _pendingBalloonClick = onClick;
@@ -114,6 +147,9 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         return Icon.FromHandle(bmp.GetHicon());
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

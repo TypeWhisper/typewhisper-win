@@ -7,7 +7,7 @@ using TypeWhisper.Core;
 namespace TypeWhisper.Windows.Services;
 
 /// <summary>
-/// Monitors a folder for supported audio/video files and runs transcription automation jobs.
+/// Provides watch folder service behavior.
 /// </summary>
 public sealed class WatchFolderService : IDisposable
 {
@@ -37,6 +37,9 @@ public sealed class WatchFolderService : IDisposable
     private WatchFolderOptions? _options;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the WatchFolderService class.
+    /// </summary>
     public WatchFolderService()
         : this(TypeWhisperEnvironment.DataPath)
     {
@@ -51,9 +54,21 @@ public sealed class WatchFolderService : IDisposable
         LoadHistory();
     }
 
+    /// <summary>
+    /// Gets or sets the watch path value.
+    /// </summary>
     public string? WatchPath { get; private set; }
+    /// <summary>
+    /// Gets or sets the currently processing value.
+    /// </summary>
     public string? CurrentlyProcessing { get; private set; }
+    /// <summary>
+    /// Gets whether the service is currently running.
+    /// </summary>
     public bool IsRunning => _watcher is not null;
+    /// <summary>
+    /// Gets the history.
+    /// </summary>
     public IReadOnlyList<WatchFolderHistoryItem> History
     {
         get
@@ -65,9 +80,18 @@ public sealed class WatchFolderService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Raised when state changes.
+    /// </summary>
     public event EventHandler? StateChanged;
+    /// <summary>
+    /// Raised when the file processed event occurs.
+    /// </summary>
     public event EventHandler<WatchFolderHistoryItem>? FileProcessed;
 
+    /// <summary>
+    /// Starts the service or session.
+    /// </summary>
     public void Start(
         WatchFolderOptions options,
         Func<WatchFolderTranscriptionRequest, CancellationToken, Task<WatchFolderTranscriptionResult>> transcribeHandler)
@@ -103,6 +127,9 @@ public sealed class WatchFolderService : IDisposable
         OnStateChanged();
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         _watcher?.Dispose();
@@ -128,6 +155,9 @@ public sealed class WatchFolderService : IDisposable
         OnStateChanged();
     }
 
+    /// <summary>
+    /// Clears history.
+    /// </summary>
     public void ClearHistory()
     {
         lock (_stateGate)
@@ -541,6 +571,9 @@ public sealed class WatchFolderService : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

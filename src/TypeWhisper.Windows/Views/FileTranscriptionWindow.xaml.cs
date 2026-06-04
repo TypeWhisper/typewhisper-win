@@ -3,10 +3,16 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides file transcription window behavior.
+/// </summary>
 public partial class FileTranscriptionWindow : Window
 {
     private readonly FileTranscriptionViewModel _viewModel;
 
+    /// <summary>
+    /// Initializes a new instance of the FileTranscriptionWindow class.
+    /// </summary>
     public FileTranscriptionWindow(FileTranscriptionViewModel viewModel)
     {
         InitializeComponent();

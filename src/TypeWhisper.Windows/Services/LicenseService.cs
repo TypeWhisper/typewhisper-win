@@ -121,8 +121,14 @@ public sealed partial class LicenseService : ObservableObject
     [ObservableProperty]
     private string? _supporterRefreshError;
 
+    /// <summary>
+    /// Raised when status changes.
+    /// </summary>
     public event Action? StatusChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the LicenseService class.
+    /// </summary>
     public LicenseService()
         : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
@@ -136,16 +142,46 @@ public sealed partial class LicenseService : ObservableObject
         LoadStore();
     }
 
+    /// <summary>
+    /// Gets whether is private user.
+    /// </summary>
     public bool IsPrivateUser => UserType == LicenseUserType.PrivateUser;
+    /// <summary>
+    /// Gets whether is business user.
+    /// </summary>
     public bool IsBusinessUser => UserType == LicenseUserType.Business;
+    /// <summary>
+    /// Gets whether has commercial license.
+    /// </summary>
     public bool HasCommercialLicense => CommercialStatus == LicenseStatus.Active;
+    /// <summary>
+    /// Gets whether has supporter license.
+    /// </summary>
     public bool HasSupporterLicense => SupporterStatus == LicenseStatus.Active;
+    /// <summary>
+    /// Returns whether commercial activation.
+    /// </summary>
     public bool HasCommercialActivation => !string.IsNullOrWhiteSpace(_commercialLicenseKey) && !string.IsNullOrWhiteSpace(_commercialActivationId);
+    /// <summary>
+    /// Returns whether supporter activation.
+    /// </summary>
     public bool HasSupporterActivation => !string.IsNullOrWhiteSpace(_supporterLicenseKey) && !string.IsNullOrWhiteSpace(_supporterActivationId);
+    /// <summary>
+    /// Gets whether is supporter.
+    /// </summary>
     public bool IsSupporter => SupporterStatus == LicenseStatus.Active && EffectiveSupporterTier is not null;
+    /// <summary>
+    /// Gets whether should show reminder.
+    /// </summary>
     public bool ShouldShowReminder => IsBusinessUser && !HasCommercialLicense;
+    /// <summary>
+    /// Gets the supporter badge tier.
+    /// </summary>
     public SupporterTier SupporterBadgeTier => EffectiveSupporterTier ?? global::TypeWhisper.Windows.Services.SupporterTier.None;
 
+    /// <summary>
+    /// Gets the commercial tier display name.
+    /// </summary>
     public string? CommercialTierDisplayName => CommercialTier switch
     {
         CommercialLicenseTier.Individual => "Individual",
@@ -154,6 +190,9 @@ public sealed partial class LicenseService : ObservableObject
         _ => null
     };
 
+    /// <summary>
+    /// Gets the supporter tier display name.
+    /// </summary>
     public string? SupporterTierDisplayName => EffectiveSupporterTier switch
     {
         global::TypeWhisper.Windows.Services.SupporterTier.Bronze => "Bronze",
@@ -162,11 +201,17 @@ public sealed partial class LicenseService : ObservableObject
         _ => null
     };
 
+    /// <summary>
+    /// Gets the supporter claim proof.
+    /// </summary>
     public SupporterClaimProof? SupporterClaimProof =>
         IsSupporter && !string.IsNullOrWhiteSpace(_supporterLicenseKey) && !string.IsNullOrWhiteSpace(_supporterActivationId)
             ? new SupporterClaimProof(_supporterLicenseKey!, _supporterActivationId!, EffectiveSupporterTier!.Value)
             : null;
 
+    /// <summary>
+    /// Returns discord claim proof candidates.
+    /// </summary>
     public IReadOnlyList<SupporterClaimProof> GetDiscordClaimProofCandidates()
     {
         var proofs = new List<SupporterClaimProof>(2);
@@ -198,6 +243,9 @@ public sealed partial class LicenseService : ObservableObject
         var tier => tier,
     };
 
+    /// <summary>
+    /// Sets user type.
+    /// </summary>
     public void SetUserType(LicenseUserType type)
     {
         UserType = type;
@@ -205,6 +253,9 @@ public sealed partial class LicenseService : ObservableObject
         NotifyStateChanged();
     }
 
+    /// <summary>
+    /// Activates any license key asynchronously..
+    /// </summary>
     public async Task<ActivatedLicenseEntitlement?> ActivateAnyLicenseKeyAsync(string key, CancellationToken ct = default)
     {
         var trimmed = key.Trim();
@@ -238,6 +289,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Activates commercial license asynchronously..
+    /// </summary>
     public async Task ActivateCommercialLicenseAsync(string key, CancellationToken ct = default)
     {
         var trimmed = key.Trim();
@@ -268,9 +322,15 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs validate commercial license asynchronously.
+    /// </summary>
     public Task ValidateCommercialLicenseAsync(CancellationToken ct = default) =>
         ValidateCommercialLicenseCoreAsync(reportErrors: false, ct);
 
+    /// <summary>
+    /// Refreshes commercial license asynchronously.
+    /// </summary>
     public async Task RefreshCommercialLicenseAsync(CancellationToken ct = default)
     {
         if (!HasCommercialActivation)
@@ -297,6 +357,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs validate commercial if needed asynchronously.
+    /// </summary>
     public async Task ValidateCommercialIfNeededAsync(CancellationToken ct = default)
     {
         if (!HasCommercialActivation)
@@ -319,6 +382,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Deactivates commercial license asynchronously..
+    /// </summary>
     public async Task DeactivateCommercialLicenseAsync(CancellationToken ct = default)
     {
         if (!HasCommercialActivation)
@@ -354,6 +420,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Activates supporter key asynchronously..
+    /// </summary>
     public async Task ActivateSupporterKeyAsync(string key, CancellationToken ct = default)
     {
         var trimmed = key.Trim();
@@ -384,9 +453,15 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs validate supporter asynchronously.
+    /// </summary>
     public Task ValidateSupporterAsync(CancellationToken ct = default) =>
         ValidateSupporterCoreAsync(reportErrors: false, ct);
 
+    /// <summary>
+    /// Refreshes supporter license asynchronously.
+    /// </summary>
     public async Task RefreshSupporterLicenseAsync(CancellationToken ct = default)
     {
         if (!HasSupporterActivation)
@@ -413,6 +488,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs validate supporter if needed asynchronously.
+    /// </summary>
     public async Task ValidateSupporterIfNeededAsync(CancellationToken ct = default)
     {
         if (!HasSupporterActivation)
@@ -435,6 +513,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs reactivate stored supporter key asynchronously.
+    /// </summary>
     public async Task<bool> ReactivateStoredSupporterKeyAsync(CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_supporterLicenseKey))
@@ -458,6 +539,9 @@ public sealed partial class LicenseService : ObservableObject
         return false;
     }
 
+    /// <summary>
+    /// Deactivates supporter license asynchronously..
+    /// </summary>
     public async Task DeactivateSupporterLicenseAsync(CancellationToken ct = default)
     {
         if (!HasSupporterActivation)
@@ -493,6 +577,9 @@ public sealed partial class LicenseService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs validate all if needed asynchronously.
+    /// </summary>
     public async Task ValidateAllIfNeededAsync(CancellationToken ct = default)
     {
         await ValidateCommercialIfNeededAsync(ct);
@@ -1215,7 +1302,13 @@ public sealed partial class LicenseService : ObservableObject
         [JsonPropertyName("benefit_id")] public string? BenefitId { get; init; }
         [JsonPropertyName("benefit")] public PolarBenefit? Benefit { get; init; }
 
+        /// <summary>
+        /// Gets the resolved benefit id.
+        /// </summary>
         public string? ResolvedBenefitId => Benefit?.Id ?? BenefitId;
+        /// <summary>
+        /// Gets the resolved benefit description.
+        /// </summary>
         public string? ResolvedBenefitDescription => Benefit?.Description;
     }
 
@@ -1240,6 +1333,9 @@ public sealed partial class LicenseService : ObservableObject
 
     private sealed class PolarApiException : InvalidOperationException
     {
+        /// <summary>
+        /// Performs polar api exception.
+        /// </summary>
         public PolarApiException(string message, int statusCode, string? detail = null, string? type = null)
             : base(message)
         {
@@ -1248,57 +1344,142 @@ public sealed partial class LicenseService : ObservableObject
             Type = type;
         }
 
+        /// <summary>
+        /// Gets the provider or HTTP status code associated with the result.
+        /// </summary>
         public int StatusCode { get; }
+        /// <summary>
+        /// Gets the detail.
+        /// </summary>
         public string? Detail { get; }
+        /// <summary>
+        /// Gets the type.
+        /// </summary>
         public string? Type { get; }
     }
 }
 
+/// <summary>
+/// Lists the supported license user type values.
+/// </summary>
 public enum LicenseUserType
 {
+    /// <summary>
+    /// Represents the private user option.
+    /// </summary>
     PrivateUser,
+    /// <summary>
+    /// Represents the business option.
+    /// </summary>
     Business,
 }
 
+/// <summary>
+/// Lists the supported license status values.
+/// </summary>
 public enum LicenseStatus
 {
+    /// <summary>
+    /// Represents the unlicensed option.
+    /// </summary>
     Unlicensed,
+    /// <summary>
+    /// Represents the active option.
+    /// </summary>
     Active,
+    /// <summary>
+    /// Represents the expired option.
+    /// </summary>
     Expired,
 }
 
+/// <summary>
+/// Lists the supported commercial license tier values.
+/// </summary>
 public enum CommercialLicenseTier
 {
+    /// <summary>
+    /// Represents the individual option.
+    /// </summary>
     Individual,
+    /// <summary>
+    /// Represents the team option.
+    /// </summary>
     Team,
+    /// <summary>
+    /// Represents the enterprise option.
+    /// </summary>
     Enterprise,
 }
 
+/// <summary>
+/// Lists the supported supporter tier values.
+/// </summary>
 public enum SupporterTier
 {
+    /// <summary>
+    /// Represents the none option.
+    /// </summary>
     None,
+    /// <summary>
+    /// Represents the bronze option.
+    /// </summary>
     Bronze,
+    /// <summary>
+    /// Represents the silver option.
+    /// </summary>
     Silver,
+    /// <summary>
+    /// Represents the gold option.
+    /// </summary>
     Gold,
 }
 
+/// <summary>
+/// Lists the supported activated license entitlement kind values.
+/// </summary>
 public enum ActivatedLicenseEntitlementKind
 {
+    /// <summary>
+    /// Represents the commercial option.
+    /// </summary>
     Commercial,
+    /// <summary>
+    /// Represents the supporter option.
+    /// </summary>
     Supporter,
 }
 
+/// <summary>
+/// Represents activated license entitlement data.
+/// </summary>
+/// <param name="Kind">Kind supplied to the member.</param>
+/// <param name="CommercialTier">Commercial tier supplied to the member.</param>
+/// <param name="SupporterTier">Supporter tier supplied to the member.</param>
+/// <param name="IsLifetime">Is lifetime supplied to the member.</param>
 public sealed record ActivatedLicenseEntitlement(
     ActivatedLicenseEntitlementKind Kind,
     CommercialLicenseTier? CommercialTier = null,
     SupporterTier? SupporterTier = null,
     bool IsLifetime = false)
 {
+    /// <summary>
+    /// Performs commercial.
+    /// </summary>
     public static ActivatedLicenseEntitlement Commercial(CommercialLicenseTier tier, bool isLifetime) =>
         new(ActivatedLicenseEntitlementKind.Commercial, tier, null, isLifetime);
 
+    /// <summary>
+    /// Performs supporter.
+    /// </summary>
     public static ActivatedLicenseEntitlement Supporter(SupporterTier tier) =>
         new(ActivatedLicenseEntitlementKind.Supporter, null, tier);
 }
 
+/// <summary>
+/// Represents supporter claim proof data.
+/// </summary>
+/// <param name="Key">Key supplied to the member.</param>
+/// <param name="ActivationId">Activation id supplied to the member.</param>
+/// <param name="Tier">Tier supplied to the member.</param>
 public sealed record SupporterClaimProof(string Key, string ActivationId, SupporterTier Tier);

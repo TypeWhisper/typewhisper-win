@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenAiCompatible;
 
+/// <summary>
+/// Provides open ai compatible plugin behavior.
+/// </summary>
 public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 {
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(5) };
@@ -19,10 +22,22 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
     private List<FetchedModel> _fetchedModels = [];
 
     // ITypeWhisperPlugin
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.openai-compatible";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "OpenAI Compatible";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -41,20 +56,38 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
         host.Log(PluginLogLevel.Info, $"Activated (baseUrl={_baseUrl}, configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new OpenAiCompatibleSettingsView(this);
 
     // ITranscriptionEnginePlugin
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "openai-compatible";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Custom Server";
 
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_baseUrl);
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels
     {
         get
@@ -70,16 +103,28 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
         }
     }
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         _selectedModelId = modelId;
         _host?.SetSetting("selectedModel", modelId);
     }
 
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => true;
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt,
         CancellationToken ct)
@@ -95,10 +140,19 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
     }
 
     // ILlmProviderPlugin
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "OpenAI Compatible";
 
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => IsConfigured && !string.IsNullOrEmpty(_selectedLlmModelId);
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels
     {
         get
@@ -114,6 +168,9 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
         }
     }
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(
         string systemPrompt, string userText, string model, CancellationToken ct)
     {
@@ -234,6 +291,9 @@ public sealed class OpenAiCompatiblePlugin : ITranscriptionEnginePlugin, ILlmPro
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _httpClient.Dispose();
 }
 

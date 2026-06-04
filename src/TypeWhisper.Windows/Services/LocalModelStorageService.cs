@@ -7,6 +7,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Manages custom storage for large local model assets.
+/// </summary>
 public sealed class LocalModelStorageService
 {
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> PluginAssetEntries =
@@ -29,17 +32,29 @@ public sealed class LocalModelStorageService
     private readonly ISettingsService _settings;
     private readonly Action? _unloadActiveModels;
 
+    /// <summary>
+    /// Initializes a new instance of the LocalModelStorageService class.
+    /// </summary>
     public LocalModelStorageService(ISettingsService settings, Action? unloadActiveModels = null)
     {
         _settings = settings;
         _unloadActiveModels = unloadActiveModels;
     }
 
+    /// <summary>
+    /// Gets the currently resolved local model storage path.
+    /// </summary>
     public string ResolvedModelStoragePath =>
         LocalModelStoragePaths.ResolveModelStoragePath(_settings.Current);
 
+    /// <summary>
+    /// Gets the default local model storage path.
+    /// </summary>
     public static string DefaultModelStoragePath => LocalModelStoragePaths.DefaultModelStoragePath;
 
+    /// <summary>
+    /// Resolves and validates the active local model storage path.
+    /// </summary>
     public static string ResolveAvailableModelStoragePath(AppSettings settings)
     {
         var root = LocalModelStoragePaths.ResolveModelStoragePath(settings);
@@ -53,6 +68,9 @@ public sealed class LocalModelStorageService
         return root;
     }
 
+    /// <summary>
+    /// Resolves and validates the active plugin asset directory.
+    /// </summary>
     public static string ResolveAvailablePluginAssetDirectory(AppSettings? settings, string pluginId)
     {
         var directory = LocalModelStoragePaths.ResolvePluginAssetDirectory(settings, pluginId);
@@ -68,6 +86,9 @@ public sealed class LocalModelStorageService
         return directory;
     }
 
+    /// <summary>
+    /// Moves known large local model assets to the target path and saves it as the active storage path.
+    /// </summary>
     public async Task MoveDownloadsAndUsePathAsync(string targetPath, CancellationToken ct = default)
     {
         var targetRoot = PrepareWritableTarget(targetPath);
@@ -91,6 +112,9 @@ public sealed class LocalModelStorageService
         _settings.Save(_settings.Current with { LocalModelStoragePath = targetRoot });
     }
 
+    /// <summary>
+    /// Resets local model storage to the default app data path.
+    /// </summary>
     public void ResetToDefault() =>
         _settings.Save(_settings.Current with { LocalModelStoragePath = null });
 

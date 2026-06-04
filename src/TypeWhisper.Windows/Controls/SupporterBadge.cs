@@ -11,16 +11,25 @@ namespace TypeWhisper.Windows.Controls;
 /// </summary>
 public sealed class SupporterBadge : Border
 {
+    /// <summary>
+    /// Gets the tier property.
+    /// </summary>
     public static readonly DependencyProperty TierProperty =
         DependencyProperty.Register(nameof(Tier), typeof(SupporterTier), typeof(SupporterBadge),
             new PropertyMetadata(SupporterTier.None, OnTierChanged));
 
+    /// <summary>
+    /// Gets the tier.
+    /// </summary>
     public SupporterTier Tier
     {
         get => (SupporterTier)GetValue(TierProperty);
         set => SetValue(TierProperty, value);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the SupporterBadge class.
+    /// </summary>
     public SupporterBadge()
     {
         CornerRadius = new CornerRadius(10);

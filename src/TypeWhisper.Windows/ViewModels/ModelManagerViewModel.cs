@@ -12,6 +12,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides model manager view model behavior.
+/// </summary>
 public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
@@ -46,6 +49,9 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private bool _isModelStorageBusy;
     [ObservableProperty] private bool _hasModelStorageError;
 
+    /// <summary>
+    /// Gets the currently selected acceleration option.
+    /// </summary>
     public string SelectedAccelerationOptionValue
     {
         get => _selectedAccelerationOptionValue;
@@ -56,14 +62,26 @@ public partial class ModelManagerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the acceleration status text.
+    /// </summary>
     public string AccelerationStatusText
     {
         get => _accelerationStatusText;
         set => SetProperty(ref _accelerationStatusText, value);
     }
 
+    /// <summary>
+    /// Gets the providers.
+    /// </summary>
     public ObservableCollection<ProviderViewModel> Providers { get; } = [];
+    /// <summary>
+    /// Gets the available model options.
+    /// </summary>
     public ObservableCollection<ModelOptionViewModel> AvailableModelOptions { get; } = [];
+    /// <summary>
+    /// Gets the acceleration options.
+    /// </summary>
     public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } =
     [
         new(AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
@@ -73,6 +91,9 @@ public partial class ModelManagerViewModel : ObservableObject
         new(AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"])
     ];
 
+    /// <summary>
+    /// Initializes a new instance of the ModelManagerViewModel class.
+    /// </summary>
     public ModelManagerViewModel(
         ModelManagerService modelManager,
         ISettingsService settings,
@@ -532,16 +553,37 @@ public partial class ModelManagerViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides provider view model behavior.
+/// </summary>
 public partial class ProviderViewModel : ObservableObject
 {
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId { get; }
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
+    /// <summary>
+    /// Gets whether has llm translation.
+    /// </summary>
     public bool HasLlmTranslation { get; }
+    /// <summary>
+    /// Gets whether supports download.
+    /// </summary>
     public bool SupportsDownload { get; }
+    /// <summary>
+    /// Gets the models.
+    /// </summary>
     public ObservableCollection<ModelItemViewModel> Models { get; } = [];
 
     [ObservableProperty] private bool _isConfigured;
 
+    /// <summary>
+    /// Initializes a new instance of the ProviderViewModel class.
+    /// </summary>
     public ProviderViewModel(string providerId, string displayName, bool isConfigured,
         bool hasLlmTranslation, bool supportsDownload)
     {
@@ -553,14 +595,38 @@ public partial class ProviderViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides model item view model behavior.
+/// </summary>
 public partial class ModelItemViewModel : ObservableObject
 {
+    /// <summary>
+    /// Gets the full id.
+    /// </summary>
     public string FullId { get; }
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
+    /// <summary>
+    /// Gets the size description.
+    /// </summary>
     public string? SizeDescription { get; }
+    /// <summary>
+    /// Gets whether is recommended.
+    /// </summary>
     public bool IsRecommended { get; }
+    /// <summary>
+    /// Gets the language count.
+    /// </summary>
     public int LanguageCount { get; }
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation { get; }
+    /// <summary>
+    /// Gets whether supports download.
+    /// </summary>
     public bool SupportsDownload { get; }
 
     [ObservableProperty] private bool _isActive;
@@ -570,6 +636,9 @@ public partial class ModelItemViewModel : ObservableObject
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _statusText = "";
 
+    /// <summary>
+    /// Initializes a new instance of the ModelItemViewModel class.
+    /// </summary>
     public ModelItemViewModel(string fullId, PluginModelInfo model, bool isAvailable,
         bool isActive, bool supportsTranslation, bool supportsDownload,
         bool isDownloaded, ModelStatus status)
@@ -590,13 +659,31 @@ public partial class ModelItemViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides model option view model behavior.
+/// </summary>
 public sealed class ModelOptionViewModel
 {
+    /// <summary>
+    /// Gets the full id.
+    /// </summary>
     public string FullId { get; }
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName { get; }
+    /// <summary>
+    /// Gets the model display name.
+    /// </summary>
     public string ModelDisplayName { get; }
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the ModelOptionViewModel class.
+    /// </summary>
     public ModelOptionViewModel(string fullId, string providerDisplayName, string modelDisplayName, string displayName)
     {
         FullId = fullId;
@@ -606,11 +693,23 @@ public sealed class ModelOptionViewModel
     }
 }
 
+/// <summary>
+/// Provides acceleration option view model behavior.
+/// </summary>
 public sealed class AccelerationOptionViewModel
 {
+    /// <summary>
+    /// Gets the value.
+    /// </summary>
     public string Value { get; }
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the AccelerationOptionViewModel class.
+    /// </summary>
     public AccelerationOptionViewModel(string value, string displayName)
     {
         Value = value;

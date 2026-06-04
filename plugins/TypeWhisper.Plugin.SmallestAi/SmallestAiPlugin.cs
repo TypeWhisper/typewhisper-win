@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.SmallestAi;
 
+/// <summary>
+/// Provides smallest ai plugin behavior.
+/// </summary>
 public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
 {
     private const string BaseUrl = "https://api.smallest.ai";
@@ -33,6 +36,9 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
 
+    /// <summary>
+    /// Initializes a new instance of the SmallestAiPlugin class.
+    /// </summary>
     public SmallestAiPlugin()
         : this(CreateHttpClient())
     {
@@ -45,10 +51,22 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.smallest-ai";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Smallest AI Pulse";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -57,25 +75,58 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new SmallestAiSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "smallest-ai";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Smallest AI";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels => Models;
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
+    /// <summary>
+    /// Gets whether the provider supports live streaming transcription.
+    /// </summary>
     public bool SupportsStreaming => true;
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         if (Models.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
@@ -83,6 +134,9 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
         _selectedModelId = modelId;
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -112,6 +166,9 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
         return ParseTranscriptionResponse(json, NormalizeLanguage(language));
     }
 
+    /// <summary>
+    /// Opens a streaming transcription session for live audio.
+    /// </summary>
     public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -383,6 +440,9 @@ public sealed class SmallestAiPlugin : ITranscriptionEnginePlugin
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(120) };
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

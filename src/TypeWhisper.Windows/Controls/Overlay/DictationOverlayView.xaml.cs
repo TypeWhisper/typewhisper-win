@@ -8,6 +8,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
+/// <summary>
+/// Provides dictation overlay view behavior.
+/// </summary>
 public partial class DictationOverlayView : UserControl
 {
     private const double MaxPartialPreviewHeight = 124;
@@ -24,6 +27,9 @@ public partial class DictationOverlayView : UserControl
     private bool _queuedPartialTextAnimation;
     private int _partialPreviewAnimationVersion;
 
+    /// <summary>
+    /// Initializes a new instance of the DictationOverlayView class.
+    /// </summary>
     public DictationOverlayView()
     {
         InitializeComponent();

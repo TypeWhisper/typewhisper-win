@@ -7,8 +7,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides workflows section behavior.
+/// </summary>
 public partial class WorkflowsSection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the WorkflowsSection class.
+    /// </summary>
     public WorkflowsSection() => InitializeComponent();
 
     private void WorkflowRow_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

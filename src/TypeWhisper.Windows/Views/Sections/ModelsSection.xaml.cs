@@ -7,8 +7,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides models section behavior.
+/// </summary>
 public partial class ModelsSection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the ModelsSection class.
+    /// </summary>
     public ModelsSection() => InitializeComponent();
 
     private void BrowseModelStorage_Click(object sender, RoutedEventArgs e)

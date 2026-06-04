@@ -8,6 +8,9 @@ using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides workflow palette service behavior.
+/// </summary>
 public sealed class WorkflowPaletteService
 {
     private readonly IWorkflowService _workflows;
@@ -18,8 +21,14 @@ public sealed class WorkflowPaletteService
     private readonly PluginManager _pluginManager;
     private readonly IWorkflowPalettePresenter _presenter;
 
+    /// <summary>
+    /// Raised when feedback requested.
+    /// </summary>
     public event Action<string, bool>? FeedbackRequested;
 
+    /// <summary>
+    /// Initializes a new instance of the WorkflowPaletteService class.
+    /// </summary>
     public WorkflowPaletteService(
         IWorkflowService workflows,
         IActiveWindowService activeWindow,
@@ -56,6 +65,9 @@ public sealed class WorkflowPaletteService
         _presenter = presenter;
     }
 
+    /// <summary>
+    /// Toggles palette asynchronously.
+    /// </summary>
     public async Task TogglePaletteAsync()
     {
         if (_presenter.IsVisible)
@@ -94,6 +106,9 @@ public sealed class WorkflowPaletteService
         _presenter.Show(viewModel, static () => { });
     }
 
+    /// <summary>
+    /// Executes workflow asynchronously..
+    /// </summary>
     public async Task ExecuteWorkflowAsync(Workflow workflow)
     {
         if (!workflow.IsEnabled || !workflow.IsManuallyRunnable)
@@ -225,8 +240,14 @@ internal sealed class WorkflowPaletteWindowPresenter : IWorkflowPalettePresenter
 {
     private WorkflowPaletteWindow? _window;
 
+    /// <summary>
+    /// Gets whether is visible.
+    /// </summary>
     public bool IsVisible => _window is not null;
 
+    /// <summary>
+    /// Performs show.
+    /// </summary>
     public void Show(WorkflowPaletteViewModel viewModel, Action onClosed)
     {
         var window = new WorkflowPaletteWindow(viewModel);
@@ -243,6 +264,9 @@ internal sealed class WorkflowPaletteWindowPresenter : IWorkflowPalettePresenter
         window.Activate();
     }
 
+    /// <summary>
+    /// Performs close.
+    /// </summary>
     public void Close() => _window?.RequestClose();
 }
 

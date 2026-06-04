@@ -2,17 +2,29 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides recent transcription store behavior.
+/// </summary>
 public sealed class RecentTranscriptionStore
 {
     private readonly object _gate = new();
     private readonly int _maxSessionEntries;
     private readonly List<RecentTranscriptionEntry> _sessionEntries = [];
 
+    /// <summary>
+    /// Initializes a new instance of the RecentTranscriptionStore class.
+    /// </summary>
     public RecentTranscriptionStore(int maxSessionEntries = 20)
     {
         _maxSessionEntries = Math.Max(1, maxSessionEntries);
     }
 
+    /// <summary>
+    /// Gets the session entries.
+    /// </summary>
+    /// <summary>
+    /// Gets the session entries.
+    /// </summary>
     public IReadOnlyList<RecentTranscriptionEntry> SessionEntries
     {
         get
@@ -24,6 +36,9 @@ public sealed class RecentTranscriptionStore
         }
     }
 
+    /// <summary>
+    /// Records transcription.
+    /// </summary>
     public void RecordTranscription(
         string id,
         string finalText,
@@ -51,6 +66,9 @@ public sealed class RecentTranscriptionStore
         }
     }
 
+    /// <summary>
+    /// Returns the merged entries.
+    /// </summary>
     public IReadOnlyList<RecentTranscriptionEntry> MergedEntries(
         IReadOnlyList<TranscriptionRecord> historyRecords,
         int limit = 12)
@@ -87,10 +105,22 @@ public sealed class RecentTranscriptionStore
             .ToList();
     }
 
+    /// <summary>
+    /// Returns the latest entry.
+    /// </summary>
     public RecentTranscriptionEntry? LatestEntry(IReadOnlyList<TranscriptionRecord> historyRecords) =>
         MergedEntries(historyRecords, limit: 1).FirstOrDefault();
 }
 
+/// <summary>
+/// Represents recent transcription entry data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="FinalText">Final text supplied to the member.</param>
+/// <param name="Timestamp">Timestamp supplied to the member.</param>
+/// <param name="AppName">App name supplied to the member.</param>
+/// <param name="AppProcessName">App process name supplied to the member.</param>
+/// <param name="Source">Source supplied to the member.</param>
 public sealed record RecentTranscriptionEntry(
     string Id,
     string FinalText,
@@ -99,8 +129,17 @@ public sealed record RecentTranscriptionEntry(
     string? AppProcessName,
     RecentTranscriptionSource Source);
 
+/// <summary>
+/// Lists the supported recent transcription source values.
+/// </summary>
 public enum RecentTranscriptionSource
 {
+    /// <summary>
+    /// Represents the session option.
+    /// </summary>
     Session,
+    /// <summary>
+    /// Represents the history option.
+    /// </summary>
     History
 }

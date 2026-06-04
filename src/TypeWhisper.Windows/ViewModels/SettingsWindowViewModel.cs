@@ -20,17 +20,53 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 {
     private static SettingsRoute _lastOpenedRoute = SettingsRoute.Dashboard;
 
+    /// <summary>
+    /// Gets the settings.
+    /// </summary>
     public SettingsViewModel Settings { get; }
+    /// <summary>
+    /// Gets the model manager.
+    /// </summary>
     public ModelManagerViewModel ModelManager { get; }
+    /// <summary>
+    /// Gets the history.
+    /// </summary>
     public HistoryViewModel History { get; }
+    /// <summary>
+    /// Gets the dictionary.
+    /// </summary>
     public DictionaryViewModel Dictionary { get; }
+    /// <summary>
+    /// Gets the configured snippets in display order.
+    /// </summary>
     public SnippetsViewModel Snippets { get; }
+    /// <summary>
+    /// Gets the configured workflows in display order.
+    /// </summary>
     public WorkflowsViewModel Workflows { get; }
+    /// <summary>
+    /// Gets the dashboard.
+    /// </summary>
     public DashboardViewModel Dashboard { get; }
+    /// <summary>
+    /// Gets the loaded plugin view models.
+    /// </summary>
     public PluginsViewModel Plugins { get; }
+    /// <summary>
+    /// Gets the cloud folder sync.
+    /// </summary>
     public CloudFolderSyncViewModel CloudFolderSync { get; }
+    /// <summary>
+    /// Gets the license.
+    /// </summary>
     public LicenseService License { get; }
+    /// <summary>
+    /// Gets the recorder.
+    /// </summary>
     public AudioRecorderViewModel Recorder { get; }
+    /// <summary>
+    /// Gets the file transcription.
+    /// </summary>
     public FileTranscriptionViewModel FileTranscription { get; }
 
     private readonly UpdateService _updateService;
@@ -55,41 +91,122 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private double _recordingSeconds;
     [ObservableProperty] private string _partialText = "";
 
+    /// <summary>
+    /// Gets the current app version.
+    /// </summary>
     public string CurrentAppVersion => _updateService.CurrentVersion;
+    /// <summary>
+    /// Builds current app version display.
+    /// </summary>
     public string CurrentAppVersionDisplay => BuildCurrentAppVersionDisplay();
+    /// <summary>
+    /// Gets the current page content width.
+    /// </summary>
     public double CurrentPageContentWidth => CurrentPageMetadata.ContentWidth;
+    /// <summary>
+    /// Gets the current page shows summary row.
+    /// </summary>
     public bool CurrentPageShowsSummaryRow => CurrentPageMetadata.ShowsSummaryRow;
+    /// <summary>
+    /// Gets the current page uses sticky actions.
+    /// </summary>
     public bool CurrentPageUsesStickyActions => CurrentPageMetadata.UsesStickyActions;
+    /// <summary>
+    /// Gets the selected update channel description.
+    /// </summary>
     public string SelectedUpdateChannelDescription =>
         UpdateChannelOptions.FirstOrDefault(option => option.Value == SelectedUpdateChannel)?.Description ?? string.Empty;
+    /// <summary>
+    /// Gets the error log entries.
+    /// </summary>
     public ObservableCollection<ErrorLogEntry> ErrorLogEntries { get; } = [];
+    /// <summary>
+    /// Gets the update channel options.
+    /// </summary>
     public ObservableCollection<ReleaseChannelOption> UpdateChannelOptions { get; } = [];
+    /// <summary>
+    /// Gets whether has error log entries.
+    /// </summary>
     public bool HasErrorLogEntries => ErrorLogEntries.Count > 0;
+    /// <summary>
+    /// Gets the navigation groups.
+    /// </summary>
     public ObservableCollection<SettingsNavigationGroup> NavigationGroups { get; } = [];
+    /// <summary>
+    /// Gets the indicator style.
+    /// </summary>
     public IndicatorStyle IndicatorStyle => Settings.IndicatorStyle;
+    /// <summary>
+    /// Gets the overlay position.
+    /// </summary>
     public OverlayPosition OverlayPosition => Settings.OverlayPosition;
+    /// <summary>
+    /// Gets the left widget.
+    /// </summary>
     public OverlayWidget LeftWidget => Settings.OverlayLeftWidget;
+    /// <summary>
+    /// Gets the right widget.
+    /// </summary>
     public OverlayWidget RightWidget => Settings.OverlayRightWidget;
+    /// <summary>
+    /// Gets the live transcription enabled.
+    /// </summary>
     public bool LiveTranscriptionEnabled => Settings.LiveTranscriptionEnabled;
+    /// <summary>
+    /// Gets the live transcription font size in device-independent pixels.
+    /// </summary>
     public double LiveTranscriptionFontSize => Settings.LiveTranscriptionFontSize;
+    /// <summary>
+    /// Gets the state.
+    /// </summary>
     public DictationState State => DictationState.Recording;
+    /// <summary>
+    /// Gets the status text.
+    /// </summary>
     public string StatusText => Loc.Instance["Appearance.PreviewStatus"];
+    /// <summary>
+    /// Gets the active workflow name.
+    /// </summary>
     public string? ActiveWorkflowName => Loc.Instance["Widget.Workflow"];
+    /// <summary>
+    /// Gets the active process name.
+    /// </summary>
     public string? ActiveProcessName => "TypeWhisper";
+    /// <summary>
+    /// Gets the current hotkey mode.
+    /// </summary>
     public HotkeyMode? CurrentHotkeyMode => HotkeyMode.Toggle;
+    /// <summary>
+    /// Gets whether show inline feedback.
+    /// </summary>
     public bool ShowInlineFeedback => false;
+    /// <summary>
+    /// Gets the feedback text.
+    /// </summary>
     public string? FeedbackText => null;
+    /// <summary>
+    /// Gets the feedback is error.
+    /// </summary>
     public bool FeedbackIsError => false;
+    /// <summary>
+    /// Gets whether show built in partial preview.
+    /// </summary>
     public bool ShowBuiltInPartialPreview =>
         AppearanceIndicatorPreviewPresentation.ShouldShowPartialText(
             LiveTranscriptionEnabled,
             IndicatorStyle);
+    /// <summary>
+    /// Gets whether show supporter premium notice.
+    /// </summary>
     public bool ShowSupporterPremiumNotice => License.IsSupporter && License.CommercialStatus != LicenseStatus.Active;
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
     private readonly Dictionary<SettingsRoute, SettingsNavigationItem> _navigationLookup = [];
 
+    /// <summary>
+    /// Initializes a new instance of the SettingsWindowViewModel class.
+    /// </summary>
     public SettingsWindowViewModel(
         SettingsViewModel settings,
         ModelManagerViewModel modelManager,
@@ -152,6 +269,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SyncNavigationSelection();
     }
 
+    /// <summary>
+    /// Gets the current section name.
+    /// </summary>
     public string CurrentSectionName => CurrentRoute.ToString();
 
     [RelayCommand]
@@ -262,16 +382,25 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         window.Show();
     }
 
+    /// <summary>
+    /// Performs register section.
+    /// </summary>
     public void RegisterSection(SettingsRoute route, Func<UserControl> factory)
     {
         _sectionFactories[route] = factory;
     }
 
+    /// <summary>
+    /// Performs navigate to default.
+    /// </summary>
     public void NavigateToDefault()
     {
         Open(_lastOpenedRoute);
     }
 
+    /// <summary>
+    /// Performs open.
+    /// </summary>
     public void Open(SettingsRoute route)
     {
         if (!_sectionFactories.ContainsKey(route))
@@ -300,6 +429,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         return Plugins.FocusInstalledPlugin(pluginId);
     }
 
+    /// <summary>
+    /// Performs try consume pending file importer request.
+    /// </summary>
     public bool TryConsumePendingFileImporterRequest()
     {
         if (PendingFileImporterRequestId == 0)
@@ -522,4 +654,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents release channel option data.
+/// </summary>
+/// <param name="Value">Value supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="Description">Description supplied to the member.</param>
 public sealed record ReleaseChannelOption(ReleaseChannel Value, string DisplayName, string Description);

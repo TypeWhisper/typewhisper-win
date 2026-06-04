@@ -5,8 +5,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides dictionary section behavior.
+/// </summary>
 public partial class DictionarySection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the DictionarySection class.
+    /// </summary>
     public DictionarySection() => InitializeComponent();
 
     private void Tab_Checked(object sender, RoutedEventArgs e)

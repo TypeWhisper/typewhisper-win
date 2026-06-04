@@ -6,6 +6,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides settings service behavior.
+/// </summary>
 public sealed class SettingsService : ISettingsService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -20,15 +23,27 @@ public sealed class SettingsService : ISettingsService
 
     private AppSettings _current;
 
+    /// <summary>
+    /// Gets the current.
+    /// </summary>
     public AppSettings Current => _current;
+    /// <summary>
+    /// Raised when settings changes.
+    /// </summary>
     public event Action<AppSettings>? SettingsChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the SettingsService class.
+    /// </summary>
     public SettingsService(string filePath)
     {
         _filePath = filePath;
         _current = Load();
     }
 
+    /// <summary>
+    /// Loads persisted state from storage.
+    /// </summary>
     public AppSettings Load()
     {
         // Try primary settings file
@@ -59,6 +74,9 @@ public sealed class SettingsService : ISettingsService
         return _current;
     }
 
+    /// <summary>
+    /// Persists the supplied state to storage.
+    /// </summary>
     public void Save(AppSettings settings)
     {
         settings = NormalizeSettings(settings);
@@ -159,7 +177,7 @@ public sealed class SettingsService : ISettingsService
                 settings.LocalModelStoragePath)
         };
 
-        return settings;
+        return settings.NormalizeHotkeyLists();
     }
 
     private static void LogWarning(string message)

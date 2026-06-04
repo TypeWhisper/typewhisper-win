@@ -6,19 +6,31 @@ using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows;
 
+/// <summary>
+/// Provides program behavior.
+/// </summary>
 public static class Program
 {
     private static Mutex? _singleInstanceMutex;
     private static IReadOnlyList<string>? _restartArgs;
     private static readonly string CallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
+    /// <summary>
+    /// Gets or sets the start minimized value.
+    /// </summary>
     public static bool StartMinimized { get; private set; }
 
+    /// <summary>
+    /// Performs request restart.
+    /// </summary>
     public static void RequestRestart(params string[] args)
     {
         _restartArgs = args.ToArray();
     }
 
+    /// <summary>
+    /// Performs main.
+    /// </summary>
     [STAThread]
     public static void Main(string[] args)
     {

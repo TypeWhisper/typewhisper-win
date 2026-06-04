@@ -2,6 +2,15 @@ using System.IO;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Represents cli install state data.
+/// </summary>
+/// <param name="BundledCliAvailable">Bundled cli available supplied to the member.</param>
+/// <param name="Installed">Installed supplied to the member.</param>
+/// <param name="BundledPath">Bundled path supplied to the member.</param>
+/// <param name="InstallPath">Install path supplied to the member.</param>
+/// <param name="InstallDirectoryInPath">Install directory in path supplied to the member.</param>
+/// <param name="StatusText">Status text supplied to the member.</param>
 public sealed record CliInstallState(
     bool BundledCliAvailable,
     bool Installed,
@@ -10,6 +19,9 @@ public sealed record CliInstallState(
     bool InstallDirectoryInPath,
     string StatusText);
 
+/// <summary>
+/// Provides cli install service behavior.
+/// </summary>
 public sealed class CliInstallService
 {
     private const string CliFileName = "typewhisper.exe";
@@ -17,6 +29,9 @@ public sealed class CliInstallService
     private readonly Func<string> _installDirectoryProvider;
     private readonly Action<string> _pathUpdater;
 
+    /// <summary>
+    /// Initializes a new instance of the CliInstallService class.
+    /// </summary>
     public CliInstallService()
         : this(FindBundledCliPath, DefaultInstallDirectory, AddUserPathEntry)
     {
@@ -32,6 +47,9 @@ public sealed class CliInstallService
         _pathUpdater = pathUpdater;
     }
 
+    /// <summary>
+    /// Returns state.
+    /// </summary>
     public CliInstallState GetState()
     {
         var installDirectory = _installDirectoryProvider();
@@ -57,6 +75,9 @@ public sealed class CliInstallService
             status);
     }
 
+    /// <summary>
+    /// Performs install.
+    /// </summary>
     public CliInstallState Install()
     {
         var state = GetState();
@@ -78,6 +99,9 @@ public sealed class CliInstallService
         return GetState();
     }
 
+    /// <summary>
+    /// Builds cli examples.
+    /// </summary>
     public static IReadOnlyList<string> BuildCliExamples(int port) =>
     [
         "typewhisper --help",
@@ -87,6 +111,9 @@ public sealed class CliInstallService
         $"typewhisper transcribe recording.wav --language de --json --port {port}"
     ];
 
+    /// <summary>
+    /// Builds curl examples.
+    /// </summary>
     public static IReadOnlyList<string> BuildCurlExamples(int port) =>
     [
         $"curl http://localhost:{port}/v1/status",

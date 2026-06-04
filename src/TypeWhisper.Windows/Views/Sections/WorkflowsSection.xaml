@@ -541,6 +541,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -626,19 +627,20 @@
                                         </Grid>
                                     </Border>
 
-                <ScrollViewer Grid.Row="1"
+                <ui:InfoBar Grid.Row="1"
+                            Title="{loc:Str Workflows.ValidationTitle}"
+                            Message="{Binding Workflows.EditorError}"
+                            Severity="Error"
+                            IsOpen="True"
+                            IsClosable="False"
+                            Margin="24,0,40,14"
+                            Visibility="{Binding Workflows.HasEditorError, Converter={StaticResource BoolToVis}}"/>
+
+                <ScrollViewer Grid.Row="2"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               CanContentScroll="False">
                     <StackPanel Margin="24,0,40,24">
-
-                                    <ui:InfoBar Title="{loc:Str Workflows.ValidationTitle}"
-                                                Message="{Binding Workflows.EditorError}"
-                                                Severity="Error"
-                                                IsOpen="True"
-                                                IsClosable="False"
-                                                Margin="0,0,0,14"
-                                                Visibility="{Binding Workflows.HasEditorError, Converter={StaticResource BoolToVis}}"/>
 
                                     <TextBlock Text="{loc:Str Workflows.Name}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <TextBox Text="{Binding Workflows.EditName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,14"/>
@@ -1105,9 +1107,32 @@
                                                    Style="{StaticResource HintStyle}"
                                                    Margin="0,0,0,8"/>
                                         <TextBlock Text="{loc:Str Hotkey.ModifierOnlyHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,8"/>
-                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.EditHotkey, Mode=TwoWay}"
+                                        <ItemsControl ItemsSource="{Binding Workflows.EditHotkeys}" Margin="0,0,0,8">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource WorkflowRemovableChipStyle}" Margin="0,0,6,6">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding}" Foreground="#D6DEE9" FontSize="10.5"/>
+                                                            <Button Style="{StaticResource WorkflowChipCloseButtonStyle}"
+                                                                    Command="{Binding DataContext.Workflows.RemoveHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    ToolTip="{loc:Str Workflows.Remove}">
+                                                                <TextBlock Text="&#xE711;"
+                                                                           FontFamily="Segoe MDL2 Assets"
+                                                                           FontSize="8"
+                                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.NewHotkey, Mode=TwoWay}"
+                                                                        RecordedCommand="{Binding Workflows.AddHotkeyCommand}"
+                                                                        UseAddGlyph="True"
+                                                                        ToolTip="{loc:Str Workflows.AddHotkey}"
                                                                         AllowModifierOnly="True"
-                                                                        Width="260"
                                                                         HorizontalAlignment="Left"/>
                                     </StackPanel>
 

@@ -3,6 +3,9 @@ using NAudio.Wave;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides audio recording service behavior.
+/// </summary>
 public sealed class AudioRecordingService : IDisposable
 {
     private const int SampleRate = 16000;
@@ -50,6 +53,9 @@ public sealed class AudioRecordingService : IDisposable
     private readonly Queue<AudioChunkTelemetry> _recentChunks = new();
     private DateTime? _lastSamplesAvailableUtc;
 
+    /// <summary>
+    /// Initializes a new instance of the AudioRecordingService class.
+    /// </summary>
     public AudioRecordingService()
         : this(new WaveInAudioInputDeviceProvider(), new WaveInAudioInputCaptureFactory(), DefaultDevicePollInterval)
     {
@@ -65,23 +71,71 @@ public sealed class AudioRecordingService : IDisposable
         _devicePollInterval = devicePollInterval;
     }
 
+    /// <summary>
+    /// Raised when audio level changes.
+    /// </summary>
     public event EventHandler<AudioLevelEventArgs>? AudioLevelChanged;
+    /// <summary>
+    /// Raised when preview level changes.
+    /// </summary>
     public event EventHandler<AudioLevelEventArgs>? PreviewLevelChanged;
+    /// <summary>
+    /// Raised when samples available.
+    /// </summary>
     public event EventHandler<SamplesAvailableEventArgs>? SamplesAvailable;
+    /// <summary>
+    /// Raised when devices changes.
+    /// </summary>
     public event EventHandler? DevicesChanged;
+    /// <summary>
+    /// Raised when device lost.
+    /// </summary>
     public event EventHandler? DeviceLost;
+    /// <summary>
+    /// Raised when device available.
+    /// </summary>
     public event EventHandler? DeviceAvailable;
 
+    /// <summary>
+    /// Gets whether has device.
+    /// </summary>
     public bool HasDevice => _deviceProvider.DeviceCount > 0;
+    /// <summary>
+    /// Gets or sets the whisper mode enabled value.
+    /// </summary>
     public bool WhisperModeEnabled { get; set; }
+    /// <summary>
+    /// Gets or sets the normalization enabled value.
+    /// </summary>
     public bool NormalizationEnabled { get; set; } = true;
+    /// <summary>
+    /// Gets whether recording is currently active.
+    /// </summary>
     public bool IsRecording => _isRecording;
+    /// <summary>
+    /// Gets the peak rms level.
+    /// </summary>
     public float PeakRmsLevel => _peakRmsLevel;
+    /// <summary>
+    /// Gets the pre gain peak rms level.
+    /// </summary>
     public float PreGainPeakRmsLevel => _preGainPeakRms;
+    /// <summary>
+    /// Gets the current rms level.
+    /// </summary>
     public float CurrentRmsLevel => _currentRmsLevel;
+    /// <summary>
+    /// Gets whether has speech energy.
+    /// </summary>
     public bool HasSpeechEnergy => _preGainPeakRms >= SpeechEnergyThreshold;
+    /// <summary>
+    /// Gets the recording duration.
+    /// </summary>
     public TimeSpan RecordingDuration => _isRecording ? DateTime.UtcNow - _recordingStartTime : TimeSpan.Zero;
 
+    /// <summary>
+    /// Sets microphone device.
+    /// </summary>
     public void SetMicrophoneDevice(int? deviceNumber)
     {
         var previousDeviceNumber = _configuredDeviceNumber;
@@ -114,6 +168,9 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Performs warm up.
+    /// </summary>
     public bool WarmUp()
     {
         if (_isWarmedUp || _disposed) return _isWarmedUp;
@@ -156,12 +213,21 @@ public sealed class AudioRecordingService : IDisposable
         return _isWarmedUp;
     }
 
+    /// <summary>
+    /// Returns available devices.
+    /// </summary>
     public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices() =>
         GetAvailableDevices(new WaveInAudioInputDeviceProvider());
 
+    /// <summary>
+    /// Returns available input devices.
+    /// </summary>
     public IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableInputDevices() =>
         GetAvailableDevices(_deviceProvider);
 
+    /// <summary>
+    /// Starts recording.
+    /// </summary>
     public void StartRecording()
     {
         if (_isRecording) return;
@@ -190,12 +256,18 @@ public sealed class AudioRecordingService : IDisposable
         _isRecording = true;
     }
 
+    /// <summary>
+    /// Returns current buffer.
+    /// </summary>
     public float[]? GetCurrentBuffer()
     {
         if (!_isRecording || _sampleBuffer is null) return null;
         lock (_bufferLock) { return [.. _sampleBuffer]; }
     }
 
+    /// <summary>
+    /// Stops recording.
+    /// </summary>
     public float[]? StopRecording()
     {
         if (!_isRecording)
@@ -225,6 +297,9 @@ public sealed class AudioRecordingService : IDisposable
         return samples;
     }
 
+    /// <summary>
+    /// Stops recording asynchronously.
+    /// </summary>
     public async Task<float[]?> StopRecordingAsync(CancellationToken cancellationToken = default)
     {
         if (!_isRecording || _waveIn is null)
@@ -592,6 +667,9 @@ public sealed class AudioRecordingService : IDisposable
         return _activeDeviceNumber == configuredDeviceNumber;
     }
 
+    /// <summary>
+    /// Starts preview.
+    /// </summary>
     public void StartPreview(int? deviceNumber)
     {
         if (_isRecording)
@@ -622,6 +700,9 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops preview.
+    /// </summary>
     public void StopPreview()
     {
         if (_previewWaveIn is not null)
@@ -646,6 +727,9 @@ public sealed class AudioRecordingService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets whether is previewing.
+    /// </summary>
     public bool IsPreviewing => _isPreviewing;
 
     private void OnPreviewDataAvailable(object? sender, AudioInputDataAvailableEventArgs e)
@@ -686,6 +770,9 @@ public sealed class AudioRecordingService : IDisposable
         _activeDeviceName = null;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -709,17 +796,41 @@ public sealed class AudioRecordingService : IDisposable
     }
 }
 
+/// <summary>
+/// Represents audio level event args data.
+/// </summary>
+/// <param name="PeakLevel">Peak level supplied to the member.</param>
+/// <param name="RmsLevel">Rms level supplied to the member.</param>
 public sealed record AudioLevelEventArgs(float PeakLevel, float RmsLevel);
 
+/// <summary>
+/// Provides samples available event args behavior.
+/// </summary>
 public sealed class SamplesAvailableEventArgs(float[] samples) : EventArgs
 {
+    /// <summary>
+    /// Gets the samples.
+    /// </summary>
     public float[] Samples { get; } = samples;
 }
 
+/// <summary>
+/// Represents audio tail snapshot data.
+/// </summary>
+/// <param name="LastSamplesAvailableUtc">Last samples available utc supplied to the member.</param>
+/// <param name="RecentChunks">Recent chunks supplied to the member.</param>
 public sealed record AudioTailSnapshot(
     DateTime? LastSamplesAvailableUtc,
     IReadOnlyList<AudioChunkTelemetry> RecentChunks);
 
+/// <summary>
+/// Represents audio chunk telemetry data.
+/// </summary>
+/// <param name="TimestampUtc">Timestamp utc supplied to the member.</param>
+/// <param name="Peak">Peak supplied to the member.</param>
+/// <param name="Rms">Rms supplied to the member.</param>
+/// <param name="PreGainRms">Pre gain rms supplied to the member.</param>
+/// <param name="SampleCount">Sample count supplied to the member.</param>
 public sealed record AudioChunkTelemetry(
     DateTime TimestampUtc,
     float Peak,
@@ -750,25 +861,43 @@ internal interface IAudioInputCapture : IDisposable
 
 internal sealed class AudioInputDataAvailableEventArgs(byte[] buffer, int bytesRecorded) : EventArgs
 {
+    /// <summary>
+    /// Gets the buffer.
+    /// </summary>
     public byte[] Buffer { get; } = buffer;
+    /// <summary>
+    /// Gets the bytes recorded.
+    /// </summary>
     public int BytesRecorded { get; } = bytesRecorded;
 }
 
 internal sealed class AudioInputRecordingStoppedEventArgs(Exception? exception = null) : EventArgs
 {
+    /// <summary>
+    /// Gets the exception.
+    /// </summary>
     public Exception? Exception { get; } = exception;
 }
 
 internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
 {
+    /// <summary>
+    /// Gets the device count.
+    /// </summary>
     public int DeviceCount => WaveInEvent.DeviceCount;
 
+    /// <summary>
+    /// Returns device name.
+    /// </summary>
     public string GetDeviceName(int deviceNumber) =>
         WaveInEvent.GetCapabilities(deviceNumber).ProductName;
 }
 
 internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
 {
+    /// <summary>
+    /// Creates.
+    /// </summary>
     public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds) =>
         new WaveInAudioInputCapture(deviceNumber, waveFormat, bufferMilliseconds);
 }
@@ -777,6 +906,9 @@ internal sealed class WaveInAudioInputCapture : IAudioInputCapture
 {
     private readonly WaveInEvent _waveIn;
 
+    /// <summary>
+    /// Performs wave in audio input capture.
+    /// </summary>
     public WaveInAudioInputCapture(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
     {
         _waveIn = new WaveInEvent
@@ -790,13 +922,28 @@ internal sealed class WaveInAudioInputCapture : IAudioInputCapture
         _waveIn.RecordingStopped += OnRecordingStopped;
     }
 
+    /// <summary>
+    /// Raised when data available.
+    /// </summary>
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
+    /// <summary>
+    /// Raised when recording stopped.
+    /// </summary>
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
+    /// <summary>
+    /// Starts recording.
+    /// </summary>
     public void StartRecording() => _waveIn.StartRecording();
 
+    /// <summary>
+    /// Stops recording.
+    /// </summary>
     public void StopRecording() => _waveIn.StopRecording();
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _waveIn.DataAvailable -= OnDataAvailable;

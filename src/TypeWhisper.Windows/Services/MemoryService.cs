@@ -26,8 +26,14 @@ public sealed class MemoryService
         Do not include temporary information like meeting times or deadlines.
         """;
 
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the MemoryService class.
+    /// </summary>
     public MemoryService(PluginManager pluginManager)
     {
         _pluginManager = pluginManager;

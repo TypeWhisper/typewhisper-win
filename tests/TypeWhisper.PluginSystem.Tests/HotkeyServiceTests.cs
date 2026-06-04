@@ -47,6 +47,52 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void BuildWorkflowHotkeyBindings_IncludesMultipleHotkeysForOneWorkflow()
+    {
+        var workflow = NewWorkflow(
+            "Rewrite",
+            WorkflowTrigger.Hotkey(
+                WorkflowHotkeyBehavior.ProcessSelectedText,
+                "Ctrl+Alt+R",
+                "Ctrl+Shift+R"));
+
+        var bindings = HotkeyService.BuildWorkflowHotkeyBindings([workflow]);
+
+        Assert.Equal(["Ctrl+Alt+R", "Ctrl+Shift+R"], bindings.Select(binding => binding.Hotkey));
+        Assert.All(bindings, binding =>
+        {
+            Assert.Equal(workflow.Id, binding.WorkflowId);
+            Assert.Equal(WorkflowHotkeyBehavior.ProcessSelectedText, binding.Behavior);
+        });
+    }
+
+    [Fact]
+    public void BuildAppHotkeyBindings_IncludesMultipleHotkeysPerShortcutAction()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = ["Ctrl+Alt+D", "Ctrl+Shift+D"],
+            ToggleOnlyHotkeys = ["Ctrl+Alt+T"],
+            WorkflowPaletteHotkeys = ["Ctrl+Alt+W", "Ctrl+Shift+W"]
+        };
+
+        var bindings = HotkeyService.BuildAppHotkeyBindings(settings);
+
+        Assert.Equal(
+            ["Ctrl+Alt+D", "Ctrl+Shift+D"],
+            bindings.Where(binding => binding.Action == AppHotkeyAction.MainDictation)
+                .Select(binding => binding.Hotkey));
+        Assert.Equal(
+            ["Ctrl+Alt+T"],
+            bindings.Where(binding => binding.Action == AppHotkeyAction.ToggleOnly)
+                .Select(binding => binding.Hotkey));
+        Assert.Equal(
+            ["Ctrl+Alt+W", "Ctrl+Shift+W"],
+            bindings.Where(binding => binding.Action == AppHotkeyAction.WorkflowPalette)
+                .Select(binding => binding.Hotkey));
+    }
+
+    [Fact]
     public void WorkflowPaletteRequested_EventIsRaised()
     {
         var sut = new HotkeyService(

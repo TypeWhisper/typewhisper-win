@@ -5,11 +5,17 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.ElevenLabs;
 
+/// <summary>
+/// Provides eleven labs settings view behavior.
+/// </summary>
 public partial class ElevenLabsSettingsView : UserControl
 {
     private readonly ElevenLabsPlugin _plugin;
     private bool _suppressPasswordChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the ElevenLabsSettingsView class.
+    /// </summary>
     public ElevenLabsSettingsView(ElevenLabsPlugin plugin)
     {
         _plugin = plugin;

@@ -5,6 +5,9 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.Soniox;
 
+/// <summary>
+/// Provides soniox settings view behavior.
+/// </summary>
 public partial class SonioxSettingsView : UserControl
 {
     private static readonly TimeSpan ApiKeySaveDebounce = TimeSpan.FromMilliseconds(300);
@@ -13,6 +16,9 @@ public partial class SonioxSettingsView : UserControl
     private CancellationTokenSource? _saveDebounceCts;
     private readonly bool _suppressPasswordChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the SonioxSettingsView class.
+    /// </summary>
     public SonioxSettingsView(SonioxPlugin plugin)
     {
         _plugin = plugin;

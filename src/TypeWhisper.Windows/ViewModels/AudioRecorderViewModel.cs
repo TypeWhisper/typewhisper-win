@@ -13,8 +13,19 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents recording item data.
+/// </summary>
+/// <param name="FileName">File name supplied to the member.</param>
+/// <param name="FilePath">File path supplied to the member.</param>
+/// <param name="CreatedAt">Created at supplied to the member.</param>
+/// <param name="Duration">Duration supplied to the member.</param>
+/// <param name="Transcript">Transcript supplied to the member.</param>
 public sealed record RecordingItem(string FileName, string FilePath, DateTime CreatedAt, TimeSpan Duration, string? Transcript);
 
+/// <summary>
+/// Provides audio recorder view model behavior.
+/// </summary>
 public partial class AudioRecorderViewModel : ObservableObject, IDisposable
 {
     private readonly AudioRecordingService _audio;
@@ -32,9 +43,18 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _statusText = Loc.Instance["Status.Ready"];
     [ObservableProperty] private bool _isTranscribing;
 
+    /// <summary>
+    /// Gets the recordings.
+    /// </summary>
     public ObservableCollection<RecordingItem> Recordings { get; } = [];
+    /// <summary>
+    /// Gets whether has recordings.
+    /// </summary>
     public bool HasRecordings => Recordings.Count > 0;
 
+    /// <summary>
+    /// Initializes a new instance of the AudioRecorderViewModel class.
+    /// </summary>
     public AudioRecorderViewModel(
         AudioRecordingService audio,
         ModelManagerService modelManager,
@@ -219,6 +239,9 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         dispatcher.Invoke(action);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         Loc.Instance.LanguageChanged -= OnLanguageChanged;

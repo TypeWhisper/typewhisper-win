@@ -8,8 +8,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.LiveTranscript;
 
 /// <summary>
-/// Plugin that shows a floating window with real-time transcription text.
-/// Subscribes to recording and transcription events to display live updates.
+/// Provides live transcript plugin behavior.
 /// </summary>
 public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 {
@@ -38,12 +37,27 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private Guid? _pendingTerminalRecordingId;
     private bool _activeRecordingEnded;
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.live-transcript";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Live Transcript";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.1";
 
+    /// <summary>
+    /// Gets whether uses host appearance.
+    /// </summary>
     public bool UsesHostAppearance => _host is ILivePreviewAppearanceProvider;
 
+    /// <summary>
+    /// Gets the font size.
+    /// </summary>
     public double FontSize
     {
         get => (_host as ILivePreviewAppearanceProvider)?.LiveTranscriptionFontSize
@@ -60,6 +74,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         }
     }
 
+    /// <summary>
+    /// Gets the opacity.
+    /// </summary>
     public double Opacity
     {
         get => _host?.GetSetting<double?>(OpacitySettingName) ?? 0.85;
@@ -71,6 +88,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         }
     }
 
+    /// <summary>
+    /// Gets the auto hide milliseconds.
+    /// </summary>
     public int AutoHideMilliseconds
     {
         get => (_host as ILivePreviewAppearanceProvider)?.PreviewBubbleAutoHideMilliseconds
@@ -88,6 +108,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private double? WindowLeft => _host?.GetSetting<double?>(WindowLeftSettingName);
     private double? WindowTop => _host?.GetSetting<double?>(WindowTopSettingName);
 
+    /// <summary>
+    /// Saves window position.
+    /// </summary>
     public void SaveWindowPosition(double left, double top)
     {
         if (!double.IsFinite(left) || !double.IsFinite(top))
@@ -97,6 +120,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         _host?.SetSetting(WindowTopSettingName, top);
     }
 
+    /// <summary>
+    /// Performs reset window position.
+    /// </summary>
     public void ResetWindowPosition()
     {
         _host?.SetSetting<double?>(WindowLeftSettingName, null);
@@ -106,6 +132,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
             DispatchToUi(_window.ResetToDefaultPosition);
     }
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -121,6 +150,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         foreach (var sub in _subscriptions)
@@ -144,6 +176,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new LiveTranscriptSettingsView(this);
 
     private Task OnRecordingStarted(RecordingStartedEvent evt)
@@ -386,6 +421,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;

@@ -18,8 +18,14 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
     private Task? _receiveTask;
     private bool _disposed;
 
+    /// <summary>
+    /// Raised when transcript received.
+    /// </summary>
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
+    /// <summary>
+    /// Connects the streaming session before audio is sent.
+    /// </summary>
     public static async Task<ElevenLabsStreamingSession> ConnectAsync(
         string apiKey,
         string realtimeModelId,
@@ -33,6 +39,9 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         return session;
     }
 
+    /// <summary>
+    /// Sends a PCM audio chunk to the active streaming session.
+    /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open || pcm16Audio.Length == 0)
@@ -58,6 +67,9 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Finalizes the stream and returns the provider transcript.
+    /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open)
@@ -227,6 +239,9 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         return null;
     }
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)

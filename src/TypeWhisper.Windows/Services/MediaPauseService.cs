@@ -3,6 +3,9 @@ using TypeWhisper.Core.Interfaces;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides media pause service behavior.
+/// </summary>
 public sealed partial class MediaPauseService : IMediaPauseService
 {
     private bool _didPause;
@@ -14,6 +17,9 @@ public sealed partial class MediaPauseService : IMediaPauseService
     [LibraryImport("user32.dll")]
     private static partial void keybd_event(byte bVk, byte bScan, uint dwFlags, nuint dwExtraInfo);
 
+    /// <summary>
+    /// Pauses media.
+    /// </summary>
     public void PauseMedia()
     {
         try
@@ -29,6 +35,9 @@ public sealed partial class MediaPauseService : IMediaPauseService
         }
     }
 
+    /// <summary>
+    /// Resumes media.
+    /// </summary>
     public void ResumeMedia()
     {
         if (!_didPause) return;

@@ -14,8 +14,14 @@ namespace TypeWhisper.Windows.Services;
 
 internal sealed class ModelManagerRequestException : Exception
 {
+    /// <summary>
+    /// Gets the provider or HTTP status code associated with the result.
+    /// </summary>
     public int StatusCode { get; }
 
+    /// <summary>
+    /// Performs model manager request exception.
+    /// </summary>
     public ModelManagerRequestException(int statusCode, string message)
         : base(message)
     {
@@ -28,6 +34,9 @@ internal sealed record ActiveModelTranscriptionResult(
     string? EngineId,
     string? ModelId);
 
+/// <summary>
+/// Provides model manager service behavior.
+/// </summary>
 public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
     private readonly PluginManager _pluginManager;
@@ -38,14 +47,23 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private System.Timers.Timer? _autoUnloadTimer;
     private bool _disposed;
 
+    /// <summary>
+    /// Raised when a property value changes.
+    /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// Gets the active model id.
+    /// </summary>
     public string? ActiveModelId
     {
         get => _activeModelId;
         private set { _activeModelId = value; OnPropertyChanged(); }
     }
 
+    /// <summary>
+    /// Gets the plugin manager.
+    /// </summary>
     public PluginManager PluginManager => _pluginManager;
 
     /// <summary>
@@ -77,6 +95,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     public static string GetPluginModelId(string pluginId, string modelId) =>
         $"plugin:{pluginId}:{modelId}";
 
+    /// <summary>
+    /// Gets the engine.
+    /// </summary>
     public ITranscriptionEngine Engine
     {
         get
@@ -106,12 +127,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the ModelManagerService class.
+    /// </summary>
     public ModelManagerService(PluginManager pluginManager, ISettingsService settings)
     {
         _pluginManager = pluginManager;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Returns status.
+    /// </summary>
     public ModelStatus GetStatus(string modelId)
     {
         if (_modelStatuses.TryGetValue(modelId, out var tracked))
@@ -147,6 +174,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         return plugin.IsConfigured ? ModelStatus.Ready : ModelStatus.NotDownloaded;
     }
 
+    /// <summary>
+    /// Returns whether downloaded.
+    /// </summary>
     public bool IsDownloaded(string modelId)
     {
         try
@@ -180,6 +210,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private static bool IsDownloadedCore(ITranscriptionEnginePlugin plugin, string pluginModelId) =>
         plugin.IsModelDownloaded(pluginModelId);
 
+    /// <summary>
+    /// Downloads and load model asynchronously.
+    /// </summary>
     public async Task DownloadAndLoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         if (!IsPluginModel(modelId))
@@ -212,6 +245,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         await LoadModelAsync(modelId, cancellationToken);
     }
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         if (!IsPluginModel(modelId))
@@ -271,6 +307,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             _ => TranscriptionAccelerationPreference.Auto
         };
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel()
     {
         CancelAutoUnload();
@@ -317,6 +356,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         _autoUnloadTimer = null;
     }
 
+    /// <summary>
+    /// Deletes model.
+    /// </summary>
     public void DeleteModel(string modelId)
     {
         if (ActiveModelId == modelId)
@@ -325,6 +367,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         SetStatus(modelId, ModelStatus.NotDownloaded);
     }
 
+    /// <summary>
+    /// Ensures model loaded asynchronously..
+    /// </summary>
     public async Task<bool> EnsureModelLoadedAsync(string? modelId = null, CancellationToken cancellationToken = default)
     {
         var targetModelId = modelId ?? _settings.Current.SelectedModelId;
@@ -586,6 +631,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -614,6 +662,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             _restore = restore;
         }
 
+        /// <summary>
+        /// Releases asynchronous resources owned by this session.
+        /// </summary>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -636,20 +687,34 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 }
 
 /// <summary>
-/// No-op transcription engine returned when no plugin provides a real engine.
-/// Prevents null-reference / InvalidOperationException in callers.
+/// Provides no-op transcription engine behavior.
 /// </summary>
 internal sealed class NoOpTranscriptionEngine : ITranscriptionEngine
 {
+    /// <summary>
+    /// Gets the shared no-op engine instance.
+    /// </summary>
     public static readonly NoOpTranscriptionEngine Instance = new();
 
+    /// <summary>
+    /// Gets whether a transcription model is currently loaded.
+    /// </summary>
     public bool IsModelLoaded => false;
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public Task LoadModelAsync(string modelPath, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel() { }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public Task<TranscriptionResult> TranscribeAsync(
         float[] audioSamples, string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,
@@ -658,22 +723,36 @@ internal sealed class NoOpTranscriptionEngine : ITranscriptionEngine
 }
 
 /// <summary>
-/// Adapts a plugin transcription engine to the ITranscriptionEngine interface
-/// used by the rest of the application.
+/// Provides plugin transcription engine adapter behavior.
 /// </summary>
 internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
 {
     private readonly ITranscriptionEnginePlugin _plugin;
 
+    /// <summary>
+    /// Performs plugin transcription engine adapter.
+    /// </summary>
     public PluginTranscriptionEngineAdapter(ITranscriptionEnginePlugin plugin) => _plugin = plugin;
 
+    /// <summary>
+    /// Gets whether a transcription model is currently loaded.
+    /// </summary>
     public bool IsModelLoaded => _plugin.IsConfigured && _plugin.SelectedModelId is not null;
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public Task LoadModelAsync(string modelPath, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel() { }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<TranscriptionResult> TranscribeAsync(
         float[] audioSamples, string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,

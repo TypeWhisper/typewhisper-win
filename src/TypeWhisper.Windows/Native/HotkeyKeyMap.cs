@@ -40,6 +40,9 @@ internal static class HotkeyKeyMap
     private static readonly Dictionary<string, uint> VirtualKeysByToken = Definitions
         .ToDictionary(definition => definition.Token, definition => definition.VirtualKey, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Performs try get token.
+    /// </summary>
     public static bool TryGetToken(Key key, out string token)
     {
         if (TokensByKey.TryGetValue(key, out token!))
@@ -73,6 +76,9 @@ internal static class HotkeyKeyMap
         return false;
     }
 
+    /// <summary>
+    /// Performs try get virtual key.
+    /// </summary>
     public static bool TryGetVirtualKey(string token, out uint virtualKey)
     {
         virtualKey = 0;

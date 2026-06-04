@@ -67,6 +67,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>
+    /// Performs sherpa cuda runtime installer.
+    /// </summary>
     public SherpaCudaRuntimeInstaller(string pluginDataDirectory, HttpClient httpClient)
     {
         var pluginDataRoot = Path.GetFullPath(pluginDataDirectory);
@@ -74,10 +77,19 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         _httpClient = httpClient;
     }
 
+    /// <summary>
+    /// Performs runtime directory.
+    /// </summary>
     public string RuntimeDirectory => Path.Join(_runtimeRoot, "native");
 
+    /// <summary>
+    /// Returns whether installed.
+    /// </summary>
     public bool IsInstalled => RequiredFiles.All(file => File.Exists(GetRuntimeFilePath(file)));
 
+    /// <summary>
+    /// Ensures installed asynchronously..
+    /// </summary>
     public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
     {
         if (IsInstalled)

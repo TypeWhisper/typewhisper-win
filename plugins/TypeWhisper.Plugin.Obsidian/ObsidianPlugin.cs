@@ -8,30 +8,63 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Obsidian;
 
+/// <summary>
+/// Provides obsidian plugin behavior.
+/// </summary>
 public sealed partial class ObsidianPlugin : IActionPlugin
 {
     private IPluginHostServices? _host;
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.obsidian";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Obsidian";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Gets the action id.
+    /// </summary>
     public string ActionId => "save-to-obsidian";
+    /// <summary>
+    /// Gets the action name.
+    /// </summary>
     public string ActionName => "Save to Obsidian";
+    /// <summary>
+    /// Gets the action icon.
+    /// </summary>
     public string? ActionIcon => "\ud83d\udcdd";
 
     internal IPluginHostServices? Host => _host;
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new ObsidianSettingsView(this);
 
+    /// <summary>
+    /// Performs execute asynchronously.
+    /// </summary>
     public async Task<ActionResult> ExecuteAsync(string input, ActionContext context, CancellationToken ct)
     {
         if (_host is null)
@@ -232,6 +265,9 @@ public sealed partial class ObsidianPlugin : IActionPlugin
         return vaults;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() { }
 }
 

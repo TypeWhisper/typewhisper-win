@@ -8,6 +8,9 @@ internal sealed record SupertonicVoiceStyle(DenseTensor<float> Ttl, DenseTensor<
 
 internal static class SupertonicVoiceStyleLoader
 {
+    /// <summary>
+    /// Loads persisted state from storage.
+    /// </summary>
     public static SupertonicVoiceStyle Load(string voiceStylePath)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(voiceStylePath));

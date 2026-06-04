@@ -4,13 +4,25 @@ using System.Text.Json.Serialization;
 
 namespace TypeWhisper.Core.Services.Sync;
 
+/// <summary>
+/// Provides cloud folder sync json behavior.
+/// </summary>
 public static class CloudFolderSyncJson
 {
+    /// <summary>
+    /// Creates options.
+    /// </summary>
     public static readonly JsonSerializerOptions Options = CreateOptions(writeIndented: true);
 
+    /// <summary>
+    /// Serializes&lt;t&gt;.
+    /// </summary>
     public static string Serialize<T>(T value) =>
         JsonSerializer.Serialize(value, Options);
 
+    /// <summary>
+    /// Deserializes&lt;t&gt;.
+    /// </summary>
     public static T? Deserialize<T>(string json) =>
         JsonSerializer.Deserialize<T>(json, Options);
 
@@ -31,6 +43,9 @@ internal sealed class CloudFolderSyncDateTimeConverter : JsonConverter<DateTime>
 {
     private const string Format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
 
+    /// <summary>
+    /// Reads.
+    /// </summary>
     public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var value = reader.GetString();
@@ -49,6 +64,9 @@ internal sealed class CloudFolderSyncDateTimeConverter : JsonConverter<DateTime>
         throw new JsonException($"Invalid ISO-8601 date: {value}");
     }
 
+    /// <summary>
+    /// Writes.
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
     {
         var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();

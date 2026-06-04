@@ -7,6 +7,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides cloud folder sync view model behavior.
+/// </summary>
 public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDisposable
 {
     private readonly ISettingsService _settings;
@@ -25,6 +28,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private string? _statusMessage;
 
+    /// <summary>
+    /// Initializes a new instance of the CloudFolderSyncViewModel class.
+    /// </summary>
     public CloudFolderSyncViewModel(
         ISettingsService settings,
         IUserDataSyncStore store,
@@ -35,6 +41,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         license.StatusChanged += RefreshEntitlementProperties;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the CloudFolderSyncViewModel class.
+    /// </summary>
     public CloudFolderSyncViewModel(
         ISettingsService settings,
         IUserDataSyncStore store,
@@ -54,21 +63,51 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         ClearFolderCommand = new RelayCommand(ClearFolder, () => HasSelectedFolder && !IsSyncing);
     }
 
+    /// <summary>
+    /// Gets the sync now command.
+    /// </summary>
     public IAsyncRelayCommand SyncNowCommand { get; }
+    /// <summary>
+    /// Gets the clear folder command.
+    /// </summary>
     public IRelayCommand ClearFolderCommand { get; }
 
+    /// <summary>
+    /// Returns whether use sync.
+    /// </summary>
     public bool CanUseSync => _canUseSync();
+    /// <summary>
+    /// Gets whether show locked state.
+    /// </summary>
     public bool ShowLockedState => !CanUseSync;
+    /// <summary>
+    /// Gets whether show sync controls.
+    /// </summary>
     public bool ShowSyncControls => CanUseSync;
+    /// <summary>
+    /// Returns whether selected folder.
+    /// </summary>
     public bool HasSelectedFolder => !string.IsNullOrWhiteSpace(SelectedFolderPath);
+    /// <summary>
+    /// Gets the selected folder display name.
+    /// </summary>
     public string SelectedFolderDisplayName => HasSelectedFolder
         ? SelectedFolderPath!
         : Text("Premium.NoFolderSelected", "No folder selected");
+    /// <summary>
+    /// Performs provider text.
+    /// </summary>
     public string ProviderDisplayName => ProviderText(CloudFolderSyncProviderDetector.Detect(SelectedFolderPath));
+    /// <summary>
+    /// Gets the last sync display.
+    /// </summary>
     public string LastSyncDisplay => LastSyncDate is { } date
         ? date.ToLocalTime().ToString("g")
         : Text("Premium.Never", "Never");
 
+    /// <summary>
+    /// Sets folder path.
+    /// </summary>
     public void SetFolderPath(string folderPath)
     {
         if (IsSyncing || string.IsNullOrWhiteSpace(folderPath))
@@ -94,6 +133,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         RefreshComputedProperties();
     }
 
+    /// <summary>
+    /// Clears folder.
+    /// </summary>
     public void ClearFolder()
     {
         if (IsSyncing)
@@ -114,6 +156,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         RefreshComputedProperties();
     }
 
+    /// <summary>
+    /// Performs sync now asynchronously.
+    /// </summary>
     public async Task SyncNowAsync()
     {
         var folderPath = SelectedFolderPath;
@@ -175,6 +220,9 @@ public sealed partial class CloudFolderSyncViewModel : ObservableObject, IDispos
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _scheduledSync?.Cancel();

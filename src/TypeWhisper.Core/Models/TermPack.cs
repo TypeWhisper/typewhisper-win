@@ -1,7 +1,18 @@
 namespace TypeWhisper.Core.Models;
 
+/// <summary>
+/// Represents term pack data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="Name">Name supplied to the member.</param>
+/// <param name="Icon">Icon supplied to the member.</param>
+/// <param name="Terms">Terms supplied to the member.</param>
+/// <param name="RequiresCommercialLicense">Requires commercial license supplied to the member.</param>
 public sealed record TermPack(string Id, string Name, string Icon, string[] Terms, bool RequiresCommercialLicense = false)
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static readonly HashSet<string> IndustryPackIds = new(StringComparer.OrdinalIgnoreCase)
     {
         "real-estate",
@@ -9,6 +20,9 @@ public sealed record TermPack(string Id, string Name, string Icon, string[] Term
         "legal"
     };
 
+    /// <summary>
+    /// Gets the all packs.
+    /// </summary>
     public static readonly TermPack[] AllPacks =
     [
         new("web-dev", "Web Development", "\U0001F310",
@@ -75,21 +89,40 @@ public sealed record TermPack(string Id, string Name, string Icon, string[] Term
         ])
     ];
 
+    /// <summary>
+    /// Finds a built-in term pack by identifier using case-insensitive matching.
+    /// </summary>
     public static TermPack? FindById(string id) =>
         AllPacks.FirstOrDefault(pack => pack.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Returns term packs visible to the current license tier.
+    /// </summary>
     public static IEnumerable<TermPack> VisiblePacks(bool hasCommercialLicense) =>
         AllPacks.Where(pack => hasCommercialLicense || !pack.RequiresCommercialLicense);
 }
 
+/// <summary>
+/// Represents industry preset data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="Name">Name supplied to the member.</param>
+/// <param name="Description">Description supplied to the member.</param>
+/// <param name="TermPackId">Term pack id supplied to the member.</param>
 public sealed record IndustryPreset(string Id, string Name, string Description, string? TermPackId)
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static readonly IndustryPreset General = new(
         "general",
         "General writing",
         "Start with TypeWhisper defaults. You can add term packs later.",
         null);
 
+    /// <summary>
+    /// Gets the all.
+    /// </summary>
     public static readonly IndustryPreset[] All =
     [
         General,
@@ -98,6 +131,9 @@ public sealed record IndustryPreset(string Id, string Name, string Description, 
         new("legal", "Jura", "Prepare legal dictation vocabulary for drafts and notes.", "legal")
     ];
 
+    /// <summary>
+    /// Resolves the supplied input to a configured value.
+    /// </summary>
     public static IndustryPreset Resolve(string? id) =>
         All.FirstOrDefault(preset => preset.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) ?? General;
 }

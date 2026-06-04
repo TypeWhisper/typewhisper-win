@@ -30,6 +30,9 @@ public sealed class PluginManager : IDisposable
     private List<IPostProcessorPlugin> _postProcessors = [];
     private List<IActionPlugin> _actionPlugins = [];
 
+    /// <summary>
+    /// Initializes a new instance of the PluginManager class.
+    /// </summary>
     public PluginManager(
         PluginLoader loader,
         PluginEventBus eventBus,
@@ -400,6 +403,9 @@ public sealed class PluginManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         List<LoadedPlugin> plugins;

@@ -19,6 +19,20 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents api dictation transcription data.
+/// </summary>
+/// <param name="Text">Text supplied to the member.</param>
+/// <param name="RawText">Raw text supplied to the member.</param>
+/// <param name="Timestamp">Timestamp supplied to the member.</param>
+/// <param name="AppName">App name supplied to the member.</param>
+/// <param name="AppProcessName">App process name supplied to the member.</param>
+/// <param name="AppUrl">App url supplied to the member.</param>
+/// <param name="Duration">Duration supplied to the member.</param>
+/// <param name="Language">Language supplied to the member.</param>
+/// <param name="Engine">Engine supplied to the member.</param>
+/// <param name="Model">Model supplied to the member.</param>
+/// <param name="WordsCount">Words count supplied to the member.</param>
 public sealed record ApiDictationTranscription(
     string Text,
     string RawText,
@@ -32,20 +46,45 @@ public sealed record ApiDictationTranscription(
     string? Model,
     int WordsCount);
 
+/// <summary>
+/// Represents api dictation session snapshot data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="Status">Status supplied to the member.</param>
+/// <param name="Transcription">Transcription supplied to the member.</param>
+/// <param name="Error">Error supplied to the member.</param>
 public sealed record ApiDictationSessionSnapshot(
     Guid Id,
     ApiDictationSessionStatus Status,
     ApiDictationTranscription? Transcription,
     string? Error);
 
+/// <summary>
+/// Lists the supported API dictation session status values.
+/// </summary>
 public enum ApiDictationSessionStatus
 {
+    /// <summary>
+    /// Represents the recording option.
+    /// </summary>
     Recording,
+    /// <summary>
+    /// Represents the processing option.
+    /// </summary>
     Processing,
+    /// <summary>
+    /// Represents the completed option.
+    /// </summary>
     Completed,
+    /// <summary>
+    /// Represents the failed option.
+    /// </summary>
     Failed
 }
 
+/// <summary>
+/// Provides dictation view model behavior.
+/// </summary>
 public partial class DictationViewModel : ObservableObject, IDisposable
 {
     private readonly ISettingsService _settings;
@@ -126,8 +165,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string? _lastTranscribedText;
     [ObservableProperty] private string? _lastTranscriptionLanguage;
 
+    /// <summary>
+    /// Returns whether read back last transcription.
+    /// </summary>
     public bool CanReadBackLastTranscription => !string.IsNullOrWhiteSpace(LastTranscribedText);
 
+    /// <summary>
+    /// Initializes a new instance of the DictationViewModel class.
+    /// </summary>
     public DictationViewModel(
         ISettingsService settings,
         ModelManagerService modelManager,
@@ -248,21 +293,54 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
+    /// <summary>
+    /// Gets the left widget.
+    /// </summary>
     public OverlayWidget LeftWidget => _settings.Current.OverlayLeftWidget;
+    /// <summary>
+    /// Gets the right widget.
+    /// </summary>
     public OverlayWidget RightWidget => _settings.Current.OverlayRightWidget;
+    /// <summary>
+    /// Gets the indicator style.
+    /// </summary>
     public IndicatorStyle IndicatorStyle => _settings.Current.IndicatorStyle;
+    /// <summary>
+    /// Gets the overlay position.
+    /// </summary>
     public OverlayPosition OverlayPosition => _settings.Current.OverlayPosition;
+    /// <summary>
+    /// Gets the live transcription enabled.
+    /// </summary>
     public bool LiveTranscriptionEnabled => _settings.Current.LiveTranscriptionEnabled;
+    /// <summary>
+    /// Gets the live transcription font size in device-independent pixels.
+    /// </summary>
     public double LiveTranscriptionFontSize =>
         AppSettings.NormalizeLiveTranscriptionFontSize(_settings.Current.LiveTranscriptionFontSize);
+    /// <summary>
+    /// Gets whether show inline feedback.
+    /// </summary>
     public bool ShowInlineFeedback =>
         DictationOverlayPresentation.ShowInlineFeedback(IsOverlayVisible, ShowFeedback);
+    /// <summary>
+    /// Gets whether show detached feedback.
+    /// </summary>
     public bool ShowDetachedFeedback =>
         DictationOverlayPresentation.ShowDetachedFeedback(IsOverlayVisible, ShowFeedback);
+    /// <summary>
+    /// Gets whether has overlay content visible.
+    /// </summary>
     public bool HasOverlayContentVisible =>
         DictationOverlayPresentation.HasVisibleContent(IsOverlayVisible, ShowFeedback);
+    /// <summary>
+    /// Gets the external live preview active.
+    /// </summary>
     public bool ExternalLivePreviewActive =>
         _modelManager.PluginManager.IsEnabled(ExternalLiveTranscriptPluginId);
+    /// <summary>
+    /// Gets whether show built in partial preview.
+    /// </summary>
     public bool ShowBuiltInPartialPreview =>
         DictationOverlayPresentation.ShowBuiltInPartialPreview(
             PartialText,
@@ -333,6 +411,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
     }
 
+    /// <summary>
+    /// Reads back last transcription.
+    /// </summary>
     public void ReadBackLastTranscription()
     {
         if (string.IsNullOrWhiteSpace(LastTranscribedText))
@@ -341,6 +422,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _speechFeedback.ReadBack(LastTranscribedText, LastTranscriptionLanguage);
     }
 
+    /// <summary>
+    /// Shows recent transcriptions palette.
+    /// </summary>
     public void ShowRecentTranscriptionsPalette()
     {
         if (State != DictationState.Idle)
@@ -349,9 +433,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         _recentTranscriptions.TogglePalette();
     }
 
+    /// <summary>
+    /// Copies last transcription to clipboard asynchronously.
+    /// </summary>
     public Task CopyLastTranscriptionToClipboardAsync() =>
         _recentTranscriptions.CopyLastTranscriptionToClipboardAsync();
 
+    /// <summary>
+    /// Shows workflow palette asynchronously.
+    /// </summary>
     public async Task ShowWorkflowPaletteAsync()
     {
         if (State != DictationState.Idle)
@@ -360,6 +450,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         await _workflowPalette.TogglePaletteAsync();
     }
 
+    /// <summary>
+    /// Processes workflow hotkey text asynchronously.
+    /// </summary>
     public async Task ProcessWorkflowHotkeyTextAsync(string workflowId)
     {
         if (State != DictationState.Idle)
@@ -387,8 +480,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private string? EffectiveModelId =>
         _activeWorkflow?.Behavior.TranscriptionModelOverride;
 
-    [RelayCommand]
     /// <summary>Public API for starting recording (used by HTTP API).</summary>
+    [RelayCommand]
     public Task StartRecordingAsync() => StartRecording();
 
     /// <summary>Public API for stopping recording (used by HTTP API).</summary>
@@ -397,6 +490,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     /// <summary>Whether the service is currently recording.</summary>
     public bool IsRecording => _isRecording;
 
+    /// <summary>
+    /// Starts recording for api asynchronously.
+    /// </summary>
     public async Task<Guid> StartRecordingForApiAsync()
     {
         var sessionId = Guid.NewGuid();
@@ -415,6 +511,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         return sessionId;
     }
 
+    /// <summary>
+    /// Stops recording for api asynchronously.
+    /// </summary>
     public async Task<Guid?> StopRecordingForApiAsync()
     {
         var sessionId = _activeApiDictationSessionId;
@@ -425,6 +524,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         return sessionId;
     }
 
+    /// <summary>
+    /// Returns api dictation session.
+    /// </summary>
     public ApiDictationSessionSnapshot? GetApiDictationSession(Guid id)
     {
         lock (_apiSessionLock)
@@ -1594,6 +1696,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable
     private static int CountWords(string text) =>
         text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -1690,9 +1795,15 @@ internal static class DictationFinalTextPolicy
     private const int MaximumRepeatReductionPasses = 8;
     private static readonly Regex AutomaticEllipsisRegex = new(@"\s*(?:\.{3,}|\u2026)\s*", RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// Joins preview segments.
+    /// </summary>
     public static string JoinPreviewSegments(IReadOnlyList<string> previewSegments) =>
         string.Join(" ", previewSegments.Where(segment => !string.IsNullOrWhiteSpace(segment))).Trim();
 
+    /// <summary>
+    /// Determines whether a final transcript should be discarded as likely silence.
+    /// </summary>
     public static bool ShouldRejectAsNoSpeech(
         string? finalText,
         float? noSpeechProbability,
@@ -1707,15 +1818,24 @@ internal static class DictationFinalTextPolicy
             && !hasPreviewText;
     }
 
+    /// <summary>
+    /// Selects raw text.
+    /// </summary>
     public static string SelectRawText(string? finalText) =>
         NormalizeDictationArtifacts(finalText?.Trim() ?? "");
 
+    /// <summary>
+    /// Selects trusted live text.
+    /// </summary>
     public static string? SelectTrustedLiveText(string? liveText)
     {
         var text = liveText?.Trim();
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
+    /// <summary>
+    /// Selects raw text.
+    /// </summary>
     public static string SelectRawText(string? finalText, string? trustedLiveText)
     {
         var normalizedFinalText = SelectRawText(finalText);
@@ -1872,6 +1992,9 @@ internal static class DictationFinalTextPolicy
 
 internal static class DictationInsertionTextFormatter
 {
+    /// <summary>
+    /// Performs text for insertion.
+    /// </summary>
     public static string TextForInsertion(string text)
     {
         if (string.IsNullOrEmpty(text) || char.IsWhiteSpace(text[^1]))
@@ -1891,6 +2014,9 @@ internal static class DictationShortSpeechPolicy
     private const float ShortClipQuietPeakThreshold = 0.003f;
     private const float LongClipQuietPeakThreshold = 0.006f;
 
+    /// <summary>
+    /// Classifies
+    /// </summary>
     public static ShortSpeechDecision Classify(
         double rawDuration,
         float peakLevel,
@@ -1925,6 +2051,9 @@ internal static class DictationShortSpeechPolicy
         return ShortSpeechDecision.Transcribe;
     }
 
+    /// <summary>
+    /// Performs pad samples for final transcription.
+    /// </summary>
     public static float[] PadSamplesForFinalTranscription(float[] samples, double rawDuration)
     {
         if (rawDuration < MinimumTranscriptionSeconds)
@@ -1973,12 +2102,30 @@ internal sealed record RecordingTailDiagnosticSnapshot(
     int? CompareDecodeTextLength,
     long? CompareDecodeDurationMs);
 
+/// <summary>
+/// Lists the supported dictation state values.
+/// </summary>
 public enum DictationState
 {
+    /// <summary>
+    /// Represents the idle option.
+    /// </summary>
     Idle,
+    /// <summary>
+    /// Represents the recording option.
+    /// </summary>
     Recording,
+    /// <summary>
+    /// Represents the processing option.
+    /// </summary>
     Processing,
+    /// <summary>
+    /// Represents the inserting option.
+    /// </summary>
     Inserting,
+    /// <summary>
+    /// Represents the error option.
+    /// </summary>
     Error
 }
 

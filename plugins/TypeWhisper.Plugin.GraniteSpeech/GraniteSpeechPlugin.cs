@@ -10,6 +10,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.GraniteSpeech;
 
+/// <summary>
+/// Provides granite speech plugin behavior.
+/// </summary>
 public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
 {
     private const string ModelId = "granite-4.0-1b-speech";
@@ -32,19 +35,52 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
     private int _requestId;
 
     // ITypeWhisperPlugin
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.granite-speech";
+    /// <summary>
+    /// Performs speech.
+    /// </summary>
     public string PluginName => "IBM Granite Speech (Local)";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.1";
 
     // ITranscriptionEnginePlugin
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "granite-speech";
+    /// <summary>
+    /// Gets the provider display name.
+    /// </summary>
     public string ProviderDisplayName => "Lokal (Granite Speech)";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => true;
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => true;
+    /// <summary>
+    /// Gets whether the provider can download models through the host.
+    /// </summary>
     public bool SupportsModelDownload => true;
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages => GraniteSupportedLanguages;
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
     [
         new(ModelId, "IBM Granite 4.0 1B Speech")
@@ -56,20 +92,32 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         }
     ];
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         StopSidecar();
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => null;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         if (modelId != ModelId)
@@ -77,9 +125,15 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         _selectedModelId = modelId;
     }
 
+    /// <summary>
+    /// Gets whether the requested model is available locally.
+    /// </summary>
     public bool IsModelDownloaded(string modelId) =>
         File.Exists(Path.Combine(GetDataDirectory(), ".setup-complete"));
 
+    /// <summary>
+    /// Downloads the requested model and reports progress when available.
+    /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         var dataDir = GetDataDirectory();
@@ -223,6 +277,9 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         progress?.Report(1.0);
     }
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
         if (!IsModelDownloaded(modelId))
@@ -248,6 +305,9 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         }
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
@@ -279,6 +339,9 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         }
     }
 
+    /// <summary>
+    /// Unloads model asynchronously..
+    /// </summary>
     public async Task UnloadModelAsync()
     {
         await _sidecarLock.WaitAsync();
@@ -293,6 +356,9 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         StopSidecar();

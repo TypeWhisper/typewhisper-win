@@ -6,10 +6,16 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides plugins section behavior.
+/// </summary>
 public partial class PluginsSection : UserControl
 {
     private PluginsViewModel? _pluginsViewModel;
 
+    /// <summary>
+    /// Initializes a new instance of the PluginsSection class.
+    /// </summary>
     public PluginsSection()
     {
         InitializeComponent();

@@ -6,6 +6,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides history service behavior.
+/// </summary>
 public sealed class HistoryService : IHistoryService
 {
     private readonly string _filePath;
@@ -20,6 +23,12 @@ public sealed class HistoryService : IHistoryService
     private double _totalDuration;
     private List<string> _distinctApps = [];
 
+    /// <summary>
+    /// Gets the persisted transcription history records.
+    /// </summary>
+    /// <summary>
+    /// Gets the persisted transcription history records.
+    /// </summary>
     public IReadOnlyList<TranscriptionRecord> Records
     {
         get
@@ -32,18 +41,36 @@ public sealed class HistoryService : IHistoryService
         }
     }
 
+    /// <summary>
+    /// Raised when records changes.
+    /// </summary>
     public event Action? RecordsChanged;
 
+    /// <summary>
+    /// Gets the number of persisted transcription history records.
+    /// </summary>
     public int TotalRecords => _cacheLoaded ? _totalRecords : Records.Count;
+    /// <summary>
+    /// Performs total words.
+    /// </summary>
     public int TotalWords => _cacheLoaded ? _totalWords : Records.Sum(r => r.WordCount);
+    /// <summary>
+    /// Performs total duration.
+    /// </summary>
     public double TotalDuration => _cacheLoaded ? _totalDuration : Records.Sum(r => r.DurationSeconds);
 
+    /// <summary>
+    /// Initializes a new instance of the HistoryService class.
+    /// </summary>
     public HistoryService(string filePath, string? audioDirectory = null)
     {
         _filePath = filePath;
         _audioDirectory = audioDirectory;
     }
 
+    /// <summary>
+    /// Ensures loaded asynchronously..
+    /// </summary>
     public async Task EnsureLoadedAsync()
     {
         if (_cacheLoaded) return;
@@ -66,6 +93,9 @@ public sealed class HistoryService : IHistoryService
         }
     }
 
+    /// <summary>
+    /// Returns distinct apps.
+    /// </summary>
     public IReadOnlyList<string> GetDistinctApps()
     {
         EnsureCacheLoaded();
@@ -75,6 +105,9 @@ public sealed class HistoryService : IHistoryService
         }
     }
 
+    /// <summary>
+    /// Adds record.
+    /// </summary>
     public void AddRecord(TranscriptionRecord record)
     {
         EnsureCacheLoaded();
@@ -98,6 +131,9 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Updates record.
+    /// </summary>
     public void UpdateRecord(string id, string finalText)
     {
         EnsureCacheLoaded();
@@ -118,6 +154,9 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes record.
+    /// </summary>
     public void DeleteRecord(string id)
     {
         EnsureCacheLoaded();
@@ -143,6 +182,9 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Clears all items from the current collection.
+    /// </summary>
     public void ClearAll()
     {
         EnsureCacheLoaded();
@@ -162,6 +204,9 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Performs search.
+    /// </summary>
     public IReadOnlyList<TranscriptionRecord> Search(string query)
     {
         EnsureCacheLoaded();
@@ -177,6 +222,9 @@ public sealed class HistoryService : IHistoryService
         }
     }
 
+    /// <summary>
+    /// Performs purge old records.
+    /// </summary>
     public void PurgeOldRecords(TimeSpan? retention)
     {
         if (retention is null) return;
@@ -204,6 +252,9 @@ public sealed class HistoryService : IHistoryService
         RecordsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Exports to text.
+    /// </summary>
     public string ExportToText(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null)
     {
         var l = labels ?? ExportLabels.Default;
@@ -224,6 +275,9 @@ public sealed class HistoryService : IHistoryService
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Exports to csv.
+    /// </summary>
     public string ExportToCsv(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null)
     {
         var l = labels ?? ExportLabels.Default;
@@ -239,6 +293,9 @@ public sealed class HistoryService : IHistoryService
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Exports to markdown.
+    /// </summary>
     public string ExportToMarkdown(IReadOnlyList<TranscriptionRecord> records, ExportLabels? labels = null)
     {
         var l = labels ?? ExportLabels.Default;
@@ -268,6 +325,9 @@ public sealed class HistoryService : IHistoryService
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Exports the current data as JSON.
+    /// </summary>
     public string ExportToJson(IReadOnlyList<TranscriptionRecord> records)
     {
         var data = records.Select(r => new

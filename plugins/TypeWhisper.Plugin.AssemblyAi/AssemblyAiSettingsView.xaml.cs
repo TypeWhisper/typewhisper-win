@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.AssemblyAi;
 
+/// <summary>
+/// Provides assembly ai settings view behavior.
+/// </summary>
 public partial class AssemblyAiSettingsView : UserControl
 {
     private readonly AssemblyAiPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the AssemblyAiSettingsView class.
+    /// </summary>
     public AssemblyAiSettingsView(AssemblyAiPlugin plugin)
     {
         _plugin = plugin;

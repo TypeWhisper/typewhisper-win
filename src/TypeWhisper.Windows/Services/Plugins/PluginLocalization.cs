@@ -7,9 +7,7 @@ using TypeWhisper.Windows.Services.Localization;
 namespace TypeWhisper.Windows.Services.Plugins;
 
 /// <summary>
-/// Loads localized strings from JSON files in a plugin's Localization/ subdirectory.
-/// Each file is named by language code (e.g. en.json, de.json) and contains flat key-value pairs.
-/// Falls back to English ("en"), then returns the key itself if no translation is found.
+/// Provides plugin localization behavior.
 /// </summary>
 public sealed class PluginLocalization : IPluginLocalization
 {
@@ -24,9 +22,18 @@ public sealed class PluginLocalization : IPluginLocalization
     private readonly Dictionary<string, Dictionary<string, string>> _strings = [];
     private readonly string _localizationDir;
 
+    /// <summary>
+    /// Gets the current language.
+    /// </summary>
     public string CurrentLanguage { get; }
+    /// <summary>
+    /// Gets the available languages.
+    /// </summary>
     public IReadOnlyList<string> AvailableLanguages { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the PluginLocalization class.
+    /// </summary>
     public PluginLocalization(string pluginDirectory, string? languageOverride = null)
     {
         _localizationDir = Path.Combine(pluginDirectory, LocalizationFolder);
@@ -63,6 +70,9 @@ public sealed class PluginLocalization : IPluginLocalization
         AvailableLanguages = available;
     }
 
+    /// <summary>
+    /// Returns the localized string for the requested key.
+    /// </summary>
     public string GetString(string key)
     {
         // Try current language
@@ -84,6 +94,9 @@ public sealed class PluginLocalization : IPluginLocalization
         return key;
     }
 
+    /// <summary>
+    /// Returns the localized string for the requested key.
+    /// </summary>
     public string GetString(string key, params object[] args)
     {
         var template = GetString(key);

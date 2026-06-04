@@ -5,11 +5,17 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Reson8;
 
+/// <summary>
+/// Provides reson8 settings view behavior.
+/// </summary>
 public partial class Reson8SettingsView : UserControl
 {
     private readonly Reson8Plugin _plugin;
     private bool _suppressChanges;
 
+    /// <summary>
+    /// Initializes a new instance of the Reson8SettingsView class.
+    /// </summary>
     public Reson8SettingsView(Reson8Plugin plugin)
     {
         _plugin = plugin;

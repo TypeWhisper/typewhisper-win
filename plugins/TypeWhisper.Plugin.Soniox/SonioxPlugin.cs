@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Soniox;
 
+/// <summary>
+/// Provides soniox plugin behavior.
+/// </summary>
 public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 {
     internal const string DefaultModelId = "default";
@@ -40,6 +43,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
 
+    /// <summary>
+    /// Initializes a new instance of the SonioxPlugin class.
+    /// </summary>
     public SonioxPlugin()
         : this(CreateHttpClient())
     {
@@ -60,10 +66,22 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.soniox";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Soniox";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.3";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -72,26 +90,53 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new SonioxSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "soniox";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Soniox";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels => Models;
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
 
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         if (!string.Equals(modelId, DefaultModelId, StringComparison.Ordinal))
@@ -100,6 +145,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         _selectedModelId = DefaultModelId;
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -606,6 +654,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private sealed record SonioxTimedToken(string Text, double Start, double End);
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

@@ -522,9 +522,45 @@
         </Setter>
     </Style>
 
+    <Style x:Key="HotkeyChipCloseButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="7,0,0,0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="#9FB2C7"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="CloseChrome"
+                            Width="{TemplateBinding Width}"
+                            Height="{TemplateBinding Height}"
+                            CornerRadius="8"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CloseChrome" Property="Background" Value="#25364A"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="CloseChrome" Property="Background" Value="#335E9FF2"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="{x:Type controls:HotkeyRecorderControl}">
         <Setter Property="MinWidth" Value="220"/>
-        <Setter Property="Height" Value="36"/>
+        <Setter Property="Height" Value="34"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
@@ -534,25 +570,66 @@
                             Background="{StaticResource InputBackgroundBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="8">
-                        <Grid Margin="12,0">
+                            CornerRadius="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock x:Name="HotkeyText"
+                                       Grid.Column="0"
                                        Text="{TemplateBinding Hotkey}"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"
-                                       Foreground="{StaticResource TextBrush}"/>
+                                       Foreground="{StaticResource TextBrush}"
+                                       Margin="12,0,0,0"/>
                             <TextBlock x:Name="RecordingText"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
                                        Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Hotkey.Placeholder], Mode=OneWay}"
                                        VerticalAlignment="Center"
                                        FontStyle="Italic"
                                        Foreground="{StaticResource AccentBrush}"
-                                       Visibility="Collapsed"/>
+                                       Visibility="Collapsed"
+                                       Margin="12,0,12,0"/>
                             <TextBlock x:Name="EmptyText"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
                                        Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Hotkey.ClickToAssign], Mode=OneWay}"
                                        VerticalAlignment="Center"
                                        FontStyle="Italic"
                                        Foreground="{StaticResource HintBrush}"
+                                       Visibility="Collapsed"
+                                       Margin="12,0,12,0"/>
+                            <TextBlock x:Name="AddGlyph"
+                                       Grid.Column="0"
+                                       Grid.ColumnSpan="2"
+                                       Text="&#xE710;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="13"
+                                       Foreground="{StaticResource LabelBrush}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
+                            <Button x:Name="ClearButton"
+                                    Style="{StaticResource HotkeyChipCloseButtonStyle}"
+                                    Grid.Column="1"
+                                    Width="18"
+                                    Height="18"
+                                    Margin="8,0,6,0"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{StaticResource HintBrush}"
+                                    ToolTip="{Binding Source={x:Static loc:Loc.Instance}, Path=[Hotkey.Clear], Mode=OneWay}"
+                                    Focusable="False">
+                                <TextBlock Text="&#xE711;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="8"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Button>
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -567,15 +644,48 @@
                             <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             <Setter TargetName="HotkeyText" Property="Visibility" Value="Collapsed"/>
                             <Setter TargetName="RecordingText" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ClearButton" Property="Visibility" Value="Collapsed"/>
                         </Trigger>
-                        <DataTrigger Binding="{Binding Hotkey, RelativeSource={RelativeSource Self}}" Value="">
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Hotkey, RelativeSource={RelativeSource Self}}" Value=""/>
+                                <Condition Binding="{Binding IsRecording, RelativeSource={RelativeSource Self}}" Value="False"/>
+                            </MultiDataTrigger.Conditions>
                             <Setter TargetName="HotkeyText" Property="Visibility" Value="Collapsed"/>
                             <Setter TargetName="EmptyText" Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
+                            <Setter TargetName="ClearButton" Property="Visibility" Value="Collapsed"/>
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Hotkey, RelativeSource={RelativeSource Self}}" Value=""/>
+                                <Condition Binding="{Binding IsRecording, RelativeSource={RelativeSource Self}}" Value="False"/>
+                                <Condition Binding="{Binding UseAddGlyph, RelativeSource={RelativeSource Self}}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="EmptyText" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="AddGlyph" Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding Hotkey, RelativeSource={RelativeSource Self}}" Value=""/>
+                    <Condition Binding="{Binding IsRecording, RelativeSource={RelativeSource Self}}" Value="False"/>
+                    <Condition Binding="{Binding UseAddGlyph, RelativeSource={RelativeSource Self}}" Value="True"/>
+                </MultiDataTrigger.Conditions>
+                <Setter Property="MinWidth" Value="34"/>
+            </MultiDataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="HotkeyChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="#182738"/>
+        <Setter Property="BorderBrush" Value="#2A4668"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="Padding" Value="10,5"/>
     </Style>
 
     <!-- ComboBoxItem Style -->

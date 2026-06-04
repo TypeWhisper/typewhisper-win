@@ -331,22 +331,70 @@ static class Program
 
     private sealed record CliOptions
     {
+        /// <summary>
+        /// Gets or sets the command value.
+        /// </summary>
         public string? Command { get; private init; }
+        /// <summary>
+        /// Gets or sets the positionals value.
+        /// </summary>
         public List<string> Positionals { get; private init; } = [];
+        /// <summary>
+        /// Gets or sets the port value.
+        /// </summary>
         public int? Port { get; private init; }
+        /// <summary>
+        /// Gets or sets the api token value.
+        /// </summary>
         public string? ApiToken { get; private init; }
+        /// <summary>
+        /// Gets or sets the json value.
+        /// </summary>
         public bool Json { get; private init; }
+        /// <summary>
+        /// Gets or sets the show help value.
+        /// </summary>
         public bool ShowHelp { get; private init; }
+        /// <summary>
+        /// Gets or sets the show version value.
+        /// </summary>
         public bool ShowVersion { get; private init; }
+        /// <summary>
+        /// Gets or sets the language value.
+        /// </summary>
         public string? Language { get; private init; }
+        /// <summary>
+        /// Gets or sets the language hints value.
+        /// </summary>
         public List<string> LanguageHints { get; private init; } = [];
+        /// <summary>
+        /// Runs the task asynchronously..
+        /// </summary>
         public string Task { get; private init; } = "transcribe";
+        /// <summary>
+        /// Gets or sets the translate to value.
+        /// </summary>
         public string? TranslateTo { get; private init; }
+        /// <summary>
+        /// Gets or sets the engine value.
+        /// </summary>
         public string? Engine { get; private init; }
+        /// <summary>
+        /// Gets or sets the model value.
+        /// </summary>
         public string? Model { get; private init; }
+        /// <summary>
+        /// Gets or sets the await download value.
+        /// </summary>
         public bool AwaitDownload { get; private init; }
+        /// <summary>
+        /// Gets or sets the error value.
+        /// </summary>
         public string? Error { get; private init; }
 
+        /// <summary>
+        /// Parses the supplied value into the expected representation.
+        /// </summary>
         public static CliOptions Parse(string[] args)
         {
             var options = new CliOptions();

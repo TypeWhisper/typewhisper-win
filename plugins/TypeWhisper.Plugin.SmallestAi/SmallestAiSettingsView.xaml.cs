@@ -5,6 +5,9 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.SmallestAi;
 
+/// <summary>
+/// Provides smallest ai settings view behavior.
+/// </summary>
 public partial class SmallestAiSettingsView : UserControl
 {
     private static readonly TimeSpan ApiKeySaveDebounce = TimeSpan.FromMilliseconds(300);
@@ -13,6 +16,9 @@ public partial class SmallestAiSettingsView : UserControl
     private CancellationTokenSource? _saveDebounceCts;
     private readonly bool _suppressPasswordChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the SmallestAiSettingsView class.
+    /// </summary>
     public SmallestAiSettingsView(SmallestAiPlugin plugin)
     {
         _plugin = plugin;

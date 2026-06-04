@@ -6,6 +6,9 @@ using TypeWhisper.Windows.Native;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides text insertion service behavior.
+/// </summary>
 public sealed class TextInsertionService
 {
     private static readonly TimeSpan ModifierPollInterval = TimeSpan.FromMilliseconds(25);
@@ -22,11 +25,17 @@ public sealed class TextInsertionService
     private readonly ITextInsertionPlatform _platform;
     private readonly IErrorLogService? _errorLog;
 
+    /// <summary>
+    /// Initializes a new instance of the TextInsertionService class.
+    /// </summary>
     public TextInsertionService()
         : this(new WindowsTextInsertionPlatform(), null)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the TextInsertionService class.
+    /// </summary>
     public TextInsertionService(IErrorLogService errorLog)
         : this(new WindowsTextInsertionPlatform(), errorLog)
     {
@@ -38,6 +47,9 @@ public sealed class TextInsertionService
         _errorLog = errorLog;
     }
 
+    /// <summary>
+    /// Performs insert text asynchronously.
+    /// </summary>
     public async Task<InsertionResult> InsertTextAsync(
         string text,
         bool autoPaste = true,
@@ -86,8 +98,14 @@ public sealed class TextInsertionService
         return InsertionResult.Pasted;
     }
 
+    /// <summary>
+    /// Performs try get clipboard text asynchronously.
+    /// </summary>
     public Task<string?> TryGetClipboardTextAsync() => _platform.TryGetClipboardTextAsync();
 
+    /// <summary>
+    /// Performs try capture selected text asynchronously.
+    /// </summary>
     public async Task<string?> TryCaptureSelectedTextAsync(IntPtr targetHwnd = default)
     {
         var previousClipboard = await _platform.TryGetClipboardTextAsync();
@@ -262,6 +280,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
         NativeMethods.VK_RWIN
     ];
 
+    /// <summary>
+    /// Performs try get clipboard text asynchronously.
+    /// </summary>
     public async Task<string?> TryGetClipboardTextAsync()
     {
         try
@@ -275,6 +296,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
         }
     }
 
+    /// <summary>
+    /// Sets clipboard text asynchronously.
+    /// </summary>
     public Task SetClipboardTextAsync(string text) =>
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
@@ -292,6 +316,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             }
         }).Task;
 
+    /// <summary>
+    /// Clears clipboard text asynchronously.
+    /// </summary>
     public Task ClearClipboardTextAsync() =>
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
@@ -309,15 +336,30 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             }
         }).Task;
 
+    /// <summary>
+    /// Performs delay asynchronously.
+    /// </summary>
     public Task DelayAsync(TimeSpan delay) => Task.Delay(delay);
 
+    /// <summary>
+    /// Returns whether any modifier key down.
+    /// </summary>
     public bool IsAnyModifierKeyDown() =>
         ModifierKeys.Any(key => (NativeMethods.GetAsyncKeyState(key) & unchecked((short)0x8000)) != 0);
 
+    /// <summary>
+    /// Returns foreground window.
+    /// </summary>
     public IntPtr GetForegroundWindow() => NativeMethods.GetForegroundWindow();
 
+    /// <summary>
+    /// Sets foreground window.
+    /// </summary>
     public bool SetForegroundWindow(IntPtr hwnd) => NativeMethods.SetForegroundWindow(hwnd);
 
+    /// <summary>
+    /// Sends copy input.
+    /// </summary>
     public uint SendCopyInput() =>
         NativeMethods.SendInput(
             ExpectedCopyInputCount,
@@ -329,6 +371,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             ],
             Marshal.SizeOf<NativeMethods.INPUT>());
 
+    /// <summary>
+    /// Sends paste input.
+    /// </summary>
     public uint SendPasteInput() =>
         NativeMethods.SendInput(
             ExpectedPasteInputCount,
@@ -340,6 +385,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
             ],
             Marshal.SizeOf<NativeMethods.INPUT>());
 
+    /// <summary>
+    /// Sends enter input.
+    /// </summary>
     public uint SendEnterInput() =>
         NativeMethods.SendInput(
             ExpectedEnterInputCount,
@@ -365,10 +413,25 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
         };
 }
 
+/// <summary>
+/// Lists the supported insertion result values.
+/// </summary>
 public enum InsertionResult
 {
+    /// <summary>
+    /// Represents the pasted option.
+    /// </summary>
     Pasted,
+    /// <summary>
+    /// Represents the copied to clipboard option.
+    /// </summary>
     CopiedToClipboard,
+    /// <summary>
+    /// Represents the no text option.
+    /// </summary>
     NoText,
+    /// <summary>
+    /// Represents the action handled option.
+    /// </summary>
     ActionHandled
 }

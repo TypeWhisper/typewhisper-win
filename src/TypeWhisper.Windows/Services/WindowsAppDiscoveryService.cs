@@ -10,13 +10,33 @@ using TypeWhisper.Core.Interfaces;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Lists the supported windows app discovery source values.
+/// </summary>
 public enum WindowsAppDiscoverySource
 {
+    /// <summary>
+    /// Represents the running option.
+    /// </summary>
     Running,
+    /// <summary>
+    /// Represents the installed option.
+    /// </summary>
     Installed,
+    /// <summary>
+    /// Represents the history option.
+    /// </summary>
     History
 }
 
+/// <summary>
+/// Represents windows app descriptor data.
+/// </summary>
+/// <param name="ProcessName">Process name supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="ExecutablePath">Executable path supplied to the member.</param>
+/// <param name="Source">Source supplied to the member.</param>
+/// <param name="Icon">Icon supplied to the member.</param>
 public sealed record WindowsAppDescriptor(
     string ProcessName,
     string DisplayName,
@@ -24,6 +44,9 @@ public sealed record WindowsAppDescriptor(
     WindowsAppDiscoverySource Source,
     ImageSource? Icon);
 
+/// <summary>
+/// Provides windows app discovery service behavior.
+/// </summary>
 public sealed class WindowsAppDiscoveryService
 {
     private static readonly string OwnProcessName = Process.GetCurrentProcess().ProcessName;
@@ -31,11 +54,17 @@ public sealed class WindowsAppDiscoveryService
     private IReadOnlyList<WindowsAppDescriptor>? _cachedApps;
     private DateTime _lastScanUtc;
 
+    /// <summary>
+    /// Initializes a new instance of the WindowsAppDiscoveryService class.
+    /// </summary>
     public WindowsAppDiscoveryService(IHistoryService history)
     {
         _history = history;
     }
 
+    /// <summary>
+    /// Returns apps.
+    /// </summary>
     public IReadOnlyList<WindowsAppDescriptor> GetApps(bool forceRefresh = false)
     {
         if (!forceRefresh

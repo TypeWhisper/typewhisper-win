@@ -6,6 +6,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.FileMemory;
 
+/// <summary>
+/// Provides file memory plugin behavior.
+/// </summary>
 public sealed class FileMemoryPlugin : IMemoryStoragePlugin
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -20,10 +23,22 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.file-memory";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "File Memory";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -32,6 +47,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
@@ -39,10 +57,16 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => null;
 
     // IMemoryStoragePlugin
 
+    /// <summary>
+    /// Performs store asynchronously.
+    /// </summary>
     public async Task StoreAsync(string content, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -66,6 +90,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Performs search asynchronously.
+    /// </summary>
     public async Task<IReadOnlyList<string>> SearchAsync(string query, int maxResults = 5, CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct);
@@ -86,6 +113,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Returns all asynchronously.
+    /// </summary>
     public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -100,6 +130,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Performs delete asynchronously.
+    /// </summary>
     public async Task DeleteAsync(string content, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -117,6 +150,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Clears all asynchronously.
+    /// </summary>
     public async Task ClearAllAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -133,6 +169,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Counts asynchronously..
+    /// </summary>
     public async Task<int> CountAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -191,6 +230,9 @@ public sealed class FileMemoryPlugin : IMemoryStoragePlugin
         await File.WriteAllTextAsync(_filePath, json, ct);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _lock.Dispose();

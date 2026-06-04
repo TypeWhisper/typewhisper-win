@@ -6,12 +6,18 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.GemmaLocal;
 
+/// <summary>
+/// Provides gemma local settings view behavior.
+/// </summary>
 public partial class GemmaLocalSettingsView : UserControl
 {
     private readonly GemmaLocalPlugin _plugin;
     private readonly List<ModelViewModel> _viewModels = [];
     private CancellationTokenSource? _downloadCts;
 
+    /// <summary>
+    /// Initializes a new instance of the GemmaLocalSettingsView class.
+    /// </summary>
     public GemmaLocalSettingsView(GemmaLocalPlugin plugin)
     {
         _plugin = plugin;
@@ -175,20 +181,56 @@ internal sealed class ModelViewModel : INotifyPropertyChanged
     private double _progress;
     private Visibility _progressVisibility = Visibility.Collapsed;
 
+    /// <summary>
+    /// Gets or sets the id value.
+    /// </summary>
     public required string Id { get; init; }
+    /// <summary>
+    /// Gets or sets the display name value.
+    /// </summary>
     public required string DisplayName { get; init; }
+    /// <summary>
+    /// Gets or sets the size text value.
+    /// </summary>
     public required string SizeText { get; init; }
+    /// <summary>
+    /// Gets or sets the is recommended value.
+    /// </summary>
     public required bool IsRecommended { get; init; }
 
+    /// <summary>
+    /// Gets the recommended visibility.
+    /// </summary>
     public Visibility RecommendedVisibility => IsRecommended ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public Brush StatusBrush { get => _statusBrush; set => Set(ref _statusBrush, value); }
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public string ActionText { get => _actionText; set => Set(ref _actionText, value); }
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public bool ActionEnabled { get => _actionEnabled; set => Set(ref _actionEnabled, value); }
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public double Progress { get => _progress; set => Set(ref _progress, value); }
+    /// <summary>
+    /// Updates the stored value.
+    /// </summary>
     public Visibility ProgressVisibility { get => _progressVisibility; set => Set(ref _progressVisibility, value); }
 
+    /// <summary>
+    /// Raised when a property value changes.
+    /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)

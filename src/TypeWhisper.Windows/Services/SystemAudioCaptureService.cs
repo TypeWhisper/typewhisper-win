@@ -14,7 +14,13 @@ public sealed class SystemAudioCaptureService : IDisposable
     private readonly List<float> _samples = [];
     private bool _isRecording;
 
+    /// <summary>
+    /// Gets whether recording is currently active.
+    /// </summary>
     public bool IsRecording => _isRecording;
+    /// <summary>
+    /// Raised when audio level changes.
+    /// </summary>
     public event Action<float>? AudioLevelChanged;
 
     /// <summary>
@@ -126,6 +132,9 @@ public sealed class SystemAudioCaptureService : IDisposable
         return output;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _capture?.StopRecording();

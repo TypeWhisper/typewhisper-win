@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.Deepgram;
 
+/// <summary>
+/// Provides deepgram settings view behavior.
+/// </summary>
 public partial class DeepgramSettingsView : UserControl
 {
     private readonly DeepgramPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the DeepgramSettingsView class.
+    /// </summary>
     public DeepgramSettingsView(DeepgramPlugin plugin)
     {
         _plugin = plugin;

@@ -7,6 +7,11 @@ using TypeWhisper.Windows.Native;
 
 namespace TypeWhisper.Windows.Services.Localization;
 
+/// <summary>
+/// Represents ui language option data.
+/// </summary>
+/// <param name="Code">Code supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record UiLanguageOption(string? Code, string DisplayName);
 
 /// <summary>
@@ -24,13 +29,22 @@ public sealed class Loc : INotifyPropertyChanged
         PropertyNameCaseInsensitive = true
     };
 
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static Loc Instance { get; } = new();
 
     private readonly Dictionary<string, Dictionary<string, string>> _strings = [];
     private string _currentLanguage = FallbackLanguage;
     private string? _localizationDir;
 
+    /// <summary>
+    /// Raised when a property value changes.
+    /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged;
+    /// <summary>
+    /// Raised when language changes.
+    /// </summary>
     public event EventHandler? LanguageChanged;
 
     private Loc() { }
@@ -40,6 +54,9 @@ public sealed class Loc : INotifyPropertyChanged
     /// </summary>
     public string this[string key] => GetString(key);
 
+    /// <summary>
+    /// Gets the current language.
+    /// </summary>
     public string CurrentLanguage
     {
         get => _currentLanguage;
@@ -53,10 +70,19 @@ public sealed class Loc : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Gets or sets the available languages value.
+    /// </summary>
     public IReadOnlyList<string> AvailableLanguages { get; private set; } = [];
 
+    /// <summary>
+    /// Gets or sets the available ui languages value.
+    /// </summary>
     public IReadOnlyList<UiLanguageOption> AvailableUiLanguages { get; private set; } = [];
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize()
     {
         var baseDir = AppContext.BaseDirectory;
@@ -116,6 +142,9 @@ public sealed class Loc : INotifyPropertyChanged
         return options;
     }
 
+    /// <summary>
+    /// Returns whether language.
+    /// </summary>
     public bool HasLanguage(string langCode) => _strings.ContainsKey(langCode);
 
     /// <summary>
@@ -145,6 +174,9 @@ public sealed class Loc : INotifyPropertyChanged
         return result;
     }
 
+    /// <summary>
+    /// Returns the localized string for the requested key.
+    /// </summary>
     public string GetString(string key)
     {
         if (_strings.TryGetValue(_currentLanguage, out var currentDict) &&
@@ -159,6 +191,9 @@ public sealed class Loc : INotifyPropertyChanged
         return key;
     }
 
+    /// <summary>
+    /// Returns the localized string for the requested key.
+    /// </summary>
     public string GetString(string key, params object[] args)
     {
         var template = GetString(key);

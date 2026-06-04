@@ -9,6 +9,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.GoogleCloudStt;
 
+/// <summary>
+/// Provides google cloud stt plugin behavior.
+/// </summary>
 public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
 {
     private const string ApiEndpoint = "https://speech.googleapis.com/v1/speech:recognize";
@@ -20,10 +23,22 @@ public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.google-cloud-stt";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Google Cloud STT";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -31,12 +46,18 @@ public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView()
     {
         var panel = new StackPanel { Margin = new Thickness(8) };
@@ -87,16 +108,37 @@ public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "google-cloud-stt";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Google Cloud";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
         [new PluginModelInfo("latest_long", "Google Cloud (Long)")];
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         if (modelId != "latest_long")
@@ -104,6 +146,9 @@ public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
         _selectedModelId = modelId;
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
@@ -230,5 +275,8 @@ public sealed class GoogleCloudSttPlugin : ITranscriptionEnginePlugin
         _ => iso,
     };
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _httpClient.Dispose();
 }

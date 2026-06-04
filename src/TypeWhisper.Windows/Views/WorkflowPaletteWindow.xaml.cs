@@ -6,12 +6,18 @@ using FormsScreen = System.Windows.Forms.Screen;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides workflow palette window behavior.
+/// </summary>
 public partial class WorkflowPaletteWindow : Window
 {
     private readonly WorkflowPaletteViewModel _viewModel;
     private bool _isSelecting;
     private bool _isClosing;
 
+    /// <summary>
+    /// Initializes a new instance of the WorkflowPaletteWindow class.
+    /// </summary>
     public WorkflowPaletteWindow(WorkflowPaletteViewModel viewModel)
     {
         InitializeComponent();
@@ -76,6 +82,9 @@ public partial class WorkflowPaletteWindow : Window
         _viewModel.Select(item);
     }
 
+    /// <summary>
+    /// Performs request close.
+    /// </summary>
     public void RequestClose()
     {
         if (_isClosing)

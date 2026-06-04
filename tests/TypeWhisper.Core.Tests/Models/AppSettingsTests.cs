@@ -46,6 +46,78 @@ public class AppSettingsTests
         Assert.Null(AppSettings.Default.LastTranslationTargetLanguage);
     }
 
+    [Fact]
+    public void GetMainDictationHotkeys_PrefersConfiguredListOverLegacyStrings()
+    {
+        var settings = AppSettings.Default with
+        {
+            PushToTalkHotkey = "Ctrl+Shift",
+            ToggleHotkey = "Ctrl+Shift+F9",
+            MainDictationHotkeys = ["Ctrl+Alt+D", " Ctrl+Alt+D ", "Ctrl+Shift+D"]
+        };
+
+        Assert.Equal(["Ctrl+Alt+D", "Ctrl+Shift+D"], settings.GetMainDictationHotkeys());
+    }
+
+    [Fact]
+    public void GetShortcutHotkeys_FallsBackToLegacySingleValue()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "",
+            ToggleHotkey = "Ctrl+Alt+D",
+            WorkflowPaletteHotkeys = [],
+            WorkflowPaletteHotkey = "Ctrl+Alt+W"
+        };
+
+        Assert.Equal(["Ctrl+Alt+D"], settings.GetMainDictationHotkeys());
+        Assert.Equal(["Ctrl+Alt+W"], settings.GetWorkflowPaletteHotkeys());
+    }
+
+    [Fact]
+    public void GetMainDictationHotkeys_PreservesBothLegacyMainHotkeys()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "Ctrl+Alt+P",
+            ToggleHotkey = "Ctrl+Alt+T"
+        };
+
+        Assert.Equal(["Ctrl+Alt+P", "Ctrl+Alt+T"], settings.GetMainDictationHotkeys());
+    }
+
+    [Fact]
+    public void GetMainDictationHotkeys_FallsBackWhenConfiguredListCleansToEmpty()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = [" ", ""],
+            PushToTalkHotkey = "",
+            ToggleHotkey = "Ctrl+Alt+D"
+        };
+
+        Assert.Equal(["Ctrl+Alt+D"], settings.GetMainDictationHotkeys());
+    }
+
+    [Fact]
+    public void NormalizeHotkeyLists_PreservesLegacyMainHotkeyList()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "Ctrl+Alt+P",
+            ToggleHotkey = "Ctrl+Alt+T"
+        };
+
+        var normalized = settings.NormalizeHotkeyLists();
+
+        Assert.Equal(["Ctrl+Alt+P", "Ctrl+Alt+T"], normalized.MainDictationHotkeys);
+        Assert.Equal("Ctrl+Alt+P", normalized.ToggleHotkey);
+        Assert.Equal("Ctrl+Alt+P", normalized.PushToTalkHotkey);
+    }
+
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(0, 0)]

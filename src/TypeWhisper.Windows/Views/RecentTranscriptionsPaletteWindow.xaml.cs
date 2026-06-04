@@ -5,12 +5,18 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides recent transcriptions palette window behavior.
+/// </summary>
 public partial class RecentTranscriptionsPaletteWindow : Window
 {
     private readonly RecentTranscriptionsPaletteViewModel _viewModel;
     private bool _isSelecting;
     private bool _isClosing;
 
+    /// <summary>
+    /// Initializes a new instance of the RecentTranscriptionsPaletteWindow class.
+    /// </summary>
     public RecentTranscriptionsPaletteWindow(RecentTranscriptionsPaletteViewModel viewModel)
     {
         InitializeComponent();
@@ -75,6 +81,9 @@ public partial class RecentTranscriptionsPaletteWindow : Window
         _viewModel.Select(item);
     }
 
+    /// <summary>
+    /// Performs request close.
+    /// </summary>
     public void RequestClose()
     {
         if (_isClosing)
@@ -133,25 +142,55 @@ public partial class RecentTranscriptionsPaletteWindow : Window
     [StructLayout(LayoutKind.Sequential)]
     private struct Point
     {
+        /// <summary>
+        /// Gets the x.
+        /// </summary>
         public int X;
+        /// <summary>
+        /// Gets the y.
+        /// </summary>
         public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo
     {
+        /// <summary>
+        /// Gets the cb size.
+        /// </summary>
         public int cbSize;
+        /// <summary>
+        /// Gets the rc monitor.
+        /// </summary>
         public RectNative rcMonitor;
+        /// <summary>
+        /// Gets the rc work.
+        /// </summary>
         public RectNative rcWork;
+        /// <summary>
+        /// Gets or sets the Win32 flags field.
+        /// </summary>
         public uint dwFlags;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RectNative
     {
+        /// <summary>
+        /// Gets the left.
+        /// </summary>
         public int Left;
+        /// <summary>
+        /// Gets the top.
+        /// </summary>
         public int Top;
+        /// <summary>
+        /// Gets the right.
+        /// </summary>
         public int Right;
+        /// <summary>
+        /// Gets the bottom.
+        /// </summary>
         public int Bottom;
     }
 }
