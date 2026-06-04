@@ -147,7 +147,7 @@ public sealed class LocalModelStorageService
 
     private static void EnsureWritable(string fullPath)
     {
-        var probePath = Path.Combine(fullPath, $".typewhisper-write-test-{Guid.NewGuid():N}.tmp");
+        var probePath = Path.Join(fullPath, $".typewhisper-write-test-{Guid.NewGuid():N}.tmp");
         try
         {
             File.WriteAllText(probePath, "");
@@ -186,25 +186,29 @@ public sealed class LocalModelStorageService
             if (string.Equals(name, LocalModelStoragePaths.PluginDataFolderName, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            MoveEntry(entry, Path.Combine(targetRoot, name));
+            MoveEntry(entry, Path.Join(targetRoot, SafeLeafName(name, nameof(entry))));
         }
     }
 
     private static void MigratePluginAssets(string sourceRoot, string targetRoot, CancellationToken ct)
     {
+        var pluginDataFolderName = SafeRelativeName(LocalModelStoragePaths.PluginDataFolderName, nameof(LocalModelStoragePaths.PluginDataFolderName));
+
         foreach (var (pluginId, entries) in PluginAssetEntries)
         {
             ct.ThrowIfCancellationRequested();
-            var sourcePluginDir = Path.Combine(sourceRoot, LocalModelStoragePaths.PluginDataFolderName, pluginId);
+            var pluginFolderName = SafeLeafName(pluginId, nameof(pluginId));
+            var sourcePluginDir = Path.Join(sourceRoot, pluginDataFolderName, pluginFolderName);
             if (!Directory.Exists(sourcePluginDir))
                 continue;
 
-            var targetPluginDir = Path.Combine(targetRoot, LocalModelStoragePaths.PluginDataFolderName, pluginId);
+            var targetPluginDir = Path.Join(targetRoot, pluginDataFolderName, pluginFolderName);
             foreach (var entryName in entries)
             {
                 ct.ThrowIfCancellationRequested();
-                var sourceEntry = Path.Combine(sourcePluginDir, entryName);
-                var targetEntry = Path.Combine(targetPluginDir, entryName);
+                var safeEntryName = SafeRelativeName(entryName, nameof(entryName));
+                var sourceEntry = Path.Join(sourcePluginDir, safeEntryName);
+                var targetEntry = Path.Join(targetPluginDir, safeEntryName);
                 MoveEntry(sourceEntry, targetEntry);
             }
         }
@@ -216,7 +220,7 @@ public sealed class LocalModelStorageService
         {
             Directory.CreateDirectory(target);
             foreach (var child in Directory.EnumerateFileSystemEntries(source))
-                MoveEntry(child, Path.Combine(target, Path.GetFileName(child)));
+                MoveEntry(child, Path.Join(target, SafeLeafName(Path.GetFileName(child), nameof(child))));
 
             TryDeleteDirectoryIfEmpty(source);
             return;
@@ -228,6 +232,29 @@ public sealed class LocalModelStorageService
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         File.Copy(source, target);
         File.Delete(source);
+    }
+
+    private static string SafeLeafName(string value, string parameterName)
+    {
+        var safeName = Path.GetFileName(value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeName) || safeName is "." or "..")
+            throw new InvalidOperationException($"Invalid path segment for {parameterName}.");
+
+        return safeName;
+    }
+
+    private static string SafeRelativeName(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value is "." or ".."
+            || Path.IsPathRooted(value)
+            || value.Contains(Path.DirectorySeparatorChar)
+            || value.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new InvalidOperationException($"Invalid relative path segment for {parameterName}.");
+        }
+
+        return value;
     }
 
     private static void TryDeleteDirectoryIfEmpty(string path)

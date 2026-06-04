@@ -130,10 +130,11 @@ public sealed class TranslationService : ITranslationService, IDisposable
 
             var modelInfo = TranslationModelInfo.FindModel(sourceLang, targetLang)
                 ?? throw new NotSupportedException($"No translation model for {sourceLang}->{targetLang}");
+            var modelSubDirectory = SafeRelativeName(modelInfo.SubDirectory, nameof(modelInfo.SubDirectory));
 
-            var modelDir = Path.Combine(
+            var modelDir = Path.Join(
                 LocalModelStorageService.ResolveAvailableModelStoragePath(_settings.Current),
-                modelInfo.SubDirectory);
+                modelSubDirectory);
             Directory.CreateDirectory(modelDir);
 
             await DownloadMissingFilesAsync(modelInfo, modelDir, ct);
@@ -160,7 +161,8 @@ public sealed class TranslationService : ITranslationService, IDisposable
     {
         foreach (var file in modelInfo.Files)
         {
-            var filePath = Path.Combine(modelDir, file.FileName);
+            var safeFileName = SafeLeafName(file.FileName, nameof(file.FileName));
+            var filePath = Path.Join(modelDir, safeFileName);
             if (File.Exists(filePath)) continue;
 
             System.Diagnostics.Debug.WriteLine($"Downloading translation model file: {file.FileName}");
@@ -182,8 +184,8 @@ public sealed class TranslationService : ITranslationService, IDisposable
 
     private static LoadedTranslationModel LoadModel(string modelDir)
     {
-        var config = MarianConfig.Load(Path.Combine(modelDir, "config.json"));
-        var tokenizer = MarianTokenizer.Load(Path.Combine(modelDir, "tokenizer.json"), config.EosTokenId);
+        var config = MarianConfig.Load(Path.Join(modelDir, "config.json"));
+        var tokenizer = MarianTokenizer.Load(Path.Join(modelDir, "tokenizer.json"), config.EosTokenId);
 
         var sessionOptions = new SessionOptions
         {
@@ -192,10 +194,33 @@ public sealed class TranslationService : ITranslationService, IDisposable
             IntraOpNumThreads = Environment.ProcessorCount
         };
 
-        var encoder = new InferenceSession(Path.Combine(modelDir, "encoder_model_quantized.onnx"), sessionOptions);
-        var decoder = new InferenceSession(Path.Combine(modelDir, "decoder_model_quantized.onnx"), sessionOptions);
+        var encoder = new InferenceSession(Path.Join(modelDir, "encoder_model_quantized.onnx"), sessionOptions);
+        var decoder = new InferenceSession(Path.Join(modelDir, "decoder_model_quantized.onnx"), sessionOptions);
 
         return new LoadedTranslationModel(encoder, decoder, tokenizer, config);
+    }
+
+    private static string SafeLeafName(string value, string parameterName)
+    {
+        var safeName = Path.GetFileName(value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeName) || safeName is "." or "..")
+            throw new InvalidOperationException($"Invalid path segment for {parameterName}.");
+
+        return safeName;
+    }
+
+    private static string SafeRelativeName(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value is "." or ".."
+            || Path.IsPathRooted(value)
+            || value.Contains(Path.DirectorySeparatorChar)
+            || value.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new InvalidOperationException($"Invalid relative path segment for {parameterName}.");
+        }
+
+        return value;
     }
 
     private static string RunInference(LoadedTranslationModel model, string text)

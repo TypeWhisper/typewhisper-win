@@ -6,37 +6,37 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class LocalModelStorageServiceTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"tw-storage-{Guid.NewGuid():N}");
+    private readonly string _tempDir = Path.Join(Path.GetTempPath(), $"tw-storage-{Guid.NewGuid():N}");
 
     public LocalModelStorageServiceTests() => Directory.CreateDirectory(_tempDir);
 
     [Fact]
     public async Task MoveDownloadsAndUsePathAsync_MigratesKnownAssetsAndKeepsPluginSettingsInPlace()
     {
-        var oldRoot = Path.Combine(_tempDir, "old-storage");
-        var newRoot = Path.Combine(_tempDir, "new-storage");
+        var oldRoot = Path.Join(_tempDir, "old-storage");
+        var newRoot = Path.Join(_tempDir, "new-storage");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
             LocalModelStoragePath = oldRoot
         });
-        Directory.CreateDirectory(Path.Combine(oldRoot, "translation-en-fr"));
-        await File.WriteAllTextAsync(Path.Combine(oldRoot, "translation-en-fr", "config.json"), "{}");
+        Directory.CreateDirectory(Path.Join(oldRoot, "translation-en-fr"));
+        await File.WriteAllTextAsync(Path.Join(oldRoot, "translation-en-fr", "config.json"), "{}");
 
-        var whisperData = Path.Combine(oldRoot, "PluginData", "com.typewhisper.whisper-cpp");
-        Directory.CreateDirectory(Path.Combine(whisperData, "Models"));
-        await File.WriteAllTextAsync(Path.Combine(whisperData, "Models", "ggml.bin"), "model");
-        await File.WriteAllTextAsync(Path.Combine(whisperData, "settings.json"), "settings");
+        var whisperData = Path.Join(oldRoot, "PluginData", "com.typewhisper.whisper-cpp");
+        Directory.CreateDirectory(Path.Join(whisperData, "Models"));
+        await File.WriteAllTextAsync(Path.Join(whisperData, "Models", "ggml.bin"), "model");
+        await File.WriteAllTextAsync(Path.Join(whisperData, "settings.json"), "settings");
 
-        var sherpaData = Path.Combine(oldRoot, "PluginData", "com.typewhisper.sherpa-onnx");
-        Directory.CreateDirectory(Path.Combine(sherpaData, "Runtimes", "sherpa-onnx-cuda"));
-        await File.WriteAllTextAsync(Path.Combine(sherpaData, "Runtimes", "sherpa-onnx-cuda", "runtime.dll"), "runtime");
+        var sherpaData = Path.Join(oldRoot, "PluginData", "com.typewhisper.sherpa-onnx");
+        Directory.CreateDirectory(Path.Join(sherpaData, "Runtimes", "sherpa-onnx-cuda"));
+        await File.WriteAllTextAsync(Path.Join(sherpaData, "Runtimes", "sherpa-onnx-cuda", "runtime.dll"), "runtime");
 
-        var graniteData = Path.Combine(oldRoot, "PluginData", "com.typewhisper.granite-speech");
-        Directory.CreateDirectory(Path.Combine(graniteData, "python"));
-        Directory.CreateDirectory(Path.Combine(graniteData, "hf-cache"));
-        await File.WriteAllTextAsync(Path.Combine(graniteData, ".setup-complete"), "done");
-        await File.WriteAllTextAsync(Path.Combine(graniteData, "python", "python.exe"), "python");
-        await File.WriteAllTextAsync(Path.Combine(graniteData, "hf-cache", "model.bin"), "model");
+        var graniteData = Path.Join(oldRoot, "PluginData", "com.typewhisper.granite-speech");
+        Directory.CreateDirectory(Path.Join(graniteData, "python"));
+        Directory.CreateDirectory(Path.Join(graniteData, "hf-cache"));
+        await File.WriteAllTextAsync(Path.Join(graniteData, ".setup-complete"), "done");
+        await File.WriteAllTextAsync(Path.Join(graniteData, "python", "python.exe"), "python");
+        await File.WriteAllTextAsync(Path.Join(graniteData, "hf-cache", "model.bin"), "model");
 
         var unloaded = false;
         var sut = new LocalModelStorageService(settings, () => unloaded = true);
@@ -45,21 +45,21 @@ public sealed class LocalModelStorageServiceTests : IDisposable
 
         Assert.True(unloaded);
         Assert.Equal(newRoot, settings.Current.LocalModelStoragePath);
-        Assert.True(File.Exists(Path.Combine(newRoot, "translation-en-fr", "config.json")));
-        Assert.True(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.whisper-cpp", "Models", "ggml.bin")));
-        Assert.True(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.sherpa-onnx", "Runtimes", "sherpa-onnx-cuda", "runtime.dll")));
-        Assert.True(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.granite-speech", ".setup-complete")));
-        Assert.True(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.granite-speech", "python", "python.exe")));
-        Assert.True(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.granite-speech", "hf-cache", "model.bin")));
-        Assert.False(File.Exists(Path.Combine(newRoot, "PluginData", "com.typewhisper.whisper-cpp", "settings.json")));
-        Assert.True(File.Exists(Path.Combine(whisperData, "settings.json")));
+        Assert.True(File.Exists(Path.Join(newRoot, "translation-en-fr", "config.json")));
+        Assert.True(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.whisper-cpp", "Models", "ggml.bin")));
+        Assert.True(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.sherpa-onnx", "Runtimes", "sherpa-onnx-cuda", "runtime.dll")));
+        Assert.True(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.granite-speech", ".setup-complete")));
+        Assert.True(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.granite-speech", "python", "python.exe")));
+        Assert.True(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.granite-speech", "hf-cache", "model.bin")));
+        Assert.False(File.Exists(Path.Join(newRoot, "PluginData", "com.typewhisper.whisper-cpp", "settings.json")));
+        Assert.True(File.Exists(Path.Join(whisperData, "settings.json")));
     }
 
     [Fact]
     public async Task MoveDownloadsAndUsePathAsync_SavesTarget_WhenSourcesAreMissing()
     {
-        var oldRoot = Path.Combine(_tempDir, "old-storage");
-        var newRoot = Path.Combine(_tempDir, "new-storage");
+        var oldRoot = Path.Join(_tempDir, "old-storage");
+        var newRoot = Path.Join(_tempDir, "new-storage");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
             LocalModelStoragePath = oldRoot
@@ -75,8 +75,8 @@ public sealed class LocalModelStorageServiceTests : IDisposable
     [Fact]
     public async Task MoveDownloadsAndUsePathAsync_DoesNotSaveTarget_WhenDestinationIsInvalid()
     {
-        var oldRoot = Path.Combine(_tempDir, "old-storage");
-        var targetFile = Path.Combine(_tempDir, "not-a-directory");
+        var oldRoot = Path.Join(_tempDir, "old-storage");
+        var targetFile = Path.Join(_tempDir, "not-a-directory");
         await File.WriteAllTextAsync(targetFile, "file");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
@@ -94,7 +94,7 @@ public sealed class LocalModelStorageServiceTests : IDisposable
     [Fact]
     public void ResolveAvailableModelStoragePath_Throws_WhenConfiguredPathIsMissing()
     {
-        var missingRoot = Path.Combine(_tempDir, "missing-storage");
+        var missingRoot = Path.Join(_tempDir, "missing-storage");
         var settings = AppSettings.Default with
         {
             LocalModelStoragePath = missingRoot
@@ -110,7 +110,7 @@ public sealed class LocalModelStorageServiceTests : IDisposable
     [Fact]
     public void ResolveAvailablePluginAssetDirectory_CreatesPluginDirectory_WhenConfiguredRootExists()
     {
-        var storageRoot = Path.Combine(_tempDir, "model-storage");
+        var storageRoot = Path.Join(_tempDir, "model-storage");
         Directory.CreateDirectory(storageRoot);
         var settings = AppSettings.Default with
         {
@@ -122,7 +122,7 @@ public sealed class LocalModelStorageServiceTests : IDisposable
             "com.typewhisper.whisper-cpp");
 
         Assert.Equal(
-            Path.Combine(storageRoot, "PluginData", "com.typewhisper.whisper-cpp"),
+            Path.Join(storageRoot, "PluginData", "com.typewhisper.whisper-cpp"),
             directory);
         Assert.True(Directory.Exists(directory));
     }
@@ -130,20 +130,20 @@ public sealed class LocalModelStorageServiceTests : IDisposable
     [Fact]
     public void ResolveAvailablePluginAssetDirectory_UsesFinalPluginIdSegment()
     {
-        var storageRoot = Path.Combine(_tempDir, "model-storage");
+        var storageRoot = Path.Join(_tempDir, "model-storage");
         Directory.CreateDirectory(storageRoot);
         var settings = AppSettings.Default with
         {
             LocalModelStoragePath = storageRoot
         };
-        var pathLikePluginId = Path.Combine(_tempDir, "ignored", "com.typewhisper.whisper-cpp");
+        var pathLikePluginId = Path.Join(_tempDir, "ignored", "com.typewhisper.whisper-cpp");
 
         var directory = LocalModelStorageService.ResolveAvailablePluginAssetDirectory(
             settings,
             pathLikePluginId);
 
         Assert.Equal(
-            Path.Combine(storageRoot, "PluginData", "com.typewhisper.whisper-cpp"),
+            Path.Join(storageRoot, "PluginData", "com.typewhisper.whisper-cpp"),
             directory);
         Assert.True(Directory.Exists(directory));
     }
