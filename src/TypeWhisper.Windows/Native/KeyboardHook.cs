@@ -3,6 +3,9 @@ using System.Runtime.InteropServices;
 
 namespace TypeWhisper.Windows.Native;
 
+/// <summary>
+/// Provides keyboard hook behavior.
+/// </summary>
 public sealed class KeyboardHook : IDisposable
 {
     private IntPtr _hookId = IntPtr.Zero;
@@ -10,15 +13,30 @@ public sealed class KeyboardHook : IDisposable
     private bool _disposed;
     private readonly HotkeyMatchStateMachine _stateMachine = new();
 
+    /// <summary>
+    /// Raised when the key down event occurs.
+    /// </summary>
     public event EventHandler? KeyDown;
+    /// <summary>
+    /// Raised when the key up event occurs.
+    /// </summary>
     public event EventHandler? KeyUp;
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Initializes a new instance of the KeyboardHook class.
+    /// </summary>
     public KeyboardHook()
     {
         _proc = HookCallback;
     }
 
+    /// <summary>
+    /// Sets hotkey.
+    /// </summary>
     public void SetHotkey(string hotkeyString)
     {
         if (HotkeyParser.Parse(hotkeyString, out var modifiers, out var vk))
@@ -27,6 +45,9 @@ public sealed class KeyboardHook : IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts the service or session.
+    /// </summary>
     public void Start()
     {
         if (_hookId != IntPtr.Zero) return;
@@ -44,6 +65,9 @@ public sealed class KeyboardHook : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         if (_hookId != IntPtr.Zero)
@@ -163,6 +187,9 @@ public sealed class KeyboardHook : IDisposable
         NativeMethods.SendInput(1, [input], Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -194,8 +221,14 @@ internal sealed class HotkeyMatchStateMachine
     private bool _isPressed;
     private bool _winPassThroughActive;
 
+    /// <summary>
+    /// Gets whether has hotkey.
+    /// </summary>
     public bool HasHotkey => _targetVk != 0 || _targetModifiers != 0;
 
+    /// <summary>
+    /// Sets hotkey.
+    /// </summary>
     public void SetHotkey(uint modifiers, uint vk)
     {
         _targetModifiers = modifiers;
@@ -203,6 +236,9 @@ internal sealed class HotkeyMatchStateMachine
         ResetRuntimeState();
     }
 
+    /// <summary>
+    /// Performs reset.
+    /// </summary>
     public void Reset()
     {
         _targetModifiers = 0;
@@ -210,6 +246,9 @@ internal sealed class HotkeyMatchStateMachine
         ResetRuntimeState();
     }
 
+    /// <summary>
+    /// Processes key event.
+    /// </summary>
     public HotkeyProcessResult ProcessKeyEvent(uint vkCode, bool isKeyDown, bool isKeyUp)
     {
         if (!HasHotkey || (!isKeyDown && !isKeyUp))
@@ -459,21 +498,39 @@ internal enum HotkeyModifier
 
 internal static class HotkeyKeyClassifier
 {
+    /// <summary>
+    /// Returns whether ctrl key.
+    /// </summary>
     public static bool IsCtrlKey(uint vk) =>
         vk is NativeMethods.VK_CONTROL or NativeMethods.VK_LCONTROL or NativeMethods.VK_RCONTROL;
 
+    /// <summary>
+    /// Returns whether shift key.
+    /// </summary>
     public static bool IsShiftKey(uint vk) =>
         vk is NativeMethods.VK_SHIFT or NativeMethods.VK_LSHIFT or NativeMethods.VK_RSHIFT;
 
+    /// <summary>
+    /// Returns whether alt key.
+    /// </summary>
     public static bool IsAltKey(uint vk) =>
         vk is NativeMethods.VK_MENU or NativeMethods.VK_LMENU or NativeMethods.VK_RMENU;
 
+    /// <summary>
+    /// Returns whether win key.
+    /// </summary>
     public static bool IsWinKey(uint vk) =>
         vk is NativeMethods.VK_LWIN or NativeMethods.VK_RWIN;
 
+    /// <summary>
+    /// Returns whether modifier key.
+    /// </summary>
     public static bool IsModifierKey(uint vk) =>
         IsCtrlKey(vk) || IsShiftKey(vk) || IsAltKey(vk) || IsWinKey(vk);
 
+    /// <summary>
+    /// Performs matches modifier.
+    /// </summary>
     public static bool MatchesModifier(uint vkCode, HotkeyModifier modifier) => modifier switch
     {
         HotkeyModifier.Control => IsCtrlKey(vkCode),
@@ -486,12 +543,18 @@ internal static class HotkeyKeyClassifier
 
 internal static class HotkeyParser
 {
+    /// <summary>
+    /// Performs normalize.
+    /// </summary>
     public static string Normalize(string? hotkeyString)
     {
         var normalized = hotkeyString?.Trim() ?? "";
         return Parse(normalized, out _, out _) ? normalized : "";
     }
 
+    /// <summary>
+    /// Parses the supplied value into the expected representation.
+    /// </summary>
     public static bool Parse(string hotkeyString, out uint modifiers, out uint vk)
     {
         modifiers = 0;

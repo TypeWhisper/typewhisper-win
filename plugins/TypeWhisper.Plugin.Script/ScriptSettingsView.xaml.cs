@@ -4,11 +4,17 @@ using System.Windows.Controls;
 
 namespace TypeWhisper.Plugin.Script;
 
+/// <summary>
+/// Provides script settings view behavior.
+/// </summary>
 public partial class ScriptSettingsView : UserControl
 {
     private readonly ScriptPlugin _plugin;
     private bool _suppressEditEvents;
 
+    /// <summary>
+    /// Initializes a new instance of the ScriptSettingsView class.
+    /// </summary>
     public ScriptSettingsView(ScriptPlugin plugin)
     {
         _plugin = plugin;

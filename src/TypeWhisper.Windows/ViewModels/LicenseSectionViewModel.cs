@@ -8,6 +8,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides license section view model behavior.
+/// </summary>
 public sealed partial class LicenseSectionViewModel : ObservableObject
 {
     private const string CustomerPortalUrl = "https://polar.sh/typewhisper/portal";
@@ -24,6 +27,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     private CommercialLicenseTier _selectedCommercialPlanTier = CommercialLicenseTier.Individual;
     private ActivatedLicenseEntitlementKind? _activationNoticeKind;
 
+    /// <summary>
+    /// Initializes a new instance of the LicenseSectionViewModel class.
+    /// </summary>
     public LicenseSectionViewModel(LicenseService license, SupporterDiscordService discord)
     {
         License = license;
@@ -69,11 +75,29 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         Discord.PropertyChanged += OnServicePropertyChanged;
     }
 
+    /// <summary>
+    /// Gets the license.
+    /// </summary>
     public LicenseService License { get; }
+    /// <summary>
+    /// Gets the discord.
+    /// </summary>
     public SupporterDiscordService Discord { get; }
+    /// <summary>
+    /// Gets the monthly commercial options.
+    /// </summary>
     public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions { get; }
+    /// <summary>
+    /// Gets the lifetime commercial options.
+    /// </summary>
     public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions { get; }
+    /// <summary>
+    /// Gets the supporter options.
+    /// </summary>
     public IReadOnlyList<LicensePurchaseOption> SupporterOptions { get; }
+    /// <summary>
+    /// Gets the plan options.
+    /// </summary>
     public IReadOnlyList<LicensePlanOption> PlanOptions =>
     [
         new(
@@ -116,21 +140,63 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     [ObservableProperty]
     private string? _licenseActivationNotice;
 
+    /// <summary>
+    /// Gets whether is private user.
+    /// </summary>
     public bool IsPrivateUser => License.IsPrivateUser;
+    /// <summary>
+    /// Gets whether is business user.
+    /// </summary>
     public bool IsBusinessUser => License.IsBusinessUser;
+    /// <summary>
+    /// Gets whether show plan selection.
+    /// </summary>
     public bool ShowPlanSelection => License.CommercialStatus != LicenseStatus.Active;
+    /// <summary>
+    /// Gets whether show license activation.
+    /// </summary>
     public bool ShowLicenseActivation => License.CommercialStatus != LicenseStatus.Active;
+    /// <summary>
+    /// Gets whether show commercial purchase.
+    /// </summary>
     public bool ShowCommercialPurchase =>
         License.CommercialStatus != LicenseStatus.Active
         && (IsBusinessUser || License.HasCommercialActivation);
+    /// <summary>
+    /// Gets whether show commercial manage.
+    /// </summary>
     public bool ShowCommercialManage => License.HasCommercialActivation;
+    /// <summary>
+    /// Gets whether show supporter purchase.
+    /// </summary>
     public bool ShowSupporterPurchase => !License.HasSupporterLicense;
+    /// <summary>
+    /// Gets whether show supporter manage.
+    /// </summary>
     public bool ShowSupporterManage => License.HasSupporterActivation;
+    /// <summary>
+    /// Gets whether show customer portal shortcut.
+    /// </summary>
     public bool ShowCustomerPortalShortcut => !License.HasCommercialActivation && !License.HasSupporterActivation;
+    /// <summary>
+    /// Gets whether show discord section.
+    /// </summary>
     public bool ShowDiscordSection => License.HasSupporterLicense;
+    /// <summary>
+    /// Gets whether show discord connect.
+    /// </summary>
     public bool ShowDiscordConnect => ShowDiscordSection && Discord.ClaimState is SupporterDiscordClaimState.Unavailable or SupporterDiscordClaimState.Unlinked;
+    /// <summary>
+    /// Shows discord refresh.
+    /// </summary>
     public bool ShowDiscordRefresh => ShowDiscordSection && (Discord.IsHelperUnavailable || Discord.ClaimState is SupporterDiscordClaimState.Pending or SupporterDiscordClaimState.Linked or SupporterDiscordClaimState.Failed);
+    /// <summary>
+    /// Gets whether show discord reconnect.
+    /// </summary>
     public bool ShowDiscordReconnect => ShowDiscordSection && !Discord.IsHelperUnavailable && Discord.ClaimState is SupporterDiscordClaimState.Pending or SupporterDiscordClaimState.Linked or SupporterDiscordClaimState.Failed;
+    /// <summary>
+    /// Gets the commercial status title.
+    /// </summary>
     public string CommercialStatusTitle => License.CommercialStatus switch
     {
         LicenseStatus.Active => Loc.Instance["License.CommercialActiveTitle"],
@@ -138,6 +204,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         _ => Loc.Instance["License.CommercialInactiveTitle"],
     };
 
+    /// <summary>
+    /// Gets the commercial status detail.
+    /// </summary>
     public string CommercialStatusDetail
     {
         get
@@ -158,6 +227,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the supporter status title.
+    /// </summary>
     public string SupporterStatusTitle => License.SupporterStatus switch
     {
         LicenseStatus.Active => Loc.Instance["License.SupporterActiveTitle"],
@@ -165,6 +237,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         _ => Loc.Instance["License.SupporterInactiveTitle"],
     };
 
+    /// <summary>
+    /// Gets the supporter status detail.
+    /// </summary>
     public string SupporterStatusDetail => License.SupporterStatus switch
     {
         LicenseStatus.Active when !string.IsNullOrWhiteSpace(License.SupporterTierDisplayName)
@@ -173,6 +248,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         _ => Loc.Instance["License.SupporterInactiveDetail"],
     };
 
+    /// <summary>
+    /// Gets the discord status title.
+    /// </summary>
     public string DiscordStatusTitle => Discord.ClaimState switch
     {
         _ when Discord.IsHelperUnavailable => Loc.Instance["License.DiscordServiceUnavailableTitle"],
@@ -182,6 +260,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         _ => Loc.Instance["License.DiscordUnlinkedTitle"],
     };
 
+    /// <summary>
+    /// Gets the discord status detail.
+    /// </summary>
     public string DiscordStatusDetail
     {
         get
@@ -206,21 +287,66 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the select private user command.
+    /// </summary>
     public RelayCommand SelectPrivateUserCommand { get; }
+    /// <summary>
+    /// Gets the select business user command.
+    /// </summary>
     public RelayCommand SelectBusinessUserCommand { get; }
+    /// <summary>
+    /// Gets the select plan command.
+    /// </summary>
     public RelayCommand<LicensePlanOption> SelectPlanCommand { get; }
+    /// <summary>
+    /// Gets the open url command.
+    /// </summary>
     public RelayCommand<string> OpenUrlCommand { get; }
+    /// <summary>
+    /// Gets the open customer portal command.
+    /// </summary>
     public RelayCommand OpenCustomerPortalCommand { get; }
+    /// <summary>
+    /// Gets the open git hub sponsors claim command.
+    /// </summary>
     public RelayCommand OpenGitHubSponsorsClaimCommand { get; }
+    /// <summary>
+    /// Gets the activate license command.
+    /// </summary>
     public AsyncRelayCommand ActivateLicenseCommand { get; }
+    /// <summary>
+    /// Gets the refresh commercial license command.
+    /// </summary>
     public AsyncRelayCommand RefreshCommercialLicenseCommand { get; }
+    /// <summary>
+    /// Gets the refresh supporter license command.
+    /// </summary>
     public AsyncRelayCommand RefreshSupporterLicenseCommand { get; }
+    /// <summary>
+    /// Gets the deactivate commercial license command.
+    /// </summary>
     public AsyncRelayCommand DeactivateCommercialLicenseCommand { get; }
+    /// <summary>
+    /// Gets the deactivate supporter license command.
+    /// </summary>
     public AsyncRelayCommand DeactivateSupporterLicenseCommand { get; }
+    /// <summary>
+    /// Gets the connect discord command.
+    /// </summary>
     public AsyncRelayCommand ConnectDiscordCommand { get; }
+    /// <summary>
+    /// Gets the reconnect discord command.
+    /// </summary>
     public AsyncRelayCommand ReconnectDiscordCommand { get; }
+    /// <summary>
+    /// Gets the refresh discord status command.
+    /// </summary>
     public AsyncRelayCommand RefreshDiscordStatusCommand { get; }
 
+    /// <summary>
+    /// Performs initialize asynchronously.
+    /// </summary>
     public async Task InitializeAsync()
     {
         await License.ValidateAllIfNeededAsync();
@@ -441,6 +567,16 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         };
 }
 
+/// <summary>
+/// Represents license plan option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="Title">Title supplied to the member.</param>
+/// <param name="Price">Price supplied to the member.</param>
+/// <param name="Detail">Detail supplied to the member.</param>
+/// <param name="IconGlyph">Icon glyph supplied to the member.</param>
+/// <param name="CommercialTier">Commercial tier supplied to the member.</param>
+/// <param name="IsSelected">Is selected supplied to the member.</param>
 public sealed record LicensePlanOption(
     string Id,
     string Title,
@@ -450,4 +586,11 @@ public sealed record LicensePlanOption(
     CommercialLicenseTier? CommercialTier,
     bool IsSelected);
 
+/// <summary>
+/// Represents license purchase option data.
+/// </summary>
+/// <param name="Title">Title supplied to the member.</param>
+/// <param name="Price">Price supplied to the member.</param>
+/// <param name="Detail">Detail supplied to the member.</param>
+/// <param name="Url">Url supplied to the member.</param>
 public sealed record LicensePurchaseOption(string Title, string Price, string Detail, string Url);

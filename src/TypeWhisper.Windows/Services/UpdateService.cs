@@ -8,6 +8,9 @@ using Velopack.Sources;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides update service behavior.
+/// </summary>
 public sealed class UpdateService
 {
     internal const string StableChannelSetting = "stable";
@@ -19,9 +22,18 @@ public sealed class UpdateService
     private UpdateManager? _updateManager;
     private UpdateInfo? _pendingUpdate;
 
+    /// <summary>
+    /// Gets whether is update available.
+    /// </summary>
     public bool IsUpdateAvailable => _pendingUpdate is not null;
+    /// <summary>
+    /// Performs available version.
+    /// </summary>
     public string? AvailableVersion => _pendingUpdate?.TargetFullRelease?.Version?.ToString();
 
+    /// <summary>
+    /// Gets the current version.
+    /// </summary>
     public string CurrentVersion
     {
         get
@@ -43,16 +55,28 @@ public sealed class UpdateService
         }
     }
 
+    /// <summary>
+    /// Gets or sets the channel value.
+    /// </summary>
     public ReleaseChannel Channel { get; private set; } = ReleaseChannel.Stable;
 
+    /// <summary>
+    /// Raised when update available.
+    /// </summary>
     public event EventHandler? UpdateAvailable;
 
+    /// <summary>
+    /// Initializes a new instance of the UpdateService class.
+    /// </summary>
     public UpdateService(TrayIconService trayIcon, ISettingsService settings)
     {
         _trayIcon = trayIcon;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize(ReleaseChannel? channel = null)
     {
         var resolvedChannel = channel ?? ResolveReleaseChannel(_settings.Current.UpdateChannel, CurrentVersion);
@@ -71,11 +95,17 @@ public sealed class UpdateService
         }
     }
 
+    /// <summary>
+    /// Performs switch channel.
+    /// </summary>
     public void SwitchChannel(ReleaseChannel channel)
     {
         Initialize(channel);
     }
 
+    /// <summary>
+    /// Performs check for updates asynchronously.
+    /// </summary>
     public async Task CheckForUpdatesAsync()
     {
         if (_updateManager is null) return;
@@ -97,6 +127,9 @@ public sealed class UpdateService
         }
     }
 
+    /// <summary>
+    /// Downloads and apply asynchronously.
+    /// </summary>
     public async Task DownloadAndApplyAsync()
     {
         if (_updateManager is null || _pendingUpdate is null) return;
@@ -165,9 +198,21 @@ public sealed class UpdateService
     }
 }
 
+/// <summary>
+/// Lists the supported release channel values.
+/// </summary>
 public enum ReleaseChannel
 {
+    /// <summary>
+    /// Represents the stable option.
+    /// </summary>
     Stable,
+    /// <summary>
+    /// Represents the release candidate option.
+    /// </summary>
     ReleaseCandidate,
+    /// <summary>
+    /// Represents the daily option.
+    /// </summary>
     Daily
 }

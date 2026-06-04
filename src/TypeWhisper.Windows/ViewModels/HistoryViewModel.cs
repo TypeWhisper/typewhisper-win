@@ -14,6 +14,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides history view model behavior.
+/// </summary>
 public partial class HistoryViewModel : ObservableObject
 {
     private readonly IHistoryService _history;
@@ -26,13 +29,31 @@ public partial class HistoryViewModel : ObservableObject
     [ObservableProperty] private string? _selectedAppFilter;
     [ObservableProperty] private bool _isLoading;
 
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
     public ObservableCollection<HistoryEntryViewModel> Entries { get; } = [];
+    /// <summary>
+    /// Gets the available apps.
+    /// </summary>
     public ObservableCollection<string> AvailableApps { get; } = [];
+    /// <summary>
+    /// Gets the grouped entries.
+    /// </summary>
     public ICollectionView GroupedEntries { get; }
 
+    /// <summary>
+    /// Gets the number of persisted transcription history records.
+    /// </summary>
     public int TotalRecords => _history.TotalRecords;
+    /// <summary>
+    /// Gets the total words.
+    /// </summary>
     public int TotalWords => _history.TotalWords;
 
+    /// <summary>
+    /// Initializes a new instance of the HistoryViewModel class.
+    /// </summary>
     public HistoryViewModel(
         IHistoryService history,
         IDictionaryService dictionary,
@@ -60,6 +81,9 @@ public partial class HistoryViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// Performs load asynchronously.
+    /// </summary>
     public async Task LoadAsync()
     {
         if (_hasLoaded) return;
@@ -234,10 +258,16 @@ public partial class HistoryViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides history entry view model behavior.
+/// </summary>
 public partial class HistoryEntryViewModel : ObservableObject
 {
     private readonly HistoryViewModel _parent;
 
+    /// <summary>
+    /// Gets or sets the record value.
+    /// </summary>
     public TranscriptionRecord Record { get; private set; }
 
     [ObservableProperty] private bool _isExpanded;
@@ -245,12 +275,27 @@ public partial class HistoryEntryViewModel : ObservableObject
     [ObservableProperty] private string _editText = "";
     [ObservableProperty] private bool _hasSuggestions;
 
+    /// <summary>
+    /// Gets the correction suggestions.
+    /// </summary>
     public ObservableCollection<CorrectionSuggestion> CorrectionSuggestions { get; } = [];
 
+    /// <summary>
+    /// Performs compute date group.
+    /// </summary>
     public string DateGroup => ComputeDateGroup(Record.Timestamp);
+    /// <summary>
+    /// Performs time label.
+    /// </summary>
     public string TimeLabel => Record.Timestamp.ToString("HH:mm");
+    /// <summary>
+    /// Gets the duration label.
+    /// </summary>
     public string DurationLabel => $"{Record.DurationSeconds:F1}s";
 
+    /// <summary>
+    /// Initializes a new instance of the HistoryEntryViewModel class.
+    /// </summary>
     public HistoryEntryViewModel(TranscriptionRecord record, HistoryViewModel parent)
     {
         Record = record;

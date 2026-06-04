@@ -28,8 +28,14 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         _collector = collector;
     }
 
+    /// <summary>
+    /// Raised when transcript received.
+    /// </summary>
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
+    /// <summary>
+    /// Connects the streaming session before audio is sent.
+    /// </summary>
     public static async Task<OpenAiRealtimeStreamingSession> ConnectAsync(
         string apiKey,
         string? language,
@@ -46,6 +52,9 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         return session;
     }
 
+    /// <summary>
+    /// Transcribes wav asynchronously.
+    /// </summary>
     public static async Task<PluginTranscriptionResult> TranscribeWavAsync(
         string apiKey,
         byte[] wavAudio,
@@ -129,6 +138,9 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         });
     }
 
+    /// <summary>
+    /// Sends a PCM audio chunk to the active streaming session.
+    /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open || pcm16Audio.Length == 0)
@@ -148,6 +160,9 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Finalizes the stream and returns the provider transcript.
+    /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open)
@@ -271,6 +286,9 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         return wavAudio[44..];
     }
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -303,6 +321,9 @@ internal sealed class OpenAiRealtimeTranscriptCollector
     private readonly Dictionary<string, string> _completedTexts = [];
     private readonly Dictionary<string, string> _deltaTexts = [];
 
+    /// <summary>
+    /// Gets the current text.
+    /// </summary>
     public string CurrentText
     {
         get
@@ -320,10 +341,22 @@ internal sealed class OpenAiRealtimeTranscriptCollector
         }
     }
 
+    /// <summary>
+    /// Gets whether has completed transcript.
+    /// </summary>
     public bool HasCompletedTranscript => _completedOrder.Count > 0;
+    /// <summary>
+    /// Gets or sets the is session ready value.
+    /// </summary>
     public bool IsSessionReady { get; private set; }
+    /// <summary>
+    /// Gets or sets the error value.
+    /// </summary>
     public string? Error { get; private set; }
 
+    /// <summary>
+    /// Applies an event update to the current state.
+    /// </summary>
     public bool ApplyEvent(string json, out StreamingTranscriptEvent? transcriptEvent)
     {
         transcriptEvent = null;

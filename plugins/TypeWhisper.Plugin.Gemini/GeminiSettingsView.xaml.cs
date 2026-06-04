@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.Gemini;
 
+/// <summary>
+/// Provides gemini settings view behavior.
+/// </summary>
 public partial class GeminiSettingsView : UserControl
 {
     private readonly GeminiPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the GeminiSettingsView class.
+    /// </summary>
     public GeminiSettingsView(GeminiPlugin plugin)
     {
         _plugin = plugin;

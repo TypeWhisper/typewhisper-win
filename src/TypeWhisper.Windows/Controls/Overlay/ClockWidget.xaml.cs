@@ -3,10 +3,16 @@ using System.Windows.Threading;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
+/// <summary>
+/// Provides clock widget behavior.
+/// </summary>
 public partial class ClockWidget : UserControl, IDisposable
 {
     private readonly DispatcherTimer _timer;
 
+    /// <summary>
+    /// Initializes a new instance of the ClockWidget class.
+    /// </summary>
     public ClockWidget()
     {
         InitializeComponent();
@@ -16,5 +22,8 @@ public partial class ClockWidget : UserControl, IDisposable
         _timer.Start();
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _timer.Stop();
 }

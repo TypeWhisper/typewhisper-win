@@ -10,15 +10,36 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Script;
 
+/// <summary>
+/// Represents script entry data.
+/// </summary>
 public sealed record ScriptEntry
 {
+    /// <summary>
+    /// Creates or returns a stable identifier.
+    /// </summary>
     public Guid Id { get; init; } = Guid.NewGuid();
+    /// <summary>
+    /// Gets or sets the name value.
+    /// </summary>
     public string Name { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the command value.
+    /// </summary>
     public string Command { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the shell value.
+    /// </summary>
     public string Shell { get; init; } = "cmd";
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; init; } = true;
 }
 
+/// <summary>
+/// Provides script service behavior.
+/// </summary>
 public sealed class ScriptService
 {
     private static readonly JsonSerializerOptions s_jsonOptions = new()
@@ -31,8 +52,14 @@ public sealed class ScriptService
     private readonly IPluginHostServices _host;
     private readonly string _configPath;
 
+    /// <summary>
+    /// Gets the scripts.
+    /// </summary>
     public ObservableCollection<ScriptEntry> Scripts { get; } = [];
 
+    /// <summary>
+    /// Initializes a new instance of the ScriptService class.
+    /// </summary>
     public ScriptService(IPluginHostServices host)
     {
         _host = host;
@@ -40,12 +67,18 @@ public sealed class ScriptService
         Load();
     }
 
+    /// <summary>
+    /// Adds script.
+    /// </summary>
     public void AddScript(ScriptEntry script)
     {
         Scripts.Add(script);
         Save();
     }
 
+    /// <summary>
+    /// Removes script.
+    /// </summary>
     public void RemoveScript(Guid id)
     {
         var script = Scripts.FirstOrDefault(s => s.Id == id);
@@ -56,6 +89,9 @@ public sealed class ScriptService
         }
     }
 
+    /// <summary>
+    /// Updates script.
+    /// </summary>
     public void UpdateScript(ScriptEntry updated)
     {
         for (var i = 0; i < Scripts.Count; i++)
@@ -69,6 +105,9 @@ public sealed class ScriptService
         }
     }
 
+    /// <summary>
+    /// Moves up.
+    /// </summary>
     public void MoveUp(Guid id)
     {
         var index = IndexOf(id);
@@ -79,6 +118,9 @@ public sealed class ScriptService
         }
     }
 
+    /// <summary>
+    /// Moves down.
+    /// </summary>
     public void MoveDown(Guid id)
     {
         var index = IndexOf(id);
@@ -89,6 +131,9 @@ public sealed class ScriptService
         }
     }
 
+    /// <summary>
+    /// Runs scripts asynchronously..
+    /// </summary>
     public async Task<string> RunScriptsAsync(string text, PostProcessingContext context, CancellationToken ct)
     {
         var current = text;
@@ -210,6 +255,9 @@ public sealed class ScriptService
         }
     }
 
+    /// <summary>
+    /// Persists the supplied state to storage.
+    /// </summary>
     public void Save()
     {
         try
@@ -225,18 +273,42 @@ public sealed class ScriptService
     }
 }
 
+/// <summary>
+/// Provides script plugin behavior.
+/// </summary>
 public sealed class ScriptPlugin : IPostProcessorPlugin
 {
     private IPluginHostServices? _host;
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.script";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Script Runner";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
+    /// <summary>
+    /// Gets the processor name.
+    /// </summary>
     public string ProcessorName => "Script Runner";
+    /// <summary>
+    /// Gets the priority.
+    /// </summary>
     public int Priority => 400;
 
+    /// <summary>
+    /// Gets or sets the service value.
+    /// </summary>
     public ScriptService? Service { get; private set; }
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -244,20 +316,32 @@ public sealed class ScriptPlugin : IPostProcessorPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         Service = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
     {
         if (Service is null) return text;
         return await Service.RunScriptsAsync(text, context, ct);
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new ScriptSettingsView(this);
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         Service = null;

@@ -7,12 +7,18 @@ using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides snippet service behavior.
+/// </summary>
 public sealed partial class SnippetService : ISnippetService
 {
     private readonly string _filePath;
     private List<Snippet> _cache = [];
     private bool _cacheLoaded;
 
+    /// <summary>
+    /// Gets the configured snippets in display order.
+    /// </summary>
     public IReadOnlyList<Snippet> Snippets
     {
         get
@@ -22,6 +28,9 @@ public sealed partial class SnippetService : ISnippetService
         }
     }
 
+    /// <summary>
+    /// Gets the all tags.
+    /// </summary>
     public IReadOnlyList<string> AllTags
     {
         get
@@ -35,13 +44,22 @@ public sealed partial class SnippetService : ISnippetService
         }
     }
 
+    /// <summary>
+    /// Raised when snippets changes.
+    /// </summary>
     public event Action? SnippetsChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the SnippetService class.
+    /// </summary>
     public SnippetService(string filePath)
     {
         _filePath = filePath;
     }
 
+    /// <summary>
+    /// Adds snippet.
+    /// </summary>
     public void AddSnippet(Snippet snippet)
     {
         EnsureCacheLoaded();
@@ -50,6 +68,9 @@ public sealed partial class SnippetService : ISnippetService
         SnippetsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Updates snippet.
+    /// </summary>
     public void UpdateSnippet(Snippet snippet)
     {
         EnsureCacheLoaded();
@@ -63,6 +84,9 @@ public sealed partial class SnippetService : ISnippetService
         SnippetsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes snippet.
+    /// </summary>
     public void DeleteSnippet(string id)
     {
         EnsureCacheLoaded();
@@ -71,6 +95,9 @@ public sealed partial class SnippetService : ISnippetService
         SnippetsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Applies snippets.
+    /// </summary>
     public string ApplySnippets(string text, Func<string>? clipboardProvider = null)
     {
         EnsureCacheLoaded();
@@ -98,12 +125,18 @@ public sealed partial class SnippetService : ISnippetService
         return text;
     }
 
+    /// <summary>
+    /// Exports the current data as JSON.
+    /// </summary>
     public string ExportToJson()
     {
         EnsureCacheLoaded();
         return JsonSerializer.Serialize(_cache, SnippetJsonContext.Default.ListSnippet);
     }
 
+    /// <summary>
+    /// Imports from json.
+    /// </summary>
     public int ImportFromJson(string json)
     {
         var imported = JsonSerializer.Deserialize(json, SnippetJsonContext.Default.ListSnippet);
@@ -171,6 +204,9 @@ public sealed partial class SnippetService : ISnippetService
         }
     }
 
+    /// <summary>
+    /// Returns user data sync snippets.
+    /// </summary>
     public IReadOnlyList<UserDataSyncSnippet> GetUserDataSyncSnippets()
     {
         EnsureCacheLoaded();
@@ -186,6 +222,9 @@ public sealed partial class SnippetService : ISnippetService
             .ToList();
     }
 
+    /// <summary>
+    /// Applies user data sync mutations.
+    /// </summary>
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
         EnsureCacheLoaded();

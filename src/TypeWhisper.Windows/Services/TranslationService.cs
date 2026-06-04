@@ -12,6 +12,9 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides translation service behavior.
+/// </summary>
 public sealed class TranslationService : ITranslationService, IDisposable
 {
     private readonly PluginManager _pluginManager;
@@ -25,11 +28,17 @@ public sealed class TranslationService : ITranslationService, IDisposable
         "You are a professional translator. Translate the given text accurately and naturally. " +
         "Output ONLY the translation, nothing else. Do not add explanations, notes, or formatting.";
 
+    /// <summary>
+    /// Initializes a new instance of the TranslationService class.
+    /// </summary>
     public TranslationService(PluginManager pluginManager)
     {
         _pluginManager = pluginManager;
     }
 
+    /// <summary>
+    /// Returns whether model ready.
+    /// </summary>
     public bool IsModelReady(string sourceLang, string targetLang)
     {
         // Cloud translation is always ready when a provider is configured
@@ -38,9 +47,15 @@ public sealed class TranslationService : ITranslationService, IDisposable
         return _loadedModels.ContainsKey(ModelKey(sourceLang, targetLang));
     }
 
+    /// <summary>
+    /// Returns whether model loading.
+    /// </summary>
     public bool IsModelLoading(string sourceLang, string targetLang) =>
         _loadingModels.Contains(ModelKey(sourceLang, targetLang));
 
+    /// <summary>
+    /// Performs translate asynchronously.
+    /// </summary>
     public async Task<string> TranslateAsync(string text, string sourceLang, string targetLang, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return text;
@@ -239,6 +254,9 @@ public sealed class TranslationService : ITranslationService, IDisposable
     private static string ModelKey(string sourceLang, string targetLang) =>
         $"{sourceLang}-{targetLang}";
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

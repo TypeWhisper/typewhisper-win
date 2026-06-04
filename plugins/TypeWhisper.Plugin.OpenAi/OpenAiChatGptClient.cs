@@ -12,6 +12,9 @@ internal sealed class OpenAiChatGptClient
     private readonly string _accessToken;
     private readonly string? _accountId;
 
+    /// <summary>
+    /// Performs open ai chat gpt client.
+    /// </summary>
     public OpenAiChatGptClient(HttpClient httpClient, string accessToken, string? accountId)
     {
         _httpClient = httpClient;
@@ -19,6 +22,9 @@ internal sealed class OpenAiChatGptClient
         _accountId = accountId;
     }
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(
         string systemPrompt,
         string userText,

@@ -1,5 +1,11 @@
 namespace TypeWhisper.Core.Models;
 
+/// <summary>
+/// Represents translation file info data.
+/// </summary>
+/// <param name="FileName">File name supplied to the member.</param>
+/// <param name="DownloadUrl">Download url supplied to the member.</param>
+/// <param name="EstimatedSizeMB">Estimated size mb supplied to the member.</param>
 public sealed record TranslationFileInfo(string FileName, string DownloadUrl, int EstimatedSizeMB);
 
 /// <summary>
@@ -12,19 +18,43 @@ public sealed record TranslationTargetOption(string? Code, string DisplayName, s
 /// </summary>
 public sealed record TranslationLanguage(string Code, string DisplayName, string BadgeCode);
 
+/// <summary>
+/// Represents translation model info data.
+/// </summary>
 public sealed record TranslationModelInfo
 {
+    /// <summary>
+    /// Gets or sets the id value.
+    /// </summary>
     public required string Id { get; init; }
+    /// <summary>
+    /// Gets or sets the source language value.
+    /// </summary>
     public required string SourceLanguage { get; init; }
+    /// <summary>
+    /// Gets or sets the target language value.
+    /// </summary>
     public required string TargetLanguage { get; init; }
+    /// <summary>
+    /// Gets or sets the display name value.
+    /// </summary>
     public required string DisplayName { get; init; }
+    /// <summary>
+    /// Gets or sets the files value.
+    /// </summary>
     public required IReadOnlyList<TranslationFileInfo> Files { get; init; }
+    /// <summary>
+    /// Gets or sets the sub directory value.
+    /// </summary>
     public required string SubDirectory { get; init; }
 
     private const string HF = "https://huggingface.co/Xenova";
 
     // --- Supported target languages ---
 
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public static IReadOnlyList<TranslationLanguage> SupportedLanguages { get; } =
     [
         new("en", "English", "EN"),
@@ -103,6 +133,9 @@ public sealed record TranslationModelInfo
         };
     }
 
+    /// <summary>
+    /// Gets the available models.
+    /// </summary>
     public static IReadOnlyList<TranslationModelInfo> AvailableModels { get; } =
     [
         // X → EN (confirmed Xenova exports)
@@ -151,6 +184,9 @@ public sealed record TranslationModelInfo
         Pair("de", "es"),
     ];
 
+    /// <summary>
+    /// Performs find model.
+    /// </summary>
     public static TranslationModelInfo? FindModel(string sourceLang, string targetLang) =>
         AvailableModels.FirstOrDefault(m =>
             m.SourceLanguage == sourceLang && m.TargetLanguage == targetLang);

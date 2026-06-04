@@ -13,11 +13,17 @@ public partial class LiveTranscriptWindow : Window
     private double? _savedLeft;
     private double? _savedTop;
 
+    /// <summary>
+    /// Initializes a new instance of the LiveTranscriptWindow class.
+    /// </summary>
     public LiveTranscriptWindow()
     {
         InitializeComponent();
     }
 
+    /// <summary>
+    /// Raised when position changes.
+    /// </summary>
     public event Action<double, double>? PositionChanged;
 
     /// <summary>Gets the current displayed text.</summary>
@@ -42,6 +48,9 @@ public partial class LiveTranscriptWindow : Window
         RootBorder.Opacity = opacity;
     }
 
+    /// <summary>
+    /// Sets saved position.
+    /// </summary>
     public void SetSavedPosition(double? left, double? top)
     {
         _savedLeft = left;
@@ -51,6 +60,9 @@ public partial class LiveTranscriptWindow : Window
             PositionWindow();
     }
 
+    /// <summary>
+    /// Performs reset to default position.
+    /// </summary>
     public void ResetToDefaultPosition()
     {
         _savedLeft = null;

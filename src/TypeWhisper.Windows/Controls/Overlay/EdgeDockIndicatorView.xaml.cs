@@ -9,6 +9,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
+/// <summary>
+/// Provides edge dock indicator view behavior.
+/// </summary>
 public partial class EdgeDockIndicatorView : UserControl
 {
     private const double MaxPartialPreviewHeight = 86;
@@ -26,6 +29,9 @@ public partial class EdgeDockIndicatorView : UserControl
     private bool _queuedPartialTextAnimation;
     private int _partialPreviewAnimationVersion;
 
+    /// <summary>
+    /// Initializes a new instance of the EdgeDockIndicatorView class.
+    /// </summary>
     public EdgeDockIndicatorView()
     {
         InitializeComponent();

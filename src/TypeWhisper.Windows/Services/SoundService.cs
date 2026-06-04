@@ -3,6 +3,9 @@ using NAudio.Wave;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides sound service behavior.
+/// </summary>
 public sealed class SoundService
 {
     private static readonly string SoundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Sounds");
@@ -12,11 +15,26 @@ public sealed class SoundService
     private readonly byte[]? _success = LoadWav("success.wav");
     private readonly byte[]? _error = LoadWav("error.wav");
 
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Performs play start sound.
+    /// </summary>
     public void PlayStartSound() => Play(_start);
+    /// <summary>
+    /// Performs play stop sound.
+    /// </summary>
     public void PlayStopSound() => Play(_stop);
+    /// <summary>
+    /// Performs play success sound.
+    /// </summary>
     public void PlaySuccessSound() => Play(_success);
+    /// <summary>
+    /// Performs play error sound.
+    /// </summary>
     public void PlayErrorSound() => Play(_error);
 
     private void Play(byte[]? wav)

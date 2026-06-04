@@ -11,6 +11,9 @@ public static class ApiKeyProtection
 {
     private static readonly byte[] Entropy = "TypeWhisper.ApiKey.v1"u8.ToArray();
 
+    /// <summary>
+    /// Performs encrypt.
+    /// </summary>
     public static string Encrypt(string plainText)
     {
         if (string.IsNullOrEmpty(plainText)) return "";
@@ -19,6 +22,9 @@ public static class ApiKeyProtection
         return Convert.ToBase64String(encrypted);
     }
 
+    /// <summary>
+    /// Performs decrypt.
+    /// </summary>
     public static string Decrypt(string encrypted)
     {
         if (string.IsNullOrEmpty(encrypted)) return "";

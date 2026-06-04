@@ -7,6 +7,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Gemini;
 
+/// <summary>
+/// Provides gemini plugin behavior.
+/// </summary>
 public sealed class GeminiPlugin : ILlmProviderPlugin
 {
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
@@ -18,10 +21,22 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.gemini";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Google Gemini";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -29,19 +44,34 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new GeminiSettingsView(this);
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "Google Gemini";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
     [
         new PluginModelInfo(DefaultModel, "Gemini 2.5 Flash") { IsRecommended = true },
@@ -52,6 +82,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
         new PluginModelInfo("gemma-4-4b-it", "Gemma 4 4B"),
     ];
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
@@ -93,6 +126,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

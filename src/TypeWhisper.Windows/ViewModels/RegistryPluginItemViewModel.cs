@@ -5,31 +5,94 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides registry plugin item view model behavior.
+/// </summary>
 public partial class RegistryPluginItemViewModel : ObservableObject
 {
     private readonly RegistryPlugin _registryPlugin;
     private readonly PluginRegistryService _registryService;
 
+    /// <summary>
+    /// Gets the id.
+    /// </summary>
     public string Id => _registryPlugin.Id;
+    /// <summary>
+    /// Gets the display or storage name.
+    /// </summary>
     public string Name => _registryPlugin.Name;
+    /// <summary>
+    /// Gets the version.
+    /// </summary>
     public string Version => _registryPlugin.Version;
+    /// <summary>
+    /// Gets the author.
+    /// </summary>
     public string Author => _registryPlugin.Author;
+    /// <summary>
+    /// Gets the description.
+    /// </summary>
     public string Description => _registryPlugin.Description;
+    /// <summary>
+    /// Gets the category.
+    /// </summary>
     public string? Category => _registryPlugin.Category;
+    /// <summary>
+    /// Gets the categories.
+    /// </summary>
     public IReadOnlyList<string>? Categories => _registryPlugin.Categories;
+    /// <summary>
+    /// Gets the requires api key.
+    /// </summary>
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
+    /// <summary>
+    /// Performs format size.
+    /// </summary>
     public string SizeDisplay => FormatSize(_registryPlugin.Size);
+    /// <summary>
+    /// Gets the logo path.
+    /// </summary>
     public string? LogoPath => PluginIconHelper.GetLogoPath(Id);
+    /// <summary>
+    /// Gets whether has logo.
+    /// </summary>
     public bool HasLogo => LogoPath is not null;
+    /// <summary>
+    /// Performs icon emoji.
+    /// </summary>
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
+    /// <summary>
+    /// Performs icon gradient start.
+    /// </summary>
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
+    /// <summary>
+    /// Performs icon gradient end.
+    /// </summary>
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
+    /// <summary>
+    /// Gets the category descriptors.
+    /// </summary>
     public IReadOnlyList<PluginMarketplaceCategoryDescriptor> CategoryDescriptors =>
         PluginMarketplaceCategories.ResolveAll(Category, Categories);
+    /// <summary>
+    /// Performs category keys.
+    /// </summary>
     public IReadOnlyList<string> CategoryKeys => CategoryDescriptors.Select(category => category.Key).ToArray();
+    /// <summary>
+    /// Gets the category key.
+    /// </summary>
     public string CategoryKey => CategoryDescriptors[0].Key;
+    /// <summary>
+    /// Gets the category label.
+    /// </summary>
     public string CategoryLabel => CategoryDescriptors[0].DisplayName;
+    /// <summary>
+    /// Gets the category sort order.
+    /// </summary>
     public int CategorySortOrder => CategoryDescriptors[0].SortOrder;
+    /// <summary>
+    /// Gets the location badge.
+    /// </summary>
     public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
 
     [ObservableProperty] private PluginInstallState _installState;
@@ -37,8 +100,14 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     [ObservableProperty] private bool _isWorking;
     [ObservableProperty] private string _installErrorMessage = "";
 
+    /// <summary>
+    /// Returns whether install error.
+    /// </summary>
     public bool HasInstallError => !string.IsNullOrWhiteSpace(InstallErrorMessage);
 
+    /// <summary>
+    /// Initializes a new instance of the RegistryPluginItemViewModel class.
+    /// </summary>
     public RegistryPluginItemViewModel(RegistryPlugin registryPlugin, PluginRegistryService registryService)
     {
         _registryPlugin = registryPlugin;
@@ -145,10 +214,22 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents plugin marketplace category descriptor data.
+/// </summary>
+/// <param name="Key">Key supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="SortOrder">Sort order supplied to the member.</param>
 public sealed record PluginMarketplaceCategoryDescriptor(string Key, string DisplayName, int SortOrder);
 
+/// <summary>
+/// Provides plugin marketplace categories behavior.
+/// </summary>
 public static class PluginMarketplaceCategories
 {
+    /// <summary>
+    /// Resolves the supplied input to a configured value.
+    /// </summary>
     public static PluginMarketplaceCategoryDescriptor Resolve(string? rawCategory) => Normalize(rawCategory) switch
     {
         "transcription" => new("transcription", Loc.Instance["Plugins.CategoryTranscription"], 0),
@@ -160,6 +241,9 @@ public static class PluginMarketplaceCategories
         _ => new("utility", Loc.Instance["Plugins.CategoryUtilities"], 6)
     };
 
+    /// <summary>
+    /// Resolves all.
+    /// </summary>
     public static IReadOnlyList<PluginMarketplaceCategoryDescriptor> ResolveAll(
         string? primaryCategory,
         IEnumerable<string>? categories)

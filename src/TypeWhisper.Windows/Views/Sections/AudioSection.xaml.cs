@@ -5,8 +5,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides audio section behavior.
+/// </summary>
 public partial class AudioSection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the AudioSection class.
+    /// </summary>
     public AudioSection() => InitializeComponent();
 
     private void Model_Click(object sender, MouseButtonEventArgs e)

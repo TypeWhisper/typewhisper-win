@@ -6,21 +6,39 @@ using System.Windows.Data;
 
 namespace TypeWhisper.Plugin.Webhook;
 
+/// <summary>
+/// Provides bool to icon converter behavior.
+/// </summary>
 public sealed class BoolToIconConverter : IValueConverter
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static readonly BoolToIconConverter Instance = new();
 
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is true ? "\u2713" : "\u2717";
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Provides webhook settings view behavior.
+/// </summary>
 public partial class WebhookSettingsView : UserControl
 {
     private readonly WebhookPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the WebhookSettingsView class.
+    /// </summary>
     public WebhookSettingsView(WebhookPlugin plugin)
     {
         _plugin = plugin;

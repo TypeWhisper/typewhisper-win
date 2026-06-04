@@ -26,17 +26,26 @@ public sealed class PluginAssemblyLoadContext : AssemblyLoadContext
 {
     private readonly AssemblyDependencyResolver _resolver;
 
+    /// <summary>
+    /// Initializes a new instance of the PluginAssemblyLoadContext class.
+    /// </summary>
     public PluginAssemblyLoadContext(string pluginPath) : base(isCollectible: true)
     {
         _resolver = new AssemblyDependencyResolver(pluginPath);
     }
 
+    /// <summary>
+    /// Resolves managed plugin dependencies from the plugin directory before falling back to the default context.
+    /// </summary>
     protected override Assembly? Load(AssemblyName assemblyName)
     {
         var path = _resolver.ResolveAssemblyToPath(assemblyName);
         return path is not null ? LoadFromAssemblyPath(path) : null;
     }
 
+    /// <summary>
+    /// Resolves native plugin dependencies from the plugin directory and returns zero when unavailable.
+    /// </summary>
     protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
     {
         var path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
@@ -45,8 +54,7 @@ public sealed class PluginAssemblyLoadContext : AssemblyLoadContext
 }
 
 /// <summary>
-/// Discovers and loads plugins from one or more search directories.
-/// Each plugin resides in a subdirectory containing a manifest.json file.
+/// Provides plugin loader behavior.
 /// </summary>
 public sealed partial class PluginLoader
 {
@@ -149,7 +157,7 @@ public sealed partial class PluginLoader
     }
 
     /// <summary>
-    /// Removes the Zone.Identifier alternate data stream (Mark of the Web) from all
+    /// Removes the Zone.Identifier alternate data stream (Mark of the Web) from all.
     /// DLL and JSON files in a directory, preventing Windows SmartScreen from blocking them.
     /// </summary>
     internal static void UnblockDirectory(string directory)

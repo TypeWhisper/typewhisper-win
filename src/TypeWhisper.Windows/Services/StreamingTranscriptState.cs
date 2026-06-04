@@ -10,6 +10,9 @@ internal sealed class StreamingTranscriptState
     private string _lastDisplayedText = "";
     private string _lastFinalSegment = "";
 
+    /// <summary>
+    /// Starts a new streaming transcript session and returns its version token.
+    /// </summary>
     public int StartSession()
     {
         _confirmedText = "";
@@ -18,6 +21,9 @@ internal sealed class StreamingTranscriptState
         return Interlocked.Increment(ref _sessionVersion);
     }
 
+    /// <summary>
+    /// Stops the current session and returns the most recent display text.
+    /// </summary>
     public string StopSession()
     {
         var finalText = !string.IsNullOrWhiteSpace(_lastDisplayedText)
@@ -30,11 +36,20 @@ internal sealed class StreamingTranscriptState
         return finalText;
     }
 
+    /// <summary>
+    /// Returns whether the supplied version still belongs to the active session.
+    /// </summary>
     public bool IsCurrentSession(int sessionVersion) =>
         sessionVersion == Volatile.Read(ref _sessionVersion);
 
+    /// <summary>
+    /// Invalidates in-flight transcript updates from older sessions.
+    /// </summary>
     public void InvalidateSession() => Interlocked.Increment(ref _sessionVersion);
 
+    /// <summary>
+    /// Applies a real-time transcript update and returns false for stale or empty updates.
+    /// </summary>
     public bool TryApplyRealtime(
         int sessionVersion,
         StreamingTranscriptEvent evt,
@@ -55,6 +70,8 @@ internal sealed class StreamingTranscriptState
 
         if (evt.IsFinal)
         {
+            // Some providers send final events as cumulative text while others send only the
+            // newest segment, so final updates are merged with duplicate protection.
             _confirmedText = MergeFinalSegment(_confirmedText, _lastFinalSegment, text);
             _lastFinalSegment = text;
             _lastDisplayedText = _confirmedText;
@@ -69,6 +86,9 @@ internal sealed class StreamingTranscriptState
         return true;
     }
 
+    /// <summary>
+    /// Applies a polled transcript snapshot and stabilizes it against confirmed text.
+    /// </summary>
     public bool TryApplyPolling(
         int sessionVersion,
         string rawText,
@@ -87,6 +107,8 @@ internal sealed class StreamingTranscriptState
         if (string.IsNullOrEmpty(text))
             return false;
 
+        // Polling sources can rewrite their full hypothesis on every read; keep the longest
+        // stable prefix so the preview does not visibly regress while speech continues.
         var stable = StreamingHandler.StabilizeText(_confirmedText, text);
         _confirmedText = stable;
         _lastDisplayedText = stable;

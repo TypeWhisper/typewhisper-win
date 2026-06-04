@@ -64,30 +64,54 @@ public sealed class TermPackRegistryService
 
     private sealed record RegistryResponse
     {
+        /// <summary>
+        /// Gets or sets the packs value.
+        /// </summary>
         [JsonPropertyName("packs")]
         public List<RemoteTermPack>? Packs { get; init; }
     }
 
     private sealed record RemoteTermPack
     {
+        /// <summary>
+        /// Gets or sets the id value.
+        /// </summary>
         [JsonPropertyName("id")]
         public string Id { get; init; } = "";
 
+        /// <summary>
+        /// Gets or sets the name value.
+        /// </summary>
         [JsonPropertyName("name")]
         public string? Name { get; init; }
 
+        /// <summary>
+        /// Gets or sets the names value.
+        /// </summary>
         [JsonPropertyName("names")]
         public Dictionary<string, string>? Names { get; init; }
 
+        /// <summary>
+        /// Gets or sets the icon value.
+        /// </summary>
         [JsonPropertyName("icon")]
         public string? Icon { get; init; }
 
+        /// <summary>
+        /// Gets or sets the requires commercial license value.
+        /// </summary>
         [JsonPropertyName("requiresCommercialLicense")]
         public bool RequiresCommercialLicense { get; init; }
 
+        /// <summary>
+        /// Gets or sets the terms value.
+        /// </summary>
         [JsonPropertyName("terms")]
         public List<string> Terms { get; init; } = [];
 
+        /// <summary>
+        /// Gets the localized name.
+        /// </summary>
         public string LocalizedName()
         {
             var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;

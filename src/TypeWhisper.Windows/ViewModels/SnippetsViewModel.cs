@@ -11,6 +11,9 @@ using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides snippets view model behavior.
+/// </summary>
 public partial class SnippetsViewModel : ObservableObject
 {
     private readonly ISnippetService _snippets;
@@ -26,21 +29,51 @@ public partial class SnippetsViewModel : ObservableObject
     [ObservableProperty] private string _editTags = "";
     private string? _editingSnippetId;
 
-    // Tag filter
+    /// <summary>
+    /// Gets or sets the active tag filter used to limit the snippet list.
+    /// </summary>
     [ObservableProperty] private string? _selectedTagFilter;
+
+    /// <summary>
+    /// Gets the distinct tags that can be selected for snippet filtering.
+    /// </summary>
     public ObservableCollection<string> AvailableTags { get; } = [];
+    /// <summary>
+    /// Gets the configured snippets in display order.
+    /// </summary>
     public ObservableCollection<Snippet> Snippets { get; } = [];
+    /// <summary>
+    /// Gets whether has snippets.
+    /// </summary>
     public bool HasSnippets => Snippets.Count > 0;
+    /// <summary>
+    /// Returns whether active tag filter.
+    /// </summary>
     public bool HasActiveTagFilter => !string.IsNullOrWhiteSpace(SelectedTagFilter);
+    /// <summary>
+    /// Gets the snippet count.
+    /// </summary>
     public int SnippetCount => Snippets.Count;
+    /// <summary>
+    /// Performs enabled snippet count.
+    /// </summary>
     public int EnabledSnippetCount => Snippets.Count(static snippet => snippet.IsEnabled);
+    /// <summary>
+    /// Gets the summary text.
+    /// </summary>
     public string SummaryText => HasActiveTagFilter
         ? Loc.Instance.GetString("Snippets.FilteredSummaryFormat", SnippetCount, EnabledSnippetCount, SelectedTagFilter ?? "")
         : Loc.Instance.GetString("Snippets.SummaryFormat", SnippetCount, EnabledSnippetCount);
+    /// <summary>
+    /// Gets the editor title.
+    /// </summary>
     public string EditorTitle => IsCreatingNew
         ? Loc.Instance["SnippetEditor.NewTitle"]
         : Loc.Instance["SnippetEditor.EditTitle"];
 
+    /// <summary>
+    /// Initializes a new instance of the SnippetsViewModel class.
+    /// </summary>
     public SnippetsViewModel(ISnippetService snippets)
     {
         _snippets = snippets;

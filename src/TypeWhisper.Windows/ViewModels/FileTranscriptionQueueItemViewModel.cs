@@ -5,8 +5,14 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides file transcription queue item view model behavior.
+/// </summary>
 public sealed partial class FileTranscriptionQueueItemViewModel : ObservableObject
 {
+    /// <summary>
+    /// Initializes a new instance of the FileTranscriptionQueueItemViewModel class.
+    /// </summary>
     public FileTranscriptionQueueItemViewModel(string filePath, FileTranscriptionQueueItemStatus status)
     {
         FilePath = filePath;
@@ -18,9 +24,21 @@ public sealed partial class FileTranscriptionQueueItemViewModel : ObservableObje
         ErrorText = status == FileTranscriptionQueueItemStatus.Unsupported ? StatusText : "";
     }
 
+    /// <summary>
+    /// Gets the file path.
+    /// </summary>
     public string FilePath { get; }
+    /// <summary>
+    /// Gets the file name.
+    /// </summary>
     public string FileName { get; }
+    /// <summary>
+    /// Gets or sets the cancellation value.
+    /// </summary>
     public CancellationTokenSource? Cancellation { get; set; }
+    /// <summary>
+    /// Gets or sets the raw result value.
+    /// </summary>
     public TranscriptionResult? RawResult { get; set; }
 
     [ObservableProperty] private FileTranscriptionQueueItemStatus _status;
@@ -31,11 +49,29 @@ public sealed partial class FileTranscriptionQueueItemViewModel : ObservableObje
     [ObservableProperty] private double _audioDuration;
     [ObservableProperty] private string _errorText = "";
 
+    /// <summary>
+    /// Gets whether is processing.
+    /// </summary>
     public bool IsProcessing => Status is FileTranscriptionQueueItemStatus.Loading or FileTranscriptionQueueItemStatus.Transcribing;
+    /// <summary>
+    /// Gets whether can cancel.
+    /// </summary>
     public bool CanCancel => Status is FileTranscriptionQueueItemStatus.Queued or FileTranscriptionQueueItemStatus.Loading or FileTranscriptionQueueItemStatus.Transcribing;
+    /// <summary>
+    /// Returns whether result.
+    /// </summary>
     public bool HasResult => Status == FileTranscriptionQueueItemStatus.Completed && !string.IsNullOrWhiteSpace(ResultText);
+    /// <summary>
+    /// Gets whether can export subtitles.
+    /// </summary>
     public bool CanExportSubtitles => HasResult && RawResult?.Segments is { Count: > 0 };
+    /// <summary>
+    /// Returns whether detected language.
+    /// </summary>
     public bool HasDetectedLanguage => !string.IsNullOrWhiteSpace(DetectedLanguage);
+    /// <summary>
+    /// Returns whether error.
+    /// </summary>
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorText);
 
     partial void OnStatusChanged(FileTranscriptionQueueItemStatus value)
@@ -62,6 +98,9 @@ public sealed partial class FileTranscriptionQueueItemViewModel : ObservableObje
         OnPropertyChanged(nameof(HasError));
     }
 
+    /// <summary>
+    /// Refreshes export state.
+    /// </summary>
     public void RefreshExportState()
     {
         OnPropertyChanged(nameof(CanExportSubtitles));

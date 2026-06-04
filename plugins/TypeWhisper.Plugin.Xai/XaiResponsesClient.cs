@@ -13,6 +13,9 @@ internal sealed class XaiResponsesClient
     private readonly string _baseUrl;
     private readonly string _apiKey;
 
+    /// <summary>
+    /// Performs xai responses client.
+    /// </summary>
     public XaiResponsesClient(HttpClient httpClient, string baseUrl, string apiKey)
     {
         _httpClient = httpClient;
@@ -20,6 +23,9 @@ internal sealed class XaiResponsesClient
         _apiKey = apiKey;
     }
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(
         string systemPrompt,
         string userText,
@@ -46,6 +52,9 @@ internal sealed class XaiResponsesClient
         return ParseResponse(json);
     }
 
+    /// <summary>
+    /// Parses response.
+    /// </summary>
     public static string ParseResponse(string json)
     {
         using var doc = JsonDocument.Parse(json);

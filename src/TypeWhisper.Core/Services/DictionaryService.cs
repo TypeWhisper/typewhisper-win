@@ -6,6 +6,9 @@ using TypeWhisper.Core.Services.Sync;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides dictionary service behavior.
+/// </summary>
 public sealed class DictionaryService : IDictionaryService
 {
     private const string PackEntryPrefix = "pack:";
@@ -14,6 +17,12 @@ public sealed class DictionaryService : IDictionaryService
     private List<DictionaryEntry> _cache = [];
     private bool _cacheLoaded;
 
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
     public IReadOnlyList<DictionaryEntry> Entries
     {
         get
@@ -23,13 +32,22 @@ public sealed class DictionaryService : IDictionaryService
         }
     }
 
+    /// <summary>
+    /// Raised when entries changes.
+    /// </summary>
     public event Action? EntriesChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the DictionaryService class.
+    /// </summary>
     public DictionaryService(string filePath)
     {
         _filePath = filePath;
     }
 
+    /// <summary>
+    /// Adds a dictionary entry and persists the updated dictionary.
+    /// </summary>
     public void AddEntry(DictionaryEntry entry)
     {
         EnsureCacheLoaded();
@@ -38,6 +56,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Adds entries.
+    /// </summary>
     public void AddEntries(IEnumerable<DictionaryEntry> entries)
     {
         EnsureCacheLoaded();
@@ -46,6 +67,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Updates entry.
+    /// </summary>
     public void UpdateEntry(DictionaryEntry entry)
     {
         EnsureCacheLoaded();
@@ -59,6 +83,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes entry.
+    /// </summary>
     public void DeleteEntry(string id)
     {
         EnsureCacheLoaded();
@@ -67,6 +94,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes entries.
+    /// </summary>
     public void DeleteEntries(IEnumerable<string> ids)
     {
         EnsureCacheLoaded();
@@ -76,6 +106,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Applies corrections.
+    /// </summary>
     public string ApplyCorrections(string text)
     {
         EnsureCacheLoaded();
@@ -102,6 +135,9 @@ public sealed class DictionaryService : IDictionaryService
         return text;
     }
 
+    /// <summary>
+    /// Returns terms for prompt.
+    /// </summary>
     public string? GetTermsForPrompt()
     {
         EnsureCacheLoaded();
@@ -111,6 +147,9 @@ public sealed class DictionaryService : IDictionaryService
         return string.Join(", ", terms);
     }
 
+    /// <summary>
+    /// Returns enabled terms.
+    /// </summary>
     public IReadOnlyList<string> GetEnabledTerms()
     {
         EnsureCacheLoaded();
@@ -119,6 +158,9 @@ public sealed class DictionaryService : IDictionaryService
             .Select(e => e.Original));
     }
 
+    /// <summary>
+    /// Returns enabled corrections.
+    /// </summary>
     public IReadOnlyList<DictionaryEntry> GetEnabledCorrections()
     {
         EnsureCacheLoaded();
@@ -128,6 +170,9 @@ public sealed class DictionaryService : IDictionaryService
             .ToList();
     }
 
+    /// <summary>
+    /// Sets terms.
+    /// </summary>
     public void SetTerms(IEnumerable<string> terms, bool replaceExisting)
     {
         EnsureCacheLoaded();
@@ -199,6 +244,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Removes all terms.
+    /// </summary>
     public void RemoveAllTerms()
     {
         EnsureCacheLoaded();
@@ -207,6 +255,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes term.
+    /// </summary>
     public bool DeleteTerm(string term)
     {
         EnsureCacheLoaded();
@@ -223,6 +274,9 @@ public sealed class DictionaryService : IDictionaryService
         return true;
     }
 
+    /// <summary>
+    /// Upserts correction.
+    /// </summary>
     public void UpsertCorrection(string original, string replacement, bool caseSensitive)
     {
         EnsureCacheLoaded();
@@ -264,6 +318,9 @@ public sealed class DictionaryService : IDictionaryService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes correction.
+    /// </summary>
     public bool DeleteCorrection(string original)
     {
         EnsureCacheLoaded();
@@ -279,6 +336,9 @@ public sealed class DictionaryService : IDictionaryService
         return true;
     }
 
+    /// <summary>
+    /// Learns correction.
+    /// </summary>
     public void LearnCorrection(string original, string replacement)
     {
         EnsureCacheLoaded();
@@ -306,6 +366,9 @@ public sealed class DictionaryService : IDictionaryService
         }
     }
 
+    /// <summary>
+    /// Activates pack.
+    /// </summary>
     public void ActivatePack(TermPack pack)
     {
         EnsureCacheLoaded();
@@ -339,6 +402,9 @@ public sealed class DictionaryService : IDictionaryService
         }
     }
 
+    /// <summary>
+    /// Deactivates pack.
+    /// </summary>
     public void DeactivatePack(string packId)
     {
         EnsureCacheLoaded();
@@ -363,6 +429,9 @@ public sealed class DictionaryService : IDictionaryService
         }
     }
 
+    /// <summary>
+    /// Returns user data sync entries.
+    /// </summary>
     public IReadOnlyList<UserDataSyncDictionaryEntry> GetUserDataSyncEntries()
     {
         EnsureCacheLoaded();
@@ -381,6 +450,9 @@ public sealed class DictionaryService : IDictionaryService
             .ToList();
     }
 
+    /// <summary>
+    /// Applies user data sync mutations.
+    /// </summary>
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
         EnsureCacheLoaded();

@@ -27,17 +27,47 @@ public sealed class HotkeyService : IDisposable
     private DateTime _keyDownTime;
     private bool _isActive;
 
+    /// <summary>
+    /// Raised when dictation start requested.
+    /// </summary>
     public event EventHandler? DictationStartRequested;
+    /// <summary>
+    /// Raised when dictation stop requested.
+    /// </summary>
     public event EventHandler? DictationStopRequested;
+    /// <summary>
+    /// Raised when cancel requested.
+    /// </summary>
     public event EventHandler? CancelRequested;
+    /// <summary>
+    /// Raised when recent transcriptions requested.
+    /// </summary>
     public event EventHandler? RecentTranscriptionsRequested;
+    /// <summary>
+    /// Raised when copy last transcription requested.
+    /// </summary>
     public event EventHandler? CopyLastTranscriptionRequested;
+    /// <summary>
+    /// Raised when workflow palette requested.
+    /// </summary>
     public event EventHandler? WorkflowPaletteRequested;
+    /// <summary>
+    /// Raised when workflow dictation requested.
+    /// </summary>
     public event EventHandler<string>? WorkflowDictationRequested;
+    /// <summary>
+    /// Raised when workflow text processing requested.
+    /// </summary>
     public event EventHandler<string>? WorkflowTextProcessingRequested;
+    /// <summary>
+    /// Gets or sets the current mode value.
+    /// </summary>
     public HotkeyMode? CurrentMode { get; private set; }
 
     private bool _isCancelShortcutEnabled;
+    /// <summary>
+    /// Gets whether is cancel shortcut enabled.
+    /// </summary>
     public bool IsCancelShortcutEnabled
     {
         get => _isCancelShortcutEnabled;
@@ -49,6 +79,9 @@ public sealed class HotkeyService : IDisposable
     }
 
     private bool _isEnabled = true;
+    /// <summary>
+    /// Gets whether is enabled.
+    /// </summary>
     public bool IsEnabled
     {
         get => _isEnabled;
@@ -59,6 +92,9 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the HotkeyService class.
+    /// </summary>
     public HotkeyService(ISettingsService settings, IWorkflowService workflows)
     {
         _settings = settings;
@@ -69,6 +105,9 @@ public sealed class HotkeyService : IDisposable
         _cancelHook.KeyDown += OnCancelKeyDown;
     }
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize(Window window)
     {
         ApplySettings();
@@ -76,6 +115,9 @@ public sealed class HotkeyService : IDisposable
         _workflows.WorkflowsChanged += () => Application.Current?.Dispatcher.Invoke(ApplyWorkflowHotkeys);
     }
 
+    /// <summary>
+    /// Applies settings.
+    /// </summary>
     public void ApplySettings()
     {
         var s = _settings.Current;
@@ -350,6 +392,9 @@ public sealed class HotkeyService : IDisposable
         CurrentMode = null;
     }
 
+    /// <summary>
+    /// Performs force stop.
+    /// </summary>
     public void ForceStop()
     {
         if (_isActive)
@@ -359,6 +404,9 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -371,9 +419,18 @@ public sealed class HotkeyService : IDisposable
     }
 }
 
+/// <summary>
+/// Lists the supported hotkey mode values.
+/// </summary>
 public enum HotkeyMode
 {
+    /// <summary>
+    /// Represents the toggle option.
+    /// </summary>
     Toggle,
+    /// <summary>
+    /// Represents the push to talk option.
+    /// </summary>
     PushToTalk
 }
 

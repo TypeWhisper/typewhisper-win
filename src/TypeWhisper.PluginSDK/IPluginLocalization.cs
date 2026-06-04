@@ -1,8 +1,7 @@
 namespace TypeWhisper.PluginSDK;
 
 /// <summary>
-/// Provides localized strings for a plugin from JSON files in the Localization/ subdirectory.
-/// Files are named by language code (e.g. en.json, de.json) and contain flat key-value pairs.
+/// Provides localized plugin strings with host-managed fallback behavior.
 /// </summary>
 public interface IPluginLocalization
 {

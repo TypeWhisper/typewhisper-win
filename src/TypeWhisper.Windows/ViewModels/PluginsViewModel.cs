@@ -8,31 +8,76 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides plugins view model behavior.
+/// </summary>
 public partial class PluginsViewModel : ObservableObject
 {
     private readonly PluginManager _pluginManager;
     private readonly PluginRegistryService _registryService;
 
+    /// <summary>
+    /// Gets the loaded plugin view models.
+    /// </summary>
     public ObservableCollection<PluginItemViewModel> Plugins { get; } = [];
+    /// <summary>
+    /// Gets the registry plugins.
+    /// </summary>
     public ObservableCollection<RegistryPluginItemViewModel> RegistryPlugins { get; } = [];
+    /// <summary>
+    /// Gets the marketplace groups.
+    /// </summary>
     public ObservableCollection<RegistryPluginCategoryGroupViewModel> MarketplaceGroups { get; } = [];
+    /// <summary>
+    /// Gets the marketplace capability filters.
+    /// </summary>
     public ObservableCollection<MarketplaceCapabilityFilterViewModel> MarketplaceCapabilityFilters { get; } = [];
+    /// <summary>
+    /// Gets the filtered marketplace plugins.
+    /// </summary>
     public ObservableCollection<RegistryPluginItemViewModel> FilteredMarketplacePlugins { get; } = [];
+    /// <summary>
+    /// Gets the installed plugin count.
+    /// </summary>
     public int InstalledPluginCount => Plugins.Count;
+    /// <summary>
+    /// Performs enabled plugin count.
+    /// </summary>
     public int EnabledPluginCount => Plugins.Count(static plugin => plugin.IsEnabled);
+    /// <summary>
+    /// Gets the marketplace plugin count.
+    /// </summary>
     public int MarketplacePluginCount => RegistryPlugins.Count;
+    /// <summary>
+    /// Performs installed summary text.
+    /// </summary>
     public string InstalledSummaryText => Loc.Instance.GetString("Plugins.InstalledSummaryFormat", InstalledPluginCount, EnabledPluginCount);
+    /// <summary>
+    /// Performs marketplace summary text.
+    /// </summary>
     public string MarketplaceSummaryText => Loc.Instance.GetString("Plugins.MarketplaceSummaryFormat", MarketplacePluginCount);
+    /// <summary>
+    /// Gets the selected marketplace capability filter name.
+    /// </summary>
     public string SelectedMarketplaceCapabilityFilterName => string.Join(
         ", ",
         MarketplaceCapabilityFilters
             .Where(filter => filter.IsSelected)
             .OrderBy(filter => filter.SortOrder)
             .Select(filter => filter.DisplayName));
+    /// <summary>
+    /// Performs marketplace category summary text.
+    /// </summary>
     public string MarketplaceCategorySummaryText => string.IsNullOrWhiteSpace(SelectedMarketplaceCapabilityFilterName)
         ? MarketplaceSummaryText
         : Loc.Instance.GetString("Plugins.MarketplaceCategorySummaryFormat", FilteredMarketplacePlugins.Count, SelectedMarketplaceCapabilityFilterName);
+    /// <summary>
+    /// Gets whether has marketplace categories.
+    /// </summary>
     public bool HasMarketplaceCategories => MarketplaceCapabilityFilters.Count > 0;
+    /// <summary>
+    /// Gets whether has active marketplace capability filters.
+    /// </summary>
     public bool HasActiveMarketplaceCapabilityFilters => _selectedMarketplaceCapabilityKeys.Count > 0;
 
     [ObservableProperty] private bool _isLoadingRegistry;
@@ -40,6 +85,9 @@ public partial class PluginsViewModel : ObservableObject
 
     private readonly HashSet<string> _selectedMarketplaceCapabilityKeys = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Initializes a new instance of the PluginsViewModel class.
+    /// </summary>
     public PluginsViewModel(PluginManager pluginManager, PluginRegistryService registryService)
     {
         _pluginManager = pluginManager;
@@ -234,12 +282,27 @@ public partial class PluginsViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides registry plugin category group view model behavior.
+/// </summary>
 public partial class RegistryPluginCategoryGroupViewModel : ObservableObject
 {
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
+    /// <summary>
+    /// Gets the loaded plugin view models.
+    /// </summary>
     public ObservableCollection<RegistryPluginItemViewModel> Plugins { get; }
+    /// <summary>
+    /// Gets the count.
+    /// </summary>
     public int Count => Plugins.Count;
 
+    /// <summary>
+    /// Initializes a new instance of the RegistryPluginCategoryGroupViewModel class.
+    /// </summary>
     public RegistryPluginCategoryGroupViewModel(string displayName, IEnumerable<RegistryPluginItemViewModel> plugins)
     {
         DisplayName = displayName;
@@ -247,15 +310,33 @@ public partial class RegistryPluginCategoryGroupViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides marketplace capability filter view model behavior.
+/// </summary>
 public partial class MarketplaceCapabilityFilterViewModel : ObservableObject
 {
+    /// <summary>
+    /// Gets the key.
+    /// </summary>
     public string Key { get; }
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName { get; }
+    /// <summary>
+    /// Gets the sort order.
+    /// </summary>
     public int SortOrder { get; }
+    /// <summary>
+    /// Gets the count.
+    /// </summary>
     public int Count { get; }
 
     [ObservableProperty] private bool _isSelected;
 
+    /// <summary>
+    /// Initializes a new instance of the MarketplaceCapabilityFilterViewModel class.
+    /// </summary>
     public MarketplaceCapabilityFilterViewModel(string key, string displayName, int sortOrder, int count, bool isSelected)
     {
         Key = key;
@@ -266,23 +347,62 @@ public partial class MarketplaceCapabilityFilterViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Provides plugin item view model behavior.
+/// </summary>
 public partial class PluginItemViewModel : ObservableObject
 {
     private readonly LoadedPlugin _plugin;
     private readonly PluginManager _pluginManager;
     private readonly PluginRegistryService _registryService;
 
+    /// <summary>
+    /// Gets the id.
+    /// </summary>
     public string Id => _plugin.Manifest.Id;
+    /// <summary>
+    /// Gets the display or storage name.
+    /// </summary>
     public string Name => _plugin.Manifest.Name;
+    /// <summary>
+    /// Gets the version.
+    /// </summary>
     public string Version => _plugin.Manifest.Version;
+    /// <summary>
+    /// Gets the author.
+    /// </summary>
     public string? Author => _plugin.Manifest.Author;
+    /// <summary>
+    /// Gets the description.
+    /// </summary>
     public string? Description => _plugin.Manifest.Description;
+    /// <summary>
+    /// Gets the logo path.
+    /// </summary>
     public string? LogoPath => PluginIconHelper.GetLogoPath(Id);
+    /// <summary>
+    /// Gets whether has logo.
+    /// </summary>
     public bool HasLogo => LogoPath is not null;
+    /// <summary>
+    /// Performs icon emoji.
+    /// </summary>
     public string IconEmoji => PluginIconHelper.GetIcon(Id);
+    /// <summary>
+    /// Performs icon gradient start.
+    /// </summary>
     public string IconGradientStart => PluginIconHelper.GetGradientStart(Id);
+    /// <summary>
+    /// Performs icon gradient end.
+    /// </summary>
     public string IconGradientEnd => PluginIconHelper.GetGradientEnd(Id);
+    /// <summary>
+    /// Gets the status label.
+    /// </summary>
     public string StatusLabel => IsEnabled ? Loc.Instance["Plugins.Enabled"] : Loc.Instance["Plugins.Disabled"];
+    /// <summary>
+    /// Gets the category descriptors.
+    /// </summary>
     public IReadOnlyList<PluginMarketplaceCategoryDescriptor> CategoryDescriptors =>
         _categoryDescriptors ??= PluginMarketplaceCategories.ResolveAll(
             _plugin.Manifest.Category ?? DetectPrimaryCategory(),
@@ -295,18 +415,48 @@ public partial class PluginItemViewModel : ObservableObject
     private IReadOnlyList<PluginMarketplaceCategoryDescriptor>? _categoryDescriptors;
 
     // Capability badges
+    /// <summary>
+    /// Gets whether is transcription provider.
+    /// </summary>
     public bool IsTranscriptionProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITranscriptionEnginePlugin;
+    /// <summary>
+    /// Gets whether is llm provider.
+    /// </summary>
     public bool IsLlmProvider => _plugin.Instance is TypeWhisper.PluginSDK.ILlmProviderPlugin;
+    /// <summary>
+    /// Gets whether is tts provider.
+    /// </summary>
     public bool IsTtsProvider => _plugin.Instance is TypeWhisper.PluginSDK.ITtsProviderPlugin;
+    /// <summary>
+    /// Gets whether is post processor.
+    /// </summary>
     public bool IsPostProcessor => _plugin.Instance is TypeWhisper.PluginSDK.IPostProcessorPlugin;
+    /// <summary>
+    /// Gets whether is action provider.
+    /// </summary>
     public bool IsActionProvider => _plugin.Instance is TypeWhisper.PluginSDK.IActionPlugin;
+    /// <summary>
+    /// Gets whether is memory storage.
+    /// </summary>
     public bool IsMemoryStorage => _plugin.Instance is TypeWhisper.PluginSDK.IMemoryStoragePlugin;
 
+    /// <summary>
+    /// Gets the category.
+    /// </summary>
     public string Category => CategoryDescriptors[0].DisplayName;
 
+    /// <summary>
+    /// Gets whether is local.
+    /// </summary>
     public bool IsLocal => _plugin.Manifest.IsLocal;
+    /// <summary>
+    /// Gets the location badge.
+    /// </summary>
     public string LocationBadge => IsLocal ? Loc.Instance["Plugins.Local"] : Loc.Instance["Plugins.Cloud"];
 
+    /// <summary>
+    /// Initializes a new instance of the PluginItemViewModel class.
+    /// </summary>
     public PluginItemViewModel(LoadedPlugin plugin, bool isEnabled, PluginManager pluginManager, PluginRegistryService registryService)
     {
         _plugin = plugin;

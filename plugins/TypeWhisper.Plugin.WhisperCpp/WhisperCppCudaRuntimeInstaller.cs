@@ -34,6 +34,9 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
     private readonly WhisperCppCudaRuntimePackage _package;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>
+    /// Performs whisper cpp cuda runtime installer.
+    /// </summary>
     public WhisperCppCudaRuntimeInstaller(string pluginDirectory, HttpClient httpClient)
         : this(pluginDirectory, httpClient, DefaultPackage)
     {
@@ -50,11 +53,20 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
         _package = package;
     }
 
+    /// <summary>
+    /// Gets the runtime directory.
+    /// </summary>
     public string RuntimeDirectory { get; }
 
+    /// <summary>
+    /// Returns whether installed.
+    /// </summary>
     public bool IsInstalled => _package.RequiredDlls.All(file =>
         File.Exists(GetRuntimeFilePath(file)));
 
+    /// <summary>
+    /// Ensures installed asynchronously..
+    /// </summary>
     public async Task EnsureInstalledAsync(CancellationToken cancellationToken)
     {
         if (IsInstalled)
@@ -192,5 +204,8 @@ internal sealed class WhisperCppCudaRuntimeInstaller : IWhisperCppCudaRuntimeIns
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _gate.Dispose();
 }

@@ -7,6 +7,9 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
+/// <summary>
+/// Provides waveform widget behavior.
+/// </summary>
 public partial class WaveformWidget : UserControl, IDisposable
 {
     private readonly Rectangle[] _bars = new Rectangle[5];
@@ -15,6 +18,9 @@ public partial class WaveformWidget : UserControl, IDisposable
     private readonly Random _rng = new();
     private bool _isRendering;
 
+    /// <summary>
+    /// Initializes a new instance of the WaveformWidget class.
+    /// </summary>
     public WaveformWidget()
     {
         InitializeComponent();
@@ -95,6 +101,9 @@ public partial class WaveformWidget : UserControl, IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_isRendering)

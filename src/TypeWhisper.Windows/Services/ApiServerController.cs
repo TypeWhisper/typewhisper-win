@@ -3,6 +3,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides api server controller behavior.
+/// </summary>
 public sealed class ApiServerController : IDisposable
 {
     private readonly ILocalApiServer _server;
@@ -10,18 +13,36 @@ public sealed class ApiServerController : IDisposable
     private bool _initialized;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the ApiServerController class.
+    /// </summary>
     public ApiServerController(ILocalApiServer server, ISettingsService settings)
     {
         _server = server;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Gets whether the service is currently running.
+    /// </summary>
     public bool IsRunning => _server.IsRunning;
+    /// <summary>
+    /// Gets or sets the active port value.
+    /// </summary>
     public int? ActivePort { get; private set; }
+    /// <summary>
+    /// Gets or sets the error message value.
+    /// </summary>
     public string? ErrorMessage { get; private set; }
 
+    /// <summary>
+    /// Raised when state changes.
+    /// </summary>
     public event Action? StateChanged;
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize()
     {
         if (_initialized)
@@ -32,6 +53,9 @@ public sealed class ApiServerController : IDisposable
         Apply(_settings.Current);
     }
 
+    /// <summary>
+    /// Refreshes
+    /// </summary>
     public void Refresh() => NotifyStateChanged();
 
     private void OnSettingsChanged(AppSettings settings) => Apply(settings);
@@ -105,6 +129,9 @@ public sealed class ApiServerController : IDisposable
             and not AppDomainUnloadedException
             and not BadImageFormatException;
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

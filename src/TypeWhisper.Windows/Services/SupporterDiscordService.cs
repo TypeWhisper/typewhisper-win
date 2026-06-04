@@ -11,12 +11,30 @@ using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Lists the supported supporter discord claim state values.
+/// </summary>
 public enum SupporterDiscordClaimState
 {
+    /// <summary>
+    /// Represents the unavailable option.
+    /// </summary>
     Unavailable,
+    /// <summary>
+    /// Represents the unlinked option.
+    /// </summary>
     Unlinked,
+    /// <summary>
+    /// Represents the pending option.
+    /// </summary>
     Pending,
+    /// <summary>
+    /// Represents the linked option.
+    /// </summary>
     Linked,
+    /// <summary>
+    /// Represents the failed option.
+    /// </summary>
     Failed,
 }
 
@@ -62,6 +80,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
     [ObservableProperty]
     private bool _isHelperUnavailable;
 
+    /// <summary>
+    /// Initializes a new instance of the SupporterDiscordService class.
+    /// </summary>
     public SupporterDiscordService()
         : this(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, TypeWhisperEnvironment.DataPath)
     {
@@ -80,15 +101,30 @@ public sealed partial class SupporterDiscordService : ObservableObject
         LoadPersistedStatus();
     }
 
+    /// <summary>
+    /// Gets whether has linked roles.
+    /// </summary>
     public bool HasLinkedRoles => LinkedRoles.Length > 0;
+    /// <summary>
+    /// Performs linked roles text.
+    /// </summary>
     public string LinkedRolesText => string.Join(", ", LinkedRoles);
+    /// <summary>
+    /// Gets the git hub sponsors url.
+    /// </summary>
     public string GitHubSponsorsUrl => $"{BaseUrl}/claims/github";
+    /// <summary>
+    /// Gets the callback uri.
+    /// </summary>
     public string CallbackUri => $"{CallbackScheme}://{CallbackHost}{CallbackPath}";
 
     private string BaseUrl =>
         Environment.GetEnvironmentVariable("TYPEWHISPER_DISCORD_CLAIM_BASE_URL")
         ?? DefaultBaseUrl;
 
+    /// <summary>
+    /// Returns whether handle callback uri.
+    /// </summary>
     public static bool CanHandleCallbackUri(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw) || !Uri.TryCreate(raw, UriKind.Absolute, out var uri))
@@ -97,11 +133,17 @@ public sealed partial class SupporterDiscordService : ObservableObject
         return CanHandleCallbackUri(uri);
     }
 
+    /// <summary>
+    /// Returns whether handle callback uri.
+    /// </summary>
     public static bool CanHandleCallbackUri(Uri uri) =>
         uri.Scheme.Equals(CallbackScheme, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(uri.Host, CallbackHost, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(uri.AbsolutePath, CallbackPath, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Creates claim session asynchronously.
+    /// </summary>
     public async Task<Uri?> CreateClaimSessionAsync(LicenseService license, CancellationToken ct = default)
     {
         IsWorking = true;
@@ -185,6 +227,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs reconnect asynchronously.
+    /// </summary>
     public async Task<Uri?> ReconnectAsync(LicenseService license, CancellationToken ct = default)
     {
         ClaimState = SupporterDiscordClaimState.Unlinked;
@@ -197,6 +242,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
         return await CreateClaimSessionAsync(license, ct);
     }
 
+    /// <summary>
+    /// Refreshes status if needed asynchronously.
+    /// </summary>
     public async Task RefreshStatusIfNeededAsync(LicenseService license, CancellationToken ct = default)
     {
         var candidates = license.GetDiscordClaimProofCandidates();
@@ -213,6 +261,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
             await RefreshClaimStatusAsync(license, ct);
     }
 
+    /// <summary>
+    /// Refreshes claim status asynchronously.
+    /// </summary>
     public async Task RefreshClaimStatusAsync(LicenseService license, CancellationToken ct = default)
     {
         var candidates = license.GetDiscordClaimProofCandidates();
@@ -271,6 +322,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Performs handle supporter entitlement removed.
+    /// </summary>
     public void HandleSupporterEntitlementRemoved()
     {
         ClaimState = SupporterDiscordClaimState.Unavailable;
@@ -298,6 +352,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// Performs handle callback uri asynchronously.
+    /// </summary>
     public async Task<bool> HandleCallbackUriAsync(Uri uri, LicenseService license, CancellationToken ct = default)
     {
         if (!CanHandleCallbackUri(uri))
