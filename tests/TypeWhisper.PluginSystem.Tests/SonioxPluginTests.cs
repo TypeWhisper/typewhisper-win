@@ -21,6 +21,16 @@ public class SonioxPluginTests
     }
 
     [Fact]
+    public void PluginVersion_IsSonioxMarketplaceReleaseVersion()
+    {
+        var manifest = LoadManifest();
+        var sut = new SonioxPlugin();
+
+        Assert.Equal("1.0.3", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.0.3", sut.PluginVersion);
+    }
+
+    [Fact]
     public void Manifest_AdvertisesTranscriptionCapabilitiesAndApiKeyRequirement()
     {
         var manifest = LoadManifest();
