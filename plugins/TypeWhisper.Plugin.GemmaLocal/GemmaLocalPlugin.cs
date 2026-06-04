@@ -286,8 +286,14 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         return sb.ToString();
     }
 
-    private string GetModelDirectory(string modelId) =>
-        Path.Combine(_host?.PluginDataDirectory ?? ".", "Models", modelId);
+    private string GetModelDirectory(string modelId)
+    {
+        var safeModelId = Path.GetFileName(modelId);
+        if (string.IsNullOrWhiteSpace(safeModelId) || safeModelId is "." or "..")
+            throw new ArgumentException("Model ID must not be empty.", nameof(modelId));
+
+        return Path.Join(_host?.PluginAssetDirectory ?? ".", "Models", safeModelId);
+    }
 
     private string GetModelFilePath(string modelId, string fileName) =>
         Path.Combine(GetModelDirectory(modelId), fileName);

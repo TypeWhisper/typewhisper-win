@@ -91,6 +91,59 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_TranslationFailureRequired_Throws()
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = (_, _, _, _) => throw new IOException("storage unavailable"),
+            TranslationTarget = "fr",
+            DetectedLanguage = "en",
+            RequireTranslationSuccess = true
+        };
+
+        var ex = await Assert.ThrowsAsync<IOException>(
+            () => _sut.ProcessAsync("hello", options));
+        Assert.Equal("storage unavailable", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "fr")]
+    public async Task ProcessAsync_RequiredTranslationWithoutConfiguration_Throws(
+        bool hasHandler,
+        string? targetLanguage)
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = hasHandler
+                ? (text, _, _, _) => Task.FromResult(text)
+                : null,
+            TranslationTarget = targetLanguage,
+            DetectedLanguage = "en",
+            RequireTranslationSuccess = true
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ProcessAsync("hello", options));
+        Assert.Equal("Required translation post-processing is not configured.", ex.Message);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_TranslationFailureNotRequired_KeepsCurrentText()
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = (_, _, _, _) => throw new IOException("storage unavailable"),
+            TranslationTarget = "fr",
+            DetectedLanguage = "en"
+        };
+
+        var result = await _sut.ProcessAsync("hello", options);
+
+        Assert.Equal("hello", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Translation_SkippedWhenEffectiveLanguageMatchesTarget()
     {
         var options = new PipelineOptions
