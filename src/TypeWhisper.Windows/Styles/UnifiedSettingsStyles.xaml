@@ -522,6 +522,42 @@
         </Setter>
     </Style>
 
+    <Style x:Key="HotkeyChipCloseButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="7,0,0,0"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="#9FB2C7"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="CloseChrome"
+                            Width="{TemplateBinding Width}"
+                            Height="{TemplateBinding Height}"
+                            CornerRadius="8"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CloseChrome" Property="Background" Value="#25364A"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="CloseChrome" Property="Background" Value="#335E9FF2"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="{x:Type controls:HotkeyRecorderControl}">
         <Setter Property="MinWidth" Value="220"/>
         <Setter Property="Height" Value="34"/>
@@ -576,6 +612,7 @@
                                        VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
                             <Button x:Name="ClearButton"
+                                    Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                     Grid.Column="1"
                                     Width="18"
                                     Height="18"
@@ -649,42 +686,6 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="16"/>
         <Setter Property="Padding" Value="10,5"/>
-    </Style>
-
-    <Style x:Key="HotkeyChipCloseButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="16"/>
-        <Setter Property="Height" Value="16"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="Margin" Value="7,0,0,0"/>
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="#9FB2C7"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="CloseChrome"
-                            Width="{TemplateBinding Width}"
-                            Height="{TemplateBinding Height}"
-                            CornerRadius="8"
-                            Background="{TemplateBinding Background}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="CloseChrome" Property="Background" Value="#25364A"/>
-                            <Setter Property="Foreground" Value="#FFFFFF"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="CloseChrome" Property="Background" Value="#335E9FF2"/>
-                            <Setter Property="Foreground" Value="#FFFFFF"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!-- ComboBoxItem Style -->

@@ -129,6 +129,10 @@ public class SettingsServiceTests : IDisposable
 
         var loaded = new SettingsService(_filePath).Current;
         Assert.Equal(["Ctrl+Alt+D", "Ctrl+Shift+D"], loaded.GetMainDictationHotkeys());
+        Assert.Equal(["Ctrl+Alt+T"], loaded.GetToggleOnlyHotkeys());
+        Assert.Equal(["Ctrl+Alt+H"], loaded.GetHoldOnlyHotkeys());
+        Assert.Equal(["Ctrl+Alt+R"], loaded.GetRecentTranscriptionsHotkeys());
+        Assert.Equal(["Ctrl+Alt+C"], loaded.GetCopyLastTranscriptionHotkeys());
         Assert.Equal(["Ctrl+Alt+W", "Ctrl+Shift+W"], loaded.GetWorkflowPaletteHotkeys());
         Assert.Equal("Ctrl+Alt+D", loaded.PushToTalkHotkey);
         Assert.Equal("Ctrl+Alt+D", loaded.ToggleHotkey);

@@ -77,7 +77,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveMainDictationHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;"
                                                                    FontFamily="Segoe MDL2 Assets"
                                                                    FontSize="8"
@@ -135,7 +136,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveToggleOnlyHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="8" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                                     </Button>
                                                 </StackPanel>
@@ -184,7 +186,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveHoldOnlyHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="8" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                                     </Button>
                                                 </StackPanel>
@@ -239,7 +242,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveRecentTranscriptionsHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="8" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                                     </Button>
                                                 </StackPanel>
@@ -288,7 +292,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveCopyLastTranscriptionHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="8" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                                     </Button>
                                                 </StackPanel>
@@ -337,7 +342,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.Settings.RemoveWorkflowPaletteHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="8" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                                     </Button>
                                                 </StackPanel>

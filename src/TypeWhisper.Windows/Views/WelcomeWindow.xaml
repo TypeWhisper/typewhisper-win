@@ -681,7 +681,8 @@
                                                     <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
                                                             Command="{Binding DataContext.RemoveMainDictationHotkeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                             CommandParameter="{Binding}"
-                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}">
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
                                                         <TextBlock Text="&#xE711;"
                                                                    FontFamily="Segoe MDL2 Assets"
                                                                    FontSize="8"

@@ -124,6 +124,35 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void AddHotkey_RevalidatesExistingEditorError()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.EditTemplate = WorkflowTemplate.Translation;
+        sut.EditTranslationTargetLanguage = "";
+        sut.EditHotkeyTriggerEnabled = true;
+
+        sut.SaveEditorCommand.Execute(null);
+        sut.AddHotkeyCommand.Execute("Ctrl+Alt+R");
+
+        Assert.Empty(workflows.Workflows);
+        Assert.Equal("Translation workflows need a target language.", sut.EditorError);
+    }
+
+    [Fact]
+    public void RemoveHotkey_RevalidatesExistingEditorError()
+    {
+        var sut = CreateViewModel();
+        sut.EditHotkeys.Add("Ctrl+Alt+R");
+        sut.EditHotkeys.Add("Ctrl+Alt+R");
+        sut.SaveEditorCommand.Execute(null);
+
+        sut.RemoveHotkeyCommand.Execute("Ctrl+Alt+R");
+
+        Assert.Null(sut.EditorError);
+    }
+
+    [Fact]
     public void SaveEditor_RejectsHotkeyConflictWithAnotherWorkflow()
     {
         var existing = NewWorkflow("Existing", WorkflowTrigger.Hotkey("Ctrl+Alt+R"));

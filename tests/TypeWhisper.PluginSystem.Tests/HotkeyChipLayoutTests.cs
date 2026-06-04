@@ -19,6 +19,8 @@ public sealed class HotkeyChipLayoutTests
         Assert.Contains("UseAddGlyph", xaml);
         Assert.Contains("Text=\"&#xE710;\"", xaml);
         Assert.Contains("Property=\"MinWidth\" Value=\"34\"", xaml);
+        Assert.Contains("x:Name=\"ClearButton\"", xaml);
+        Assert.Contains("Style=\"{StaticResource HotkeyChipCloseButtonStyle}\"", xaml);
         Assert.Contains("Hotkey.Clear", xaml);
         Assert.Contains("CornerRadius=\"16\"", xaml);
     }
@@ -118,6 +120,7 @@ public sealed class HotkeyChipLayoutTests
         Assert.Contains("RecordedCommand=\"{Binding Settings.AddMainDictationHotkeyCommand}\"", shortcutsXaml);
         Assert.Contains("UseAddGlyph=\"True\"", shortcutsXaml);
         Assert.Contains("Settings.RemoveMainDictationHotkeyCommand", shortcutsXaml);
+        Assert.Equal(6, Count(shortcutsXaml, "AutomationProperties.Name=\"{loc:Str Shortcuts.RemoveHotkey}\""));
         Assert.DoesNotContain("ActionCommand", shortcutsXaml);
         Assert.DoesNotContain("Width=\"282\"", shortcutsXaml);
         Assert.DoesNotContain("HotkeyAddButtonStyle", shortcutsXaml);
@@ -126,10 +129,15 @@ public sealed class HotkeyChipLayoutTests
         Assert.Contains("ItemsSource=\"{Binding MainDictationHotkeys}\"", welcomeXaml);
         Assert.Contains("NewMainDictationHotkey", welcomeXaml);
         Assert.Contains("RecordedCommand=\"{Binding AddMainDictationHotkeyCommand}\"", welcomeXaml);
+        Assert.Contains("RemoveMainDictationHotkeyCommand", welcomeXaml);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Shortcuts.RemoveHotkey}\"", welcomeXaml);
         Assert.Contains("UseAddGlyph=\"True\"", welcomeXaml);
         Assert.DoesNotContain("ActionCommand", welcomeXaml);
         Assert.DoesNotContain("Width=\"282\"", welcomeXaml);
         Assert.DoesNotContain("HotkeyAddButtonStyle", welcomeXaml);
         Assert.DoesNotContain("Hotkey=\"{Binding MainDictationHotkey", welcomeXaml);
     }
+
+    private static int Count(string value, string token) =>
+        value.Split(token).Length - 1;
 }

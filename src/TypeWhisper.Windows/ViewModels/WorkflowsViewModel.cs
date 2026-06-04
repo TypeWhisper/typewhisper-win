@@ -416,7 +416,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         EditHotkeys.Add(hotkey);
         NewHotkey = "";
-        EditorError = null;
+        RevalidateEditorError();
     }
 
     [RelayCommand]
@@ -433,6 +433,14 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             return;
 
         EditHotkeys.RemoveAt(index.Value);
+        RevalidateEditorError();
+    }
+
+    private void RevalidateEditorError()
+    {
+        if (!string.IsNullOrWhiteSpace(EditorError))
+            EditorError = ValidateEditor();
+
         NotifyEditorStateChanged();
     }
 

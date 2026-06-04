@@ -150,13 +150,11 @@ public record AppSettings
 
     public IReadOnlyList<string> GetMainDictationHotkeys()
     {
-        if (MainDictationHotkeys is { Count: > 0 })
-            return CleanHotkeys(MainDictationHotkeys);
+        var configuredHotkeys = CleanHotkeys(MainDictationHotkeys);
+        if (configuredHotkeys.Count > 0)
+            return configuredHotkeys;
 
-        var legacyHotkey = !string.IsNullOrWhiteSpace(PushToTalkHotkey)
-            ? PushToTalkHotkey
-            : ToggleHotkey;
-        return CleanHotkeys([legacyHotkey]);
+        return CleanHotkeys(ResolveLegacyMainHotkeys());
     }
 
     public IReadOnlyList<string> GetToggleOnlyHotkeys() =>
@@ -201,10 +199,36 @@ public record AppSettings
         };
     }
 
-    private static IReadOnlyList<string> ResolveHotkeys(IReadOnlyList<string>? configured, string? legacyHotkey) =>
-        configured is { Count: > 0 }
-            ? CleanHotkeys(configured)
+    private IEnumerable<string?> ResolveLegacyMainHotkeys()
+    {
+        var pushToTalkHotkey = HotkeyText(PushToTalkHotkey);
+        var toggleHotkey = HotkeyText(ToggleHotkey);
+
+        if (!string.IsNullOrWhiteSpace(pushToTalkHotkey))
+            yield return pushToTalkHotkey;
+
+        if (string.IsNullOrWhiteSpace(toggleHotkey))
+            yield break;
+
+        if (string.Equals(pushToTalkHotkey, toggleHotkey, StringComparison.OrdinalIgnoreCase))
+            yield break;
+
+        if (!string.IsNullOrWhiteSpace(pushToTalkHotkey)
+            && string.Equals(toggleHotkey, Default.ToggleHotkey, StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        yield return toggleHotkey;
+    }
+
+    private static IReadOnlyList<string> ResolveHotkeys(IReadOnlyList<string>? configured, string? legacyHotkey)
+    {
+        var configuredHotkeys = CleanHotkeys(configured ?? []);
+        return configuredHotkeys.Count > 0
+            ? configuredHotkeys
             : CleanHotkeys([legacyHotkey]);
+    }
 
     private static IReadOnlyList<string> CleanHotkeys(IEnumerable<string?> values) =>
         values.Select(static value => value?.Trim() ?? "")
@@ -214,6 +238,9 @@ public record AppSettings
 
     private static string FirstOrEmpty(IReadOnlyList<string> hotkeys) =>
         hotkeys.Count == 0 ? "" : hotkeys[0];
+
+    private static string HotkeyText(string? value) =>
+        value?.Trim() ?? "";
 
     public static string NormalizeLocalModelAcceleration(string? value)
     {
