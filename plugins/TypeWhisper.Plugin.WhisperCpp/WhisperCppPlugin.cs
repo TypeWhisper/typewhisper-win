@@ -617,7 +617,11 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
         var model = GetModel(modelId);
-        return Path.Combine(host.PluginAssetDirectory, "Models", model.FileName);
+        var safeFileName = Path.GetFileName(model.FileName);
+        if (string.IsNullOrWhiteSpace(safeFileName) || safeFileName is "." or "..")
+            throw new InvalidOperationException("Model file name must not be empty.");
+
+        return Path.Join(host.PluginAssetDirectory, "Models", safeFileName);
     }
 
     internal static string BuildNativeLoadFailureMessage(

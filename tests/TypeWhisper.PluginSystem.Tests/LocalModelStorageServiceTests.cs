@@ -127,6 +127,27 @@ public sealed class LocalModelStorageServiceTests : IDisposable
         Assert.True(Directory.Exists(directory));
     }
 
+    [Fact]
+    public void ResolveAvailablePluginAssetDirectory_UsesFinalPluginIdSegment()
+    {
+        var storageRoot = Path.Combine(_tempDir, "model-storage");
+        Directory.CreateDirectory(storageRoot);
+        var settings = AppSettings.Default with
+        {
+            LocalModelStoragePath = storageRoot
+        };
+        var pathLikePluginId = Path.Combine(_tempDir, "ignored", "com.typewhisper.whisper-cpp");
+
+        var directory = LocalModelStorageService.ResolveAvailablePluginAssetDirectory(
+            settings,
+            pathLikePluginId);
+
+        Assert.Equal(
+            Path.Combine(storageRoot, "PluginData", "com.typewhisper.whisper-cpp"),
+            directory);
+        Assert.True(Directory.Exists(directory));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_tempDir, recursive: true); }

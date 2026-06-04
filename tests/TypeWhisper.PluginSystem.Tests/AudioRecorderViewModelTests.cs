@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using Moq;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
@@ -205,11 +206,10 @@ public sealed class AudioRecorderViewModelTests
     {
         try
         {
-            foreach (var wavPath in Directory.EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav"))
+            foreach (var wavPath in Directory
+                .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+                .Where(wavPath => !existingRecordings.Contains(wavPath)))
             {
-                if (existingRecordings.Contains(wavPath))
-                    continue;
-
                 File.Delete(wavPath);
                 var txtPath = Path.ChangeExtension(wavPath, ".txt");
                 if (!string.IsNullOrEmpty(txtPath))

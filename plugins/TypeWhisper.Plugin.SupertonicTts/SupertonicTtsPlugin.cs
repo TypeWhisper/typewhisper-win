@@ -135,8 +135,12 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
+        var modelDirectoryName = Path.GetFileName(SupertonicPaths.ModelDirectoryName);
+        if (string.IsNullOrWhiteSpace(modelDirectoryName) || modelDirectoryName is "." or "..")
+            throw new InvalidOperationException("Supertonic model directory name must not be empty.");
+
         _assetManager = _injectedAssetManager
-            ?? new SupertonicAssetManager(Path.Combine(host.PluginAssetDirectory, "Models", SupertonicPaths.ModelDirectoryName));
+            ?? new SupertonicAssetManager(Path.Join(host.PluginAssetDirectory, "Models", modelDirectoryName));
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         Speed = NormalizeSpeed(host.GetSetting<double?>(SpeedSettingName) ?? DefaultSpeed);
         DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);

@@ -229,7 +229,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        psi.Environment["HF_HOME"] = Path.Combine(dataDir, "hf-cache");
+        psi.Environment["HF_HOME"] = Path.Join(dataDir, "hf-cache");
 
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start model download");
@@ -384,7 +384,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
             CreateNoWindow = true,
         };
         psi.Environment["PYTHONUNBUFFERED"] = "1";
-        psi.Environment["HF_HOME"] = Path.Combine(GetDataDirectory(), "hf-cache");
+        psi.Environment["HF_HOME"] = Path.Join(GetDataDirectory(), "hf-cache");
 
         _sidecar = Process.Start(psi)
             ?? throw new InvalidOperationException("Failed to start Python sidecar");
@@ -505,7 +505,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
     }
 
     private string GetDataDirectory() =>
-        _host?.PluginAssetDirectory ?? Path.Combine(".", "PluginData");
+        _host?.PluginAssetDirectory ?? Path.Join(".", "PluginData");
 
     private static string GetScriptPath(string fileName)
     {
