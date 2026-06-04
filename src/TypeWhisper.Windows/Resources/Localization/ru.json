@@ -621,6 +621,7 @@
   "FileTranscription.SelectFile": "Выбрать файлы…",
   "FileTranscription.Cancel": "Отмена",
   "FileTranscription.CancelAll": "Отменить всё",
+  "FileTranscription.ClearQueue": "Очистить очередь",
   "FileTranscription.Copy": "Копировать",
   "FileTranscription.TextExport": "Текст (.txt)",
   "FileTranscription.TextExportShort": "TXT",

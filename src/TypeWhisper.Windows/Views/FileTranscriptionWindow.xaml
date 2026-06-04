@@ -46,12 +46,19 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="{StaticResource HintBrush}"/>
-                <Button Grid.Column="1"
-                        Content="{loc:Str FileTranscription.CancelAll}"
-                        Command="{Binding CancelCommand}"
-                        Visibility="{Binding IsProcessing, Converter={StaticResource BoolToVis}}"
-                        Style="{StaticResource SecondaryButtonStyle}"
-                        Padding="12,6"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="{loc:Str FileTranscription.ClearQueue}"
+                            Command="{Binding ClearQueueCommand}"
+                            Visibility="{Binding HasClearableItems, Converter={StaticResource BoolToVis}}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="12,6"
+                            Margin="0,0,8,0"/>
+                    <Button Content="{loc:Str FileTranscription.CancelAll}"
+                            Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsProcessing, Converter={StaticResource BoolToVis}}"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Padding="12,6"/>
+                </StackPanel>
             </Grid>
         </StackPanel>
 

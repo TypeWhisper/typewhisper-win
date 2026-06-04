@@ -637,6 +637,7 @@
   "FileTranscription.SelectFile": "Select files...",
   "FileTranscription.Cancel": "Cancel",
   "FileTranscription.CancelAll": "Cancel all",
+  "FileTranscription.ClearQueue": "Clear queue",
   "FileTranscription.Copy": "Copy",
   "FileTranscription.TextExport": "Text (.txt)",
   "FileTranscription.TextExportShort": "TXT",

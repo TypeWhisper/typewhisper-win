@@ -616,6 +616,7 @@
   "FileTranscription.SelectFile": "ファイルを選択...",
   "FileTranscription.Cancel": "キャンセル",
   "FileTranscription.CancelAll": "すべてキャンセル",
+  "FileTranscription.ClearQueue": "キューをクリア",
   "FileTranscription.Copy": "コピー",
   "FileTranscription.TextExport": "テキスト (.txt)",
   "FileTranscription.TextExportShort": "TXT",
