@@ -505,10 +505,14 @@ public partial class ModelManagerViewModel : ObservableObject
         _appRestart?.RestartMinimized();
     }
 
-    partial void OnIsModelStorageBusyChanged(bool value) =>
+    partial void OnIsModelStorageBusyChanged(bool value)
+    {
         MoveModelStorageCommand.NotifyCanExecuteChanged();
+        ResetModelStoragePathCommand.NotifyCanExecuteChanged();
+    }
 
     private bool CanMoveModelStorage() => !IsModelStorageBusy;
+    private bool CanResetModelStoragePath() => !IsModelStorageBusy;
 
     [RelayCommand(CanExecute = nameof(CanMoveModelStorage))]
     private async Task MoveModelStorage()
@@ -535,9 +539,12 @@ public partial class ModelManagerViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanResetModelStoragePath))]
     private void ResetModelStoragePath()
     {
+        if (IsModelStorageBusy)
+            return;
+
         HasModelStorageError = false;
         _modelStorage.ResetToDefault();
         RefreshModelStorage();

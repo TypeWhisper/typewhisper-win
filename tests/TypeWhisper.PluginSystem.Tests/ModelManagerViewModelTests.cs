@@ -589,7 +589,7 @@ public class ModelManagerViewModelTests
     [Fact]
     public void Constructor_ExposesConfiguredModelStoragePath()
     {
-        var storagePath = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var storagePath = Path.Join(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
         var settings = new FakeSettingsService(new AppSettings
         {
             LocalModelStoragePath = storagePath
@@ -606,11 +606,12 @@ public class ModelManagerViewModelTests
     [Fact]
     public async Task MoveModelStorageCommand_MigratesDownloadsAndRefreshesPath()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
-        var oldRoot = Path.Combine(tempDir, "old");
-        var newRoot = Path.Combine(tempDir, "new");
-        Directory.CreateDirectory(Path.Combine(oldRoot, "translation-en-fr"));
-        await File.WriteAllTextAsync(Path.Combine(oldRoot, "translation-en-fr", "config.json"), "{}");
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var oldRoot = Path.Join(tempDir, "old");
+        var newRoot = Path.Join(tempDir, "new");
+        var oldModelFile = Path.Join(oldRoot, "translation-en-fr", "config.json");
+        Directory.CreateDirectory(Path.Join(oldRoot, "translation-en-fr"));
+        await File.WriteAllTextAsync(oldModelFile, "{}");
         var settings = new FakeSettingsService(new AppSettings
         {
             LocalModelStoragePath = oldRoot
@@ -627,7 +628,8 @@ public class ModelManagerViewModelTests
 
             Assert.Equal(Path.GetFullPath(newRoot), settings.Current.LocalModelStoragePath);
             Assert.Equal(Path.GetFullPath(newRoot), sut.ResolvedModelStoragePath);
-            Assert.True(File.Exists(Path.Combine(newRoot, "translation-en-fr", "config.json")));
+            Assert.True(File.Exists(Path.Join(newRoot, "translation-en-fr", "config.json")));
+            Assert.False(File.Exists(oldModelFile));
             Assert.False(sut.IsModelStorageBusy);
             Assert.False(sut.HasModelStorageError);
         }
@@ -640,7 +642,7 @@ public class ModelManagerViewModelTests
     [Fact]
     public void ResetModelStoragePathCommand_ClearsCustomStoragePath()
     {
-        var storagePath = Path.Combine(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
+        var storagePath = Path.Join(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}");
         var settings = new FakeSettingsService(new AppSettings
         {
             LocalModelStoragePath = storagePath
@@ -654,6 +656,23 @@ public class ModelManagerViewModelTests
 
         Assert.Null(settings.Current.LocalModelStoragePath);
         Assert.Equal(LocalModelStorageService.DefaultModelStoragePath, sut.ResolvedModelStoragePath);
+    }
+
+    [Fact]
+    public void ResetModelStoragePathCommand_IsDisabledWhileStorageMoveIsBusy()
+    {
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            LocalModelStoragePath = Path.Join(Path.GetTempPath(), $"tw-models-{Guid.NewGuid():N}")
+        });
+
+        var pluginManager = CreatePluginManager(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        sut.IsModelStorageBusy = true;
+
+        Assert.False(sut.ResetModelStoragePathCommand.CanExecute(null));
     }
 
     [Fact]

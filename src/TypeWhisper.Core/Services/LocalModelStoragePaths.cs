@@ -42,7 +42,7 @@ public static class LocalModelStoragePaths
 
         return Path.Join(
             ResolveModelStoragePath(settings),
-            Path.GetFileName(PluginDataFolderName),
+            PluginDataFolderName,
             safePluginId);
     }
 }

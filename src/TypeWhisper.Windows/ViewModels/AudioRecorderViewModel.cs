@@ -236,7 +236,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             return;
         }
 
-        dispatcher.Invoke(action);
+        _ = dispatcher.InvokeAsync(action);
     }
 
     /// <summary>

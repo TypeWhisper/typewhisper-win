@@ -22,8 +22,8 @@ internal sealed class ModelManagerRequestException : Exception
     /// <summary>
     /// Performs model manager request exception.
     /// </summary>
-    public ModelManagerRequestException(int statusCode, string message)
-        : base(message)
+    public ModelManagerRequestException(int statusCode, string message, Exception? innerException = null)
+        : base(message, innerException)
     {
         StatusCode = statusCode;
     }
@@ -427,47 +427,54 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var hasOverride = !string.IsNullOrWhiteSpace(engineOverride)
             || !string.IsNullOrWhiteSpace(modelOverride);
 
-        if (!hasOverride)
+        try
         {
-            var targetModelId = _settings.Current.SelectedModelId;
-            if (string.IsNullOrWhiteSpace(targetModelId))
-                throw new ModelManagerRequestException(503, "No model loaded");
-
-            if (awaitDownload && IsPluginModel(targetModelId))
+            if (!hasOverride)
             {
-                var (pluginId, pluginModelId) = ParsePluginModelId(targetModelId);
-                var plugin = _pluginManager.TranscriptionEngines
-                    .FirstOrDefault(e => e.PluginId == pluginId);
+                var targetModelId = _settings.Current.SelectedModelId;
+                if (string.IsNullOrWhiteSpace(targetModelId))
+                    throw new ModelManagerRequestException(503, "No model loaded");
 
-                if (plugin?.SupportsModelDownload == true && !IsDownloadedCore(plugin, pluginModelId))
+                if (awaitDownload && IsPluginModel(targetModelId))
                 {
-                    await DownloadAndLoadModelAsync(targetModelId, cancellationToken);
-                    return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+                    var (pluginId, pluginModelId) = ParsePluginModelId(targetModelId);
+                    var plugin = _pluginManager.TranscriptionEngines
+                        .FirstOrDefault(e => e.PluginId == pluginId);
+
+                    if (plugin?.SupportsModelDownload == true && !IsDownloadedCore(plugin, pluginModelId))
+                    {
+                        await DownloadAndLoadModelAsync(targetModelId, cancellationToken);
+                        return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+                    }
                 }
+
+                if (!await EnsureModelLoadedAsync(targetModelId, cancellationToken))
+                    throw new ModelManagerRequestException(503, "No model loaded");
+
+                return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
             }
 
-            if (!await EnsureModelLoadedAsync(targetModelId, cancellationToken))
-                throw new ModelManagerRequestException(503, "No model loaded");
+            var resolved = ResolveRequestModel(engineOverride, modelOverride, awaitDownload);
+            var fullModelId = GetPluginModelId(resolved.Plugin.PluginId, resolved.ModelId);
 
-            return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+            if (resolved.Plugin.SupportsModelDownload
+                && !IsDownloadedCore(resolved.Plugin, resolved.ModelId)
+                && awaitDownload)
+            {
+                await DownloadAndLoadModelAsync(fullModelId, cancellationToken);
+            }
+            else
+            {
+                if (!await EnsureModelLoadedAsync(fullModelId, cancellationToken))
+                    throw new ModelManagerRequestException(503, $"Model '{resolved.ModelId}' could not be loaded");
+            }
+
+            return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: true);
         }
-
-        var resolved = ResolveRequestModel(engineOverride, modelOverride, awaitDownload);
-        var fullModelId = GetPluginModelId(resolved.Plugin.PluginId, resolved.ModelId);
-
-        if (resolved.Plugin.SupportsModelDownload
-            && !resolved.Plugin.IsModelDownloaded(resolved.ModelId)
-            && awaitDownload)
+        catch (LocalModelStorageUnavailableException ex)
         {
-            await DownloadAndLoadModelAsync(fullModelId, cancellationToken);
+            throw new ModelManagerRequestException(503, ex.Message, ex);
         }
-        else
-        {
-            if (!await EnsureModelLoadedAsync(fullModelId, cancellationToken))
-                throw new ModelManagerRequestException(503, $"Model '{resolved.ModelId}' could not be loaded");
-        }
-
-        return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: true);
     }
 
     internal async Task<ActiveModelTranscriptionResult> TranscribeActiveAsync(
@@ -563,7 +570,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
         catch (LocalModelStorageUnavailableException ex)
         {
-            throw new ModelManagerRequestException(503, ex.Message);
+            throw new ModelManagerRequestException(503, ex.Message, ex);
         }
 
         if (!engine.SupportsModelDownload && !engine.IsConfigured)

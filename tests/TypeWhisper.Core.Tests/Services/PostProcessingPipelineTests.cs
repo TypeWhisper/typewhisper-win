@@ -106,6 +106,28 @@ public class PostProcessingPipelineTests
         Assert.Equal("storage unavailable", ex.Message);
     }
 
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "fr")]
+    public async Task ProcessAsync_RequiredTranslationWithoutConfiguration_Throws(
+        bool hasHandler,
+        string? targetLanguage)
+    {
+        var options = new PipelineOptions
+        {
+            TranslationHandler = hasHandler
+                ? (text, _, _, _) => Task.FromResult(text)
+                : null,
+            TranslationTarget = targetLanguage,
+            DetectedLanguage = "en",
+            RequireTranslationSuccess = true
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ProcessAsync("hello", options));
+        Assert.Equal("Required translation post-processing is not configured.", ex.Message);
+    }
+
     [Fact]
     public async Task ProcessAsync_TranslationFailureNotRequired_KeepsCurrentText()
     {
