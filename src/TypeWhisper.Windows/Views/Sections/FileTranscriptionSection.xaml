@@ -146,12 +146,19 @@
                                            Style="{StaticResource SectionHeaderStyle}"
                                            FontSize="15"
                                            Margin="0"/>
-                                <Button Grid.Column="1"
-                                        Content="{loc:Str FileTranscription.CancelAll}"
-                                        Command="{Binding FileTranscription.CancelCommand}"
-                                        Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"
-                                        Style="{StaticResource SecondaryButtonStyle}"
-                                        Padding="14,8"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="{loc:Str FileTranscription.ClearQueue}"
+                                            Command="{Binding FileTranscription.ClearQueueCommand}"
+                                            Visibility="{Binding FileTranscription.HasClearableItems, Converter={StaticResource BoolToVis}}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"
+                                            Margin="0,0,8,0"/>
+                                    <Button Content="{loc:Str FileTranscription.CancelAll}"
+                                            Command="{Binding FileTranscription.CancelCommand}"
+                                            Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Padding="14,8"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
                         <Border Height="1" Background="#18FFFFFF"/>

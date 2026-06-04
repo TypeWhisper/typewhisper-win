@@ -93,6 +93,12 @@ public partial class FileTranscriptionViewModel : ObservableObject
     /// Gets whether has items.
     /// </summary>
     public bool HasItems => Items.Count > 0;
+
+    /// <summary>
+    /// Gets whether the file queue contains items that can be cleared.
+    /// </summary>
+    public bool HasClearableItems => Items.Any(IsClearableQueueItem);
+
     /// <summary>
     /// Returns whether watch folder path.
     /// </summary>
@@ -186,6 +192,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
         Items.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(HasItems));
+            RefreshQueueCommandState();
             RefreshStatusText();
         };
 
@@ -255,6 +262,24 @@ public partial class FileTranscriptionViewModel : ObservableObject
         }
 
         item.Cancellation?.Cancel();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanClearQueue))]
+    private void ClearQueue()
+    {
+        var itemsToRemove = Items.Where(IsClearableQueueItem).ToList();
+        if (itemsToRemove.Count == 0)
+            return;
+
+        var selectedWasRemoved = SelectedItem is not null && itemsToRemove.Contains(SelectedItem);
+        foreach (var item in itemsToRemove)
+            Items.Remove(item);
+
+        if (selectedWasRemoved)
+            SelectedItem = Items.FirstOrDefault();
+
+        RefreshQueueCommandState();
+        RefreshStatusText();
     }
 
     [RelayCommand]
@@ -383,7 +408,22 @@ public partial class FileTranscriptionViewModel : ObservableObject
         item.Status = status;
         item.StatusText = statusText;
         RefreshStatusText();
+        RefreshQueueCommandState();
     }
+
+    private bool CanClearQueue() => HasClearableItems;
+
+    private void RefreshQueueCommandState()
+    {
+        OnPropertyChanged(nameof(HasClearableItems));
+        ClearQueueCommand.NotifyCanExecuteChanged();
+    }
+
+    private static bool IsClearableQueueItem(FileTranscriptionQueueItemViewModel item) =>
+        item.Status is FileTranscriptionQueueItemStatus.Completed
+            or FileTranscriptionQueueItemStatus.Cancelled
+            or FileTranscriptionQueueItemStatus.Error
+            or FileTranscriptionQueueItemStatus.Unsupported;
 
     private void RefreshStatusText()
     {
