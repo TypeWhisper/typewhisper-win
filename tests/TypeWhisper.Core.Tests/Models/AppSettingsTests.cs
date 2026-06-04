@@ -34,6 +34,35 @@ public class AppSettingsTests
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);
     }
 
+    [Fact]
+    public void GetMainDictationHotkeys_PrefersConfiguredListOverLegacyStrings()
+    {
+        var settings = AppSettings.Default with
+        {
+            PushToTalkHotkey = "Ctrl+Shift",
+            ToggleHotkey = "Ctrl+Shift+F9",
+            MainDictationHotkeys = ["Ctrl+Alt+D", " Ctrl+Alt+D ", "Ctrl+Shift+D"]
+        };
+
+        Assert.Equal(["Ctrl+Alt+D", "Ctrl+Shift+D"], settings.GetMainDictationHotkeys());
+    }
+
+    [Fact]
+    public void GetShortcutHotkeys_FallsBackToLegacySingleValue()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "",
+            ToggleHotkey = "Ctrl+Alt+D",
+            WorkflowPaletteHotkeys = [],
+            WorkflowPaletteHotkey = "Ctrl+Alt+W"
+        };
+
+        Assert.Equal(["Ctrl+Alt+D"], settings.GetMainDictationHotkeys());
+        Assert.Equal(["Ctrl+Alt+W"], settings.GetWorkflowPaletteHotkeys());
+    }
+
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(0, 0)]

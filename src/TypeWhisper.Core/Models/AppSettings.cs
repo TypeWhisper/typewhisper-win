@@ -24,6 +24,12 @@ public record AppSettings
     public string RecentTranscriptionsHotkey { get; init; } = "";
     public string CopyLastTranscriptionHotkey { get; init; } = "";
     public string WorkflowPaletteHotkey { get; init; } = "";
+    public IReadOnlyList<string> MainDictationHotkeys { get; init; } = [];
+    public IReadOnlyList<string> ToggleOnlyHotkeys { get; init; } = [];
+    public IReadOnlyList<string> HoldOnlyHotkeys { get; init; } = [];
+    public IReadOnlyList<string> RecentTranscriptionsHotkeys { get; init; } = [];
+    public IReadOnlyList<string> CopyLastTranscriptionHotkeys { get; init; } = [];
+    public IReadOnlyList<string> WorkflowPaletteHotkeys { get; init; } = [];
     public string Language { get; init; } = "auto";
     public bool AutoPaste { get; init; } = true;
     public RecordingMode Mode { get; init; } = RecordingMode.Toggle;
@@ -141,6 +147,73 @@ public record AppSettings
             fontSize,
             MinLiveTranscriptionFontSize,
             MaxLiveTranscriptionFontSize);
+
+    public IReadOnlyList<string> GetMainDictationHotkeys()
+    {
+        if (MainDictationHotkeys is { Count: > 0 })
+            return CleanHotkeys(MainDictationHotkeys);
+
+        var legacyHotkey = !string.IsNullOrWhiteSpace(PushToTalkHotkey)
+            ? PushToTalkHotkey
+            : ToggleHotkey;
+        return CleanHotkeys([legacyHotkey]);
+    }
+
+    public IReadOnlyList<string> GetToggleOnlyHotkeys() =>
+        ResolveHotkeys(ToggleOnlyHotkeys, ToggleOnlyHotkey);
+
+    public IReadOnlyList<string> GetHoldOnlyHotkeys() =>
+        ResolveHotkeys(HoldOnlyHotkeys, HoldOnlyHotkey);
+
+    public IReadOnlyList<string> GetRecentTranscriptionsHotkeys() =>
+        ResolveHotkeys(RecentTranscriptionsHotkeys, RecentTranscriptionsHotkey);
+
+    public IReadOnlyList<string> GetCopyLastTranscriptionHotkeys() =>
+        ResolveHotkeys(CopyLastTranscriptionHotkeys, CopyLastTranscriptionHotkey);
+
+    public IReadOnlyList<string> GetWorkflowPaletteHotkeys() =>
+        ResolveHotkeys(WorkflowPaletteHotkeys, WorkflowPaletteHotkey);
+
+    public AppSettings NormalizeHotkeyLists()
+    {
+        var mainDictationHotkeys = GetMainDictationHotkeys();
+        var toggleOnlyHotkeys = GetToggleOnlyHotkeys();
+        var holdOnlyHotkeys = GetHoldOnlyHotkeys();
+        var recentTranscriptionsHotkeys = GetRecentTranscriptionsHotkeys();
+        var copyLastTranscriptionHotkeys = GetCopyLastTranscriptionHotkeys();
+        var workflowPaletteHotkeys = GetWorkflowPaletteHotkeys();
+
+        return this with
+        {
+            MainDictationHotkeys = mainDictationHotkeys,
+            ToggleHotkey = FirstOrEmpty(mainDictationHotkeys),
+            PushToTalkHotkey = FirstOrEmpty(mainDictationHotkeys),
+            ToggleOnlyHotkeys = toggleOnlyHotkeys,
+            ToggleOnlyHotkey = FirstOrEmpty(toggleOnlyHotkeys),
+            HoldOnlyHotkeys = holdOnlyHotkeys,
+            HoldOnlyHotkey = FirstOrEmpty(holdOnlyHotkeys),
+            RecentTranscriptionsHotkeys = recentTranscriptionsHotkeys,
+            RecentTranscriptionsHotkey = FirstOrEmpty(recentTranscriptionsHotkeys),
+            CopyLastTranscriptionHotkeys = copyLastTranscriptionHotkeys,
+            CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys),
+            WorkflowPaletteHotkeys = workflowPaletteHotkeys,
+            WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys)
+        };
+    }
+
+    private static IReadOnlyList<string> ResolveHotkeys(IReadOnlyList<string>? configured, string? legacyHotkey) =>
+        configured is { Count: > 0 }
+            ? CleanHotkeys(configured)
+            : CleanHotkeys([legacyHotkey]);
+
+    private static IReadOnlyList<string> CleanHotkeys(IEnumerable<string?> values) =>
+        values.Select(static value => value?.Trim() ?? "")
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string FirstOrEmpty(IReadOnlyList<string> hotkeys) =>
+        hotkeys.Count == 0 ? "" : hotkeys[0];
 
     public static string NormalizeLocalModelAcceleration(string? value)
     {

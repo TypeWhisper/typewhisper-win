@@ -19,13 +19,8 @@ public sealed class HotkeyService : IDisposable
 
     private readonly ISettingsService _settings;
     private readonly IWorkflowService _workflows;
-    private readonly KeyboardHook _hybridHook;
-    private readonly KeyboardHook _toggleOnlyHook;
-    private readonly KeyboardHook _holdOnlyHook;
     private readonly KeyboardHook _cancelHook;
-    private readonly KeyboardHook _recentTranscriptionsHook;
-    private readonly KeyboardHook _copyLastTranscriptionHook;
-    private readonly KeyboardHook _workflowPaletteHook;
+    private readonly List<KeyboardHook> _appHotkeyHooks = [];
     private readonly List<(KeyboardHook Hook, string WorkflowId)> _workflowHooks = [];
 
     private bool _disposed;
@@ -69,29 +64,9 @@ public sealed class HotkeyService : IDisposable
         _settings = settings;
         _workflows = workflows;
 
-        _hybridHook = new KeyboardHook();
-        _hybridHook.KeyDown += OnHybridKeyDown;
-        _hybridHook.KeyUp += OnHybridKeyUp;
-
-        _toggleOnlyHook = new KeyboardHook();
-        _toggleOnlyHook.KeyDown += OnToggleOnlyKeyDown;
-
-        _holdOnlyHook = new KeyboardHook();
-        _holdOnlyHook.KeyDown += OnHoldOnlyKeyDown;
-        _holdOnlyHook.KeyUp += OnHoldOnlyKeyUp;
-
         _cancelHook = new KeyboardHook();
         _cancelHook.SetHotkey("Escape");
         _cancelHook.KeyDown += OnCancelKeyDown;
-
-        _recentTranscriptionsHook = new KeyboardHook();
-        _recentTranscriptionsHook.KeyDown += OnRecentTranscriptionsKeyDown;
-
-        _copyLastTranscriptionHook = new KeyboardHook();
-        _copyLastTranscriptionHook.KeyDown += OnCopyLastTranscriptionKeyDown;
-
-        _workflowPaletteHook = new KeyboardHook();
-        _workflowPaletteHook.KeyDown += OnWorkflowPaletteKeyDown;
     }
 
     public void Initialize(Window window)
@@ -108,41 +83,13 @@ public sealed class HotkeyService : IDisposable
         StopAllHooks();
         StopWorkflowHooks();
 
-        var hybridKey = !string.IsNullOrWhiteSpace(s.PushToTalkHotkey) ? s.PushToTalkHotkey : s.ToggleHotkey;
-        if (!string.IsNullOrWhiteSpace(hybridKey))
+        foreach (var binding in BuildAppHotkeyBindings(s))
         {
-            _hybridHook.SetHotkey(hybridKey);
-            _hybridHook.Start();
-        }
-
-        if (!string.IsNullOrWhiteSpace(s.ToggleOnlyHotkey))
-        {
-            _toggleOnlyHook.SetHotkey(s.ToggleOnlyHotkey);
-            _toggleOnlyHook.Start();
-        }
-
-        if (!string.IsNullOrWhiteSpace(s.HoldOnlyHotkey))
-        {
-            _holdOnlyHook.SetHotkey(s.HoldOnlyHotkey);
-            _holdOnlyHook.Start();
-        }
-
-        if (!string.IsNullOrWhiteSpace(s.RecentTranscriptionsHotkey))
-        {
-            _recentTranscriptionsHook.SetHotkey(s.RecentTranscriptionsHotkey);
-            _recentTranscriptionsHook.Start();
-        }
-
-        if (!string.IsNullOrWhiteSpace(s.CopyLastTranscriptionHotkey))
-        {
-            _copyLastTranscriptionHook.SetHotkey(s.CopyLastTranscriptionHotkey);
-            _copyLastTranscriptionHook.Start();
-        }
-
-        if (!string.IsNullOrWhiteSpace(s.WorkflowPaletteHotkey))
-        {
-            _workflowPaletteHook.SetHotkey(s.WorkflowPaletteHotkey);
-            _workflowPaletteHook.Start();
+            var hook = new KeyboardHook();
+            AttachAppHotkeyHandler(hook, binding.Action);
+            hook.SetHotkey(binding.Hotkey);
+            hook.Start();
+            _appHotkeyHooks.Add(hook);
         }
 
         _cancelHook.SetHotkey("Escape");
@@ -183,6 +130,52 @@ public sealed class HotkeyService : IDisposable
                     workflow.Trigger.HotkeyBehavior)))
             .ToList();
 
+    internal static IReadOnlyList<AppHotkeyBinding> BuildAppHotkeyBindings(AppSettings settings) =>
+    [
+        .. BuildAppHotkeyBindings(AppHotkeyAction.MainDictation, settings.GetMainDictationHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.ToggleOnly, settings.GetToggleOnlyHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.HoldOnly, settings.GetHoldOnlyHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.RecentTranscriptions, settings.GetRecentTranscriptionsHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.CopyLastTranscription, settings.GetCopyLastTranscriptionHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.WorkflowPalette, settings.GetWorkflowPaletteHotkeys())
+    ];
+
+    private static IEnumerable<AppHotkeyBinding> BuildAppHotkeyBindings(
+        AppHotkeyAction action,
+        IEnumerable<string> hotkeys) =>
+        hotkeys
+            .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey))
+            .Select(hotkey => new AppHotkeyBinding(action, hotkey));
+
+    private void AttachAppHotkeyHandler(KeyboardHook hook, AppHotkeyAction action)
+    {
+        switch (action)
+        {
+            case AppHotkeyAction.MainDictation:
+                hook.KeyDown += OnHybridKeyDown;
+                hook.KeyUp += OnHybridKeyUp;
+                break;
+            case AppHotkeyAction.ToggleOnly:
+                hook.KeyDown += OnToggleOnlyKeyDown;
+                break;
+            case AppHotkeyAction.HoldOnly:
+                hook.KeyDown += OnHoldOnlyKeyDown;
+                hook.KeyUp += OnHoldOnlyKeyUp;
+                break;
+            case AppHotkeyAction.RecentTranscriptions:
+                hook.KeyDown += OnRecentTranscriptionsKeyDown;
+                break;
+            case AppHotkeyAction.CopyLastTranscription:
+                hook.KeyDown += OnCopyLastTranscriptionKeyDown;
+                break;
+            case AppHotkeyAction.WorkflowPalette:
+                hook.KeyDown += OnWorkflowPaletteKeyDown;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(action), action, null);
+        }
+    }
+
     private void HandleWorkflowHotkeyKeyDown(string workflowId, WorkflowHotkeyBehavior behavior)
     {
         if (!IsEnabled)
@@ -210,13 +203,10 @@ public sealed class HotkeyService : IDisposable
 
     private void ApplyEnabledState()
     {
-        _hybridHook.IsEnabled = _isEnabled;
-        _toggleOnlyHook.IsEnabled = _isEnabled;
-        _holdOnlyHook.IsEnabled = _isEnabled;
         _cancelHook.IsEnabled = _isEnabled && IsCancelShortcutEnabled;
-        _recentTranscriptionsHook.IsEnabled = _isEnabled;
-        _copyLastTranscriptionHook.IsEnabled = _isEnabled;
-        _workflowPaletteHook.IsEnabled = _isEnabled;
+
+        foreach (var hook in _appHotkeyHooks)
+            hook.IsEnabled = _isEnabled;
 
         foreach (var (hook, _) in _workflowHooks)
             hook.IsEnabled = _isEnabled;
@@ -349,13 +339,13 @@ public sealed class HotkeyService : IDisposable
 
     private void StopAllHooks()
     {
-        _hybridHook.Stop();
-        _toggleOnlyHook.Stop();
-        _holdOnlyHook.Stop();
+        foreach (var hook in _appHotkeyHooks)
+        {
+            hook.Stop();
+            hook.Dispose();
+        }
+        _appHotkeyHooks.Clear();
         _cancelHook.Stop();
-        _recentTranscriptionsHook.Stop();
-        _copyLastTranscriptionHook.Stop();
-        _workflowPaletteHook.Stop();
         _isActive = false;
         CurrentMode = null;
     }
@@ -375,13 +365,7 @@ public sealed class HotkeyService : IDisposable
         {
             StopAllHooks();
             StopWorkflowHooks();
-            _hybridHook.Dispose();
-            _toggleOnlyHook.Dispose();
-            _holdOnlyHook.Dispose();
             _cancelHook.Dispose();
-            _recentTranscriptionsHook.Dispose();
-            _copyLastTranscriptionHook.Dispose();
-            _workflowPaletteHook.Dispose();
             _disposed = true;
         }
     }
@@ -397,3 +381,17 @@ internal sealed record WorkflowHotkeyBinding(
     string WorkflowId,
     string Hotkey,
     WorkflowHotkeyBehavior Behavior);
+
+internal enum AppHotkeyAction
+{
+    MainDictation,
+    ToggleOnly,
+    HoldOnly,
+    RecentTranscriptions,
+    CopyLastTranscription,
+    WorkflowPalette
+}
+
+internal sealed record AppHotkeyBinding(
+    AppHotkeyAction Action,
+    string Hotkey);

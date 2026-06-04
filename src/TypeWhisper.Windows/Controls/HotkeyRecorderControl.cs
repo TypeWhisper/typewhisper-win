@@ -12,6 +12,7 @@ public sealed class HotkeyRecorderControl : Control
 {
     private readonly HotkeyRecorderSession _recordingSession = new();
     private static int _activeRecordingControls;
+    private Button? _clearButton;
 
     public static readonly DependencyProperty HotkeyProperty =
         DependencyProperty.Register(nameof(Hotkey), typeof(string), typeof(HotkeyRecorderControl),
@@ -24,6 +25,18 @@ public sealed class HotkeyRecorderControl : Control
     public static readonly DependencyProperty AllowModifierOnlyProperty =
         DependencyProperty.Register(nameof(AllowModifierOnly), typeof(bool), typeof(HotkeyRecorderControl),
             new PropertyMetadata(false));
+
+    public static readonly DependencyProperty UseAddGlyphProperty =
+        DependencyProperty.Register(nameof(UseAddGlyph), typeof(bool), typeof(HotkeyRecorderControl),
+            new PropertyMetadata(false));
+
+    public static readonly DependencyProperty RecordedCommandProperty =
+        DependencyProperty.Register(nameof(RecordedCommand), typeof(ICommand), typeof(HotkeyRecorderControl),
+            new PropertyMetadata(null));
+
+    public static readonly DependencyProperty RecordedCommandParameterProperty =
+        DependencyProperty.Register(nameof(RecordedCommandParameter), typeof(object), typeof(HotkeyRecorderControl),
+            new PropertyMetadata(null));
 
     public string Hotkey
     {
@@ -43,6 +56,24 @@ public sealed class HotkeyRecorderControl : Control
         set => SetValue(AllowModifierOnlyProperty, value);
     }
 
+    public bool UseAddGlyph
+    {
+        get => (bool)GetValue(UseAddGlyphProperty);
+        set => SetValue(UseAddGlyphProperty, value);
+    }
+
+    public ICommand? RecordedCommand
+    {
+        get => (ICommand?)GetValue(RecordedCommandProperty);
+        set => SetValue(RecordedCommandProperty, value);
+    }
+
+    public object? RecordedCommandParameter
+    {
+        get => GetValue(RecordedCommandParameterProperty);
+        set => SetValue(RecordedCommandParameterProperty, value);
+    }
+
     static HotkeyRecorderControl()
     {
         DefaultStyleKeyProperty.OverrideMetadata(typeof(HotkeyRecorderControl),
@@ -58,6 +89,26 @@ public sealed class HotkeyRecorderControl : Control
             if (IsRecording)
                 CancelRecording();
         };
+    }
+
+    public override void OnApplyTemplate()
+    {
+        if (_clearButton is not null)
+            _clearButton.Click -= OnClearButtonClick;
+
+        base.OnApplyTemplate();
+
+        _clearButton = GetTemplateChild("ClearButton") as Button;
+        if (_clearButton is not null)
+            _clearButton.Click += OnClearButtonClick;
+    }
+
+    private void OnClearButtonClick(object sender, RoutedEventArgs e)
+    {
+        Hotkey = "";
+        _recordingSession.Reset();
+        IsRecording = false;
+        e.Handled = true;
     }
 
     private static void OnIsRecordingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -82,6 +133,10 @@ public sealed class HotkeyRecorderControl : Control
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+
+        if (IsTemplateButtonClick(e.OriginalSource))
+            return;
+
         Focus();
 
         if (IsRecording)
@@ -90,11 +145,41 @@ public sealed class HotkeyRecorderControl : Control
         }
         else
         {
-            _recordingSession.Reset();
-            IsRecording = true;
+            BeginRecording();
         }
 
         e.Handled = true;
+    }
+
+    private void BeginRecording()
+    {
+        _recordingSession.Reset();
+        IsRecording = true;
+    }
+
+    private bool IsTemplateButtonClick(object originalSource)
+    {
+        if (originalSource is not DependencyObject source)
+            return false;
+
+        return IsDescendantOf(source, _clearButton);
+    }
+
+    private static bool IsDescendantOf(DependencyObject source, DependencyObject? ancestor)
+    {
+        if (ancestor is null)
+            return false;
+
+        var current = source;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor))
+                return true;
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
@@ -133,11 +218,7 @@ public sealed class HotkeyRecorderControl : Control
 
         var hotkey = _recordingSession.TryRecordHotkey(key);
         if (!string.IsNullOrEmpty(hotkey))
-        {
-            Hotkey = hotkey;
-            IsRecording = false;
-            _recordingSession.Reset();
-        }
+            CommitRecordedHotkey(hotkey);
     }
 
     protected override void OnPreviewKeyUp(KeyEventArgs e)
@@ -157,13 +238,20 @@ public sealed class HotkeyRecorderControl : Control
             : "";
 
         if (!string.IsNullOrEmpty(hotkey))
-        {
-            Hotkey = hotkey;
-            IsRecording = false;
-            _recordingSession.Reset();
-        }
+            CommitRecordedHotkey(hotkey);
 
         e.Handled = true;
+    }
+
+    private void CommitRecordedHotkey(string hotkey)
+    {
+        Hotkey = hotkey;
+        IsRecording = false;
+        _recordingSession.Reset();
+
+        var parameter = RecordedCommandParameter ?? hotkey;
+        if (RecordedCommand?.CanExecute(parameter) == true)
+            RecordedCommand.Execute(parameter);
     }
 
     private void CancelRecording()

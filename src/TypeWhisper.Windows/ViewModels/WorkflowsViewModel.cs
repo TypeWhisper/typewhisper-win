@@ -42,7 +42,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     [ObservableProperty] private bool _editIsEnabled = true;
     [ObservableProperty] private string _processNameInput = "";
     [ObservableProperty] private string _websitePatternInput = "";
-    [ObservableProperty] private string? _editHotkey;
+    [ObservableProperty] private string _newHotkey = "";
     [ObservableProperty] private string? _editLanguage;
     [ObservableProperty] private string? _editTask;
     [ObservableProperty] private string? _editTranslationTarget;
@@ -63,6 +63,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     public ObservableCollection<Workflow> FilteredWorkflows { get; } = [];
     public ObservableCollection<string> ProcessNameChips { get; } = [];
     public ObservableCollection<string> WebsitePatternChips { get; } = [];
+    public ObservableCollection<string> EditHotkeys { get; } = [];
     public ObservableCollection<WorkflowAppPickerOption> AppPickerOptions { get; } = [];
     public ObservableCollection<WorkflowDomainSuggestionOption> DomainSuggestions { get; } = [];
     public ObservableCollection<WorkflowTemplateOption> TemplateOptions { get; } = [];
@@ -96,6 +97,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     public bool HasAppPickerOptions => AppPickerOptions.Count > 0;
     public bool HasDomainSuggestions => DomainSuggestions.Count > 0;
     public bool HasCurrentWebsiteDomain => !string.IsNullOrWhiteSpace(CurrentWebsiteDomain);
+    public bool HasEditHotkeys => EditHotkeys.Count > 0;
     public bool SupportsSelectedTranscriptionTranslation => SelectedTranscriptionEngineSupportsTranslation();
     public string SelectedTemplateName => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Name;
     public string SelectedTemplateDescription => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Description;
@@ -169,6 +171,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _appDiscovery = appDiscovery;
 
         _workflows.WorkflowsChanged += RefreshWorkflows;
+        EditHotkeys.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasEditHotkeys));
+            NotifyEditorStateChanged();
+        };
         _history.RecordsChanged += RefreshDomainSuggestions;
         _pluginManager.PluginStateChanged += (_, _) => Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -393,6 +400,42 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         NotifyEditorStateChanged();
     }
 
+    [RelayCommand]
+    private void AddHotkey(string? value = null)
+    {
+        var hotkey = HotkeyParser.Normalize(value ?? NewHotkey);
+        if (string.IsNullOrWhiteSpace(hotkey))
+            return;
+
+        if (EditHotkeys.Any(existing => string.Equals(HotkeyParser.Normalize(existing), hotkey, StringComparison.OrdinalIgnoreCase)))
+        {
+            EditorError = Loc.Instance.GetString("Workflows.ValidationHotkeyDuplicateFormat", hotkey);
+            NewHotkey = "";
+            return;
+        }
+
+        EditHotkeys.Add(hotkey);
+        NewHotkey = "";
+        EditorError = null;
+    }
+
+    [RelayCommand]
+    private void RemoveHotkey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        var index = EditHotkeys
+            .Select((hotkey, idx) => new { Hotkey = hotkey, Index = idx })
+            .FirstOrDefault(item => string.Equals(item.Hotkey, value, StringComparison.OrdinalIgnoreCase))
+            ?.Index;
+        if (index is null)
+            return;
+
+        EditHotkeys.RemoveAt(index.Value);
+        NotifyEditorStateChanged();
+    }
+
     private void AddWebsitePattern(string? rawValue)
     {
         var value = NormalizeWebsitePattern(rawValue ?? "");
@@ -450,10 +493,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditOutputFormat = workflow.Output.Format ?? "";
         EditAutoEnter = workflow.Output.AutoEnter;
         EditTargetActionPluginId = workflow.Output.TargetActionPluginId;
-        EditHotkey = workflow.Trigger.Hotkeys.FirstOrDefault();
+        NewHotkey = "";
 
         ReplaceCollection(ProcessNameChips, workflow.Trigger.ProcessNames);
         ReplaceCollection(WebsitePatternChips, workflow.Trigger.WebsitePatterns);
+        ReplaceCollection(EditHotkeys, NormalizeHotkeyList(workflow.Trigger.Hotkeys));
         RefreshCurrentWebsiteDomain();
         RefreshAppPickerOptions();
         RefreshDomainSuggestions();
@@ -495,8 +539,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     {
         IReadOnlyList<string> processNames = EditAppTriggerEnabled ? [.. ProcessNameChips] : [];
         IReadOnlyList<string> websitePatterns = EditWebsiteTriggerEnabled ? [.. WebsitePatternChips] : [];
-        var hotkey = EditHotkeyTriggerEnabled ? HotkeyParser.Normalize(EditHotkey) : "";
-        IReadOnlyList<string> hotkeys = string.IsNullOrWhiteSpace(hotkey) ? [] : [hotkey];
+        IReadOnlyList<string> hotkeys = EditHotkeyTriggerEnabled ? NormalizeHotkeyList(EditHotkeys) : [];
 
         var kind = processNames.Count > 0
             ? WorkflowTriggerKind.App
@@ -570,8 +613,15 @@ public sealed partial class WorkflowsViewModel : ObservableObject
                 return Loc.Instance["Workflows.ValidationApp"];
             case WorkflowTriggerMode.Automatic when EditWebsiteTriggerEnabled && WebsitePatternChips.Count == 0:
                 return Loc.Instance["Workflows.ValidationWebsite"];
-            case WorkflowTriggerMode.Automatic when EditHotkeyTriggerEnabled && string.IsNullOrWhiteSpace(HotkeyParser.Normalize(EditHotkey)):
+            case WorkflowTriggerMode.Automatic when EditHotkeyTriggerEnabled && NormalizeHotkeyList(EditHotkeys).Count == 0:
                 return Loc.Instance["Workflows.ValidationHotkey"];
+        }
+
+        if (EditTriggerMode == WorkflowTriggerMode.Automatic && EditHotkeyTriggerEnabled)
+        {
+            var hotkeyValidation = ValidateHotkeys();
+            if (hotkeyValidation is not null)
+                return hotkeyValidation;
         }
 
         if (EditTemplate == WorkflowTemplate.Translation && string.IsNullOrWhiteSpace(EditTranslationTargetLanguage))
@@ -612,12 +662,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         if (EditHotkeyTriggerEnabled)
         {
-            var hotkey = string.IsNullOrWhiteSpace(EditHotkey)
+            var hotkeys = NormalizeHotkeyList(EditHotkeys);
+            var hotkeyText = hotkeys.Count == 0
                 ? TriggerDisplayName(WorkflowTriggerKind.Hotkey)
-                : EditHotkey;
+                : string.Join(", ", hotkeys);
             parts.Add(EditHotkeyBehavior == WorkflowHotkeyBehavior.ProcessSelectedText
-                ? Loc.Instance.GetString("Workflows.ReviewHotkeyProcessFormat", hotkey)
-                : Loc.Instance.GetString("Workflows.ReviewHotkeyDictationFormat", hotkey));
+                ? Loc.Instance.GetString("Workflows.ReviewHotkeyProcessFormat", hotkeyText)
+                : Loc.Instance.GetString("Workflows.ReviewHotkeyDictationFormat", hotkeyText));
         }
 
         return parts.Count == 0
@@ -875,6 +926,90 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
     private static string? GetSetting(Workflow workflow, string key) =>
         workflow.Behavior.Settings.TryGetValue(key, out var value) ? value : null;
+
+    private string? ValidateHotkeys()
+    {
+        var hotkeys = NormalizeHotkeyList(EditHotkeys);
+        var duplicate = hotkeys
+            .GroupBy(static hotkey => hotkey, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(static group => group.Count() > 1)
+            ?.Key;
+        if (!string.IsNullOrWhiteSpace(duplicate))
+            return Loc.Instance.GetString("Workflows.ValidationHotkeyDuplicateFormat", duplicate);
+
+        foreach (var hotkey in hotkeys)
+        {
+            if (FindAppHotkeyConflict(hotkey) is { } appConflict)
+                return Loc.Instance.GetString("Workflows.ValidationHotkeyAppConflictFormat", hotkey, appConflict);
+
+            if (FindWorkflowHotkeyConflict(hotkey) is { } workflowName)
+                return Loc.Instance.GetString("Workflows.ValidationHotkeyWorkflowConflictFormat", hotkey, workflowName);
+        }
+
+        return null;
+    }
+
+    private string? FindAppHotkeyConflict(string hotkey)
+    {
+        foreach (var (configuredHotkey, label) in AppHotkeyConflicts())
+        {
+            if (string.Equals(configuredHotkey, hotkey, StringComparison.OrdinalIgnoreCase))
+                return label;
+        }
+
+        return null;
+    }
+
+    private IEnumerable<(string Hotkey, string Label)> AppHotkeyConflicts()
+    {
+        var settings = _settings.Current;
+        var candidates = new (IEnumerable<string> Hotkeys, string Label)[]
+        {
+            (settings.GetMainDictationHotkeys(), Loc.Instance["Workflows.AppHotkeyMainDictation"]),
+            (settings.GetToggleOnlyHotkeys(), Loc.Instance["Workflows.AppHotkeyToggleOnly"]),
+            (settings.GetHoldOnlyHotkeys(), Loc.Instance["Workflows.AppHotkeyHoldOnly"]),
+            (settings.GetRecentTranscriptionsHotkeys(), Loc.Instance["Workflows.AppHotkeyRecentTranscriptions"]),
+            (settings.GetCopyLastTranscriptionHotkeys(), Loc.Instance["Workflows.AppHotkeyCopyLastTranscription"]),
+            (settings.GetWorkflowPaletteHotkeys(), Loc.Instance["Workflows.AppHotkeyWorkflowPalette"])
+        };
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (configuredHotkeys, label) in candidates)
+        {
+            foreach (var configuredHotkey in configuredHotkeys)
+            {
+                var normalized = HotkeyParser.Normalize(configuredHotkey);
+                if (string.IsNullOrWhiteSpace(normalized) || !seen.Add(normalized))
+                    continue;
+
+                yield return (normalized, label);
+            }
+        }
+    }
+
+    private string? FindWorkflowHotkeyConflict(string hotkey)
+    {
+        foreach (var workflow in _workflows.Workflows)
+        {
+            if (string.Equals(workflow.Id, _editingWorkflowId, StringComparison.Ordinal))
+                continue;
+
+            if (workflow.Trigger.Hotkeys
+                .Select(HotkeyParser.Normalize)
+                .Any(existing => string.Equals(existing, hotkey, StringComparison.OrdinalIgnoreCase)))
+            {
+                return workflow.Name;
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string> hotkeys) =>
+        hotkeys
+            .Select(HotkeyParser.Normalize)
+            .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey))
+            .ToList();
 
     private static int SourceRank(WindowsAppDiscoverySource source) => source switch
     {
@@ -1139,7 +1274,6 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     partial void OnWebsitePatternInputChanged(string value) => RefreshDomainSuggestions();
     partial void OnCurrentWebsiteDomainChanged(string? value) => OnPropertyChanged(nameof(HasCurrentWebsiteDomain));
     partial void OnEditNameChanged(string value) => NotifyEditorStateChanged();
-    partial void OnEditHotkeyChanged(string? value) => NotifyEditorStateChanged();
     partial void OnEditTranscriptionModelOverrideChanged(string? value) => RebuildTaskOptions();
     partial void OnEditTranslationTargetLanguageChanged(string value) => NotifyEditorStateChanged();
     partial void OnEditCustomInstructionChanged(string value) => NotifyEditorStateChanged();

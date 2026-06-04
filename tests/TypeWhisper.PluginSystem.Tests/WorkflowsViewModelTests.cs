@@ -54,13 +54,140 @@ public sealed class WorkflowsViewModelTests : IDisposable
         Assert.Same(defaultOption, sut.SelectedDefaultProvider);
     }
 
+    [Fact]
+    public void StartEdit_LoadsSingleHotkeyWorkflowAsOneHotkeyChip()
+    {
+        var workflow = NewWorkflow("Rewrite", WorkflowTrigger.Hotkey("Ctrl+Alt+R"));
+        var workflows = new TestWorkflowService([workflow]);
+        var sut = CreateViewModel(workflows);
+
+        sut.StartEditCommand.Execute(workflow);
+
+        Assert.Equal(["Ctrl+Alt+R"], sut.EditHotkeys);
+        Assert.Equal("Ctrl+Alt+R starts dictation", WorkflowsViewModel.WorkflowTriggerDetail(workflow));
+    }
+
+    [Fact]
+    public void AddAndRemoveHotkey_UpdatesEditorHotkeyChips()
+    {
+        var sut = CreateViewModel();
+
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+        sut.NewHotkey = "Ctrl+Shift+R";
+        sut.AddHotkeyCommand.Execute(null);
+        sut.RemoveHotkeyCommand.Execute("Ctrl+Alt+R");
+
+        Assert.Equal(["Ctrl+Shift+R"], sut.EditHotkeys);
+        Assert.Equal("", sut.NewHotkey);
+    }
+
+    [Fact]
+    public void AddHotkeyCommand_AcceptsRecordedHotkeyParameter()
+    {
+        var sut = CreateViewModel();
+
+        sut.AddHotkeyCommand.Execute("Ctrl+Alt+R");
+
+        Assert.Equal(["Ctrl+Alt+R"], sut.EditHotkeys);
+        Assert.Equal("", sut.NewHotkey);
+    }
+
+    [Fact]
+    public void SaveEditor_PersistsMultipleWorkflowHotkeys()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+        sut.NewHotkey = "Ctrl+Shift+R";
+        sut.AddHotkeyCommand.Execute(null);
+
+        sut.SaveEditorCommand.Execute(null);
+
+        var saved = Assert.Single(workflows.Workflows);
+        Assert.Equal(["Ctrl+Alt+R", "Ctrl+Shift+R"], saved.Trigger.Hotkeys);
+    }
+
+    [Fact]
+    public void SaveEditor_RejectsDuplicateHotkeysInEditedWorkflow()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.EditHotkeys.Add("Ctrl+Alt+R");
+        sut.EditHotkeys.Add("Ctrl+Alt+R");
+
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.Empty(workflows.Workflows);
+        Assert.Equal("This workflow already uses Ctrl+Alt+R.", sut.EditorError);
+    }
+
+    [Fact]
+    public void SaveEditor_RejectsHotkeyConflictWithAnotherWorkflow()
+    {
+        var existing = NewWorkflow("Existing", WorkflowTrigger.Hotkey("Ctrl+Alt+R"));
+        var workflows = new TestWorkflowService([existing]);
+        var sut = CreateViewModel(workflows);
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.Single(workflows.Workflows);
+        Assert.Equal("Ctrl+Alt+R is already used by workflow \"Existing\".", sut.EditorError);
+    }
+
+    [Fact]
+    public void SaveEditor_RejectsHotkeyConflictWithAppShortcut()
+    {
+        _settings.Save(AppSettings.Default with { PushToTalkHotkey = "Ctrl+Alt+R", ToggleHotkey = "Ctrl+Alt+R" });
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.Empty(workflows.Workflows);
+        Assert.Equal("Ctrl+Alt+R is already used by Main dictation hotkey.", sut.EditorError);
+    }
+
+    [Fact]
+    public void SaveEditor_RejectsHotkeyConflictWithAdditionalAppShortcutChip()
+    {
+        _settings.Save(AppSettings.Default with
+        {
+            MainDictationHotkeys = ["Ctrl+Alt+D", "Ctrl+Alt+R"]
+        });
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.Empty(workflows.Workflows);
+        Assert.Equal("Ctrl+Alt+R is already used by Main dictation hotkey.", sut.EditorError);
+    }
+
+    [Fact]
+    public void ReviewText_IncludesMultipleEditedHotkeys()
+    {
+        var sut = CreateViewModel();
+        sut.NewHotkey = "Ctrl+Alt+R";
+        sut.AddHotkeyCommand.Execute(null);
+        sut.NewHotkey = "Ctrl+Shift+R";
+        sut.AddHotkeyCommand.Execute(null);
+
+        Assert.Contains("Ctrl+Alt+R, Ctrl+Shift+R", sut.ReviewText);
+    }
+
     public void Dispose() => _pluginManager.Dispose();
 
-    private WorkflowsViewModel CreateViewModel()
+    private WorkflowsViewModel CreateViewModel(TestWorkflowService? workflows = null)
     {
-        var workflows = new Mock<IWorkflowService>();
-        workflows.SetupGet(service => service.Workflows).Returns([]);
-        workflows.Setup(service => service.NextSortOrder()).Returns(1);
+        workflows ??= new TestWorkflowService();
 
         var activeWindow = new Mock<IActiveWindowService>();
         activeWindow.Setup(service => service.GetBrowserUrl()).Returns((string?)null);
@@ -70,7 +197,7 @@ public sealed class WorkflowsViewModelTests : IDisposable
         history.Setup(service => service.GetDistinctApps()).Returns([]);
 
         return new WorkflowsViewModel(
-            workflows.Object,
+            workflows,
             activeWindow.Object,
             history.Object,
             _settings,
@@ -78,6 +205,17 @@ public sealed class WorkflowsViewModelTests : IDisposable
             new ModelManagerService(_pluginManager, _settings),
             new WindowsAppDiscoveryService(history.Object));
     }
+
+    private static Workflow NewWorkflow(string name, WorkflowTrigger trigger) =>
+        new()
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = name,
+            IsEnabled = true,
+            SortOrder = 0,
+            Template = WorkflowTemplate.CleanedText,
+            Trigger = trigger
+        };
 
     private void AddLlmProvider(FakeLlmProvider provider)
     {
@@ -119,5 +257,45 @@ public sealed class WorkflowsViewModelTests : IDisposable
         public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct) =>
             Task.FromResult(userText);
         public void Dispose() { }
+    }
+
+    private sealed class TestWorkflowService : IWorkflowService
+    {
+        private readonly List<Workflow> _workflows;
+
+        public TestWorkflowService(IReadOnlyList<Workflow>? workflows = null)
+        {
+            _workflows = workflows?.ToList() ?? [];
+        }
+
+        public IReadOnlyList<Workflow> Workflows => _workflows;
+        public event Action? WorkflowsChanged;
+
+        public void AddWorkflow(Workflow workflow)
+        {
+            _workflows.Add(workflow);
+            WorkflowsChanged?.Invoke();
+        }
+
+        public void UpdateWorkflow(Workflow workflow)
+        {
+            var index = _workflows.FindIndex(existing => existing.Id == workflow.Id);
+            if (index >= 0)
+                _workflows[index] = workflow;
+            WorkflowsChanged?.Invoke();
+        }
+
+        public void DeleteWorkflow(string id)
+        {
+            _workflows.RemoveAll(workflow => workflow.Id == id);
+            WorkflowsChanged?.Invoke();
+        }
+
+        public void ToggleWorkflow(string id) { }
+        public void Reorder(IReadOnlyList<string> orderedIds) { }
+        public int NextSortOrder() => _workflows.Count;
+        public Workflow? GetWorkflow(string id) => _workflows.FirstOrDefault(workflow => workflow.Id == id);
+        public WorkflowMatchResult? MatchWorkflow(string? processName, string? url) => null;
+        public WorkflowMatchResult? ForceMatch(string workflowId) => null;
     }
 }

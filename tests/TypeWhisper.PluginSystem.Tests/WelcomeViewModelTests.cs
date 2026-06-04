@@ -147,6 +147,68 @@ public sealed class WelcomeViewModelTests
         });
     }
 
+    [Fact]
+    public void MainDictationHotkeys_AddAndRemovePersistsMultipleValues()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(
+                plugin,
+                out _,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = [],
+                    PushToTalkHotkey = "",
+                    ToggleHotkey = ""
+                });
+
+            sut.NewMainDictationHotkey = "Ctrl+Alt+D";
+            sut.AddMainDictationHotkeyCommand.Execute(null);
+            sut.NewMainDictationHotkey = "Ctrl+Shift+D";
+            sut.AddMainDictationHotkeyCommand.Execute(null);
+            sut.RemoveMainDictationHotkeyCommand.Execute("Ctrl+Alt+D");
+
+            Assert.Equal(["Ctrl+Shift+D"], sut.MainDictationHotkeys);
+            Assert.Equal(["Ctrl+Shift+D"], settings.Current.MainDictationHotkeys);
+            Assert.Equal("Ctrl+Shift+D", settings.Current.PushToTalkHotkey);
+        });
+    }
+
+    [Fact]
+    public void MainDictationHotkeyCommand_AcceptsRecordedHotkeyParameter()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(
+                plugin,
+                out _,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = [],
+                    PushToTalkHotkey = "",
+                    ToggleHotkey = ""
+                });
+
+            sut.AddMainDictationHotkeyCommand.Execute("Ctrl+Alt+D");
+
+            Assert.Equal(["Ctrl+Alt+D"], sut.MainDictationHotkeys);
+            Assert.Equal(["Ctrl+Alt+D"], settings.Current.MainDictationHotkeys);
+            Assert.Equal("", sut.NewMainDictationHotkey);
+        });
+    }
+
     private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin) =>
         CreateViewModel(plugin, out _);
 
@@ -154,7 +216,16 @@ public sealed class WelcomeViewModelTests
         FakeTranscriptionPlugin plugin,
         out PluginManager pluginManager)
     {
-        var settings = new FakeSettingsService(AppSettings.Default);
+        return CreateViewModel(plugin, out pluginManager, out _);
+    }
+
+    private static WelcomeViewModel CreateViewModel(
+        FakeTranscriptionPlugin plugin,
+        out PluginManager pluginManager,
+        out FakeSettingsService settings,
+        AppSettings? initialSettings = null)
+    {
+        settings = new FakeSettingsService(initialSettings ?? AppSettings.Default);
         var workflows = new Mock<IWorkflowService>();
         workflows.Setup(w => w.Workflows).Returns([]);
         var activeWindow = new Mock<IActiveWindowService>();
