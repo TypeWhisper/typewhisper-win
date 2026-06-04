@@ -62,6 +62,22 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void AddWorkflow_MultipleHotkeys_PersistsAndLoads()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Rewrite",
+            WorkflowTrigger.Hotkey(
+                WorkflowHotkeyBehavior.ProcessSelectedText,
+                "Ctrl+Alt+R",
+                "Ctrl+Shift+R")));
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+        Assert.Equal(["Ctrl+Alt+R", "Ctrl+Shift+R"], loaded.Trigger.Hotkeys);
+        Assert.Equal(WorkflowHotkeyBehavior.ProcessSelectedText, loaded.Trigger.HotkeyBehavior);
+    }
+
+    [Fact]
     public void ToggleWorkflow_UpdatesEnabledState()
     {
         var workflow = NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK"));

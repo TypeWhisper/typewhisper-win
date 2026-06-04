@@ -68,6 +68,7 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private float _micLevel;
     [ObservableProperty] private bool _micWorking;
     [ObservableProperty] private string _mainDictationHotkey = "";
+    [ObservableProperty] private string _newMainDictationHotkey = "";
     [ObservableProperty] private bool _isLoadingPlugins;
     [ObservableProperty] private string _trialText = "";
     [ObservableProperty] private bool _trialSuccess;
@@ -90,14 +91,21 @@ public partial class WelcomeViewModel : ObservableObject
     /// Gets the microphones.
     /// </summary>
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+
     /// <summary>
-    /// Gets or sets the completion request value.
+    /// Gets the configured main dictation hotkeys shown during onboarding.
+    /// </summary>
+    public ObservableCollection<string> MainDictationHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets the settings route requested when onboarding completes.
     /// </summary>
     public WelcomeCompletionRequest CompletionRequest { get; private set; } = WelcomeCompletionRequest.None;
     /// <summary>
     /// Raised when playback or the asynchronous operation completes.
     /// </summary>
     public event EventHandler? Completed;
+    private bool _isSyncingMainDictationHotkeys;
 
     /// <summary>
     /// Initializes a new instance of the WelcomeViewModel class.
@@ -120,7 +128,8 @@ public partial class WelcomeViewModel : ObservableObject
         _lastObservedDictationState = dictation.State;
 
         _isInitializing = true;
-        MainDictationHotkey = ResolveMainDictationHotkey(settings.Current);
+        ReplaceCollection(MainDictationHotkeys, ResolveMainDictationHotkeys(settings.Current));
+        MainDictationHotkey = FirstOrEmpty(MainDictationHotkeys);
         SelectedIndustryPresetId = IndustryPreset.Resolve(settings.Current.SelectedIndustryPresetId).Id;
         _isInitializing = false;
 
@@ -145,18 +154,21 @@ public partial class WelcomeViewModel : ObservableObject
     /// Gets the primary action label.
     /// </summary>
     public string PrimaryActionLabel => IsFinalStep ? Loc.Instance["Welcome.GetStarted"] : Loc.Instance["Welcome.Next"];
+
     /// <summary>
-    /// Performs main dictation hotkey display.
+    /// Gets the display text for all configured main dictation hotkeys.
     /// </summary>
-    public string MainDictationHotkeyDisplay => string.IsNullOrWhiteSpace(MainDictationHotkey)
+    public string MainDictationHotkeyDisplay => MainDictationHotkeys.Count == 0
         ? Loc.Instance["Hotkey.ClickToAssign"]
-        : MainDictationHotkey;
+        : string.Join(", ", MainDictationHotkeys);
+
     /// <summary>
-    /// Returns whether configured main hotkey.
+    /// Gets whether onboarding has at least one main dictation hotkey configured.
     /// </summary>
-    public bool HasConfiguredMainHotkey => !string.IsNullOrWhiteSpace(MainDictationHotkey);
+    public bool HasConfiguredMainHotkey => MainDictationHotkeys.Count > 0;
+
     /// <summary>
-    /// Gets whether has ready engine.
+    /// Gets whether the selected local or plugin engine is ready.
     /// </summary>
     public bool HasReadyEngine =>
         !string.IsNullOrWhiteSpace(SelectedModelId)
@@ -298,10 +310,14 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(HasConfiguredMainHotkey));
         OnPropertyChanged(nameof(CanTryItOut));
 
-        if (_isInitializing)
+        if (_isInitializing || _isSyncingMainDictationHotkeys)
             return;
 
-        PersistMainDictationHotkey(value);
+        var normalized = HotkeyParser.Normalize(value);
+        ReplaceCollection(
+            MainDictationHotkeys,
+            string.IsNullOrWhiteSpace(normalized) ? [] : [normalized]);
+        PersistMainDictationHotkeys(MainDictationHotkeys);
     }
 
     partial void OnSelectedModelIdChanged(string? value)
@@ -448,6 +464,45 @@ public partial class WelcomeViewModel : ObservableObject
         SelectedModelId = AvailableModels.FirstOrDefault(m => m.FullModelId == PreferredGroqModelId)?.FullModelId
                           ?? AvailableModels.FirstOrDefault(m => m.FullModelId.StartsWith($"plugin:{GroqPluginId}:"))?.FullModelId
                           ?? SelectedModelId;
+    }
+
+    [RelayCommand]
+    private void AddMainDictationHotkey(string? value = null)
+    {
+        var normalized = HotkeyParser.Normalize(value ?? NewMainDictationHotkey);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        if (MainDictationHotkeys.Any(hotkey =>
+                string.Equals(HotkeyParser.Normalize(hotkey), normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            NewMainDictationHotkey = "";
+            return;
+        }
+
+        MainDictationHotkeys.Add(normalized);
+        NewMainDictationHotkey = "";
+        SyncMainDictationHotkeyFromCollection();
+        PersistMainDictationHotkeys(MainDictationHotkeys);
+        NotifyMainHotkeyProperties();
+    }
+
+    [RelayCommand]
+    private void RemoveMainDictationHotkey(string? hotkey)
+    {
+        var normalized = HotkeyParser.Normalize(hotkey);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        var existing = MainDictationHotkeys.FirstOrDefault(value =>
+            string.Equals(HotkeyParser.Normalize(value), normalized, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+            return;
+
+        MainDictationHotkeys.Remove(existing);
+        SyncMainDictationHotkeyFromCollection();
+        PersistMainDictationHotkeys(MainDictationHotkeys);
+        NotifyMainHotkeyProperties();
     }
 
     [RelayCommand]
@@ -607,7 +662,7 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(CompletionRequest));
 
         StopMicTest();
-        PersistMainDictationHotkey(MainDictationHotkey);
+        PersistMainDictationHotkeys(MainDictationHotkeys);
         _dictionary.ApplyIndustryPreset(SelectedIndustryPresetId);
 
         Completed?.Invoke(this, EventArgs.Empty);
@@ -634,24 +689,64 @@ public partial class WelcomeViewModel : ObservableObject
         _dictation.PropertyChanged -= OnDictationPropertyChanged;
     }
 
-    private static string ResolveMainDictationHotkey(AppSettings settings) =>
-        !string.IsNullOrWhiteSpace(HotkeyParser.Normalize(settings.PushToTalkHotkey))
-            ? HotkeyParser.Normalize(settings.PushToTalkHotkey)
-            : HotkeyParser.Normalize(settings.ToggleHotkey);
+    private static IReadOnlyList<string> ResolveMainDictationHotkeys(AppSettings settings) =>
+        NormalizeHotkeyList(settings.GetMainDictationHotkeys());
 
-    private void PersistMainDictationHotkey(string? hotkey)
+    private void PersistMainDictationHotkeys(IEnumerable<string?> hotkeys)
     {
-        var normalizedHotkey = HotkeyParser.Normalize(hotkey);
+        var normalizedHotkeys = NormalizeHotkeyList(hotkeys);
+        var primaryHotkey = FirstOrEmpty(normalizedHotkeys);
         var current = _settings.Current;
 
-        if (current.PushToTalkHotkey == normalizedHotkey && current.ToggleHotkey == normalizedHotkey)
+        if (current.GetMainDictationHotkeys().SequenceEqual(normalizedHotkeys, StringComparer.OrdinalIgnoreCase)
+            && current.PushToTalkHotkey == primaryHotkey
+            && current.ToggleHotkey == primaryHotkey)
+        {
             return;
+        }
 
         _settings.Save(current with
         {
-            PushToTalkHotkey = normalizedHotkey,
-            ToggleHotkey = normalizedHotkey
+            MainDictationHotkeys = normalizedHotkeys,
+            PushToTalkHotkey = primaryHotkey,
+            ToggleHotkey = primaryHotkey
         });
+    }
+
+    private void SyncMainDictationHotkeyFromCollection()
+    {
+        _isSyncingMainDictationHotkeys = true;
+        try
+        {
+            MainDictationHotkey = FirstOrEmpty(MainDictationHotkeys);
+        }
+        finally
+        {
+            _isSyncingMainDictationHotkeys = false;
+        }
+    }
+
+    private void NotifyMainHotkeyProperties()
+    {
+        OnPropertyChanged(nameof(MainDictationHotkeyDisplay));
+        OnPropertyChanged(nameof(HasConfiguredMainHotkey));
+        OnPropertyChanged(nameof(CanTryItOut));
+    }
+
+    private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string?> values) =>
+        values.Select(HotkeyParser.Normalize)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string FirstOrEmpty(IEnumerable<string> values) =>
+        values.FirstOrDefault() ?? "";
+
+    private static void ReplaceCollection<T>(ObservableCollection<T> target, IReadOnlyList<T> values)
+    {
+        target.Clear();
+        foreach (var value in values)
+            target.Add(value);
     }
 
     private void NotifyRecommendationProperties()

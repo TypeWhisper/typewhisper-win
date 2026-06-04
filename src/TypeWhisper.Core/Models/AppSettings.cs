@@ -84,8 +84,39 @@ public record AppSettings
     /// Gets or sets the workflow palette hotkey value.
     /// </summary>
     public string WorkflowPaletteHotkey { get; init; } = "";
+
     /// <summary>
-    /// Gets or sets the language value.
+    /// Gets or sets the main dictation hotkeys in priority order.
+    /// </summary>
+    public IReadOnlyList<string> MainDictationHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets hotkeys that always use toggle recording mode.
+    /// </summary>
+    public IReadOnlyList<string> ToggleOnlyHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets hotkeys that always use hold-to-record mode.
+    /// </summary>
+    public IReadOnlyList<string> HoldOnlyHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets hotkeys that open the recent transcriptions palette.
+    /// </summary>
+    public IReadOnlyList<string> RecentTranscriptionsHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets hotkeys that copy the most recent transcription to the clipboard.
+    /// </summary>
+    public IReadOnlyList<string> CopyLastTranscriptionHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets hotkeys that open the workflow palette.
+    /// </summary>
+    public IReadOnlyList<string> WorkflowPaletteHotkeys { get; init; } = [];
+
+    /// <summary>
+    /// Gets or sets the transcription language selection.
     /// </summary>
     public string Language { get; init; } = "auto";
     /// <summary>
@@ -392,7 +423,122 @@ public record AppSettings
             MaxLiveTranscriptionFontSize);
 
     /// <summary>
-    /// Performs normalize local model acceleration.
+    /// Returns normalized main dictation hotkeys, falling back to legacy single-hotkey settings.
+    /// </summary>
+    public IReadOnlyList<string> GetMainDictationHotkeys()
+    {
+        var configuredHotkeys = CleanHotkeys(MainDictationHotkeys);
+        if (configuredHotkeys.Count > 0)
+            return configuredHotkeys;
+
+        return CleanHotkeys(ResolveLegacyMainHotkeys());
+    }
+
+    /// <summary>
+    /// Returns normalized toggle-only hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetToggleOnlyHotkeys() =>
+        ResolveHotkeys(ToggleOnlyHotkeys, ToggleOnlyHotkey);
+
+    /// <summary>
+    /// Returns normalized hold-only hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetHoldOnlyHotkeys() =>
+        ResolveHotkeys(HoldOnlyHotkeys, HoldOnlyHotkey);
+
+    /// <summary>
+    /// Returns normalized recent-transcriptions hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetRecentTranscriptionsHotkeys() =>
+        ResolveHotkeys(RecentTranscriptionsHotkeys, RecentTranscriptionsHotkey);
+
+    /// <summary>
+    /// Returns normalized copy-last-transcription hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetCopyLastTranscriptionHotkeys() =>
+        ResolveHotkeys(CopyLastTranscriptionHotkeys, CopyLastTranscriptionHotkey);
+
+    /// <summary>
+    /// Returns normalized workflow-palette hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetWorkflowPaletteHotkeys() =>
+        ResolveHotkeys(WorkflowPaletteHotkeys, WorkflowPaletteHotkey);
+
+    /// <summary>
+    /// Returns settings with all hotkey lists normalized and legacy single-hotkey fields synchronized.
+    /// </summary>
+    public AppSettings NormalizeHotkeyLists()
+    {
+        var mainDictationHotkeys = GetMainDictationHotkeys();
+        var toggleOnlyHotkeys = GetToggleOnlyHotkeys();
+        var holdOnlyHotkeys = GetHoldOnlyHotkeys();
+        var recentTranscriptionsHotkeys = GetRecentTranscriptionsHotkeys();
+        var copyLastTranscriptionHotkeys = GetCopyLastTranscriptionHotkeys();
+        var workflowPaletteHotkeys = GetWorkflowPaletteHotkeys();
+
+        return this with
+        {
+            MainDictationHotkeys = mainDictationHotkeys,
+            ToggleHotkey = FirstOrEmpty(mainDictationHotkeys),
+            PushToTalkHotkey = FirstOrEmpty(mainDictationHotkeys),
+            ToggleOnlyHotkeys = toggleOnlyHotkeys,
+            ToggleOnlyHotkey = FirstOrEmpty(toggleOnlyHotkeys),
+            HoldOnlyHotkeys = holdOnlyHotkeys,
+            HoldOnlyHotkey = FirstOrEmpty(holdOnlyHotkeys),
+            RecentTranscriptionsHotkeys = recentTranscriptionsHotkeys,
+            RecentTranscriptionsHotkey = FirstOrEmpty(recentTranscriptionsHotkeys),
+            CopyLastTranscriptionHotkeys = copyLastTranscriptionHotkeys,
+            CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys),
+            WorkflowPaletteHotkeys = workflowPaletteHotkeys,
+            WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys)
+        };
+    }
+
+    private IEnumerable<string?> ResolveLegacyMainHotkeys()
+    {
+        var pushToTalkHotkey = HotkeyText(PushToTalkHotkey);
+        var toggleHotkey = HotkeyText(ToggleHotkey);
+
+        if (!string.IsNullOrWhiteSpace(pushToTalkHotkey))
+            yield return pushToTalkHotkey;
+
+        if (string.IsNullOrWhiteSpace(toggleHotkey))
+            yield break;
+
+        if (string.Equals(pushToTalkHotkey, toggleHotkey, StringComparison.OrdinalIgnoreCase))
+            yield break;
+
+        if (!string.IsNullOrWhiteSpace(pushToTalkHotkey)
+            && string.Equals(toggleHotkey, Default.ToggleHotkey, StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        yield return toggleHotkey;
+    }
+
+    private static IReadOnlyList<string> ResolveHotkeys(IReadOnlyList<string>? configured, string? legacyHotkey)
+    {
+        var configuredHotkeys = CleanHotkeys(configured ?? []);
+        return configuredHotkeys.Count > 0
+            ? configuredHotkeys
+            : CleanHotkeys([legacyHotkey]);
+    }
+
+    private static IReadOnlyList<string> CleanHotkeys(IEnumerable<string?> values) =>
+        values.Select(static value => value?.Trim() ?? "")
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string FirstOrEmpty(IReadOnlyList<string> hotkeys) =>
+        hotkeys.Count == 0 ? "" : hotkeys[0];
+
+    private static string HotkeyText(string? value) =>
+        value?.Trim() ?? "";
+
+    /// <summary>
+    /// Normalizes a local model acceleration storage value to a supported option.
     /// </summary>
     public static string NormalizeLocalModelAcceleration(string? value)
     {

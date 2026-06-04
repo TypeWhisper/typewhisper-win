@@ -175,7 +175,7 @@ public sealed class SettingsService : ISettingsService
                 settings.LocalModelAcceleration)
         };
 
-        return settings;
+        return settings.NormalizeHotkeyLists();
     }
 
     private static void LogWarning(string message)
