@@ -5,6 +5,9 @@ using TypeWhisper.Windows.Native;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides active window service behavior.
+/// </summary>
 public sealed class ActiveWindowService : IActiveWindowService
 {
     private static readonly int OwnProcessId = Environment.ProcessId;
@@ -19,6 +22,9 @@ public sealed class ActiveWindowService : IActiveWindowService
     private string? _lastTitle;
     private string? _cachedUrl;
 
+    /// <summary>
+    /// Returns active window handle.
+    /// </summary>
     public IntPtr GetActiveWindowHandle()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
@@ -28,6 +34,9 @@ public sealed class ActiveWindowService : IActiveWindowService
         return processId == 0 || processId == OwnProcessId ? IntPtr.Zero : hwnd;
     }
 
+    /// <summary>
+    /// Returns running app process names.
+    /// </summary>
     public IReadOnlyList<string> GetRunningAppProcessNames()
     {
         try
@@ -54,6 +63,9 @@ public sealed class ActiveWindowService : IActiveWindowService
         }
     }
 
+    /// <summary>
+    /// Returns active window process name.
+    /// </summary>
     public string? GetActiveWindowProcessName()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
@@ -73,6 +85,9 @@ public sealed class ActiveWindowService : IActiveWindowService
         }
     }
 
+    /// <summary>
+    /// Returns active window title.
+    /// </summary>
     public string? GetActiveWindowTitle()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
@@ -86,6 +101,9 @@ public sealed class ActiveWindowService : IActiveWindowService
         return result > 0 ? new string(buffer, 0, result) : null;
     }
 
+    /// <summary>
+    /// Returns browser url.
+    /// </summary>
     public string? GetBrowserUrl()
     {
         var hwnd = NativeMethods.GetForegroundWindow();

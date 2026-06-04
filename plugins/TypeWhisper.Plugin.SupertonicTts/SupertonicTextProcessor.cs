@@ -8,6 +8,9 @@ namespace TypeWhisper.Plugin.SupertonicTts;
 
 internal sealed class SupertonicTextProcessor
 {
+    /// <summary>
+    /// Performs supported languages.
+    /// </summary>
     public static readonly ISet<string> SupportedLanguages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi", "fr", "hi",
@@ -17,6 +20,9 @@ internal sealed class SupertonicTextProcessor
 
     private readonly long[] _indexer;
 
+    /// <summary>
+    /// Performs supertonic text processor.
+    /// </summary>
     public SupertonicTextProcessor(string unicodeIndexerPath)
     {
         var json = File.ReadAllText(unicodeIndexerPath);
@@ -24,6 +30,9 @@ internal sealed class SupertonicTextProcessor
             ?? throw new InvalidOperationException("Failed to load Supertonic unicode indexer.");
     }
 
+    /// <summary>
+    /// Performs process.
+    /// </summary>
     public SupertonicTextFeatures Process(IReadOnlyList<string> texts, IReadOnlyList<string> languages)
     {
         if (texts.Count != languages.Count)

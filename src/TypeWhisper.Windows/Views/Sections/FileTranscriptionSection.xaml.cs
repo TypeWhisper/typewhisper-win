@@ -6,11 +6,17 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides file transcription section behavior.
+/// </summary>
 public partial class FileTranscriptionSection : UserControl
 {
     private SettingsWindowViewModel? _viewModel;
     private bool _isPresentingImporter;
 
+    /// <summary>
+    /// Initializes a new instance of the FileTranscriptionSection class.
+    /// </summary>
     public FileTranscriptionSection()
     {
         InitializeComponent();

@@ -10,7 +10,7 @@ using TypeWhisper.Core.Interfaces;
 namespace TypeWhisper.Windows.Services.Plugins;
 
 /// <summary>
-/// Fetches the plugin registry from GitHub, manages installation, uninstallation,
+/// Fetches the plugin registry from GitHub, manages installation, uninstallation,.
 /// and update checking for marketplace plugins.
 /// </summary>
 public sealed class PluginRegistryService
@@ -33,6 +33,9 @@ public sealed class PluginRegistryService
     private DateTime _cacheTimestamp;
     private DateTime _lastUpdateCheck;
 
+    /// <summary>
+    /// Initializes a new instance of the PluginRegistryService class.
+    /// </summary>
     public PluginRegistryService(
         PluginManager pluginManager,
         PluginLoader pluginLoader,

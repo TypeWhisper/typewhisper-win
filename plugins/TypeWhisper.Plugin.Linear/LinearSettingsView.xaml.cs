@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.Linear;
 
+/// <summary>
+/// Provides linear settings view behavior.
+/// </summary>
 public partial class LinearSettingsView : UserControl
 {
     private readonly LinearPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the LinearSettingsView class.
+    /// </summary>
     public LinearSettingsView(LinearPlugin plugin)
     {
         _plugin = plugin;

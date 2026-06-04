@@ -6,6 +6,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Cohere;
 
+/// <summary>
+/// Provides cohere plugin behavior.
+/// </summary>
 public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
 {
     private const string BaseUrl = "https://api.cohere.com/compatibility";
@@ -15,10 +18,22 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.cohere";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Cohere";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -26,6 +41,9 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
@@ -34,14 +52,26 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "Cohere";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
     [
         new PluginModelInfo("command-a-03-2025", "Command A") { IsRecommended = true },
     ];
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
@@ -51,6 +81,9 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
             _httpClient, BaseUrl, _apiKey!, model, systemPrompt, userText, ct);
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView()
     {
         var panel = new StackPanel { Margin = new System.Windows.Thickness(8) };
@@ -74,5 +107,8 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
         return new UserControl { Content = panel };
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _httpClient.Dispose();
 }

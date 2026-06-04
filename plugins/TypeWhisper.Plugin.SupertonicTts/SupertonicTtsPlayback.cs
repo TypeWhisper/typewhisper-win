@@ -11,6 +11,9 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
     private readonly MemoryStream _stream;
     private int _completed;
 
+    /// <summary>
+    /// Performs supertonic tts playback session.
+    /// </summary>
     public SupertonicTtsPlaybackSession(float[] samples, int sampleRate)
     {
         _stream = new MemoryStream(BuildWav(samples, sampleRate));
@@ -18,9 +21,18 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
         _ = Task.Run(PlaySyncAndFinish);
     }
 
+    /// <summary>
+    /// Gets whether this item is currently active.
+    /// </summary>
     public bool IsActive => Volatile.Read(ref _completed) == 0;
+    /// <summary>
+    /// Raised when playback or the asynchronous operation completes.
+    /// </summary>
     public event EventHandler? Completed;
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         if (!IsActive)
@@ -32,6 +44,9 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
         Finish();
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => Stop();
 
     private void PlaySyncAndFinish()
@@ -87,20 +102,32 @@ internal sealed class SupertonicTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsP
 }
 internal sealed class SupertonicInactiveTtsPlaybackSession : TypeWhisper.PluginSDK.ITtsPlaybackSession
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static SupertonicInactiveTtsPlaybackSession Instance { get; } = new();
 
     private SupertonicInactiveTtsPlaybackSession()
     {
     }
 
+    /// <summary>
+    /// Gets whether this item is currently active.
+    /// </summary>
     public bool IsActive => false;
 
+    /// <summary>
+    /// Raised when playback or the asynchronous operation completes.
+    /// </summary>
     public event EventHandler? Completed
     {
         add { value?.Invoke(this, EventArgs.Empty); }
         remove { }
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
     }

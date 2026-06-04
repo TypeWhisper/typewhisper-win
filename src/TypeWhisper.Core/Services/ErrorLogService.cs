@@ -4,6 +4,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides error log service behavior.
+/// </summary>
 public sealed class ErrorLogService : IErrorLogService
 {
     private const int MaxEntries = 200;
@@ -12,6 +15,12 @@ public sealed class ErrorLogService : IErrorLogService
     private readonly List<ErrorLogEntry> _entries = [];
     private readonly Lock _lock = new();
 
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
     public IReadOnlyList<ErrorLogEntry> Entries
     {
         get
@@ -20,14 +29,23 @@ public sealed class ErrorLogService : IErrorLogService
         }
     }
 
+    /// <summary>
+    /// Raised when entries changes.
+    /// </summary>
     public event Action? EntriesChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the ErrorLogService class.
+    /// </summary>
     public ErrorLogService(string dataDirectory)
     {
         _logFilePath = Path.Combine(dataDirectory, "error-log.json");
         LoadFromDisk();
     }
 
+    /// <summary>
+    /// Adds an error log entry and persists the updated log.
+    /// </summary>
     public void AddEntry(string message, string category = "general")
     {
         var entry = ErrorLogEntry.Create(message, category);
@@ -44,6 +62,9 @@ public sealed class ErrorLogService : IErrorLogService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Clears all items from the current collection.
+    /// </summary>
     public void ClearAll()
     {
         lock (_lock) _entries.Clear();
@@ -51,6 +72,9 @@ public sealed class ErrorLogService : IErrorLogService
         EntriesChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Exports diagnostics.
+    /// </summary>
     public string ExportDiagnostics()
     {
         var report = new

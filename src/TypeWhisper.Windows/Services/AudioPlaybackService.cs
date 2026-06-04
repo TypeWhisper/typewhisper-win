@@ -15,12 +15,30 @@ public sealed class AudioPlaybackService : IDisposable
     private string? _currentFile;
     private System.Timers.Timer? _progressTimer;
 
+    /// <summary>
+    /// Gets whether is playing.
+    /// </summary>
     public bool IsPlaying => _waveOut?.PlaybackState == PlaybackState.Playing;
+    /// <summary>
+    /// Gets whether is paused.
+    /// </summary>
     public bool IsPaused => _waveOut?.PlaybackState == PlaybackState.Paused;
+    /// <summary>
+    /// Gets the current position seconds.
+    /// </summary>
     public double CurrentPositionSeconds => _reader?.CurrentTime.TotalSeconds ?? 0;
+    /// <summary>
+    /// Gets the total duration seconds.
+    /// </summary>
     public double TotalDurationSeconds => _reader?.TotalTime.TotalSeconds ?? 0;
 
+    /// <summary>
+    /// Raised when progress changes.
+    /// </summary>
     public event Action<double, double>? ProgressChanged; // current, total
+    /// <summary>
+    /// Raised when playback stopped.
+    /// </summary>
     public event Action? PlaybackStopped;
 
     /// <summary>
@@ -68,6 +86,9 @@ public sealed class AudioPlaybackService : IDisposable
         _waveOut.Play();
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         _progressTimer?.Stop();
@@ -84,12 +105,18 @@ public sealed class AudioPlaybackService : IDisposable
         _currentFile = null;
     }
 
+    /// <summary>
+    /// Performs seek.
+    /// </summary>
     public void Seek(double seconds)
     {
         if (_reader is null) return;
         _reader.CurrentTime = TimeSpan.FromSeconds(Math.Clamp(seconds, 0, TotalDurationSeconds));
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         Stop();

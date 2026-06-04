@@ -7,6 +7,9 @@ using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides recent transcriptions service behavior.
+/// </summary>
 public sealed class RecentTranscriptionsService
 {
     private const int PaletteLimit = 12;
@@ -18,8 +21,14 @@ public sealed class RecentTranscriptionsService
 
     private RecentTranscriptionsPaletteWindow? _paletteWindow;
 
+    /// <summary>
+    /// Raised when feedback requested.
+    /// </summary>
     public event Action<string, bool>? FeedbackRequested;
 
+    /// <summary>
+    /// Initializes a new instance of the RecentTranscriptionsService class.
+    /// </summary>
     public RecentTranscriptionsService(
         IHistoryService history,
         RecentTranscriptionStore store,
@@ -32,6 +41,9 @@ public sealed class RecentTranscriptionsService
         _settings = settings;
     }
 
+    /// <summary>
+    /// Records transcription.
+    /// </summary>
     public void RecordTranscription(
         string id,
         string finalText,
@@ -40,6 +52,9 @@ public sealed class RecentTranscriptionsService
         string? appProcessName) =>
         _store.RecordTranscription(id, finalText, timestamp, appName, appProcessName);
 
+    /// <summary>
+    /// Toggles palette.
+    /// </summary>
     public void TogglePalette()
     {
         if (_paletteWindow is { } existingWindow)
@@ -71,6 +86,9 @@ public sealed class RecentTranscriptionsService
         window.Activate();
     }
 
+    /// <summary>
+    /// Copies last transcription to clipboard asynchronously.
+    /// </summary>
     public async Task CopyLastTranscriptionToClipboardAsync()
     {
         var entry = _store.LatestEntry(_history.Records);

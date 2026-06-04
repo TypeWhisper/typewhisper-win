@@ -5,6 +5,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides workflow service behavior.
+/// </summary>
 public sealed class WorkflowService : IWorkflowService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -18,11 +21,20 @@ public sealed class WorkflowService : IWorkflowService
     private List<Workflow> _cache = [];
     private bool _cacheLoaded;
 
+    /// <summary>
+    /// Initializes a new instance of the WorkflowService class.
+    /// </summary>
     public WorkflowService(string filePath)
     {
         _filePath = filePath;
     }
 
+    /// <summary>
+    /// Gets the configured workflows in display order.
+    /// </summary>
+    /// <summary>
+    /// Gets the configured workflows in display order.
+    /// </summary>
     public IReadOnlyList<Workflow> Workflows
     {
         get
@@ -32,8 +44,14 @@ public sealed class WorkflowService : IWorkflowService
         }
     }
 
+    /// <summary>
+    /// Raised when workflows changes.
+    /// </summary>
     public event Action? WorkflowsChanged;
 
+    /// <summary>
+    /// Adds workflow.
+    /// </summary>
     public void AddWorkflow(Workflow workflow)
     {
         EnsureCacheLoaded();
@@ -48,6 +66,9 @@ public sealed class WorkflowService : IWorkflowService
         WorkflowsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Updates workflow.
+    /// </summary>
     public void UpdateWorkflow(Workflow workflow)
     {
         EnsureCacheLoaded();
@@ -59,6 +80,9 @@ public sealed class WorkflowService : IWorkflowService
         WorkflowsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Deletes workflow.
+    /// </summary>
     public void DeleteWorkflow(string id)
     {
         EnsureCacheLoaded();
@@ -67,6 +91,9 @@ public sealed class WorkflowService : IWorkflowService
         WorkflowsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Toggles workflow.
+    /// </summary>
     public void ToggleWorkflow(string id)
     {
         EnsureCacheLoaded();
@@ -82,6 +109,9 @@ public sealed class WorkflowService : IWorkflowService
         WorkflowsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Reorders
+    /// </summary>
     public void Reorder(IReadOnlyList<string> orderedIds)
     {
         EnsureCacheLoaded();
@@ -103,18 +133,27 @@ public sealed class WorkflowService : IWorkflowService
         WorkflowsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Performs next sort order.
+    /// </summary>
     public int NextSortOrder()
     {
         EnsureCacheLoaded();
         return _cache.Count == 0 ? 0 : _cache.Max(w => w.SortOrder) + 1;
     }
 
+    /// <summary>
+    /// Returns workflow.
+    /// </summary>
     public Workflow? GetWorkflow(string id)
     {
         EnsureCacheLoaded();
         return _cache.FirstOrDefault(w => w.Id == id);
     }
 
+    /// <summary>
+    /// Performs force match.
+    /// </summary>
     public WorkflowMatchResult? ForceMatch(string workflowId)
     {
         EnsureCacheLoaded();
@@ -124,6 +163,9 @@ public sealed class WorkflowService : IWorkflowService
             : new WorkflowMatchResult(workflow, WorkflowMatchKind.ManualOverride, null, 0, false);
     }
 
+    /// <summary>
+    /// Performs match workflow.
+    /// </summary>
     public WorkflowMatchResult? MatchWorkflow(string? processName, string? url)
     {
         EnsureCacheLoaded();

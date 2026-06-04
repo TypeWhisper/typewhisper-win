@@ -23,8 +23,14 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         _collector = collector;
     }
 
+    /// <summary>
+    /// Raised when transcript received.
+    /// </summary>
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
+    /// <summary>
+    /// Connects the streaming session before audio is sent.
+    /// </summary>
     public static async Task<Reson8StreamingSession> ConnectAsync(
         string apiKey,
         string baseUrl,
@@ -44,6 +50,9 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         return session;
     }
 
+    /// <summary>
+    /// Builds realtime uri.
+    /// </summary>
     public static Uri BuildRealtimeUri(string baseUrl, string? modelId, string? language)
     {
         var normalizedBase = baseUrl.Trim().TrimEnd('/');
@@ -78,6 +87,9 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         return builder.Uri;
     }
 
+    /// <summary>
+    /// Creates streaming headers.
+    /// </summary>
     public static IReadOnlyDictionary<string, string> CreateStreamingHeaders(string apiKey, string authHeader) =>
         new Dictionary<string, string>
         {
@@ -85,6 +97,9 @@ internal sealed class Reson8StreamingSession : IStreamingSession
                 Reson8Plugin.AuthHeaderValue(apiKey, authHeader)
         };
 
+    /// <summary>
+    /// Sends a PCM audio chunk to the active streaming session.
+    /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open || pcm16Audio.Length == 0)
@@ -102,6 +117,9 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Finalizes the stream and returns the provider transcript.
+    /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open)
@@ -180,6 +198,9 @@ internal sealed class Reson8StreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -246,9 +267,18 @@ internal sealed class Reson8TranscriptCollector
     private readonly List<string> _finals = [];
     private string _interim = "";
 
+    /// <summary>
+    /// Gets or sets the is flush confirmed value.
+    /// </summary>
     public bool IsFlushConfirmed { get; private set; }
+    /// <summary>
+    /// Performs final text.
+    /// </summary>
     public string FinalText => string.Join(" ", _finals);
 
+    /// <summary>
+    /// Applies an event update to the current state.
+    /// </summary>
     public StreamingTranscriptEvent? ApplyEvent(string json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -288,6 +318,9 @@ internal sealed class Reson8TranscriptCollector
         return new StreamingTranscriptEvent(text, isFinal);
     }
 
+    /// <summary>
+    /// Applies an event update to the current state.
+    /// </summary>
     public string ApplyEvent(StreamingTranscriptEvent evt)
     {
         if (evt.IsFinal)

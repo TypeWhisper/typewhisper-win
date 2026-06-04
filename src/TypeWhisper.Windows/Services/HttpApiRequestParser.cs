@@ -15,6 +15,9 @@ internal sealed record HttpApiRequest(
     IReadOnlyDictionary<string, string> Headers,
     byte[] Body)
 {
+    /// <summary>
+    /// Performs from listener request asynchronously.
+    /// </summary>
     public static async Task<HttpApiRequest> FromListenerRequestAsync(
         HttpListenerRequest request,
         CancellationToken ct)
@@ -44,11 +47,26 @@ internal sealed record HttpApiRequest(
 
 internal sealed record HttpApiResponse
 {
+    /// <summary>
+    /// Gets the provider or HTTP status code associated with the result.
+    /// </summary>
     public int StatusCode { get; }
+    /// <summary>
+    /// Gets the body.
+    /// </summary>
     public string Body { get; }
+    /// <summary>
+    /// Gets the content type.
+    /// </summary>
     public string ContentType { get; }
+    /// <summary>
+    /// Gets the headers.
+    /// </summary>
     public IReadOnlyDictionary<string, string> Headers { get; }
 
+    /// <summary>
+    /// Performs http api response.
+    /// </summary>
     public HttpApiResponse(
         int statusCode,
         string body,
@@ -64,8 +82,14 @@ internal sealed record HttpApiResponse
 
 internal sealed class HttpApiRequestException : Exception
 {
+    /// <summary>
+    /// Gets the provider or HTTP status code associated with the result.
+    /// </summary>
     public int StatusCode { get; }
 
+    /// <summary>
+    /// Performs http api request exception.
+    /// </summary>
     public HttpApiRequestException(int statusCode, string message)
         : base(message)
     {
@@ -112,6 +136,9 @@ internal static class HttpApiRequestParser
         PropertyNameCaseInsensitive = true
     };
 
+    /// <summary>
+    /// Parses transcribe.
+    /// </summary>
     public static TranscribeApiRequest ParseTranscribe(HttpApiRequest request)
     {
         var contentType = Header(request.Headers, "content-type") ?? "";
@@ -192,6 +219,9 @@ internal static class HttpApiRequestParser
             awaitDownload);
     }
 
+    /// <summary>
+    /// Parses transcribe local file.
+    /// </summary>
     public static LocalFileTranscribeApiRequest ParseTranscribeLocalFile(HttpApiRequest request)
     {
         if (request.Body.Length == 0)
@@ -236,6 +266,9 @@ internal static class HttpApiRequestParser
             awaitDownload || payload.AwaitDownload);
     }
 
+    /// <summary>
+    /// Parses multipart.
+    /// </summary>
     public static IReadOnlyList<MultipartPart> ParseMultipart(byte[] body, string boundary)
     {
         var boundaryBytes = Encoding.UTF8.GetBytes("--" + boundary);
@@ -443,15 +476,45 @@ internal static class HttpApiRequestParser
 
     private sealed record LocalFileTranscribePayload
     {
+        /// <summary>
+        /// Gets or sets the path value.
+        /// </summary>
         public string? Path { get; init; }
+        /// <summary>
+        /// Gets or sets the language value.
+        /// </summary>
         public string? Language { get; init; }
+        /// <summary>
+        /// Gets or sets the language hints value.
+        /// </summary>
         public IReadOnlyList<string>? LanguageHints { get; init; } = [];
+        /// <summary>
+        /// Runs the task asynchronously..
+        /// </summary>
         public string? Task { get; init; }
+        /// <summary>
+        /// Gets or sets the target language value.
+        /// </summary>
         public string? TargetLanguage { get; init; }
+        /// <summary>
+        /// Gets or sets the response format value.
+        /// </summary>
         public string? ResponseFormat { get; init; }
+        /// <summary>
+        /// Gets or sets the prompt value.
+        /// </summary>
         public string? Prompt { get; init; }
+        /// <summary>
+        /// Gets or sets the engine value.
+        /// </summary>
         public string? Engine { get; init; }
+        /// <summary>
+        /// Gets or sets the model value.
+        /// </summary>
         public string? Model { get; init; }
+        /// <summary>
+        /// Gets or sets the await download value.
+        /// </summary>
         public bool AwaitDownload { get; init; }
     }
 }

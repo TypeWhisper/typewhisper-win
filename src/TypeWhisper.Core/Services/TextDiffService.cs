@@ -2,11 +2,20 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides text diff service behavior.
+/// </summary>
 public static class TextDiffService
 {
+    /// <summary>
+    /// Returns whether changes.
+    /// </summary>
     public static bool HasChanges(string rawText, string finalText)
         => !string.Equals(rawText, finalText, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Performs extract corrections.
+    /// </summary>
     public static List<CorrectionSuggestion> ExtractCorrections(string original, string edited)
     {
         if (!HasChanges(original, edited))

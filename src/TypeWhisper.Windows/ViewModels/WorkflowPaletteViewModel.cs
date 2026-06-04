@@ -5,6 +5,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides workflow palette view model behavior.
+/// </summary>
 public partial class WorkflowPaletteViewModel : ObservableObject
 {
     private readonly IReadOnlyList<WorkflowPaletteItem> _allItems;
@@ -13,10 +16,22 @@ public partial class WorkflowPaletteViewModel : ObservableObject
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private WorkflowPaletteItem? _selectedItem;
 
+    /// <summary>
+    /// Gets the source text preview.
+    /// </summary>
     public string SourceTextPreview { get; }
+    /// <summary>
+    /// Gets the filtered workflows.
+    /// </summary>
     public ObservableCollection<WorkflowPaletteItem> FilteredWorkflows { get; } = [];
+    /// <summary>
+    /// Gets whether has filtered workflows.
+    /// </summary>
     public bool HasFilteredWorkflows => FilteredWorkflows.Count > 0;
 
+    /// <summary>
+    /// Initializes a new instance of the WorkflowPaletteViewModel class.
+    /// </summary>
     public WorkflowPaletteViewModel(
         IReadOnlyList<Workflow> workflows,
         string sourceText,
@@ -36,6 +51,9 @@ public partial class WorkflowPaletteViewModel : ObservableObject
 
     partial void OnSearchQueryChanged(string value) => RefreshFilteredWorkflows();
 
+    /// <summary>
+    /// Moves selection.
+    /// </summary>
     public void MoveSelection(int offset)
     {
         if (FilteredWorkflows.Count == 0)
@@ -46,8 +64,14 @@ public partial class WorkflowPaletteViewModel : ObservableObject
         SelectedItem = FilteredWorkflows[nextIndex];
     }
 
+    /// <summary>
+    /// Selects current.
+    /// </summary>
     public void SelectCurrent() => Select(SelectedItem ?? FilteredWorkflows.FirstOrDefault());
 
+    /// <summary>
+    /// Performs select.
+    /// </summary>
     public void Select(WorkflowPaletteItem? item)
     {
         if (item is null)
@@ -90,14 +114,27 @@ public partial class WorkflowPaletteViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents workflow palette item data.
+/// </summary>
+/// <param name="Workflow">Workflow supplied to the member.</param>
+/// <param name="TemplateName">Template name supplied to the member.</param>
+/// <param name="Subtitle">Subtitle supplied to the member.</param>
+/// <param name="IconGlyph">Icon glyph supplied to the member.</param>
 public sealed record WorkflowPaletteItem(
     Workflow Workflow,
     string TemplateName,
     string Subtitle,
     string IconGlyph)
 {
+    /// <summary>
+    /// Gets the display or storage name.
+    /// </summary>
     public string Name => Workflow.Name;
 
+    /// <summary>
+    /// Performs matches.
+    /// </summary>
     public bool Matches(string query) =>
         Name.Contains(query, StringComparison.OrdinalIgnoreCase)
         || TemplateName.Contains(query, StringComparison.OrdinalIgnoreCase)

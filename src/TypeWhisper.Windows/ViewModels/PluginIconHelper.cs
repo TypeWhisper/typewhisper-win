@@ -17,6 +17,9 @@ internal static class PluginIconHelper
         ["com.typewhisper.smallest-ai"] = "smallest.png"
     };
 
+    /// <summary>
+    /// Returns logo path.
+    /// </summary>
     public static string? GetLogoPath(string pluginId, string? baseDirectory = null)
     {
         if (!LogoFileNames.TryGetValue(pluginId, out var fileName))
@@ -38,6 +41,9 @@ internal static class PluginIconHelper
         return IsReadablePng(candidate) ? candidate : null;
     }
 
+    /// <summary>
+    /// Returns icon.
+    /// </summary>
     public static string GetIcon(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "\U0001F4A8",           // Groq - lightning fast
@@ -53,6 +59,9 @@ internal static class PluginIconHelper
         _ => "\U0001F9E9"                                   // Default - puzzle piece
     };
 
+    /// <summary>
+    /// Returns gradient start.
+    /// </summary>
     public static string GetGradientStart(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "#F55036",
@@ -68,6 +77,9 @@ internal static class PluginIconHelper
         _ => "#0078D4"
     };
 
+    /// <summary>
+    /// Returns gradient end.
+    /// </summary>
     public static string GetGradientEnd(string pluginId) => pluginId switch
     {
         "com.typewhisper.groq" => "#C0392B",

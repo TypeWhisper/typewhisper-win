@@ -3,11 +3,17 @@ using TypeWhisper.Core.Interfaces;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides audio ducking service behavior.
+/// </summary>
 public sealed class AudioDuckingService : IAudioDuckingService
 {
     private float _savedVolume;
     private bool _isDucked;
 
+    /// <summary>
+    /// Ducks audio.
+    /// </summary>
     public void DuckAudio(float factor)
     {
         try
@@ -28,6 +34,9 @@ public sealed class AudioDuckingService : IAudioDuckingService
         }
     }
 
+    /// <summary>
+    /// Restores audio.
+    /// </summary>
     public void RestoreAudio()
     {
         if (!_isDucked) return;

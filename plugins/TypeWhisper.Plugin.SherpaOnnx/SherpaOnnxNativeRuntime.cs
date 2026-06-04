@@ -12,12 +12,18 @@ internal static class SherpaOnnxNativeRuntime
     private static bool _resolverRegistered;
     private static string? _cudaRuntimeDirectory;
 
+    /// <summary>
+    /// Performs register resolver.
+    /// </summary>
     public static void RegisterResolver()
     {
         lock (Sync)
             RegisterResolverUnsafe();
     }
 
+    /// <summary>
+    /// Performs configure cuda runtime.
+    /// </summary>
     public static void ConfigureCudaRuntime(string runtimeDirectory)
     {
         lock (Sync)

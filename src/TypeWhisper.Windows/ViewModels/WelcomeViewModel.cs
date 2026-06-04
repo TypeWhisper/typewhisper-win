@@ -15,13 +15,31 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents welcome model item data.
+/// </summary>
+/// <param name="FullModelId">Full model id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="SizeDescription">Size description supplied to the member.</param>
+/// <param name="IsRecommended">Is recommended supplied to the member.</param>
 public record WelcomeModelItem(string FullModelId, string DisplayName, string? SizeDescription, bool IsRecommended);
 
+/// <summary>
+/// Represents welcome completion request data.
+/// </summary>
+/// <param name="SettingsRoute">Settings route supplied to the member.</param>
+/// <param name="PluginIdToConfigure">Plugin identifier to open for configuration after welcome completes.</param>
 public sealed record WelcomeCompletionRequest(SettingsRoute? SettingsRoute, string? PluginIdToConfigure)
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static WelcomeCompletionRequest None { get; } = new(null, null);
 }
 
+/// <summary>
+/// Provides welcome view model behavior.
+/// </summary>
 public partial class WelcomeViewModel : ObservableObject
 {
     private const string LocalPluginId = "com.typewhisper.sherpa-onnx";
@@ -56,13 +74,34 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private string _trialInlineStatus = "";
     [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
+    /// <summary>
+    /// Gets the loaded plugin view models.
+    /// </summary>
     public ObservableCollection<RegistryPluginItemViewModel> Plugins { get; } = [];
+    /// <summary>
+    /// Gets the available models.
+    /// </summary>
     public ObservableCollection<WelcomeModelItem> AvailableModels { get; } = [];
+    /// <summary>
+    /// Gets the industry presets.
+    /// </summary>
     public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets => _dictionary.IndustryPresets;
+    /// <summary>
+    /// Gets the microphones.
+    /// </summary>
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+    /// <summary>
+    /// Gets or sets the completion request value.
+    /// </summary>
     public WelcomeCompletionRequest CompletionRequest { get; private set; } = WelcomeCompletionRequest.None;
+    /// <summary>
+    /// Raised when playback or the asynchronous operation completes.
+    /// </summary>
     public event EventHandler? Completed;
 
+    /// <summary>
+    /// Initializes a new instance of the WelcomeViewModel class.
+    /// </summary>
     public WelcomeViewModel(
         ModelManagerService modelManager,
         ISettingsService settings,
@@ -94,57 +133,147 @@ public partial class WelcomeViewModel : ObservableObject
         _ = LoadPluginsAsync();
     }
 
+    /// <summary>
+    /// Gets whether is first step.
+    /// </summary>
     public bool IsFirstStep => CurrentStep == 0;
+    /// <summary>
+    /// Gets whether is final step.
+    /// </summary>
     public bool IsFinalStep => CurrentStep == 3;
+    /// <summary>
+    /// Gets the primary action label.
+    /// </summary>
     public string PrimaryActionLabel => IsFinalStep ? Loc.Instance["Welcome.GetStarted"] : Loc.Instance["Welcome.Next"];
+    /// <summary>
+    /// Performs main dictation hotkey display.
+    /// </summary>
     public string MainDictationHotkeyDisplay => string.IsNullOrWhiteSpace(MainDictationHotkey)
         ? Loc.Instance["Hotkey.ClickToAssign"]
         : MainDictationHotkey;
+    /// <summary>
+    /// Returns whether configured main hotkey.
+    /// </summary>
     public bool HasConfiguredMainHotkey => !string.IsNullOrWhiteSpace(MainDictationHotkey);
+    /// <summary>
+    /// Gets whether has ready engine.
+    /// </summary>
     public bool HasReadyEngine =>
         !string.IsNullOrWhiteSpace(SelectedModelId)
         && _modelManager.GetStatus(SelectedModelId).Type == ModelStatusType.Ready;
+    /// <summary>
+    /// Returns selected configuration plugin.
+    /// </summary>
     public bool SelectedModelNeedsConfiguration => GetSelectedConfigurationPlugin() is not null;
+    /// <summary>
+    /// Gets the selected model settings view.
+    /// </summary>
     public UserControl? SelectedModelSettingsView =>
         GetSelectedConfigurationPlugin() is { } plugin ? GetSettingsView(plugin) : null;
+    /// <summary>
+    /// Gets the selected model configuration provider name.
+    /// </summary>
     public string SelectedModelConfigurationProviderName =>
         GetSelectedConfigurationPlugin()?.ProviderDisplayName ?? "";
+    /// <summary>
+    /// Gets the selected model configuration title.
+    /// </summary>
     public string SelectedModelConfigurationTitle => Loc.Instance["Welcome.SelectedModelConfigurationTitle"];
+    /// <summary>
+    /// Gets the selected model configuration hint.
+    /// </summary>
     public string SelectedModelConfigurationHint =>
         string.IsNullOrWhiteSpace(SelectedModelConfigurationProviderName)
             ? Loc.Instance["Welcome.SelectedModelConfigurationHint"]
             : Loc.Instance.GetString(
                 "Welcome.SelectedModelConfigurationHintFormat",
                 SelectedModelConfigurationProviderName);
+    /// <summary>
+    /// Performs recommended local plugin.
+    /// </summary>
     public RegistryPluginItemViewModel? RecommendedLocalPlugin => Plugins.FirstOrDefault(p => p.Id == LocalPluginId);
+    /// <summary>
+    /// Performs recommended cloud plugin.
+    /// </summary>
     public RegistryPluginItemViewModel? RecommendedCloudPlugin => Plugins.FirstOrDefault(p => p.Id == GroqPluginId);
+    /// <summary>
+    /// Gets whether is local recommendation installed.
+    /// </summary>
     public bool IsLocalRecommendationInstalled => LocalEngine is not null;
+    /// <summary>
+    /// Gets whether is cloud recommendation installed.
+    /// </summary>
     public bool IsCloudRecommendationInstalled => CloudEngine is not null;
+    /// <summary>
+    /// Gets whether is cloud recommendation configured.
+    /// </summary>
     public bool IsCloudRecommendationConfigured => CloudEngine?.IsConfigured ?? false;
+    /// <summary>
+    /// Gets whether is local recommendation selected.
+    /// </summary>
     public bool IsLocalRecommendationSelected => SelectedModelId == ParakeetModelId;
+    /// <summary>
+    /// Returns whether cloud recommendation selected.
+    /// </summary>
     public bool IsCloudRecommendationSelected => SelectedModelId?.StartsWith($"plugin:{GroqPluginId}:") == true;
+    /// <summary>
+    /// Gets the cloud recommendation action label.
+    /// </summary>
     public string CloudRecommendationActionLabel =>
         IsCloudRecommendationConfigured ? Loc.Instance["Welcome.UseGroq"] : Loc.Instance["Welcome.ConfigureKey"];
+    /// <summary>
+    /// Returns selected model action label.
+    /// </summary>
     public string SelectedModelActionLabel => GetSelectedModelActionLabel();
+    /// <summary>
+    /// Gets whether can apply selected model.
+    /// </summary>
     public bool CanApplySelectedModel =>
         !string.IsNullOrWhiteSpace(SelectedModelId)
         && !IsDownloading
         && !SelectedModelNeedsConfiguration
         && !(SelectedModelId == _modelManager.ActiveModelId
              && _modelManager.GetStatus(SelectedModelId).Type == ModelStatusType.Ready);
+    /// <summary>
+    /// Returns local recommendation status.
+    /// </summary>
     public string LocalRecommendationStatus => GetLocalRecommendationStatus();
+    /// <summary>
+    /// Returns cloud recommendation status.
+    /// </summary>
     public string CloudRecommendationStatus => GetCloudRecommendationStatus();
+    /// <summary>
+    /// Gets whether can try it out.
+    /// </summary>
     public bool CanTryItOut => HasReadyEngine && HasConfiguredMainHotkey;
+    /// <summary>
+    /// Gets the trial is recording.
+    /// </summary>
     public bool TrialIsRecording => _dictation.State == DictationState.Recording;
+    /// <summary>
+    /// Gets the trial is processing.
+    /// </summary>
     public bool TrialIsProcessing =>
         _dictation.State == DictationState.Processing || _dictation.State == DictationState.Inserting;
+    /// <summary>
+    /// Gets the trial has error.
+    /// </summary>
     public bool TrialHasError => _dictation.State == DictationState.Error;
+    /// <summary>
+    /// Gets the trial status text.
+    /// </summary>
     public string TrialStatusText => _dictation.StatusText;
+    /// <summary>
+    /// Gets whether show trial inline status.
+    /// </summary>
     public bool ShowTrialInlineStatus =>
         !TrialSuccess
         && !TrialIsRecording
         && !TrialIsProcessing
         && !string.IsNullOrWhiteSpace(TrialInlineStatus);
+    /// <summary>
+    /// Gets whether uses clipboard fallback.
+    /// </summary>
     public bool UsesClipboardFallback => !_settings.Current.AutoPaste;
 
     private ITranscriptionEnginePlugin? LocalEngine =>
@@ -494,6 +623,9 @@ public partial class WelcomeViewModel : ObservableObject
             : new WelcomeCompletionRequest(SettingsRoute.Dictation, null);
     }
 
+    /// <summary>
+    /// Performs cleanup.
+    /// </summary>
     public void Cleanup()
     {
         StopMicTest();

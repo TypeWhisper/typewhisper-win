@@ -9,6 +9,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Linear;
 
+/// <summary>
+/// Provides linear plugin behavior.
+/// </summary>
 public sealed class LinearPlugin : IActionPlugin
 {
     private static readonly JsonSerializerOptions s_jsonOptions = new()
@@ -23,19 +26,52 @@ public sealed class LinearPlugin : IActionPlugin
     private string? _defaultTeamId;
     private string? _defaultProjectId;
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.linear";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Linear";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Gets the action id.
+    /// </summary>
     public string ActionId => "create-linear-issue";
+    /// <summary>
+    /// Gets the action name.
+    /// </summary>
     public string ActionName => "Create Linear Issue";
+    /// <summary>
+    /// Gets the action icon.
+    /// </summary>
     public string? ActionIcon => "\U0001F4CB";
 
+    /// <summary>
+    /// Gets the host.
+    /// </summary>
     public IPluginHostServices? Host => _host;
+    /// <summary>
+    /// Gets the api key.
+    /// </summary>
     public string? ApiKey => _apiKey;
+    /// <summary>
+    /// Gets the default team id.
+    /// </summary>
     public string? DefaultTeamId => _defaultTeamId;
+    /// <summary>
+    /// Gets the default project id.
+    /// </summary>
     public string? DefaultProjectId => _defaultProjectId;
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -49,12 +85,18 @@ public sealed class LinearPlugin : IActionPlugin
         host.Log(PluginLogLevel.Info, "Linear plugin activated");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host?.Log(PluginLogLevel.Info, "Linear plugin deactivated");
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Performs execute asynchronously.
+    /// </summary>
     public async Task<ActionResult> ExecuteAsync(string input, ActionContext context, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -86,8 +128,14 @@ public sealed class LinearPlugin : IActionPlugin
         }
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new LinearSettingsView(this);
 
+    /// <summary>
+    /// Saves api key asynchronously..
+    /// </summary>
     public async Task SaveApiKeyAsync(string apiKey)
     {
         if (_host is null) return;
@@ -96,18 +144,27 @@ public sealed class LinearPlugin : IActionPlugin
         _host.Log(PluginLogLevel.Info, "Linear API key saved");
     }
 
+    /// <summary>
+    /// Saves default team id.
+    /// </summary>
     public void SaveDefaultTeamId(string teamId)
     {
         _defaultTeamId = string.IsNullOrWhiteSpace(teamId) ? null : teamId.Trim();
         _host?.SetSetting("default-team-id", _defaultTeamId ?? "");
     }
 
+    /// <summary>
+    /// Saves default project id.
+    /// </summary>
     public void SaveDefaultProjectId(string projectId)
     {
         _defaultProjectId = string.IsNullOrWhiteSpace(projectId) ? null : projectId.Trim();
         _host?.SetSetting("default-project-id", _defaultProjectId ?? "");
     }
 
+    /// <summary>
+    /// Fetches teams asynchronously..
+    /// </summary>
     public async Task<List<LinearTeam>> FetchTeamsAsync(CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -263,17 +320,35 @@ public sealed class LinearPlugin : IActionPlugin
         return firstLine.Length > 100 ? firstLine[..100] : firstLine;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();
     }
 }
 
+/// <summary>
+/// Provides linear team behavior.
+/// </summary>
 public sealed class LinearTeam
 {
+    /// <summary>
+    /// Gets or sets the id value.
+    /// </summary>
     public string Id { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the name value.
+    /// </summary>
     public string Name { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the key value.
+    /// </summary>
     public string Key { get; init; } = "";
 
+    /// <summary>
+    /// Converts to string.
+    /// </summary>
     public override string ToString() => $"{Key} - {Name}";
 }

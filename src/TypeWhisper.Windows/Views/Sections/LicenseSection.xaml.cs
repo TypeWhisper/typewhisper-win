@@ -8,12 +8,18 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides license section behavior.
+/// </summary>
 public partial class LicenseSection : UserControl
 {
     private readonly LicenseSectionViewModel _viewModel;
     private bool _isInitialized;
     private bool _isViewModelAttached;
 
+    /// <summary>
+    /// Initializes a new instance of the LicenseSection class.
+    /// </summary>
     public LicenseSection()
     {
         InitializeComponent();

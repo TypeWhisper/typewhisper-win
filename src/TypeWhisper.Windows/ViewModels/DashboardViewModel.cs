@@ -6,10 +6,24 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents activity data point data.
+/// </summary>
+/// <param name="Date">Date supplied to the member.</param>
+/// <param name="WordCount">Word count supplied to the member.</param>
 public record ActivityDataPoint(DateTime Date, int WordCount);
 
+/// <summary>
+/// Represents recent transcription data.
+/// </summary>
+/// <param name="Preview">Preview supplied to the member.</param>
+/// <param name="TimeAgo">Time ago supplied to the member.</param>
+/// <param name="AppName">App name supplied to the member.</param>
 public record RecentTranscription(string Preview, string TimeAgo, string? AppName);
 
+/// <summary>
+/// Provides dashboard view model behavior.
+/// </summary>
 public partial class DashboardViewModel : ObservableObject
 {
     private readonly IHistoryService _history;
@@ -27,19 +41,31 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty] private string _appsTrend = "";
     [ObservableProperty] private string _timeTrend = "";
 
+    /// <summary>
+    /// Gets the chart data.
+    /// </summary>
     public ObservableCollection<ActivityDataPoint> ChartData { get; } = [];
     [ObservableProperty] private int _chartMaxValue = 1;
 
+    /// <summary>
+    /// Gets the recent transcriptions.
+    /// </summary>
     public ObservableCollection<RecentTranscription> RecentTranscriptions { get; } = [];
     [ObservableProperty] private bool _hasRecentTranscriptions;
 
     // Backward compat
+    /// <summary>
+    /// Gets whether is month view.
+    /// </summary>
     public bool IsMonthView
     {
         get => SelectedPeriod == 1;
         set => SelectedPeriod = value ? 1 : 0;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the DashboardViewModel class.
+    /// </summary>
     public DashboardViewModel(IHistoryService history)
     {
         _history = history;
@@ -56,6 +82,9 @@ public partial class DashboardViewModel : ObservableObject
 
     partial void OnSelectedPeriodChanged(int value) => Refresh();
 
+    /// <summary>
+    /// Refreshes
+    /// </summary>
     public void Refresh()
     {
         var now = DateTime.UtcNow.Date;

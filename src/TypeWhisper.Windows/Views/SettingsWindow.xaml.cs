@@ -4,8 +4,14 @@ using Wpf.Ui.Controls;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides settings window behavior.
+/// </summary>
 public partial class SettingsWindow : FluentWindow
 {
+    /// <summary>
+    /// Initializes a new instance of the SettingsWindow class.
+    /// </summary>
     public SettingsWindow(SettingsWindowViewModel viewModel)
     {
         InitializeComponent();

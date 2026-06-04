@@ -6,6 +6,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services;
 
+/// <summary>
+/// Provides vocabulary boosting service behavior.
+/// </summary>
 public sealed class VocabularyBoostingService : IVocabularyBoostingService
 {
     private const int MaxWindowTokens = 4;
@@ -16,6 +19,9 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
     private readonly object _sync = new();
     private IReadOnlyList<NormalizedTerm> _terms = [];
 
+    /// <summary>
+    /// Initializes a new instance of the VocabularyBoostingService class.
+    /// </summary>
     public VocabularyBoostingService(IDictionaryService dictionary)
     {
         _dictionary = dictionary;
@@ -23,6 +29,9 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         RebuildCatalog();
     }
 
+    /// <summary>
+    /// Applies the configured transformation to the supplied input.
+    /// </summary>
     public string Apply(string rawText)
     {
         if (string.IsNullOrWhiteSpace(rawText))

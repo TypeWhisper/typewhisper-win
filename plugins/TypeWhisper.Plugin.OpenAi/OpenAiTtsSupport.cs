@@ -58,6 +58,9 @@ internal sealed class OpenAiPcmTtsPlaybackSession : ITtsPlaybackSession, IDispos
     private readonly MemoryStream _stream;
     private int _completed;
 
+    /// <summary>
+    /// Performs open ai pcm tts playback session.
+    /// </summary>
     public OpenAiPcmTtsPlaybackSession(byte[] pcm16Audio, int sampleRate)
     {
         _stream = new MemoryStream(BuildWav(pcm16Audio, sampleRate));
@@ -65,9 +68,18 @@ internal sealed class OpenAiPcmTtsPlaybackSession : ITtsPlaybackSession, IDispos
         _ = Task.Run(PlaySyncAndFinish);
     }
 
+    /// <summary>
+    /// Gets whether this item is currently active.
+    /// </summary>
     public bool IsActive => Volatile.Read(ref _completed) == 0;
+    /// <summary>
+    /// Raised when playback or the asynchronous operation completes.
+    /// </summary>
     public event EventHandler? Completed;
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         if (!IsActive)
@@ -95,6 +107,9 @@ internal sealed class OpenAiPcmTtsPlaybackSession : ITtsPlaybackSession, IDispos
         Completed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => Stop();
 
     private static byte[] BuildWav(byte[] pcm16Audio, int sampleRate)
@@ -121,20 +136,32 @@ internal sealed class OpenAiPcmTtsPlaybackSession : ITtsPlaybackSession, IDispos
 
 internal sealed class OpenAiInactiveTtsPlaybackSession : ITtsPlaybackSession
 {
+    /// <summary>
+    /// Creates a new value using the supplied arguments.
+    /// </summary>
     public static OpenAiInactiveTtsPlaybackSession Instance { get; } = new();
 
     private OpenAiInactiveTtsPlaybackSession()
     {
     }
 
+    /// <summary>
+    /// Gets whether this item is currently active.
+    /// </summary>
     public bool IsActive => false;
 
+    /// <summary>
+    /// Raised when playback or the asynchronous operation completes.
+    /// </summary>
     public event EventHandler? Completed
     {
         add { value?.Invoke(this, EventArgs.Empty); }
         remove { }
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
     }

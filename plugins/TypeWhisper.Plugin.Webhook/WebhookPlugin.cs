@@ -10,28 +10,79 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Webhook;
 
+/// <summary>
+/// Represents webhook config data.
+/// </summary>
 public sealed record WebhookConfig
 {
+    /// <summary>
+    /// Creates or returns a stable identifier.
+    /// </summary>
     public Guid Id { get; init; } = Guid.NewGuid();
+    /// <summary>
+    /// Gets or sets the name value.
+    /// </summary>
     public string Name { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the url value.
+    /// </summary>
     public string Url { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the http method value.
+    /// </summary>
     public string HttpMethod { get; init; } = "POST";
+    /// <summary>
+    /// Gets or sets the headers value.
+    /// </summary>
     public Dictionary<string, string> Headers { get; init; } = [];
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; init; } = true;
+    /// <summary>
+    /// Gets or sets the profile filter value.
+    /// </summary>
     public List<string> ProfileFilter { get; init; } = [];
 }
 
+/// <summary>
+/// Represents delivery log entry data.
+/// </summary>
 public sealed record DeliveryLogEntry
 {
+    /// <summary>
+    /// Creates or returns a stable identifier.
+    /// </summary>
     public Guid Id { get; init; } = Guid.NewGuid();
+    /// <summary>
+    /// Gets or sets the timestamp value.
+    /// </summary>
     public DateTime Timestamp { get; init; } = DateTime.Now;
+    /// <summary>
+    /// Gets or sets the webhook name value.
+    /// </summary>
     public string WebhookName { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the url value.
+    /// </summary>
     public string Url { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the status code value.
+    /// </summary>
     public int? StatusCode { get; init; }
+    /// <summary>
+    /// Gets or sets the error value.
+    /// </summary>
     public string? Error { get; init; }
+    /// <summary>
+    /// Gets or sets the success value.
+    /// </summary>
     public bool Success { get; init; }
 }
 
+/// <summary>
+/// Provides webhook service behavior.
+/// </summary>
 public sealed class WebhookService
 {
     private const int MaxLogEntries = 20;
@@ -46,9 +97,18 @@ public sealed class WebhookService
     private readonly IPluginHostServices _host;
     private readonly string _configPath;
 
+    /// <summary>
+    /// Gets the webhooks.
+    /// </summary>
     public ObservableCollection<WebhookConfig> Webhooks { get; } = [];
+    /// <summary>
+    /// Gets the delivery log.
+    /// </summary>
     public ObservableCollection<DeliveryLogEntry> DeliveryLog { get; } = [];
 
+    /// <summary>
+    /// Initializes a new instance of the WebhookService class.
+    /// </summary>
     public WebhookService(IPluginHostServices host)
     {
         _host = host;
@@ -56,12 +116,18 @@ public sealed class WebhookService
         Load();
     }
 
+    /// <summary>
+    /// Adds webhook.
+    /// </summary>
     public void AddWebhook(WebhookConfig config)
     {
         Webhooks.Add(config);
         Save();
     }
 
+    /// <summary>
+    /// Removes webhook.
+    /// </summary>
     public void RemoveWebhook(Guid id)
     {
         var webhook = Webhooks.FirstOrDefault(w => w.Id == id);
@@ -72,6 +138,9 @@ public sealed class WebhookService
         }
     }
 
+    /// <summary>
+    /// Updates webhook.
+    /// </summary>
     public void UpdateWebhook(WebhookConfig updated)
     {
         for (var i = 0; i < Webhooks.Count; i++)
@@ -85,6 +154,9 @@ public sealed class WebhookService
         }
     }
 
+    /// <summary>
+    /// Sends webhooks asynchronously.
+    /// </summary>
     public async Task SendWebhooksAsync(TranscriptionCompletedEvent evt)
     {
         foreach (var webhook in Webhooks.ToList())
@@ -213,20 +285,41 @@ public sealed class WebhookService
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose() => _httpClient.Dispose();
 }
 
+/// <summary>
+/// Provides webhook plugin behavior.
+/// </summary>
 public sealed class WebhookPlugin : ITypeWhisperPlugin
 {
     private IDisposable? _subscription;
     private IPluginHostServices? _host;
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.webhook";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Webhook";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "2.0.0";
 
+    /// <summary>
+    /// Gets or sets the service value.
+    /// </summary>
     public WebhookService? Service { get; private set; }
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -235,6 +328,9 @@ public sealed class WebhookPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _subscription?.Dispose();
@@ -242,13 +338,22 @@ public sealed class WebhookPlugin : ITypeWhisperPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new WebhookSettingsView(this);
 
+    /// <summary>
+    /// Gets the host.
+    /// </summary>
     public IPluginHostServices? Host => _host;
 
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
         => Service?.SendWebhooksAsync(evt) ?? Task.CompletedTask;
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _subscription?.Dispose();

@@ -13,6 +13,9 @@ internal enum LiveTranscriptionStartupMode
 
 internal static class LiveTranscriptionStartupPolicy
 {
+    /// <summary>
+    /// Performs select.
+    /// </summary>
     public static LiveTranscriptionStartupMode Select(
         AppSettings settings,
         bool isPluginModel,

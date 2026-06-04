@@ -5,6 +5,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.SupertonicTts;
 
+/// <summary>
+/// Provides supertonic tts plugin behavior.
+/// </summary>
 public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
 {
     internal const string LicenseAcceptedSettingName = "licenseAccepted";
@@ -44,6 +47,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     private bool _licenseAccepted;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the SupertonicTtsPlugin class.
+    /// </summary>
     public SupertonicTtsPlugin()
         : this(
             assetManager: null,
@@ -73,13 +79,37 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         _playbackFactory = playbackFactory ?? ((samples, sampleRate) => new SupertonicTtsPlaybackSession(samples, sampleRate));
     }
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.supertonic-tts";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Supertonic TTS";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "supertonic-tts";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Supertonic TTS";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => _assetManager?.AreAssetsReady ?? false;
+    /// <summary>
+    /// Gets the voices exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginVoiceInfo> AvailableVoices => Voices;
+    /// <summary>
+    /// Gets the currently selected provider voice identifier.
+    /// </summary>
     public string? SelectedVoiceId => _selectedVoiceId;
     internal double Speed { get; private set; } = DefaultSpeed;
     internal int DenoisingSteps { get; private set; } = DefaultDenoisingSteps;
@@ -87,6 +117,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     internal bool AreAssetsReady => IsConfigured;
     internal IPluginLocalization? Loc => _host?.Localization;
 
+    /// <summary>
+    /// Gets the user-facing summary of the current settings.
+    /// </summary>
     public string? SettingsSummary
     {
         get
@@ -96,6 +129,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         }
     }
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -110,6 +146,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _synthesizer?.Dispose();
@@ -118,14 +157,23 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new SupertonicSettingsView(this);
 
+    /// <summary>
+    /// Selects the provider voice used for subsequent speech output.
+    /// </summary>
     public void SelectVoice(string? voiceId)
     {
         _selectedVoiceId = NormalizeVoiceId(voiceId);
         _host?.SetSetting(SelectedVoiceSettingName, _selectedVoiceId);
     }
 
+    /// <summary>
+    /// Synthesizes speech and returns a playback session.
+    /// </summary>
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)
     {
         var text = request.Text.Trim();
@@ -190,6 +238,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         _host?.NotifyCapabilitiesChanged();
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

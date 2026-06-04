@@ -6,6 +6,9 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.SupertonicTts;
 
+/// <summary>
+/// Provides supertonic settings view behavior.
+/// </summary>
 public partial class SupertonicSettingsView : UserControl
 {
     private readonly SupertonicTtsPlugin _plugin;
@@ -13,6 +16,9 @@ public partial class SupertonicSettingsView : UserControl
     private readonly bool _isInitializing;
     private bool _isDownloading;
 
+    /// <summary>
+    /// Initializes a new instance of the SupertonicSettingsView class.
+    /// </summary>
     public SupertonicSettingsView(SupertonicTtsPlugin plugin)
     {
         _isInitializing = true;

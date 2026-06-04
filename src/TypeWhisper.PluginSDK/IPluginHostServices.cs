@@ -65,6 +65,12 @@ public interface IPluginHostServices
 /// </summary>
 public interface ILivePreviewAppearanceProvider
 {
+    /// <summary>
+    /// Gets the live transcription font size in device-independent pixels.
+    /// </summary>
     double LiveTranscriptionFontSize { get; }
+    /// <summary>
+    /// Gets the preview bubble auto hide milliseconds.
+    /// </summary>
     int PreviewBubbleAutoHideMilliseconds { get; }
 }

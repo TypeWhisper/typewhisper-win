@@ -5,12 +5,18 @@ using Microsoft.Win32;
 
 namespace TypeWhisper.Plugin.Obsidian;
 
+/// <summary>
+/// Provides obsidian settings view behavior.
+/// </summary>
 public partial class ObsidianSettingsView : UserControl
 {
     private readonly ObsidianPlugin _plugin;
     private readonly List<ObsidianVaultInfo> _detectedVaults;
     private bool _loading = true;
 
+    /// <summary>
+    /// Initializes a new instance of the ObsidianSettingsView class.
+    /// </summary>
     public ObsidianSettingsView(ObsidianPlugin plugin)
     {
         _plugin = plugin;

@@ -6,8 +6,7 @@ using System.Windows.Controls;
 namespace TypeWhisper.Windows.Services;
 
 /// <summary>
-/// Posts UI Automation announcements for screen reader users (Narrator, NVDA, JAWS).
-/// Uses LiveRegionChanged events via a hidden TextBlock.
+/// Provides accessibility announcement service behavior.
 /// </summary>
 public sealed class AccessibilityAnnouncementService
 {
@@ -29,6 +28,9 @@ public sealed class AccessibilityAnnouncementService
         parent.Children.Add(_liveRegion);
     }
 
+    /// <summary>
+    /// Performs announce.
+    /// </summary>
     public void Announce(string message)
     {
         if (_liveRegion is null || string.IsNullOrWhiteSpace(message)) return;
@@ -52,10 +54,19 @@ public sealed class AccessibilityAnnouncementService
         });
     }
 
+    /// <summary>
+    /// Announces recording started.
+    /// </summary>
     public void AnnounceRecordingStarted() => Announce("Recording started");
 
+    /// <summary>
+    /// Announces transcription complete.
+    /// </summary>
     public void AnnounceTranscriptionComplete(int wordCount) =>
         Announce($"Transcription complete, {wordCount} words");
 
+    /// <summary>
+    /// Announces error.
+    /// </summary>
     public void AnnounceError(string reason) => Announce($"Error: {reason}");
 }

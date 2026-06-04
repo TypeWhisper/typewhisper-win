@@ -8,9 +8,15 @@ internal static class ParakeetTailHelper
     internal const int TailGuardMilliseconds = 200;
     private const int SampleRate = 16000;
 
+    /// <summary>
+    /// Returns whether parakeet model.
+    /// </summary>
     public static bool IsParakeetModel(string? activeModelId) =>
         string.Equals(activeModelId, ParakeetModelId, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Creates an app triggerend tail guard.
+    /// </summary>
     public static float[] AppendTailGuard(float[] samples)
     {
         var tailSamples = SampleRate * TailGuardMilliseconds / 1000;
@@ -21,6 +27,9 @@ internal static class ParakeetTailHelper
         return guarded;
     }
 
+    /// <summary>
+    /// Selects result.
+    /// </summary>
     public static ParakeetTranscriptionSelection SelectResult(
         string? activeModelId,
         string? fullDecodeText,

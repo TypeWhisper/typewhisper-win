@@ -4,6 +4,9 @@ using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides recent transcriptions palette view model behavior.
+/// </summary>
 public partial class RecentTranscriptionsPaletteViewModel : ObservableObject
 {
     private readonly IReadOnlyList<RecentTranscriptionPaletteItem> _allItems;
@@ -12,9 +15,18 @@ public partial class RecentTranscriptionsPaletteViewModel : ObservableObject
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private RecentTranscriptionPaletteItem? _selectedItem;
 
+    /// <summary>
+    /// Gets the filtered entries.
+    /// </summary>
     public ObservableCollection<RecentTranscriptionPaletteItem> FilteredEntries { get; } = [];
+    /// <summary>
+    /// Gets whether has filtered entries.
+    /// </summary>
     public bool HasFilteredEntries => FilteredEntries.Count > 0;
 
+    /// <summary>
+    /// Initializes a new instance of the RecentTranscriptionsPaletteViewModel class.
+    /// </summary>
     public RecentTranscriptionsPaletteViewModel(
         IReadOnlyList<RecentTranscriptionEntry> entries,
         Action<RecentTranscriptionPaletteItem> onSelect)
@@ -28,6 +40,9 @@ public partial class RecentTranscriptionsPaletteViewModel : ObservableObject
 
     partial void OnSearchQueryChanged(string value) => RefreshFilteredEntries();
 
+    /// <summary>
+    /// Moves selection.
+    /// </summary>
     public void MoveSelection(int offset)
     {
         if (FilteredEntries.Count == 0)
@@ -38,8 +53,14 @@ public partial class RecentTranscriptionsPaletteViewModel : ObservableObject
         SelectedItem = FilteredEntries[nextIndex];
     }
 
+    /// <summary>
+    /// Selects current.
+    /// </summary>
     public void SelectCurrent() => Select(SelectedItem ?? FilteredEntries.FirstOrDefault());
 
+    /// <summary>
+    /// Performs select.
+    /// </summary>
     public void Select(RecentTranscriptionPaletteItem? item)
     {
         if (item is null)
@@ -79,12 +100,23 @@ public partial class RecentTranscriptionsPaletteViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents recent transcription palette item data.
+/// </summary>
+/// <param name="Entry">Entry supplied to the member.</param>
+/// <param name="Subtitle">Subtitle supplied to the member.</param>
 public sealed record RecentTranscriptionPaletteItem(
     RecentTranscriptionEntry Entry,
     string Subtitle)
 {
+    /// <summary>
+    /// Gets the final text.
+    /// </summary>
     public string FinalText => Entry.FinalText;
 
+    /// <summary>
+    /// Performs matches.
+    /// </summary>
     public bool Matches(string query) =>
         FinalText.Contains(query, StringComparison.OrdinalIgnoreCase) ||
         Subtitle.Contains(query, StringComparison.OrdinalIgnoreCase) ||

@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.OpenAiCompatible;
 
+/// <summary>
+/// Provides open ai compatible settings view behavior.
+/// </summary>
 public partial class OpenAiCompatibleSettingsView : UserControl
 {
     private readonly OpenAiCompatiblePlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the OpenAiCompatibleSettingsView class.
+    /// </summary>
     public OpenAiCompatibleSettingsView(OpenAiCompatiblePlugin plugin)
     {
         _plugin = plugin;

@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Xai;
 
+/// <summary>
+/// Provides xai plugin behavior.
+/// </summary>
 public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ITtsProviderPlugin
 {
     private const string BaseUrl = "https://api.x.ai";
@@ -54,6 +57,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
     private bool _ttsLowLatency;
     private bool _ttsTextNormalization;
 
+    /// <summary>
+    /// Initializes a new instance of the XaiPlugin class.
+    /// </summary>
     public XaiPlugin()
         : this(CreateHttpClient())
     {
@@ -68,10 +74,22 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.xai";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "xAI / Grok";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -92,31 +110,67 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new XaiSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "xai";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "xAI / Grok";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels => SttModels;
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
+    /// <summary>
+    /// Gets whether the provider supports live streaming transcription.
+    /// </summary>
     public bool SupportsStreaming => true;
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         _selectedModelId = NormalizeSttModelId(modelId);
         _host?.SetSetting(SelectedModelSettingName, _selectedModelId);
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -151,6 +205,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
         return ParseSttResponse(json, normalizedLanguage);
     }
 
+    /// <summary>
+    /// Opens a streaming transcription session for live audio.
+    /// </summary>
     public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -161,14 +218,26 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "xAI / Grok";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => IsConfigured;
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _fetchedLlmModels.Count > 0
             ? _fetchedLlmModels.Select(m => new PluginModelInfo(m.Id, m.Id)).ToList()
             : FallbackLlmModels;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -183,16 +252,25 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
 
     // ITtsProviderPlugin
 
+    /// <summary>
+    /// Gets the voices exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginVoiceInfo> AvailableVoices =>
         _fetchedVoices.Count > 0
             ? _fetchedVoices.Select(v => new PluginVoiceInfo(v.VoiceId, v.DisplayName, v.Language)).ToList()
             : XaiTtsConfiguration.FallbackVoices;
 
+    /// <summary>
+    /// Gets the currently selected provider voice identifier.
+    /// </summary>
     public string? SelectedVoiceId =>
         !string.IsNullOrWhiteSpace(_customVoiceId)
             ? _customVoiceId
             : _selectedVoiceId ?? XaiTtsConfiguration.DefaultVoiceId;
 
+    /// <summary>
+    /// Gets the user-facing summary of the current settings.
+    /// </summary>
     public string? SettingsSummary
     {
         get
@@ -205,6 +283,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
         }
     }
 
+    /// <summary>
+    /// Selects the provider voice used for subsequent speech output.
+    /// </summary>
     public void SelectVoice(string? voiceId)
     {
         _selectedVoiceId = NormalizeVoiceId(voiceId);
@@ -212,6 +293,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
         _host?.NotifyCapabilitiesChanged();
     }
 
+    /// <summary>
+    /// Synthesizes speech and returns a playback session.
+    /// </summary>
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -568,6 +652,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(120) };
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();
@@ -578,6 +665,9 @@ internal sealed record XaiFetchedModel(string Id, string? OwnedBy);
 
 internal sealed record XaiFetchedVoice(string VoiceId, string? Name, string? Language)
 {
+    /// <summary>
+    /// Gets the display name shown in the UI.
+    /// </summary>
     public string DisplayName =>
         string.IsNullOrWhiteSpace(Name) ? VoiceId : Name.Trim();
 }

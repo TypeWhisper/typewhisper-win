@@ -32,8 +32,14 @@ public sealed class StreamingHandler : IDisposable
     private const int MaxPendingStreamingAudioBytes = 1024 * 1024;
     private const int StreamingAudioChannelCapacity = 128;
 
+    /// <summary>
+    /// Gets or sets the on partial text update value.
+    /// </summary>
     public Action<string>? OnPartialTextUpdate { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the StreamingHandler class.
+    /// </summary>
     public StreamingHandler(
         ModelManagerService modelManager,
         AudioRecordingService audio,
@@ -44,6 +50,9 @@ public sealed class StreamingHandler : IDisposable
         _dictionary = dictionary;
     }
 
+    /// <summary>
+    /// Starts the service or session.
+    /// </summary>
     public void Start(
         string? language,
         TranscriptionTask task,
@@ -69,6 +78,9 @@ public sealed class StreamingHandler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public string Stop()
     {
         _audio.SamplesAvailable -= OnStreamingSamplesAvailable;
@@ -448,6 +460,9 @@ public sealed class StreamingHandler : IDisposable
         return newText;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         Stop();

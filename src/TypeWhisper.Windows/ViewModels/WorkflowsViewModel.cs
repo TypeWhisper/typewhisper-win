@@ -14,6 +14,9 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides workflows view model behavior.
+/// </summary>
 public sealed partial class WorkflowsViewModel : ObservableObject
 {
     private readonly IWorkflowService _workflows;
@@ -59,52 +62,181 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     [ObservableProperty] private string _appPickerSearchText = "";
     [ObservableProperty] private string? _currentWebsiteDomain;
 
+    /// <summary>
+    /// Gets the configured workflows in display order.
+    /// </summary>
     public ObservableCollection<Workflow> Workflows { get; } = [];
+    /// <summary>
+    /// Gets the filtered workflows.
+    /// </summary>
     public ObservableCollection<Workflow> FilteredWorkflows { get; } = [];
+    /// <summary>
+    /// Gets the process name chips.
+    /// </summary>
     public ObservableCollection<string> ProcessNameChips { get; } = [];
+    /// <summary>
+    /// Gets the website pattern chips.
+    /// </summary>
     public ObservableCollection<string> WebsitePatternChips { get; } = [];
+    /// <summary>
+    /// Gets the app picker options.
+    /// </summary>
     public ObservableCollection<WorkflowAppPickerOption> AppPickerOptions { get; } = [];
+    /// <summary>
+    /// Gets the domain suggestions.
+    /// </summary>
     public ObservableCollection<WorkflowDomainSuggestionOption> DomainSuggestions { get; } = [];
+    /// <summary>
+    /// Gets the template options.
+    /// </summary>
     public ObservableCollection<WorkflowTemplateOption> TemplateOptions { get; } = [];
+    /// <summary>
+    /// Gets the trigger mode options.
+    /// </summary>
     public ObservableCollection<WorkflowTriggerModeOption> TriggerModeOptions { get; } = [];
+    /// <summary>
+    /// Gets the hotkey behavior options.
+    /// </summary>
     public ObservableCollection<WorkflowHotkeyBehaviorOption> HotkeyBehaviorOptions { get; } = [];
+    /// <summary>
+    /// Gets the language options.
+    /// </summary>
     public ObservableCollection<SettingOption> LanguageOptions { get; } = [];
+    /// <summary>
+    /// Gets the task options.
+    /// </summary>
     public ObservableCollection<SettingOption> TaskOptions { get; } = [];
+    /// <summary>
+    /// Gets the translation target options.
+    /// </summary>
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
+    /// <summary>
+    /// Gets the available model options.
+    /// </summary>
     public ObservableCollection<ModelOption> AvailableModelOptions { get; } = [];
+    /// <summary>
+    /// Gets the available providers.
+    /// </summary>
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
+    /// <summary>
+    /// Gets the action plugin options.
+    /// </summary>
     public ObservableCollection<ActionPluginOption> ActionPluginOptions { get; } = [];
 
+    /// <summary>
+    /// Gets the workflow count.
+    /// </summary>
     public int WorkflowCount => Workflows.Count;
+    /// <summary>
+    /// Performs enabled workflow count.
+    /// </summary>
     public int EnabledWorkflowCount => Workflows.Count(static workflow => workflow.IsEnabled);
+    /// <summary>
+    /// Performs workflow summary.
+    /// </summary>
     public string WorkflowSummary => Loc.Instance.GetString("Workflows.SummaryFormat", WorkflowCount, EnabledWorkflowCount);
+    /// <summary>
+    /// Gets the editor title.
+    /// </summary>
     public string EditorTitle => IsCreatingNew
         ? Loc.Instance["Workflows.NewTitle"]
         : Loc.Instance["Workflows.EditTitle"];
+    /// <summary>
+    /// Gets whether has workflows.
+    /// </summary>
     public bool HasWorkflows => Workflows.Count > 0;
+    /// <summary>
+    /// Gets whether has filtered workflows.
+    /// </summary>
     public bool HasFilteredWorkflows => FilteredWorkflows.Count > 0;
+    /// <summary>
+    /// Gets whether is automatic trigger mode selected.
+    /// </summary>
     public bool IsAutomaticTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Automatic;
+    /// <summary>
+    /// Gets whether is global trigger mode selected.
+    /// </summary>
     public bool IsGlobalTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Global;
+    /// <summary>
+    /// Gets whether is manual trigger mode selected.
+    /// </summary>
     public bool IsManualTriggerModeSelected => EditTriggerMode == WorkflowTriggerMode.Manual;
+    /// <summary>
+    /// Gets whether show app trigger editor.
+    /// </summary>
     public bool ShowAppTriggerEditor => IsAutomaticTriggerModeSelected && EditAppTriggerEnabled;
+    /// <summary>
+    /// Gets whether show website trigger editor.
+    /// </summary>
     public bool ShowWebsiteTriggerEditor => IsAutomaticTriggerModeSelected && EditWebsiteTriggerEnabled;
+    /// <summary>
+    /// Gets whether show hotkey trigger editor.
+    /// </summary>
     public bool ShowHotkeyTriggerEditor => IsAutomaticTriggerModeSelected && EditHotkeyTriggerEnabled;
+    /// <summary>
+    /// Gets whether is translation template.
+    /// </summary>
     public bool IsTranslationTemplate => EditTemplate == WorkflowTemplate.Translation;
+    /// <summary>
+    /// Gets whether is custom template.
+    /// </summary>
     public bool IsCustomTemplate => EditTemplate == WorkflowTemplate.Custom;
+    /// <summary>
+    /// Gets whether can change template.
+    /// </summary>
     public bool CanChangeTemplate => IsCreatingNew;
+    /// <summary>
+    /// Returns whether editor error.
+    /// </summary>
     public bool HasEditorError => !string.IsNullOrWhiteSpace(EditorError);
+    /// <summary>
+    /// Gets whether has app picker options.
+    /// </summary>
     public bool HasAppPickerOptions => AppPickerOptions.Count > 0;
+    /// <summary>
+    /// Gets whether has domain suggestions.
+    /// </summary>
     public bool HasDomainSuggestions => DomainSuggestions.Count > 0;
+    /// <summary>
+    /// Returns whether current website domain.
+    /// </summary>
     public bool HasCurrentWebsiteDomain => !string.IsNullOrWhiteSpace(CurrentWebsiteDomain);
+    /// <summary>
+    /// Performs selected transcription engine supports translation.
+    /// </summary>
     public bool SupportsSelectedTranscriptionTranslation => SelectedTranscriptionEngineSupportsTranslation();
+    /// <summary>
+    /// Gets the selected template name.
+    /// </summary>
     public string SelectedTemplateName => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Name;
+    /// <summary>
+    /// Performs selected template description.
+    /// </summary>
     public string SelectedTemplateDescription => WorkflowTemplateCatalog.DefinitionFor(EditTemplate).Description;
+    /// <summary>
+    /// Performs template icon glyph.
+    /// </summary>
     public string SelectedTemplateIconGlyph => TemplateIconGlyph(EditTemplate);
+    /// <summary>
+    /// Performs selected trigger glyph.
+    /// </summary>
     public string SelectedTriggerIconGlyph => SelectedTriggerGlyph();
+    /// <summary>
+    /// Performs selected trigger text.
+    /// </summary>
     public string SelectedTriggerLabel => SelectedTriggerText();
+    /// <summary>
+    /// Performs hotkey behavior description.
+    /// </summary>
     public string SelectedHotkeyBehaviorDescription => HotkeyBehaviorDescription(EditHotkeyBehavior);
+    /// <summary>
+    /// Builds review text.
+    /// </summary>
     public string ReviewText => BuildReviewText();
 
+    /// <summary>
+    /// Gets the default llm provider.
+    /// </summary>
     public string? DefaultLlmProvider
     {
         get => _settings.Current.DefaultLlmProvider;
@@ -120,6 +252,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the selected default provider.
+    /// </summary>
     public ProviderOption? SelectedDefaultProvider
     {
         get => AvailableProviders.FirstOrDefault(option => option.Value == DefaultLlmProvider)
@@ -137,6 +272,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the selected edit provider.
+    /// </summary>
     public ProviderOption? SelectedEditProvider
     {
         get => AvailableProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
@@ -151,6 +289,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the WorkflowsViewModel class.
+    /// </summary>
     public WorkflowsViewModel(
         IWorkflowService workflows,
         IActiveWindowService activeWindow,
@@ -942,6 +1083,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             : trimmed.ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Gets the trigger mode display name.
+    /// </summary>
     public static string TriggerModeDisplayName(WorkflowTriggerMode mode) => mode switch
     {
         WorkflowTriggerMode.Automatic => Loc.Instance["Workflows.TriggerAutomatic"],
@@ -950,6 +1094,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => ""
     };
 
+    /// <summary>
+    /// Gets the trigger display name.
+    /// </summary>
     public static string TriggerDisplayName(WorkflowTriggerKind kind) => kind switch
     {
         WorkflowTriggerKind.App => Loc.Instance["Workflows.TriggerApp"],
@@ -960,6 +1107,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => ""
     };
 
+    /// <summary>
+    /// Performs workflow trigger summary.
+    /// </summary>
     public static string WorkflowTriggerSummary(Workflow workflow)
     {
         var trigger = workflow.Trigger;
@@ -978,6 +1128,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             : string.Join(" + ", parts);
     }
 
+    /// <summary>
+    /// Performs workflow trigger detail.
+    /// </summary>
     public static string WorkflowTriggerDetail(Workflow workflow)
     {
         var trigger = workflow.Trigger;
@@ -1003,6 +1156,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         return string.Join(" · ", parts.Where(static part => !string.IsNullOrWhiteSpace(part)));
     }
 
+    /// <summary>
+    /// Performs template icon glyph.
+    /// </summary>
     public static string TemplateIconGlyph(WorkflowTemplate template) => template switch
     {
         WorkflowTemplate.CleanedText => "\uE8D2",
@@ -1016,6 +1172,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => "\uE8D2"
     };
 
+    /// <summary>
+    /// Performs trigger icon glyph.
+    /// </summary>
     public static string TriggerIconGlyph(WorkflowTriggerKind kind) => kind switch
     {
         WorkflowTriggerKind.App => "\uE71D",
@@ -1026,6 +1185,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => "\uE8F1"
     };
 
+    /// <summary>
+    /// Performs trigger mode icon glyph.
+    /// </summary>
     public static string TriggerModeIconGlyph(WorkflowTriggerMode mode) => mode switch
     {
         WorkflowTriggerMode.Automatic => "\uE8B2",
@@ -1034,6 +1196,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => "\uE8F1"
     };
 
+    /// <summary>
+    /// Performs hotkey behavior description.
+    /// </summary>
     public static string HotkeyBehaviorDescription(WorkflowHotkeyBehavior behavior) => behavior switch
     {
         WorkflowHotkeyBehavior.StartDictation => Loc.Instance["Workflows.HotkeyBehaviorStartDictationHint"],
@@ -1184,19 +1349,83 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Lists the supported workflow trigger mode values.
+/// </summary>
 public enum WorkflowTriggerMode
 {
+    /// <summary>
+    /// Represents the automatic option.
+    /// </summary>
     Automatic,
+    /// <summary>
+    /// Represents the global option.
+    /// </summary>
     Global,
+    /// <summary>
+    /// Represents the manual option.
+    /// </summary>
     Manual
 }
 
+/// <summary>
+/// Represents workflow template option data.
+/// </summary>
+/// <param name="Template">Template supplied to the member.</param>
+/// <param name="Name">Name supplied to the member.</param>
+/// <param name="Description">Description supplied to the member.</param>
+/// <param name="IconGlyph">Icon glyph supplied to the member.</param>
 public sealed record WorkflowTemplateOption(WorkflowTemplate Template, string Name, string Description, string IconGlyph);
+/// <summary>
+/// Represents workflow trigger mode option data.
+/// </summary>
+/// <param name="Mode">Mode supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="IconGlyph">Icon glyph supplied to the member.</param>
 public sealed record WorkflowTriggerModeOption(WorkflowTriggerMode Mode, string DisplayName, string IconGlyph);
+/// <summary>
+/// Represents workflow hotkey behavior option data.
+/// </summary>
+/// <param name="Behavior">Behavior supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WorkflowHotkeyBehaviorOption(WorkflowHotkeyBehavior Behavior, string DisplayName);
+/// <summary>
+/// Represents workflow app picker option data.
+/// </summary>
+/// <param name="ProcessName">Process name supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="Detail">Detail supplied to the member.</param>
+/// <param name="Icon">Icon supplied to the member.</param>
+/// <param name="IsSelected">Is selected supplied to the member.</param>
 public sealed record WorkflowAppPickerOption(string ProcessName, string DisplayName, string Detail, ImageSource? Icon, bool IsSelected);
+/// <summary>
+/// Represents workflow domain suggestion option data.
+/// </summary>
+/// <param name="Domain">Domain supplied to the member.</param>
+/// <param name="Detail">Detail supplied to the member.</param>
+/// <param name="IsCurrent">Is current supplied to the member.</param>
 public sealed record WorkflowDomainSuggestionOption(string Domain, string Detail, bool IsCurrent);
+/// <summary>
+/// Represents setting option data.
+/// </summary>
+/// <param name="Value">Value supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record SettingOption(string? Value, string DisplayName);
+/// <summary>
+/// Represents model option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record ModelOption(string? Id, string DisplayName);
+/// <summary>
+/// Represents provider option data.
+/// </summary>
+/// <param name="Value">Value supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record ProviderOption(string? Value, string DisplayName);
+/// <summary>
+/// Represents action plugin option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record ActionPluginOption(string? Id, string DisplayName);

@@ -16,6 +16,9 @@ using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows;
 
+/// <summary>
+/// Provides app behavior.
+/// </summary>
 public partial class App : Application
 {
     private ServiceProvider? _serviceProvider;
@@ -27,8 +30,14 @@ public partial class App : Application
     private DispatcherTimer? _protocolCallbackTimer;
     private static readonly string ProtocolCallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
+    /// <summary>
+    /// Gets or sets the services value.
+    /// </summary>
     public static ServiceProvider Services { get; private set; } = null!;
 
+    /// <summary>
+    /// Initializes application services, plugin discovery, error handling, and startup windows.
+    /// </summary>
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -468,6 +477,9 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Stops background services, persists shutdown-sensitive state, and releases application resources.
+    /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
         _protocolCallbackTimer?.Stop();

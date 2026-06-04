@@ -36,6 +36,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
 
     private Dictionary<string, JsonElement>? _settingsCache;
 
+    /// <summary>
+    /// Initializes a new instance of the PluginHostServices class.
+    /// </summary>
     public PluginHostServices(
         string pluginId,
         string pluginDirectory,
@@ -56,6 +59,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
     }
 
+    /// <summary>
+    /// Gets the plugin data directory.
+    /// </summary>
     public string PluginDataDirectory
     {
         get
@@ -65,29 +71,56 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         }
     }
 
+    /// <summary>
+    /// Gets the active app process name.
+    /// </summary>
     public string? ActiveAppProcessName => _activeWindow.GetActiveWindowProcessName();
+    /// <summary>
+    /// Gets the active app name.
+    /// </summary>
     public string? ActiveAppName => _activeWindow.GetActiveWindowTitle();
 
+    /// <summary>
+    /// Gets the event bus.
+    /// </summary>
     public IPluginEventBus EventBus => _eventBus;
 
+    /// <summary>
+    /// Gets the localization.
+    /// </summary>
     public IPluginLocalization Localization => _localization;
 
+    /// <summary>
+    /// Gets the available profile names.
+    /// </summary>
     public IReadOnlyList<string> AvailableProfileNames =>
         _workflows.Workflows.Select(w => w.Name).ToList();
 
+    /// <summary>
+    /// Gets the live transcription font size in device-independent pixels.
+    /// </summary>
     public double LiveTranscriptionFontSize =>
         AppSettings.NormalizeLiveTranscriptionFontSize(
             (_settings?.Current ?? AppSettings.Default).LiveTranscriptionFontSize);
 
+    /// <summary>
+    /// Gets the preview bubble auto hide milliseconds.
+    /// </summary>
     public int PreviewBubbleAutoHideMilliseconds =>
         AppSettings.NormalizePreviewBubbleAutoHideMilliseconds(
             (_settings?.Current ?? AppSettings.Default).PreviewBubbleAutoHideMilliseconds);
 
+    /// <summary>
+    /// Performs log.
+    /// </summary>
     public void Log(PluginLogLevel level, string message)
     {
         Debug.WriteLine($"[Plugin:{_pluginId}] [{level}] {message}");
     }
 
+    /// <summary>
+    /// Performs notify capabilities changed.
+    /// </summary>
     public void NotifyCapabilitiesChanged()
     {
         Debug.WriteLine($"[Plugin:{_pluginId}] Capabilities changed, notifying host");
@@ -96,6 +129,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
 
     #region Secrets (DPAPI-backed)
 
+    /// <summary>
+    /// Stores secret asynchronously..
+    /// </summary>
     public Task StoreSecretAsync(string key, string value)
     {
         var encrypted = ApiKeyProtection.Encrypt(value);
@@ -108,6 +144,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Performs load secret asynchronously.
+    /// </summary>
     public Task<string?> LoadSecretAsync(string key)
     {
         var settings = LoadSettings();
@@ -123,6 +162,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         return Task.FromResult<string?>(null);
     }
 
+    /// <summary>
+    /// Deletes secret asynchronously.
+    /// </summary>
     public Task DeleteSecretAsync(string key)
     {
         var settings = LoadSettings();
@@ -138,6 +180,10 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
 
     #region Settings (JSON-backed)
 
+    /// <summary>
+    /// Reads a plugin setting from the JSON-backed plugin store and returns the default value when absent or invalid.
+    /// </summary>
+    /// <typeparam name="T">The expected setting value type.</typeparam>
     public T? GetSetting<T>(string key)
     {
         var settings = LoadSettings();
@@ -155,6 +201,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         return default;
     }
 
+    /// <summary>
+    /// Performs key.
+    /// </summary>
     public void SetSetting<T>(string key, T value)
     {
         var settings = LoadSettings();

@@ -10,13 +10,22 @@ namespace TypeWhisper.Windows.Services.Localization;
 [MarkupExtensionReturnType(typeof(string))]
 public sealed class StrExtension : MarkupExtension
 {
+    /// <summary>
+    /// Gets or sets the key value.
+    /// </summary>
     public string Key { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the StrExtension class.
+    /// </summary>
     public StrExtension(string key)
     {
         Key = key;
     }
 
+    /// <summary>
+    /// Performs provide value.
+    /// </summary>
     public override object ProvideValue(IServiceProvider serviceProvider)
     {
         var binding = new Binding($"[{Key}]")

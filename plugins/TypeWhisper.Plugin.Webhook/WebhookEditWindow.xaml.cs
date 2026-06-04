@@ -2,12 +2,24 @@ using System.Windows;
 
 namespace TypeWhisper.Plugin.Webhook;
 
+/// <summary>
+/// Provides profile filter item behavior.
+/// </summary>
 public sealed class ProfileFilterItem(string name, bool isSelected = false)
 {
+    /// <summary>
+    /// Gets the display or storage name.
+    /// </summary>
     public string Name { get; } = name;
+    /// <summary>
+    /// Gets or sets the is selected value.
+    /// </summary>
     public bool IsSelected { get; set; } = isSelected;
 }
 
+/// <summary>
+/// Provides webhook edit window behavior.
+/// </summary>
 public partial class WebhookEditWindow : Window
 {
     private readonly Guid _editId;
@@ -15,8 +27,14 @@ public partial class WebhookEditWindow : Window
     private readonly Dictionary<string, string> _editHeaders;
     private readonly List<ProfileFilterItem> _profileItems;
 
+    /// <summary>
+    /// Gets or sets the result value.
+    /// </summary>
     public WebhookConfig? Result { get; private set; }
 
+    /// <summary>
+    /// Initializes a new instance of the WebhookEditWindow class.
+    /// </summary>
     public WebhookEditWindow(IReadOnlyList<string> availableProfiles, WebhookConfig? existing = null)
     {
         InitializeComponent();

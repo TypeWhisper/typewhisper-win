@@ -14,6 +14,9 @@ public sealed class PluginEventBus : IPluginEventBus
     private readonly ConcurrentDictionary<Type, List<Func<object, Task>>> _handlers = new();
     private readonly object _lock = new();
 
+    /// <summary>
+    /// Performs plugin event.
+    /// </summary>
     public void Publish<T>(T pluginEvent) where T : PluginEvent
     {
         var eventType = typeof(T);
@@ -42,6 +45,9 @@ public sealed class PluginEventBus : IPluginEventBus
         }
     }
 
+    /// <summary>
+    /// Performs plugin event asynchronously.
+    /// </summary>
     public IDisposable Subscribe<T>(Func<T, Task> handler) where T : PluginEvent
     {
         var eventType = typeof(T);
@@ -69,6 +75,9 @@ public sealed class PluginEventBus : IPluginEventBus
     {
         private int _disposed;
 
+        /// <summary>
+        /// Releases resources held by the instance.
+        /// </summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)

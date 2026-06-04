@@ -8,35 +8,56 @@ using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.Controls;
 
+/// <summary>
+/// Provides hotkey recorder control behavior.
+/// </summary>
 public sealed class HotkeyRecorderControl : Control
 {
     private readonly HotkeyRecorderSession _recordingSession = new();
     private static int _activeRecordingControls;
 
+    /// <summary>
+    /// Gets the hotkey property.
+    /// </summary>
     public static readonly DependencyProperty HotkeyProperty =
         DependencyProperty.Register(nameof(Hotkey), typeof(string), typeof(HotkeyRecorderControl),
             new FrameworkPropertyMetadata("", FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
+    /// <summary>
+    /// Gets whether is recording property.
+    /// </summary>
     public static readonly DependencyProperty IsRecordingProperty =
         DependencyProperty.Register(nameof(IsRecording), typeof(bool), typeof(HotkeyRecorderControl),
             new PropertyMetadata(false, OnIsRecordingChanged));
 
+    /// <summary>
+    /// Gets the allow modifier only property.
+    /// </summary>
     public static readonly DependencyProperty AllowModifierOnlyProperty =
         DependencyProperty.Register(nameof(AllowModifierOnly), typeof(bool), typeof(HotkeyRecorderControl),
             new PropertyMetadata(false));
 
+    /// <summary>
+    /// Gets the hotkey.
+    /// </summary>
     public string Hotkey
     {
         get => (string)GetValue(HotkeyProperty);
         set => SetValue(HotkeyProperty, value);
     }
 
+    /// <summary>
+    /// Gets whether recording is currently active.
+    /// </summary>
     public bool IsRecording
     {
         get => (bool)GetValue(IsRecordingProperty);
         set => SetValue(IsRecordingProperty, value);
     }
 
+    /// <summary>
+    /// Gets the allow modifier only.
+    /// </summary>
     public bool AllowModifierOnly
     {
         get => (bool)GetValue(AllowModifierOnlyProperty);
@@ -49,6 +70,9 @@ public sealed class HotkeyRecorderControl : Control
             new FrameworkPropertyMetadata(typeof(HotkeyRecorderControl)));
     }
 
+    /// <summary>
+    /// Initializes a new instance of the HotkeyRecorderControl class.
+    /// </summary>
     public HotkeyRecorderControl()
     {
         Focusable = true;
@@ -79,6 +103,9 @@ public sealed class HotkeyRecorderControl : Control
         hotkeyService.IsEnabled = _activeRecordingControls == 0;
     }
 
+    /// <summary>
+    /// Starts or cancels recording when the control is clicked and marks the mouse event handled.
+    /// </summary>
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
@@ -97,6 +124,9 @@ public sealed class HotkeyRecorderControl : Control
         e.Handled = true;
     }
 
+    /// <summary>
+    /// Cancels an active recording session when keyboard focus leaves the control.
+    /// </summary>
     protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
     {
         base.OnLostKeyboardFocus(e);
@@ -104,6 +134,9 @@ public sealed class HotkeyRecorderControl : Control
             CancelRecording();
     }
 
+    /// <summary>
+    /// Captures key presses while recording and updates or clears the bound hotkey value.
+    /// </summary>
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         if (!IsRecording)
@@ -140,6 +173,9 @@ public sealed class HotkeyRecorderControl : Control
         }
     }
 
+    /// <summary>
+    /// Completes modifier-only hotkey recording when modifier keys are released.
+    /// </summary>
     protected override void OnPreviewKeyUp(KeyEventArgs e)
     {
         if (!IsRecording || !AllowModifierOnly)
@@ -234,14 +270,23 @@ internal sealed class HotkeyRecorderSession
 {
     private readonly HashSet<Key> _pressedModifiers = [];
 
+    /// <summary>
+    /// Performs reset.
+    /// </summary>
     public void Reset() => _pressedModifiers.Clear();
 
+    /// <summary>
+    /// Performs note modifier down.
+    /// </summary>
     public void NoteModifierDown(Key key)
     {
         if (HotkeyRecorderControl.IsModifierKey(key))
             _pressedModifiers.Add(key);
     }
 
+    /// <summary>
+    /// Performs try record hotkey.
+    /// </summary>
     public string TryRecordHotkey(Key key)
     {
         if (HotkeyRecorderControl.IsModifierKey(key))
@@ -253,6 +298,9 @@ internal sealed class HotkeyRecorderSession
         return HotkeyRecorderControl.FormatHotkey(GetCurrentModifiers(), key);
     }
 
+    /// <summary>
+    /// Performs try record modifier only on release.
+    /// </summary>
     public string TryRecordModifierOnlyOnRelease(Key key)
     {
         if (!HotkeyRecorderControl.IsModifierKey(key))

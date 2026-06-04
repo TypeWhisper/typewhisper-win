@@ -21,6 +21,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
     private const int DictionaryPriority = 600;
     private const int TranslationPriority = 900;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<PostProcessingResult> ProcessAsync(
         string rawText,
         PipelineOptions options,

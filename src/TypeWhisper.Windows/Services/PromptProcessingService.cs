@@ -7,10 +7,19 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Defines the workflow text processor contract.
+/// </summary>
 public interface IWorkflowTextProcessor
 {
+    /// <summary>
+    /// Gets whether at least one configured LLM provider can process workflow text.
+    /// </summary>
     bool IsAnyProviderAvailable { get; }
 
+    /// <summary>
+    /// Applies a workflow prompt to input text using provider and model overrides when supplied.
+    /// </summary>
     Task<string> ProcessAsync(
         string systemPrompt,
         string inputText,
@@ -19,20 +28,32 @@ public interface IWorkflowTextProcessor
         CancellationToken ct);
 }
 
+/// <summary>
+/// Provides prompt processing service behavior.
+/// </summary>
 public sealed class PromptProcessingService : IWorkflowTextProcessor
 {
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
 
+    /// <summary>
+    /// Initializes a new instance of the PromptProcessingService class.
+    /// </summary>
     public PromptProcessingService(PluginManager pluginManager, ISettingsService settings)
     {
         _pluginManager = pluginManager;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Gets whether is any provider available.
+    /// </summary>
     public bool IsAnyProviderAvailable =>
         _pluginManager.LlmProviders.Any(p => p.IsAvailable);
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(
         string systemPrompt,
         string inputText,
@@ -123,6 +144,9 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
 
 internal static class WorkflowPromptInputFramer
 {
+    /// <summary>
+    /// Performs frame.
+    /// </summary>
     public static string Frame(string inputText)
     {
         var payload = JsonSerializer.Serialize(new Dictionary<string, string>

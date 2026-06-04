@@ -2,8 +2,14 @@ using System.Buffers.Binary;
 
 namespace TypeWhisper.Core.Audio;
 
+/// <summary>
+/// Provides wav encoder behavior.
+/// </summary>
 public static class WavEncoder
 {
+    /// <summary>
+    /// Encodes.
+    /// </summary>
     public static byte[] Encode(float[] samples, int sampleRate = 16000, int channels = 1, int bitsPerSample = 16)
     {
         var bytesPerSample = bitsPerSample / 8;

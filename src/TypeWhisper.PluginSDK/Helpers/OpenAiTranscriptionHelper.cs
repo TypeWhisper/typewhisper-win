@@ -32,6 +32,9 @@ public static class OpenAiTranscriptionHelper
             httpClient, baseUrl, apiKey, model, wavAudio, language, translate,
             responseFormat, ct, prompt: null);
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public static async Task<PluginTranscriptionResult> TranscribeAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, byte[] wavAudio, string? language, bool translate,

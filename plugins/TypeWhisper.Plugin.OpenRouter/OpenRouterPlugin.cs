@@ -9,6 +9,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenRouter;
 
+/// <summary>
+/// Provides open router plugin behavior.
+/// </summary>
 public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 {
     private const string BaseUrl = "https://openrouter.ai/api";
@@ -65,6 +68,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
     private static readonly OpenRouterFetchedModel DefaultFetchedModel =
         new(DefaultLlmModelId, DefaultLlmModelName, "0", "0");
 
+    /// <summary>
+    /// Initializes a new instance of the OpenRouterPlugin class.
+    /// </summary>
     public OpenRouterPlugin()
         : this(new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
     {
@@ -77,10 +83,22 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.openrouter";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "OpenRouter";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.1.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -98,28 +116,55 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsAvailable})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new OpenRouterSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "openrouter";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "OpenRouter";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => IsAvailable;
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels =>
         _fetchedTranscriptionModels.Count > 0
             ? _fetchedTranscriptionModels.Select(model => new PluginModelInfo(model.Id, model.Name)).ToList()
             : FallbackTranscriptionModels;
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedTranscriptionModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         if (TranscriptionModels.All(model => !string.Equals(model.Id, modelId, StringComparison.Ordinal)))
@@ -129,6 +174,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
         _host?.SetSetting(SelectedTranscriptionModelSettingName, modelId);
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -148,14 +196,26 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "OpenRouter";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _fetchedModels.Count > 0
             ? _fetchedModels.Select(model => new PluginModelInfo(model.Id, model.Name)).ToList()
             : FallbackModels;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
@@ -634,6 +694,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
         return false;
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();
@@ -658,6 +721,9 @@ internal sealed record OpenRouterFetchedModel(
     string PromptPrice,
     string CompletionPrice)
 {
+    /// <summary>
+    /// Performs formatted pricing.
+    /// </summary>
     public string FormattedPricing(string freeLabel)
     {
         var promptPer1M = ParsePrice(PromptPrice) * 1_000_000;

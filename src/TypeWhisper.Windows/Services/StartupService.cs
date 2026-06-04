@@ -7,14 +7,23 @@ using Velopack.Windows;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides startup service behavior.
+/// </summary>
 public static class StartupService
 {
     private const string RegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "TypeWhisper";
     private const string MinimizedArgument = "--minimized";
 
+    /// <summary>
+    /// Returns whether startup shortcut.
+    /// </summary>
     public static bool IsEnabled => HasStartupShortcut() || HasRegistryEntry();
 
+    /// <summary>
+    /// Performs enable.
+    /// </summary>
     public static void Enable()
     {
         if (TryEnableStartupShortcut())
@@ -36,6 +45,9 @@ public static class StartupService
         Log($"Enabled auto-start via registry: {value}");
     }
 
+    /// <summary>
+    /// Performs disable.
+    /// </summary>
     public static void Disable()
     {
         var removedShortcut = TryDisableStartupShortcut();
@@ -43,6 +55,9 @@ public static class StartupService
         Log($"Disabled auto-start (startup shortcut removed: {removedShortcut}, registry removed: {removedRegistry})");
     }
 
+    /// <summary>
+    /// Sets enabled.
+    /// </summary>
     public static void SetEnabled(bool enabled)
     {
         if (enabled) Enable();
