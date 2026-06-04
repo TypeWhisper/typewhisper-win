@@ -197,8 +197,9 @@ public sealed class AudioRecorderViewModelTests
             if (wavPath is not null)
                 File.Delete(wavPath);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            System.Diagnostics.Debug.WriteLine($"Audio recorder test cleanup failed for '{transcriptPath}': {ex}");
         }
     }
 
@@ -216,8 +217,10 @@ public sealed class AudioRecorderViewModelTests
                     File.Delete(txtPath);
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            System.Diagnostics.Debug.WriteLine(
+                $"Audio recorder test cleanup failed for new recordings in '{TypeWhisperEnvironment.AudioPath}': {ex}");
         }
     }
 

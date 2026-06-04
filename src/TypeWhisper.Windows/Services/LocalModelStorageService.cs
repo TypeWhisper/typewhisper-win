@@ -264,11 +264,19 @@ public sealed class LocalModelStorageService
             if (Directory.Exists(path) && !Directory.EnumerateFileSystemEntries(path).Any())
                 Directory.Delete(path);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                "Could not delete empty model storage directory '{0}': {1}",
+                path,
+                ex.Message);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                "Could not delete empty model storage directory '{0}': {1}",
+                path,
+                ex.Message);
         }
     }
 

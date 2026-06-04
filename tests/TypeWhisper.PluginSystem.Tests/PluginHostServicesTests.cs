@@ -18,7 +18,7 @@ public class PluginHostServicesTests : IDisposable
     public PluginHostServicesTests()
     {
         _workflows.Setup(w => w.Workflows).Returns(new List<TypeWhisper.Core.Models.Workflow>());
-        _tempDir = Path.Combine(Path.GetTempPath(), $"tw-test-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"tw-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
@@ -67,7 +67,7 @@ public class PluginHostServicesTests : IDisposable
     [Fact]
     public void PluginAssetDirectory_UsesCustomModelStoragePath_WhenConfigured()
     {
-        var storageRoot = Path.Combine(_tempDir, "model-storage");
+        var storageRoot = Path.Join(_tempDir, "model-storage");
         Directory.CreateDirectory(storageRoot);
         var settings = new Mock<ISettingsService>();
         settings.Setup(s => s.Current).Returns(new AppSettings
@@ -78,7 +78,7 @@ public class PluginHostServicesTests : IDisposable
         var services = CreateServices(settings: settings.Object);
 
         Assert.Equal(
-            Path.Combine(storageRoot, "PluginData", "test-plugin"),
+            Path.Join(storageRoot, "PluginData", "test-plugin"),
             services.PluginAssetDirectory);
         Assert.NotEqual(services.PluginDataDirectory, services.PluginAssetDirectory);
     }
@@ -86,7 +86,7 @@ public class PluginHostServicesTests : IDisposable
     [Fact]
     public void PluginAssetDirectory_ThrowsWhenCustomModelStoragePathIsMissing()
     {
-        var storageRoot = Path.Combine(_tempDir, "missing-storage");
+        var storageRoot = Path.Join(_tempDir, "missing-storage");
         var settings = new Mock<ISettingsService>();
         settings.Setup(s => s.Current).Returns(new AppSettings
         {
@@ -151,7 +151,14 @@ public class PluginHostServicesTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDir, recursive: true); }
-        catch { /* best effort */ }
+        try
+        {
+            if (Directory.Exists(_tempDir))
+                Directory.Delete(_tempDir, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine($"PluginHostServicesTests cleanup failed for '{_tempDir}': {ex}");
+        }
     }
 }

@@ -150,7 +150,14 @@ public sealed class LocalModelStorageServiceTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDir, recursive: true); }
-        catch { }
+        try
+        {
+            if (Directory.Exists(_tempDir))
+                Directory.Delete(_tempDir, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine($"LocalModelStorageServiceTests cleanup failed for '{_tempDir}': {ex}");
+        }
     }
 }
