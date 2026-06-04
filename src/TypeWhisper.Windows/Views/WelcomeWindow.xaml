@@ -659,28 +659,49 @@
                         </Border>
 
                         <Border Style="{StaticResource SettingsGroupPanelStyle}">
-                            <Grid Margin="18">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="190"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
+                            <StackPanel Margin="18">
                                 <TextBlock Text="{loc:Str Welcome.MainHotkeyLabel}"
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
 
-                                <controls:HotkeyRecorderControl Grid.Column="1"
-                                                                Hotkey="{Binding MainDictationHotkey, Mode=TwoWay}"
-                                                                AllowModifierOnly="True"
-                                                                HorizontalAlignment="Stretch"
-                                                                MinWidth="280"/>
+                                <ItemsControl ItemsSource="{Binding MainDictationHotkeys}"
+                                              Margin="0,10,0,8">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource HotkeyChipStyle}" Margin="0,0,6,6">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding}"
+                                                               Foreground="{StaticResource TextBrush}"
+                                                               FontSize="12"
+                                                               VerticalAlignment="Center"/>
+                                                    <Button Style="{StaticResource HotkeyChipCloseButtonStyle}"
+                                                            Command="{Binding DataContext.RemoveMainDictationHotkeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            ToolTip="{loc:Str Shortcuts.RemoveHotkey}"
+                                                            AutomationProperties.Name="{loc:Str Shortcuts.RemoveHotkey}">
+                                                        <TextBlock Text="&#xE711;"
+                                                                   FontFamily="Segoe MDL2 Assets"
+                                                                   FontSize="8"
+                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
 
-                                <StackPanel Grid.Row="1"
-                                            Grid.ColumnSpan="2"
-                                            Margin="0,12,0,0">
+                                <controls:HotkeyRecorderControl Hotkey="{Binding NewMainDictationHotkey, Mode=TwoWay}"
+                                                                RecordedCommand="{Binding AddMainDictationHotkeyCommand}"
+                                                                UseAddGlyph="True"
+                                                                ToolTip="{loc:Str Shortcuts.AddHotkey}"
+                                                                AllowModifierOnly="True"
+                                                                HorizontalAlignment="Left"/>
+
+                                <StackPanel Margin="0,12,0,0">
                                     <TextBlock Text="{loc:Str Welcome.MainHotkeyHint}"
                                                Style="{StaticResource PageSubtitleStyle}"
                                                Margin="0"/>
@@ -688,7 +709,7 @@
                                                Style="{StaticResource HintStyle}"
                                                Margin="0,8,0,0"/>
                                 </StackPanel>
-                            </Grid>
+                            </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource WizardInfoBannerStyle}">

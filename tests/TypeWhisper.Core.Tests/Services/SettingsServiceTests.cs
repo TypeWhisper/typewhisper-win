@@ -112,6 +112,52 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsMultipleAppHotkeys()
+    {
+        var sut = new SettingsService(_filePath);
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = ["Ctrl+Alt+D", "Ctrl+Shift+D"],
+            ToggleOnlyHotkeys = ["Ctrl+Alt+T"],
+            HoldOnlyHotkeys = ["Ctrl+Alt+H"],
+            RecentTranscriptionsHotkeys = ["Ctrl+Alt+R"],
+            CopyLastTranscriptionHotkeys = ["Ctrl+Alt+C"],
+            WorkflowPaletteHotkeys = ["Ctrl+Alt+W", "Ctrl+Shift+W"]
+        };
+
+        sut.Save(settings);
+
+        var loaded = new SettingsService(_filePath).Current;
+        Assert.Equal(["Ctrl+Alt+D", "Ctrl+Shift+D"], loaded.GetMainDictationHotkeys());
+        Assert.Equal(["Ctrl+Alt+T"], loaded.GetToggleOnlyHotkeys());
+        Assert.Equal(["Ctrl+Alt+H"], loaded.GetHoldOnlyHotkeys());
+        Assert.Equal(["Ctrl+Alt+R"], loaded.GetRecentTranscriptionsHotkeys());
+        Assert.Equal(["Ctrl+Alt+C"], loaded.GetCopyLastTranscriptionHotkeys());
+        Assert.Equal(["Ctrl+Alt+W", "Ctrl+Shift+W"], loaded.GetWorkflowPaletteHotkeys());
+        Assert.Equal("Ctrl+Alt+D", loaded.PushToTalkHotkey);
+        Assert.Equal("Ctrl+Alt+D", loaded.ToggleHotkey);
+        Assert.Equal("Ctrl+Alt+W", loaded.WorkflowPaletteHotkey);
+    }
+
+    [Fact]
+    public void Load_LegacySingleHotkeys_ExposesHotkeyLists()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "pushToTalkHotkey": "Ctrl+Alt+D",
+          "toggleOnlyHotkey": "Ctrl+Alt+T",
+          "workflowPaletteHotkey": "Ctrl+Alt+W"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Equal(["Ctrl+Alt+D"], sut.Current.GetMainDictationHotkeys());
+        Assert.Equal(["Ctrl+Alt+T"], sut.Current.GetToggleOnlyHotkeys());
+        Assert.Equal(["Ctrl+Alt+W"], sut.Current.GetWorkflowPaletteHotkeys());
+    }
+
+    [Fact]
     public void Load_UnknownLocalModelAcceleration_FallsBackToAuto()
     {
         File.WriteAllText(_filePath, """

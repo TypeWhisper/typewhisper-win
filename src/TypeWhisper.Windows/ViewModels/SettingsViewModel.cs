@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -29,6 +30,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _recentTranscriptionsHotkey = "";
     [ObservableProperty] private string _copyLastTranscriptionHotkey = "";
     [ObservableProperty] private string _workflowPaletteHotkey = "";
+    [ObservableProperty] private string _newMainDictationHotkey = "";
+    [ObservableProperty] private string _newToggleOnlyHotkey = "";
+    [ObservableProperty] private string _newHoldOnlyHotkey = "";
+    [ObservableProperty] private string _newRecentTranscriptionsHotkey = "";
+    [ObservableProperty] private string _newCopyLastTranscriptionHotkey = "";
+    [ObservableProperty] private string _newWorkflowPaletteHotkey = "";
+    [ObservableProperty] private string _shortcutsError = "";
     [ObservableProperty] private string _language = "auto";
     [ObservableProperty] private bool _autoPaste = true;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
@@ -76,6 +84,12 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<CommandExample> CliExamples { get; } = [];
     public ObservableCollection<TtsProviderOption> SpokenFeedbackProviders { get; } = [];
     public ObservableCollection<TtsVoiceOption> SpokenFeedbackVoices { get; } = [];
+    public ObservableCollection<string> MainDictationHotkeys { get; } = [];
+    public ObservableCollection<string> ToggleOnlyHotkeys { get; } = [];
+    public ObservableCollection<string> HoldOnlyHotkeys { get; } = [];
+    public ObservableCollection<string> RecentTranscriptionsHotkeys { get; } = [];
+    public ObservableCollection<string> CopyLastTranscriptionHotkeys { get; } = [];
+    public ObservableCollection<string> WorkflowPaletteHotkeys { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -137,6 +151,7 @@ public partial class SettingsViewModel : ObservableObject
 
     private bool _isLoading;
     private bool _isSavingSettings;
+    private bool _isSyncingShortcutHotkeys;
 
     partial void OnUiLanguageChanged(string? value)
     {
@@ -188,6 +203,7 @@ public partial class SettingsViewModel : ObservableObject
         _apiServer.StateChanged += OnApiServerStateChanged;
         _speechFeedback.ProvidersChanged += OnTtsProvidersChanged;
         _audio.DevicesChanged += OnAudioDevicesChanged;
+        RegisterShortcutHotkeyCollections();
 
         _isLoading = true;
         RefreshLocalizedCollections();
@@ -206,6 +222,8 @@ public partial class SettingsViewModel : ObservableObject
         PropertyChanged += (_, args) =>
         {
             if (_isLoading) return;
+            if (_isSyncingShortcutHotkeys) return;
+            if (IsTransientShortcutProperty(args.PropertyName)) return;
 
             if (args.PropertyName == nameof(SelectedMicrophoneItem))
                 return;
@@ -272,6 +290,63 @@ public partial class SettingsViewModel : ObservableObject
     private void RefreshCliState() => ApplyCliState(_cliInstall.GetState());
 
     [RelayCommand]
+    private void AddMainDictationHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(MainDictationHotkeys, hotkey ?? NewMainDictationHotkey, value => NewMainDictationHotkey = value);
+
+    [RelayCommand]
+    private void RemoveMainDictationHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(MainDictationHotkeys, hotkey);
+
+    [RelayCommand]
+    private void AddToggleOnlyHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(ToggleOnlyHotkeys, hotkey ?? NewToggleOnlyHotkey, value => NewToggleOnlyHotkey = value);
+
+    [RelayCommand]
+    private void RemoveToggleOnlyHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(ToggleOnlyHotkeys, hotkey);
+
+    [RelayCommand]
+    private void AddHoldOnlyHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(HoldOnlyHotkeys, hotkey ?? NewHoldOnlyHotkey, value => NewHoldOnlyHotkey = value);
+
+    [RelayCommand]
+    private void RemoveHoldOnlyHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(HoldOnlyHotkeys, hotkey);
+
+    [RelayCommand]
+    private void AddRecentTranscriptionsHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(
+            RecentTranscriptionsHotkeys,
+            hotkey ?? NewRecentTranscriptionsHotkey,
+            value => NewRecentTranscriptionsHotkey = value);
+
+    [RelayCommand]
+    private void RemoveRecentTranscriptionsHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(RecentTranscriptionsHotkeys, hotkey);
+
+    [RelayCommand]
+    private void AddCopyLastTranscriptionHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(
+            CopyLastTranscriptionHotkeys,
+            hotkey ?? NewCopyLastTranscriptionHotkey,
+            value => NewCopyLastTranscriptionHotkey = value);
+
+    [RelayCommand]
+    private void RemoveCopyLastTranscriptionHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(CopyLastTranscriptionHotkeys, hotkey);
+
+    [RelayCommand]
+    private void AddWorkflowPaletteHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(
+            WorkflowPaletteHotkeys,
+            hotkey ?? NewWorkflowPaletteHotkey,
+            value => NewWorkflowPaletteHotkey = value);
+
+    [RelayCommand]
+    private void RemoveWorkflowPaletteHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(WorkflowPaletteHotkeys, hotkey);
+
+    [RelayCommand]
     private void InstallCli()
     {
         try
@@ -317,7 +392,13 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
-        var mainDictationHotkey = HotkeyParser.Normalize(PushToTalkHotkey);
+        var mainDictationHotkeys = NormalizeHotkeyList(MainDictationHotkeys);
+        var toggleOnlyHotkeys = NormalizeHotkeyList(ToggleOnlyHotkeys);
+        var holdOnlyHotkeys = NormalizeHotkeyList(HoldOnlyHotkeys);
+        var recentTranscriptionsHotkeys = NormalizeHotkeyList(RecentTranscriptionsHotkeys);
+        var copyLastTranscriptionHotkeys = NormalizeHotkeyList(CopyLastTranscriptionHotkeys);
+        var workflowPaletteHotkeys = NormalizeHotkeyList(WorkflowPaletteHotkeys);
+        var mainDictationHotkey = FirstOrEmpty(mainDictationHotkeys);
         var selectedVoiceId = SpeechFeedbackService.IsDefaultVoiceOptionId(SelectedSpokenFeedbackVoiceId)
             ? null
             : SelectedSpokenFeedbackVoiceId;
@@ -326,6 +407,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             ToggleHotkey = mainDictationHotkey,
             PushToTalkHotkey = mainDictationHotkey,
+            MainDictationHotkeys = mainDictationHotkeys,
             Language = Language,
             AutoPaste = AutoPaste,
             Mode = Mode,
@@ -347,11 +429,16 @@ public partial class SettingsViewModel : ObservableObject
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
             ApiServerRequiresAuthentication = ApiServerRequiresAuthentication,
-            ToggleOnlyHotkey = HotkeyParser.Normalize(ToggleOnlyHotkey),
-            HoldOnlyHotkey = HotkeyParser.Normalize(HoldOnlyHotkey),
-            RecentTranscriptionsHotkey = HotkeyParser.Normalize(RecentTranscriptionsHotkey),
-            CopyLastTranscriptionHotkey = HotkeyParser.Normalize(CopyLastTranscriptionHotkey),
-            WorkflowPaletteHotkey = HotkeyParser.Normalize(WorkflowPaletteHotkey),
+            ToggleOnlyHotkeys = toggleOnlyHotkeys,
+            ToggleOnlyHotkey = FirstOrEmpty(toggleOnlyHotkeys),
+            HoldOnlyHotkeys = holdOnlyHotkeys,
+            HoldOnlyHotkey = FirstOrEmpty(holdOnlyHotkeys),
+            RecentTranscriptionsHotkeys = recentTranscriptionsHotkeys,
+            RecentTranscriptionsHotkey = FirstOrEmpty(recentTranscriptionsHotkeys),
+            CopyLastTranscriptionHotkeys = copyLastTranscriptionHotkeys,
+            CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys),
+            WorkflowPaletteHotkeys = workflowPaletteHotkeys,
+            WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys),
             AudioDuckingEnabled = AudioDuckingEnabled,
             AudioDuckingLevel = AudioDuckingLevel,
             PauseMediaDuringRecording = PauseMediaDuringRecording,
@@ -403,15 +490,22 @@ public partial class SettingsViewModel : ObservableObject
 
     private void LoadFromSettings(AppSettings s)
     {
-        var pushToTalkHotkey = HotkeyParser.Normalize(s.PushToTalkHotkey);
-        var toggleHotkey = HotkeyParser.Normalize(s.ToggleHotkey);
-        var mainDictationHotkey = !string.IsNullOrWhiteSpace(pushToTalkHotkey)
-            ? pushToTalkHotkey
-            : toggleHotkey;
+        var mainDictationHotkeys = NormalizeHotkeyList(s.GetMainDictationHotkeys());
+        var toggleOnlyHotkeys = NormalizeHotkeyList(s.GetToggleOnlyHotkeys());
+        var holdOnlyHotkeys = NormalizeHotkeyList(s.GetHoldOnlyHotkeys());
+        var recentTranscriptionsHotkeys = NormalizeHotkeyList(s.GetRecentTranscriptionsHotkeys());
+        var copyLastTranscriptionHotkeys = NormalizeHotkeyList(s.GetCopyLastTranscriptionHotkeys());
+        var workflowPaletteHotkeys = NormalizeHotkeyList(s.GetWorkflowPaletteHotkeys());
+        var mainDictationHotkey = FirstOrEmpty(mainDictationHotkeys);
 
-        ToggleHotkey = string.IsNullOrWhiteSpace(toggleHotkey)
-            ? mainDictationHotkey
-            : toggleHotkey;
+        ReplaceCollection(MainDictationHotkeys, mainDictationHotkeys);
+        ReplaceCollection(ToggleOnlyHotkeys, toggleOnlyHotkeys);
+        ReplaceCollection(HoldOnlyHotkeys, holdOnlyHotkeys);
+        ReplaceCollection(RecentTranscriptionsHotkeys, recentTranscriptionsHotkeys);
+        ReplaceCollection(CopyLastTranscriptionHotkeys, copyLastTranscriptionHotkeys);
+        ReplaceCollection(WorkflowPaletteHotkeys, workflowPaletteHotkeys);
+
+        ToggleHotkey = mainDictationHotkey;
         PushToTalkHotkey = mainDictationHotkey;
         Language = s.Language;
         AutoPaste = s.AutoPaste;
@@ -433,11 +527,11 @@ public partial class SettingsViewModel : ObservableObject
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
         ApiServerRequiresAuthentication = s.ApiServerRequiresAuthentication;
-        ToggleOnlyHotkey = HotkeyParser.Normalize(s.ToggleOnlyHotkey);
-        HoldOnlyHotkey = HotkeyParser.Normalize(s.HoldOnlyHotkey);
-        RecentTranscriptionsHotkey = HotkeyParser.Normalize(s.RecentTranscriptionsHotkey);
-        CopyLastTranscriptionHotkey = HotkeyParser.Normalize(s.CopyLastTranscriptionHotkey);
-        WorkflowPaletteHotkey = HotkeyParser.Normalize(s.WorkflowPaletteHotkey);
+        ToggleOnlyHotkey = FirstOrEmpty(toggleOnlyHotkeys);
+        HoldOnlyHotkey = FirstOrEmpty(holdOnlyHotkeys);
+        RecentTranscriptionsHotkey = FirstOrEmpty(recentTranscriptionsHotkeys);
+        CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys);
+        WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys);
         AudioDuckingEnabled = s.AudioDuckingEnabled;
         AudioDuckingLevel = s.AudioDuckingLevel;
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;
@@ -455,6 +549,109 @@ public partial class SettingsViewModel : ObservableObject
         RefreshApiExamples();
         RefreshApiServerStatus();
     }
+
+    private void RegisterShortcutHotkeyCollections()
+    {
+        MainDictationHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        ToggleOnlyHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        HoldOnlyHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        RecentTranscriptionsHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        CopyLastTranscriptionHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        WorkflowPaletteHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+    }
+
+    private void OnShortcutHotkeysChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_isLoading)
+            return;
+
+        ShortcutsError = "";
+        SyncShortcutHotkeyPropertiesFromCollections();
+        Save();
+    }
+
+    private void AddShortcutHotkey(
+        ObservableCollection<string> target,
+        string? hotkey,
+        Action<string> setNewHotkey)
+    {
+        var normalized = HotkeyParser.Normalize(hotkey);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        if (GetAllShortcutHotkeys().Any(existing =>
+                string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            ShortcutsError = Loc.Instance.GetString("Shortcuts.ValidationDuplicateFormat", normalized);
+            setNewHotkey("");
+            return;
+        }
+
+        target.Add(normalized);
+        setNewHotkey("");
+    }
+
+    private void RemoveShortcutHotkey(ObservableCollection<string> target, string? hotkey)
+    {
+        var normalized = HotkeyParser.Normalize(hotkey);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        var existing = target.FirstOrDefault(value =>
+            string.Equals(HotkeyParser.Normalize(value), normalized, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+            return;
+
+        target.Remove(existing);
+    }
+
+    private IEnumerable<string> GetAllShortcutHotkeys() =>
+    [
+        .. NormalizeHotkeyList(MainDictationHotkeys),
+        .. NormalizeHotkeyList(ToggleOnlyHotkeys),
+        .. NormalizeHotkeyList(HoldOnlyHotkeys),
+        .. NormalizeHotkeyList(RecentTranscriptionsHotkeys),
+        .. NormalizeHotkeyList(CopyLastTranscriptionHotkeys),
+        .. NormalizeHotkeyList(WorkflowPaletteHotkeys)
+    ];
+
+    private void SyncShortcutHotkeyPropertiesFromCollections()
+    {
+        _isSyncingShortcutHotkeys = true;
+        try
+        {
+            var mainDictationHotkey = FirstOrEmpty(NormalizeHotkeyList(MainDictationHotkeys));
+            ToggleHotkey = mainDictationHotkey;
+            PushToTalkHotkey = mainDictationHotkey;
+            ToggleOnlyHotkey = FirstOrEmpty(NormalizeHotkeyList(ToggleOnlyHotkeys));
+            HoldOnlyHotkey = FirstOrEmpty(NormalizeHotkeyList(HoldOnlyHotkeys));
+            RecentTranscriptionsHotkey = FirstOrEmpty(NormalizeHotkeyList(RecentTranscriptionsHotkeys));
+            CopyLastTranscriptionHotkey = FirstOrEmpty(NormalizeHotkeyList(CopyLastTranscriptionHotkeys));
+            WorkflowPaletteHotkey = FirstOrEmpty(NormalizeHotkeyList(WorkflowPaletteHotkeys));
+        }
+        finally
+        {
+            _isSyncingShortcutHotkeys = false;
+        }
+    }
+
+    private static bool IsTransientShortcutProperty(string? propertyName) =>
+        propertyName is nameof(NewMainDictationHotkey)
+            or nameof(NewToggleOnlyHotkey)
+            or nameof(NewHoldOnlyHotkey)
+            or nameof(NewRecentTranscriptionsHotkey)
+            or nameof(NewCopyLastTranscriptionHotkey)
+            or nameof(NewWorkflowPaletteHotkey)
+            or nameof(ShortcutsError);
+
+    private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string?> values) =>
+        values.Select(HotkeyParser.Normalize)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string FirstOrEmpty(IReadOnlyList<string> values) =>
+        values.Count == 0 ? "" : values[0];
 
     private void OnSettingsChanged(AppSettings updatedSettings)
     {
