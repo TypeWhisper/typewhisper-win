@@ -334,13 +334,13 @@
   {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "author": "TypeWhisper",
     "description": "Soniox speech-to-text transcription engine",
     "category": "transcription",
     "requiresApiKey": true,
-    "size": 17888,
-    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.0.2/com.typewhisper.soniox-1.0.2.zip",
+    "size": 19939,
+    "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-soniox-v1.0.3/com.typewhisper.soniox-1.0.3.zip",
     "categories": [
       "transcription"
     ],
