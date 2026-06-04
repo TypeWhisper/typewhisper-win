@@ -1,6 +1,7 @@
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -114,6 +115,67 @@ public class FileTranscriptionViewModelTests
 
         Assert.True(sut.Items[0].HasResult);
         Assert.True(sut.Items[0].CanExportSubtitles);
+    }
+
+    [Fact]
+    public async Task ClearQueue_RemovesInactiveItemsAndKeepsActiveQueue()
+    {
+        var processor = new BlockingProcessor();
+        var sut = CreateSut(processor);
+
+        sut.AddFilesCommand.Execute(new[] { "active.wav", "queued.wav" });
+        await WaitForAsync(() => sut.Items.Count == 2
+            && sut.Items[0].Status == FileTranscriptionQueueItemStatus.Transcribing);
+
+        var completed = new FileTranscriptionQueueItemViewModel("done.wav", FileTranscriptionQueueItemStatus.Completed);
+        var cancelled = new FileTranscriptionQueueItemViewModel("cancelled.wav", FileTranscriptionQueueItemStatus.Cancelled);
+        var error = new FileTranscriptionQueueItemViewModel("bad.wav", FileTranscriptionQueueItemStatus.Error);
+        var unsupported = new FileTranscriptionQueueItemViewModel("notes.txt", FileTranscriptionQueueItemStatus.Unsupported);
+        sut.Items.Add(completed);
+        sut.Items.Add(cancelled);
+        sut.Items.Add(error);
+        sut.Items.Add(unsupported);
+        sut.SelectedItem = completed;
+
+        sut.ClearQueueCommand.Execute(null);
+
+        Assert.Equal(["active.wav", "queued.wav"], sut.Items.Select(i => i.FilePath).ToArray());
+        Assert.Equal(
+            [FileTranscriptionQueueItemStatus.Transcribing, FileTranscriptionQueueItemStatus.Queued],
+            sut.Items.Select(i => i.Status).ToArray());
+        Assert.Same(sut.Items[0], sut.SelectedItem);
+        Assert.True(sut.HasItems);
+        Assert.Equal(
+            Loc.Instance.GetString("FileTranscription.QueueStatusFormat", 0, 0, 0, 1, 2),
+            sut.StatusText);
+
+        processor.Release("active.wav");
+        await WaitForAsync(() => sut.Items[1].Status == FileTranscriptionQueueItemStatus.Transcribing);
+        processor.Release("queued.wav");
+        await WaitForAsync(() => sut.Items.All(i => i.Status == FileTranscriptionQueueItemStatus.Completed));
+    }
+
+    [Fact]
+    public void ClearQueue_RemovesAllInactiveItemsAndResetsEmptyState()
+    {
+        var sut = CreateSut(new FakeProcessor());
+        var completed = new FileTranscriptionQueueItemViewModel("done.wav", FileTranscriptionQueueItemStatus.Completed);
+        var cancelled = new FileTranscriptionQueueItemViewModel("cancelled.wav", FileTranscriptionQueueItemStatus.Cancelled);
+        var error = new FileTranscriptionQueueItemViewModel("bad.wav", FileTranscriptionQueueItemStatus.Error);
+        var unsupported = new FileTranscriptionQueueItemViewModel("notes.txt", FileTranscriptionQueueItemStatus.Unsupported);
+        sut.Items.Add(completed);
+        sut.Items.Add(cancelled);
+        sut.Items.Add(error);
+        sut.Items.Add(unsupported);
+        sut.SelectedItem = error;
+
+        sut.ClearQueueCommand.Execute(null);
+
+        Assert.Empty(sut.Items);
+        Assert.Null(sut.SelectedItem);
+        Assert.False(sut.HasItems);
+        Assert.False(sut.ClearQueueCommand.CanExecute(null));
+        Assert.Equal(Loc.Instance["FileTranscription.StatusDefault"], sut.StatusText);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)
