@@ -161,9 +161,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             try
             {
-                return IsDownloadedCore(plugin, pluginModelId)
-                    ? ModelStatus.Ready
-                    : ModelStatus.NotDownloaded;
+                if (!TryGetPluginModelDownloadStatus(plugin, pluginModelId, modelId, out var isDownloaded))
+                    return _modelStatuses[modelId];
+
+                return isDownloaded ? ModelStatus.Ready : ModelStatus.NotDownloaded;
             }
             catch (LocalModelStorageUnavailableException ex)
             {
@@ -202,7 +203,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return false;
 
         if (plugin.SupportsModelDownload)
-            return IsDownloadedCore(plugin, pluginModelId);
+            return TryGetPluginModelDownloadStatus(plugin, pluginModelId, modelId, out var isDownloaded)
+                && isDownloaded;
 
         return plugin.IsConfigured;
     }
@@ -631,9 +633,41 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     private void SetStatus(string modelId, ModelStatus status)
     {
+        if (_modelStatuses.TryGetValue(modelId, out var current) && current == status)
+            return;
+
         _modelStatuses[modelId] = status;
         OnPropertyChanged(nameof(GetStatus));
     }
+
+    private bool TryGetPluginModelDownloadStatus(
+        ITranscriptionEnginePlugin plugin,
+        string pluginModelId,
+        string fullModelId,
+        out bool isDownloaded)
+    {
+        try
+        {
+            isDownloaded = plugin.IsModelDownloaded(pluginModelId);
+            return true;
+        }
+        catch (Exception ex) when (IsRecoverablePluginStatusException(ex))
+        {
+            isDownloaded = false;
+            var message = string.IsNullOrWhiteSpace(ex.Message)
+                ? ex.GetType().Name
+                : ex.Message;
+            Debug.WriteLine($"Plugin '{plugin.PluginId}' failed while checking model status: {message}");
+            SetStatus(fullModelId, ModelStatus.Failed(message));
+            return false;
+        }
+    }
+
+    private static bool IsRecoverablePluginStatusException(Exception ex) =>
+        ex is not LocalModelStorageUnavailableException
+            and not OutOfMemoryException
+            and not AppDomainUnloadedException
+            and not BadImageFormatException;
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

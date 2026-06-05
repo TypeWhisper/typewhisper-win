@@ -273,6 +273,100 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TranscribeRawBodyNormalizesNumbersByDefault()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "two" };
+        var service = CreateService(plugin);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "audio/wav",
+                ["x-language"] = "en"
+            },
+            WavEncoder.Encode([0f, 0f, 0f, 0f]));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("2", json["text"].GetString());
+    }
+
+    [Fact]
+    public async Task TranscribeRawBodyNormalizeNumbersFalsePreservesRawText()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "two" };
+        var service = CreateService(plugin);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "audio/wav",
+                ["x-language"] = "en",
+                ["x-normalize-numbers"] = "false"
+            },
+            WavEncoder.Encode([0f, 0f, 0f, 0f]));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("two", json["text"].GetString());
+    }
+
+    [Fact]
+    public async Task TranscribeRawBodyRejectsInvalidNormalizeNumbersHeader()
+    {
+        var service = CreateService(new FakeTranscriptionPlugin());
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "audio/wav",
+                ["x-normalize-numbers"] = "maybe"
+            },
+            WavEncoder.Encode([0f, 0f, 0f, 0f]));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Equal("Invalid 'x-normalize-numbers' value", ErrorMessage(response));
+    }
+
+    [Fact]
+    public async Task TranscribeVerboseJsonNormalizesSegmentText()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "two" };
+        var service = CreateService(plugin);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "audio/wav",
+                ["x-language"] = "en",
+                ["x-response-format"] = "verbose_json"
+            },
+            WavEncoder.Encode([0f, 0f, 0f, 0f]));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+        var segment = json["segments"].EnumerateArray().Single();
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("2", json["text"].GetString());
+        Assert.Equal("2", segment.GetProperty("text").GetString());
+    }
+
+    [Fact]
     public async Task Status_IncludesActiveAccelerationDetails()
     {
         var plugin = new FakeTranscriptionPlugin
@@ -637,6 +731,7 @@ public class HttpApiServiceTests : IDisposable
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin
     {
         public string? LastPrompt { get; private set; }
+        public string ResponseText { get; init; } = "transcribed";
 
         public string PluginId => "com.typewhisper.mock";
         public string PluginName => "Mock";
@@ -668,9 +763,9 @@ public class HttpApiServiceTests : IDisposable
             CancellationToken ct)
         {
             LastPrompt = prompt;
-            return Task.FromResult(new PluginTranscriptionResult("transcribed", language ?? "en", 1.25)
+            return Task.FromResult(new PluginTranscriptionResult(ResponseText, language ?? "en", 1.25)
             {
-                Segments = [new PluginTranscriptionSegment("transcribed", 0, 1.25)]
+                Segments = [new PluginTranscriptionSegment(ResponseText, 0, 1.25)]
             });
         }
 

@@ -1,11 +1,14 @@
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Services.NumberNormalization;
 
 namespace TypeWhisper.Core.Services;
 
 /// <summary>
 /// Priority-based post-processing pipeline. Steps are sorted by priority (ascending)
 /// and executed sequentially. Built-in priorities:
+///   Number Normalization: 100
 ///   Plugin PostProcessors: their own Priority value
+///   App Formatting: 150
 ///   LLM Prompt Action: 300
 ///   Snippet Expansion: 500
 ///   Vocabulary Boosting: 550
@@ -14,6 +17,7 @@ namespace TypeWhisper.Core.Services;
 /// </summary>
 public sealed class PostProcessingPipeline : IPostProcessingPipeline
 {
+    private const int NumberNormalizationPriority = 100;
     private const int FormattingPriority = 150;
     private const int LlmPriority = 300;
     private const int SnippetPriority = 500;
@@ -73,7 +77,17 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
     {
         var steps = new List<(int, string, Func<string, CancellationToken, Task<string>>)>();
 
-        // App-aware formatting at priority 150 (before everything else)
+        steps.Add((NumberNormalizationPriority, "NumberNormalization",
+            (text, _) => Task.FromResult(TranscriptionNumberNormalizationService.NormalizeText(
+                text,
+                options.TranscriptionTask,
+                options.DetectedLanguage,
+                options.ConfiguredLanguage,
+                options.ConfiguredLanguageCandidates,
+                options.TranscriptionNumberNormalizationEnabled,
+                options.NormalizeNumbersOverride))));
+
+        // App-aware formatting at priority 150 (after number normalization)
         if (options.AppFormatter is not null)
         {
             var processName = options.TargetProcessName;

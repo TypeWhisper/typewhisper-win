@@ -56,6 +56,7 @@ public class SettingsServiceTests : IDisposable
             CopyLastTranscriptionHotkey = "Ctrl+Alt+C",
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
+            TranscriptionNumberNormalizationEnabled = false,
             LastTranslationTargetLanguage = "fr",
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
@@ -99,6 +100,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+C", sut2.Current.CopyLastTranscriptionHotkey);
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
+        Assert.False(sut2.Current.TranscriptionNumberNormalizationEnabled);
         Assert.Equal("fr", sut2.Current.LastTranslationTargetLanguage);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
         Assert.False(sut2.Current.LiveTranscriptionEnabled);

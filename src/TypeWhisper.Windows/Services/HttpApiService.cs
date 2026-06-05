@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.NumberNormalization;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.ViewModels;
 
@@ -399,11 +400,25 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             ct);
 
         var result = activeResult.Result;
+        var currentSettings = _settings.Current;
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
+            TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
+            TranscriptionTask = transcribeRequest.Task,
+            DetectedLanguage = result.DetectedLanguage,
+            ConfiguredLanguage = transcribeRequest.Language,
+            ConfiguredLanguageCandidates = transcribeRequest.LanguageHints,
             VocabularyBooster = GetVocabularyBooster(),
             DictionaryCorrector = _dictionary.ApplyCorrections
         }, ct);
+        var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
+            result,
+            transcribeRequest.Task,
+            transcribeRequest.Language,
+            transcribeRequest.LanguageHints,
+            currentSettings.TranscriptionNumberNormalizationEnabled,
+            transcribeRequest.NormalizeNumbers);
 
         var finalText = pipelineResult.Text;
         if (!string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage))
@@ -440,7 +455,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 processing_time = result.ProcessingTime,
                 engine = activeResult.EngineId,
                 model = activeResult.ModelId,
-                segments = result.Segments.Select(seg => new
+                segments = normalizedResult.Segments.Select(seg => new
                 {
                     text = seg.Text,
                     start = seg.Start,
@@ -981,7 +996,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         string? Prompt,
         string? Engine,
         string? Model,
-        bool AwaitDownload)
+        bool AwaitDownload,
+        bool? NormalizeNumbers)
     {
         /// <summary>
         /// Performs from.
@@ -996,7 +1012,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 request.Prompt,
                 request.Engine,
                 request.Model,
-                request.AwaitDownload);
+                request.AwaitDownload,
+                request.NormalizeNumbers);
 
         /// <summary>
         /// Performs from.
@@ -1011,7 +1028,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 request.Prompt,
                 request.Engine,
                 request.Model,
-                request.AwaitDownload);
+                request.AwaitDownload,
+                request.NormalizeNumbers);
     }
 
     private sealed record RuleDto(
