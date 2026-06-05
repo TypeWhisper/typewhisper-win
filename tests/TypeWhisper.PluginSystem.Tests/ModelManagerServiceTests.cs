@@ -70,6 +70,31 @@ public class ModelManagerServiceTests
     }
 
     [Fact]
+    public async Task LoadModelAsync_UsesTranscriptionSelectionIdForAdditionalProfileRole()
+    {
+        const string rootPluginId = "com.typewhisper.openai-compatible";
+        const string selectionId = "openai-compatible-profile-a";
+        const string modelId = "whisper-profile";
+        var fullModelId = ModelManagerService.GetPluginModelId(selectionId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings());
+
+        var plugin = new FakeTranscriptionPlugin(
+            rootPluginId,
+            configured: true,
+            selectedModelId: null,
+            selectionId: selectionId,
+            modelIds: [modelId]);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.LoadModelAsync(fullModelId);
+
+        Assert.Equal(fullModelId, sut.ActiveModelId);
+        Assert.Equal(modelId, plugin.SelectedModelId);
+    }
+
+    [Fact]
     public async Task EnsureModelLoadedAsync_ReloadsActiveModel_WhenAccelerationPreferenceChanges()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";
@@ -389,24 +414,32 @@ public class ModelManagerServiceTests
         field.SetValue(target, value);
     }
 
-    private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin
+    private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity
     {
+        private readonly string? _selectionId;
+
         public FakeTranscriptionPlugin(
             string pluginId,
             bool configured,
             string? selectedModelId,
-            bool supportsModelDownload = false)
+            bool supportsModelDownload = false,
+            string? selectionId = null,
+            IReadOnlyList<string>? modelIds = null)
         {
             PluginId = pluginId;
             IsConfigured = configured;
             SelectedModelId = selectedModelId;
             SupportsModelDownload = supportsModelDownload;
-            TranscriptionModels = [new PluginModelInfo("parakeet", "Parakeet"), new PluginModelInfo("whisper", "Whisper")];
+            _selectionId = selectionId;
+            TranscriptionModels = modelIds is null
+                ? [new PluginModelInfo("parakeet", "Parakeet"), new PluginModelInfo("whisper", "Whisper")]
+                : modelIds.Select(modelId => new PluginModelInfo(modelId, modelId)).ToList();
         }
 
         public string PluginId { get; }
         public string PluginName => PluginId;
         public string PluginVersion => "1.0.0";
+        public string TranscriptionSelectionId => _selectionId ?? PluginId;
         public string ProviderId => PluginId;
         public string ProviderDisplayName => PluginId;
         public bool IsConfigured { get; }

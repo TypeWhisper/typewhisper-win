@@ -359,9 +359,10 @@ public partial class WelcomeViewModel : ObservableObject
         var collectedModels = new List<WelcomeModelItem>();
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines)
         {
+            var selectionId = engine.GetTranscriptionSelectionId();
             foreach (var model in engine.TranscriptionModels)
             {
-                var fullId = ModelManagerService.GetPluginModelId(engine.PluginId, model.Id);
+                var fullId = ModelManagerService.GetPluginModelId(selectionId, model.Id);
                 var name = string.IsNullOrWhiteSpace(model.SizeDescription)
                     ? model.DisplayName
                     : $"{model.DisplayName} ({model.SizeDescription})";
@@ -818,7 +819,10 @@ public partial class WelcomeViewModel : ObservableObject
 
         var (pluginId, _) = ModelManagerService.ParsePluginModelId(SelectedModelId);
         return _modelManager.PluginManager.TranscriptionEngines
-            .FirstOrDefault(engine => engine.PluginId == pluginId);
+            .FirstOrDefault(engine => string.Equals(
+                engine.GetTranscriptionSelectionId(),
+                pluginId,
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private ITranscriptionEnginePlugin? GetSelectedConfigurationPlugin()
@@ -832,14 +836,15 @@ public partial class WelcomeViewModel : ObservableObject
 
     private UserControl? GetSettingsView(ITranscriptionEnginePlugin plugin)
     {
-        if (_settingsViewCache.TryGetValue(plugin.PluginId, out var cached)
+        var settingsViewKey = plugin.GetTranscriptionSelectionId();
+        if (_settingsViewCache.TryGetValue(settingsViewKey, out var cached)
             && ReferenceEquals(cached.Plugin, plugin))
         {
             return cached.View;
         }
 
         var view = plugin.CreateSettingsView();
-        _settingsViewCache[plugin.PluginId] = (plugin, view);
+        _settingsViewCache[settingsViewKey] = (plugin, view);
         return view;
     }
 

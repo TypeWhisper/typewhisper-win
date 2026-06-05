@@ -109,13 +109,15 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
         var parts = pluginModelId.Split(':', 3);
         if (parts.Length >= 2 && parts[0] == "plugin")
         {
-            var pluginId = parts[1];
+            var providerSelectionId = parts[1];
             var modelId = parts.Length == 3 ? parts[2] : modelOverride;
 
             var provider = _pluginManager.LlmProviders
-                .FirstOrDefault(p => p is ITypeWhisperPlugin twp &&
-                    _pluginManager.GetPlugin(pluginId)?.Instance == twp &&
-                    p.IsAvailable);
+                .FirstOrDefault(p => p.IsAvailable
+                    && string.Equals(
+                        p.GetLlmSelectionId(),
+                        providerSelectionId,
+                        StringComparison.OrdinalIgnoreCase));
 
             if (provider is null)
                 return (null, "");

@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\TypeWhisper.Plugin.OpenAi.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAiCompatible\TypeWhisper.Plugin.OpenAiCompatible.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\TypeWhisper.Plugin.OpenRouter.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Groq\TypeWhisper.Plugin.Groq.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Xai\TypeWhisper.Plugin.Xai.csproj" />

@@ -10,8 +10,35 @@
     </UserControl.Resources>
 
     <StackPanel Margin="0,4" MaxWidth="500">
+        <!-- Profiles -->
+        <TextBlock x:Name="ProfilesHeader" Foreground="{StaticResource PluginLabelBrush}"
+                   FontWeight="SemiBold" Margin="0,0,0,6"/>
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="ProfilePicker"
+                      SelectionChanged="OnProfileSelectionChanged"
+                      DisplayMemberPath="Name"/>
+            <Button Grid.Column="1" x:Name="AddProfileButton" Margin="8,0,0,0"
+                    Click="OnAddProfileClick"/>
+            <Button Grid.Column="2" x:Name="DeleteProfileButton" Margin="8,0,0,0"
+                    Click="OnDeleteProfileClick"/>
+        </Grid>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="ProfileNameBox"/>
+            <Button Grid.Column="1" x:Name="RenameProfileButton" Margin="8,0,0,0"
+                    Click="OnRenameProfileClick"/>
+        </Grid>
+
         <!-- Server URL -->
-        <TextBlock Text="&#x1F310; Server URL" Foreground="{StaticResource PluginLabelBrush}"
+        <TextBlock x:Name="ServerUrlHeader" Foreground="{StaticResource PluginLabelBrush}"
                    FontWeight="SemiBold" Margin="0,0,0,6"/>
         <Grid>
             <Grid.ColumnDefinitions>
@@ -40,7 +67,7 @@
         </Border>
 
         <!-- API Key (optional) -->
-        <TextBlock Text="&#x1F511; API Key (optional)" Foreground="{StaticResource PluginLabelBrush}"
+        <TextBlock x:Name="ApiKeyHeader" Foreground="{StaticResource PluginLabelBrush}"
                    FontWeight="SemiBold" Margin="0,14,0,6"/>
         <PasswordBox x:Name="ApiKeyBox" PasswordChanged="OnApiKeyChanged"/>
         <TextBlock x:Name="ApiKeyHintText"
