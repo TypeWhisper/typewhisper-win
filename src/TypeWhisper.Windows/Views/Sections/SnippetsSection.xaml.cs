@@ -7,8 +7,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides snippets section behavior.
+/// </summary>
 public partial class SnippetsSection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the SnippetsSection class.
+    /// </summary>
     public SnippetsSection()
     {
         InitializeComponent();

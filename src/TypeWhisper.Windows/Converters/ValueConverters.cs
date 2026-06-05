@@ -14,6 +14,9 @@ namespace TypeWhisper.Windows.Converters;
 /// </summary>
 public sealed class AudioLevelWidthConverter : IMultiValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
         if (values.Length < 2) return 0.0;
@@ -26,12 +29,21 @@ public sealed class AudioLevelWidthConverter : IMultiValueConverter
         return normalized * maxWidth;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Provides localized format converter behavior.
+/// </summary>
 public sealed class LocalizedFormatConverter : IMultiValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
         if (values.Length == 0 || values[0] is not string template || string.IsNullOrEmpty(template))
@@ -47,15 +59,21 @@ public sealed class LocalizedFormatConverter : IMultiValueConverter
         }
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 
 /// <summary>
-/// Converts audio level (0..1 float) into a subtle scale factor for live overlay motion.
+/// Provides audio level scale converter behavior.
 /// </summary>
 public sealed class AudioLevelScaleConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var level = value is float f ? Math.Clamp(f, 0f, 1f) : 0f;
@@ -66,6 +84,9 @@ public sealed class AudioLevelScaleConverter : IValueConverter
         return 1.0 + Math.Min(level * 2.4, 1.0) * maxDelta;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -75,6 +96,9 @@ public sealed class AudioLevelScaleConverter : IValueConverter
 /// </summary>
 public sealed class PartialTextHalfConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not string text || string.IsNullOrWhiteSpace(text))
@@ -90,6 +114,9 @@ public sealed class PartialTextHalfConverter : IValueConverter
             : string.Join(" ", words.Skip(splitIndex));
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -99,9 +126,15 @@ public sealed class PartialTextHalfConverter : IValueConverter
 /// </summary>
 public sealed class EnumEqualsConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         Equals(value, parameter);
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is true ? parameter : Binding.DoNothing;
 }
@@ -111,9 +144,15 @@ public sealed class EnumEqualsConverter : IValueConverter
 /// </summary>
 public sealed class EdgeDockStatusDockConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is OverlayPosition.Bottom ? Dock.Bottom : Dock.Top;
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -124,6 +163,9 @@ public sealed class EdgeDockStatusDockConverter : IValueConverter
 /// </summary>
 public sealed class StepToVisibilityConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is int step && parameter is string paramStr && int.TryParse(paramStr, out var target))
@@ -131,6 +173,9 @@ public sealed class StepToVisibilityConverter : IValueConverter
         return Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -141,9 +186,15 @@ public sealed class StepToVisibilityConverter : IValueConverter
 /// </summary>
 public sealed class NonEmptyToVisibilityConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is string s && !string.IsNullOrEmpty(s) ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -154,6 +205,9 @@ public sealed class NonEmptyToVisibilityConverter : IValueConverter
 /// </summary>
 public sealed class LevelToWidthConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var level = value is float f ? f : 0f;
@@ -165,6 +219,9 @@ public sealed class LevelToWidthConverter : IValueConverter
         return normalized * maxWidth;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -174,6 +231,9 @@ public sealed class LevelToWidthConverter : IValueConverter
 /// </summary>
 public sealed class SecondsToTimerConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         var seconds = value is double d ? d : 0;
@@ -181,6 +241,9 @@ public sealed class SecondsToTimerConverter : IValueConverter
         return $"{(int)ts.TotalMinutes}:{ts.Seconds:D2}";
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -201,9 +264,15 @@ public sealed class HotkeyModeToOverlayBorderConverter : IValueConverter
         return brush;
     }
 
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is HotkeyMode.Toggle ? ToggleBrush : TransparentBrush;
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -213,23 +282,35 @@ public sealed class HotkeyModeToOverlayBorderConverter : IValueConverter
 /// </summary>
 public sealed class HotkeyModeLabelConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is HotkeyMode mode ? mode == HotkeyMode.Toggle ? "TOG" : "PTT" : "";
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 
 /// <summary>
-/// Splits a comma-separated tags string into a string array for ItemsControl binding.
+/// Provides tag split converter behavior.
 /// </summary>
 public sealed class TagSplitConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is string s && !string.IsNullOrWhiteSpace(s)
             ? s.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : Array.Empty<string>();
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -240,6 +321,9 @@ public sealed class TagSplitConverter : IValueConverter
 /// </summary>
 public sealed class BarHeightConverter : IMultiValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
         if (values.Length < 2) return 4.0;
@@ -252,6 +336,9 @@ public sealed class BarHeightConverter : IMultiValueConverter
         return Math.Max(4.0, (double)wordCount / maxValue * maxHeight);
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -261,9 +348,15 @@ public sealed class BarHeightConverter : IMultiValueConverter
 /// </summary>
 public sealed class DayLabelConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is DateTime dt ? $"{dt.Day}." : "";
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -273,9 +366,15 @@ public sealed class DayLabelConverter : IValueConverter
 /// </summary>
 public sealed class InvertBoolConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is bool b && !b;
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => value is bool b && !b;
 }
@@ -285,9 +384,15 @@ public sealed class InvertBoolConverter : IValueConverter
 /// </summary>
 public sealed class InvertBoolToVisibilityConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         => value is true ? Visibility.Collapsed : Visibility.Visible;
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -298,6 +403,9 @@ public sealed class InvertBoolToVisibilityConverter : IValueConverter
 /// </summary>
 public sealed class ZeroToVisibilityConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         bool isZero = value is int i && i == 0;
@@ -305,6 +413,9 @@ public sealed class ZeroToVisibilityConverter : IValueConverter
         return isZero ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -314,6 +425,9 @@ public sealed class ZeroToVisibilityConverter : IValueConverter
 /// </summary>
 public sealed class StringToBrushConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is string hex && !string.IsNullOrEmpty(hex))
@@ -328,6 +442,9 @@ public sealed class StringToBrushConverter : IValueConverter
         return new SolidColorBrush(Colors.Gray);
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
@@ -338,6 +455,9 @@ public sealed class StringToBrushConverter : IValueConverter
 /// </summary>
 public sealed class InstallStateToVisibilityConverter : IValueConverter
 {
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is PluginInstallState state && parameter is string expected)
@@ -347,6 +467,9 @@ public sealed class InstallStateToVisibilityConverter : IValueConverter
         return Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }

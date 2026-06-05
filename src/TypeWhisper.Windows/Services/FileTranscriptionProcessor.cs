@@ -6,8 +6,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Defines the file transcription processor contract.
+/// </summary>
 public interface IFileTranscriptionProcessor
 {
+    /// <summary>
+    /// Transcribes an audio file, reports queue progress, and returns both raw and processed text.
+    /// </summary>
     Task<FileTranscriptionProcessResult> ProcessAsync(
         string filePath,
         Action<FileTranscriptionProcessProgress> onProgress,
@@ -15,20 +21,40 @@ public interface IFileTranscriptionProcessor
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Represents file transcription process options data.
+/// </summary>
+/// <param name="EngineId">Engine id supplied to the member.</param>
+/// <param name="ModelId">Model id supplied to the member.</param>
+/// <param name="Language">Language supplied to the member.</param>
+/// <param name="Task">Task supplied to the member.</param>
 public sealed record FileTranscriptionProcessOptions(
     string? EngineId = null,
     string? ModelId = null,
     string? Language = null,
     TranscriptionTask? Task = null);
 
+/// <summary>
+/// Represents file transcription process progress data.
+/// </summary>
+/// <param name="Status">Status supplied to the member.</param>
+/// <param name="StatusText">Status text supplied to the member.</param>
 public sealed record FileTranscriptionProcessProgress(
     FileTranscriptionQueueItemStatus Status,
     string StatusText);
 
+/// <summary>
+/// Represents file transcription process result data.
+/// </summary>
+/// <param name="RawResult">Raw result supplied to the member.</param>
+/// <param name="ProcessedText">Processed text supplied to the member.</param>
 public sealed record FileTranscriptionProcessResult(
     TranscriptionResult RawResult,
     string ProcessedText);
 
+/// <summary>
+/// Provides file transcription processor behavior.
+/// </summary>
 public sealed class FileTranscriptionProcessor(
     ModelManagerService modelManager,
     ISettingsService settings,
@@ -37,6 +63,9 @@ public sealed class FileTranscriptionProcessor(
     IVocabularyBoostingService vocabularyBoosting,
     IPostProcessingPipeline pipeline) : IFileTranscriptionProcessor
 {
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<FileTranscriptionProcessResult> ProcessAsync(
         string filePath,
         Action<FileTranscriptionProcessProgress> onProgress,

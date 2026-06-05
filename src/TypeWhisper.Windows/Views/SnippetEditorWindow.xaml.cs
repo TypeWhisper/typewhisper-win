@@ -4,10 +4,16 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides snippet editor window behavior.
+/// </summary>
 public partial class SnippetEditorWindow : Window
 {
     private readonly SnippetsViewModel _vm;
 
+    /// <summary>
+    /// Initializes a new instance of the SnippetEditorWindow class.
+    /// </summary>
     public SnippetEditorWindow(SnippetsViewModel viewModel)
     {
         _vm = viewModel;

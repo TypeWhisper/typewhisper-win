@@ -8,24 +8,66 @@ namespace TypeWhisper.Windows.Services.Plugins;
 /// </summary>
 public sealed record RegistryPlugin
 {
+    /// <summary>
+    /// Gets or sets the id value.
+    /// </summary>
     public string Id { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the name value.
+    /// </summary>
     public string Name { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the version value.
+    /// </summary>
     public string Version { get; init; } = "0.0.0";
+    /// <summary>
+    /// Gets or sets the min host version value.
+    /// </summary>
     public string? MinHostVersion { get; init; }
+    /// <summary>
+    /// Gets or sets the author value.
+    /// </summary>
     public string Author { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the description value.
+    /// </summary>
     public string Description { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the category value.
+    /// </summary>
     public string? Category { get; init; }
+    /// <summary>
+    /// Gets or sets the categories value.
+    /// </summary>
     [JsonConverter(typeof(RegistryCategoriesJsonConverter))]
     public IReadOnlyList<string>? Categories { get; init; }
+    /// <summary>
+    /// Gets or sets the size value.
+    /// </summary>
     public long Size { get; init; }
+    /// <summary>
+    /// Gets or sets the download url value.
+    /// </summary>
     public string DownloadUrl { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the icon system name value.
+    /// </summary>
     public string? IconSystemName { get; init; }
+    /// <summary>
+    /// Gets or sets the requires api key value.
+    /// </summary>
     public bool RequiresApiKey { get; init; }
+    /// <summary>
+    /// Gets or sets the descriptions value.
+    /// </summary>
     public Dictionary<string, string>? Descriptions { get; init; }
 }
 
 internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyList<string>?>
 {
+    /// <summary>
+    /// Reads.
+    /// </summary>
     public override IReadOnlyList<string>? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -55,6 +97,9 @@ internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyL
         throw new JsonException("Registry plugin categories array was not closed.");
     }
 
+    /// <summary>
+    /// Writes.
+    /// </summary>
     public override void Write(
         Utf8JsonWriter writer,
         IReadOnlyList<string>? value,
@@ -74,13 +119,25 @@ internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyL
 }
 
 /// <summary>
-/// Installation state of a registry plugin relative to the local system.
+/// Lists the supported plugin install state values.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PluginInstallState
 {
+    /// <summary>
+    /// Represents the not installed option.
+    /// </summary>
     NotInstalled,
+    /// <summary>
+    /// Represents the installed option.
+    /// </summary>
     Installed,
+    /// <summary>
+    /// Represents the update available option.
+    /// </summary>
     UpdateAvailable,
+    /// <summary>
+    /// Represents the bundled option.
+    /// </summary>
     Bundled
 }

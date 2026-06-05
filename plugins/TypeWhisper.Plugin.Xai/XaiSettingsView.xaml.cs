@@ -6,12 +6,18 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Xai;
 
+/// <summary>
+/// Provides xai settings view behavior.
+/// </summary>
 public partial class XaiSettingsView : UserControl
 {
     private readonly XaiPlugin _plugin;
     private readonly bool _suppressPasswordChanged;
     private bool _suppressControlChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the XaiSettingsView class.
+    /// </summary>
     public XaiSettingsView(XaiPlugin plugin)
     {
         _plugin = plugin;

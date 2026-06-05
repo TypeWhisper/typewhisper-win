@@ -16,8 +16,14 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
     private readonly MemoryStream _audioBuffer = new();
     private const int MinChunkBytes = 1600; // 50ms at 16kHz, 16-bit
 
+    /// <summary>
+    /// Raised when transcript received.
+    /// </summary>
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
+    /// <summary>
+    /// Connects the streaming session before audio is sent.
+    /// </summary>
     public static async Task<AssemblyAiStreamingSession> ConnectAsync(
         string apiKey, string? language, CancellationToken ct)
     {
@@ -33,6 +39,9 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
         return session;
     }
 
+    /// <summary>
+    /// Sends a PCM audio chunk to the active streaming session.
+    /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
         if (_ws.State != WebSocketState.Open) return;
@@ -47,6 +56,9 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
         await _ws.SendAsync(chunk, WebSocketMessageType.Binary, true, ct);
     }
 
+    /// <summary>
+    /// Finalizes the stream and returns the provider transcript.
+    /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
         if (_ws.State != WebSocketState.Open) return;
@@ -105,6 +117,9 @@ internal sealed class AssemblyAiStreamingSession : IStreamingSession
         catch { /* malformed message, skip */ }
     }
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         _receiveCts.Cancel();

@@ -5,17 +5,34 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Audio;
+using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents recording item data.
+/// </summary>
+/// <param name="FileName">File name supplied to the member.</param>
+/// <param name="FilePath">File path supplied to the member.</param>
+/// <param name="CreatedAt">Created at supplied to the member.</param>
+/// <param name="Duration">Duration supplied to the member.</param>
+/// <param name="Transcript">Transcript supplied to the member.</param>
 public sealed record RecordingItem(string FileName, string FilePath, DateTime CreatedAt, TimeSpan Duration, string? Transcript);
 
+/// <summary>
+/// Provides audio recorder view model behavior.
+/// </summary>
 public partial class AudioRecorderViewModel : ObservableObject, IDisposable
 {
     private readonly AudioRecordingService _audio;
     private readonly ModelManagerService _modelManager;
+    private readonly ISettingsService _settings;
+    private readonly IPostProcessingPipeline _pipeline;
+    private readonly ITranslationService _translation;
     private System.Timers.Timer? _timer;
     private DateTime _recordingStart;
     private string? _statusKey;
@@ -26,15 +43,32 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _statusText = Loc.Instance["Status.Ready"];
     [ObservableProperty] private bool _isTranscribing;
 
+    /// <summary>
+    /// Gets the recordings.
+    /// </summary>
     public ObservableCollection<RecordingItem> Recordings { get; } = [];
+    /// <summary>
+    /// Gets whether has recordings.
+    /// </summary>
     public bool HasRecordings => Recordings.Count > 0;
 
-    public AudioRecorderViewModel(AudioRecordingService audio, ModelManagerService modelManager)
+    /// <summary>
+    /// Initializes a new instance of the AudioRecorderViewModel class.
+    /// </summary>
+    public AudioRecorderViewModel(
+        AudioRecordingService audio,
+        ModelManagerService modelManager,
+        ISettingsService settings,
+        IPostProcessingPipeline pipeline,
+        ITranslationService translation)
     {
         _audio = audio;
         _modelManager = modelManager;
+        _settings = settings;
+        _pipeline = pipeline;
+        _translation = translation;
         _audio.AudioLevelChanged += (_, e) =>
-            Application.Current?.Dispatcher.InvokeAsync(() => AudioLevel = e.PeakLevel);
+            DispatchToUi(() => AudioLevel = e.PeakLevel);
         _statusKey = "Status.Ready";
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         LoadExistingRecordings();
@@ -66,7 +100,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         _timer.Elapsed += (_, _) =>
         {
             var elapsed = DateTime.UtcNow - _recordingStart;
-            Application.Current?.Dispatcher.InvokeAsync(() =>
+            DispatchToUi(() =>
                 DurationText = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}");
         };
         _timer.Start();
@@ -99,13 +133,14 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
 
         // Auto-transcribe
         string? transcript = null;
+        var processingFailed = false;
         try
         {
             var engine = _modelManager.ActiveTranscriptionPlugin;
             if (engine is not null)
             {
                 var result = await engine.TranscribeAsync(wav, null, false, null, CancellationToken.None);
-                transcript = result.Text;
+                transcript = await PostProcessTranscriptAsync(result);
                 if (!string.IsNullOrEmpty(transcript))
                 {
                     var txtPath = Path.ChangeExtension(filePath, ".txt");
@@ -113,14 +148,35 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            processingFailed = true;
+            StatusText = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+        }
 
         IsTranscribing = false;
 
         var item = new RecordingItem(fileName, filePath, DateTime.Now, duration, transcript);
-        Application.Current?.Dispatcher.Invoke(() => Recordings.Insert(0, item));
-        SetLocalizedStatus(transcript is not null ? "Status.Done" : "Recorder.SavedNoModel");
+        DispatchToUi(() => Recordings.Insert(0, item));
+        if (!processingFailed)
+            SetLocalizedStatus(transcript is not null ? "Status.Done" : "Recorder.SavedNoModel");
         DurationText = "0:00";
+    }
+
+    private async Task<string> PostProcessTranscriptAsync(PluginTranscriptionResult result)
+    {
+        var translationTarget = _settings.Current.TranslationTargetLanguage;
+        var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
+        {
+            TranslationHandler = !string.IsNullOrEmpty(translationTarget)
+                ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
+                : null,
+            TranslationTarget = translationTarget,
+            RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
+            DetectedLanguage = result.DetectedLanguage
+        }, CancellationToken.None);
+
+        return pipelineResult.Text;
     }
 
     [RelayCommand]
@@ -165,12 +221,27 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         if (string.IsNullOrWhiteSpace(_statusKey))
             return;
 
-        Application.Current?.Dispatcher.Invoke(() =>
+        DispatchToUi(() =>
         {
             StatusText = Loc.Instance[_statusKey];
         });
     }
 
+    private static void DispatchToUi(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        _ = dispatcher.InvokeAsync(action);
+    }
+
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         Loc.Instance.LanguageChanged -= OnLanguageChanged;

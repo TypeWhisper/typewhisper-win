@@ -16,6 +16,9 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
     private readonly SupertonicConfig _config;
     private readonly Dictionary<string, SupertonicVoiceStyle> _voiceStyleCache = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Performs supertonic onnx synthesizer.
+    /// </summary>
     public SupertonicOnnxSynthesizer(string assetRoot)
     {
         var onnxDir = Path.Combine(assetRoot, "onnx");
@@ -33,6 +36,9 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         _vocoder = new InferenceSession(Path.Combine(onnxDir, "vocoder.onnx"), options);
     }
 
+    /// <summary>
+    /// Performs synthesize.
+    /// </summary>
     public SupertonicSynthesisResult Synthesize(SupertonicSynthesisRequest request, CancellationToken ct)
     {
         var style = GetVoiceStyle(request.VoiceStylePath);
@@ -51,6 +57,9 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         return new SupertonicSynthesisResult(samples.ToArray(), _config.SampleRate);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _durationPredictor.Dispose();
@@ -208,6 +217,9 @@ internal sealed class SupertonicOnnxSynthesizer : ISupertonicSynthesizer
         int ChunkCompressFactor,
         int LatentDim)
     {
+        /// <summary>
+        /// Loads persisted state from storage.
+        /// </summary>
         public static SupertonicConfig Load(string path)
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));

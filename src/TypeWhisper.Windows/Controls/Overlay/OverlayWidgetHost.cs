@@ -4,12 +4,21 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
+/// <summary>
+/// Provides overlay widget host behavior.
+/// </summary>
 public class OverlayWidgetHost : ContentControl
 {
+    /// <summary>
+    /// Gets the widget type property.
+    /// </summary>
     public static readonly DependencyProperty WidgetTypeProperty =
         DependencyProperty.Register(nameof(WidgetType), typeof(OverlayWidget), typeof(OverlayWidgetHost),
             new PropertyMetadata(OverlayWidget.None, OnWidgetTypeChanged));
 
+    /// <summary>
+    /// Gets the widget type.
+    /// </summary>
     public OverlayWidget WidgetType
     {
         get => (OverlayWidget)GetValue(WidgetTypeProperty);

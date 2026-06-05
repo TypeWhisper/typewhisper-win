@@ -25,6 +25,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
     private const int DictionaryPriority = 600;
     private const int TranslationPriority = 900;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<PostProcessingResult> ProcessAsync(
         string rawText,
         PipelineOptions options,
@@ -32,6 +35,11 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
     {
         if (options.RequireLlmSuccess && options.LlmHandler is null)
             throw new InvalidOperationException("Required LLM post-processing is not configured.");
+        if (options.RequireTranslationSuccess
+            && (options.TranslationHandler is null || string.IsNullOrWhiteSpace(options.TranslationTarget)))
+        {
+            throw new InvalidOperationException("Required translation post-processing is not configured.");
+        }
 
         var steps = BuildSteps(options);
         var text = rawText;
@@ -52,6 +60,9 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
                 System.Diagnostics.Debug.WriteLine(
                     $"PostProcessingPipeline: Step '{name}' failed: {ex.Message}");
                 if (name == "LLM" && options.RequireLlmSuccess)
+                    throw;
+
+                if (name == "Translation" && options.RequireTranslationSuccess)
                     throw;
 
                 // Continue with current text — don't let one step break the pipeline

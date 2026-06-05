@@ -4,14 +4,37 @@ using System.Text.Json;
 
 namespace TypeWhisper.Cli;
 
+/// <summary>
+/// Represents cli connection options data.
+/// </summary>
+/// <param name="ApplicationDataRoot">Application data root supplied to the member.</param>
+/// <param name="PortOverride">Port override supplied to the member.</param>
+/// <param name="ApiTokenOverride">Api token override supplied to the member.</param>
+/// <param name="EnvironmentApiToken">Environment api token supplied to the member.</param>
 public sealed record CliConnectionOptions(
     string? ApplicationDataRoot = null,
     int? PortOverride = null,
     string? ApiTokenOverride = null,
     string? EnvironmentApiToken = null);
 
+/// <summary>
+/// Represents cli connection data.
+/// </summary>
+/// <param name="Port">Port supplied to the member.</param>
+/// <param name="ApiToken">Api token supplied to the member.</param>
 public sealed record CliConnection(int Port, string? ApiToken);
 
+/// <summary>
+/// Represents cli transcribe request data.
+/// </summary>
+/// <param name="FilePath">File path supplied to the member.</param>
+/// <param name="Language">Language supplied to the member.</param>
+/// <param name="LanguageHints">Language hints supplied to the member.</param>
+/// <param name="Task">Task supplied to the member.</param>
+/// <param name="TargetLanguage">Target language supplied to the member.</param>
+/// <param name="Engine">Engine supplied to the member.</param>
+/// <param name="Model">Model supplied to the member.</param>
+/// <param name="AwaitDownload">Await download supplied to the member.</param>
 public sealed record CliTranscribeRequest(
     string FilePath,
     string? Language,
@@ -22,10 +45,16 @@ public sealed record CliTranscribeRequest(
     string? Model,
     bool AwaitDownload);
 
+/// <summary>
+/// Provides cli connection resolver behavior.
+/// </summary>
 public static class CliConnectionResolver
 {
     private const int DefaultPort = 8978;
 
+    /// <summary>
+    /// Resolves the supplied input to a configured value.
+    /// </summary>
     public static CliConnection Resolve(CliConnectionOptions options)
     {
         var appDirectory = Path.Join(
@@ -46,6 +75,9 @@ public static class CliConnectionResolver
         return new CliConnection(port, token);
     }
 
+    /// <summary>
+    /// Returns whether port in range.
+    /// </summary>
     public static bool IsPortInRange(int port) => port is >= 1 and <= 65535;
 
     private static ApiDiscovery? ReadDiscovery(string path)
@@ -93,14 +125,29 @@ public static class CliConnectionResolver
 
     private sealed record ApiDiscovery
     {
+        /// <summary>
+        /// Gets or sets the version value.
+        /// </summary>
         public int Version { get; init; }
+        /// <summary>
+        /// Gets or sets the port value.
+        /// </summary>
         public int Port { get; init; }
+        /// <summary>
+        /// Gets or sets the token value.
+        /// </summary>
         public string? Token { get; init; }
     }
 }
 
+/// <summary>
+/// Provides cli request builder behavior.
+/// </summary>
 public static class CliRequestBuilder
 {
+    /// <summary>
+    /// Builds get.
+    /// </summary>
     public static HttpRequestMessage BuildGet(string baseUrl, string path, string? apiToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(baseUrl, path));
@@ -108,6 +155,9 @@ public static class CliRequestBuilder
         return request;
     }
 
+    /// <summary>
+    /// Builds transcribe local file.
+    /// </summary>
     public static HttpRequestMessage BuildTranscribeLocalFile(
         string baseUrl,
         CliTranscribeRequest request,
@@ -137,12 +187,18 @@ public static class CliRequestBuilder
         return message;
     }
 
+    /// <summary>
+    /// Applies api token.
+    /// </summary>
     public static void ApplyApiToken(HttpRequestMessage request, string? apiToken)
     {
         if (!string.IsNullOrWhiteSpace(apiToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiToken.Trim());
     }
 
+    /// <summary>
+    /// Builds stdin file name.
+    /// </summary>
     public static string BuildStdinFileName(ReadOnlySpan<byte> audioBytes)
     {
         if (audioBytes.Length >= 12

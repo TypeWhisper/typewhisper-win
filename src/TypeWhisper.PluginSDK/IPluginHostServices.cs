@@ -25,6 +25,9 @@ public interface IPluginHostServices
     /// <summary>Directory where the plugin can store its own data files.</summary>
     string PluginDataDirectory { get; }
 
+    /// <summary>Directory where the plugin can store large downloadable assets such as models and runtimes.</summary>
+    string PluginAssetDirectory => PluginDataDirectory;
+
     /// <summary>Process name of the currently active foreground application, or null.</summary>
     string? ActiveAppProcessName { get; }
 
@@ -65,6 +68,12 @@ public interface IPluginHostServices
 /// </summary>
 public interface ILivePreviewAppearanceProvider
 {
+    /// <summary>
+    /// Gets the live transcription font size in device-independent pixels.
+    /// </summary>
     double LiveTranscriptionFontSize { get; }
+    /// <summary>
+    /// Gets the preview bubble auto hide milliseconds.
+    /// </summary>
     int PreviewBubbleAutoHideMilliseconds { get; }
 }

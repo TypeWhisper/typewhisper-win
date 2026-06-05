@@ -3,16 +3,37 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
 
+/// <summary>
+/// Lists the supported cloud folder sync provider values.
+/// </summary>
 public enum CloudFolderSyncProvider
 {
+    /// <summary>
+    /// Represents the i cloud drive option.
+    /// </summary>
     ICloudDrive,
+    /// <summary>
+    /// Represents the one drive option.
+    /// </summary>
     OneDrive,
+    /// <summary>
+    /// Represents the dropbox option.
+    /// </summary>
     Dropbox,
+    /// <summary>
+    /// Represents the custom option.
+    /// </summary>
     Custom
 }
 
+/// <summary>
+/// Provides cloud folder sync provider detector behavior.
+/// </summary>
 public static class CloudFolderSyncProviderDetector
 {
+    /// <summary>
+    /// Detects.
+    /// </summary>
     public static CloudFolderSyncProvider Detect(string? folderPath)
     {
         var path = (folderPath ?? string.Empty).ToLowerInvariant();
@@ -33,64 +54,159 @@ public static class CloudFolderSyncProviderDetector
     }
 }
 
+/// <summary>
+/// Provides cloud folder sync not entitled exception behavior.
+/// </summary>
 public sealed class CloudFolderSyncNotEntitledException : InvalidOperationException
 {
+    /// <summary>
+    /// Initializes a new instance of the CloudFolderSyncNotEntitledException class.
+    /// </summary>
     public CloudFolderSyncNotEntitledException()
         : base("Cloud Folder Sync requires an active Commercial license.")
     {
     }
 }
 
+/// <summary>
+/// Provides cloud folder sync missing store exception behavior.
+/// </summary>
 public sealed class CloudFolderSyncMissingStoreException : InvalidOperationException
 {
+    /// <summary>
+    /// Initializes a new instance of the CloudFolderSyncMissingStoreException class.
+    /// </summary>
     public CloudFolderSyncMissingStoreException()
         : base("TypeWhisper user data is unavailable.")
     {
     }
 }
 
+/// <summary>
+/// Represents cloud folder sync state data.
+/// </summary>
 public sealed record CloudFolderSyncState
 {
+    /// <summary>
+    /// Returns the device id.
+    /// </summary>
     public string DeviceId { get; set; } = Guid.NewGuid().ToString();
+    /// <summary>
+    /// Gets or sets the known local item ids value.
+    /// </summary>
     public HashSet<string> KnownLocalItemIds { get; set; } = [];
+    /// <summary>
+    /// Gets or sets the exported item versions value.
+    /// </summary>
     public Dictionary<string, string> ExportedItemVersions { get; set; } = [];
+    /// <summary>
+    /// Gets or sets the applied operation ids value.
+    /// </summary>
     public HashSet<string> AppliedOperationIds { get; set; } = [];
+    /// <summary>
+    /// Gets or sets the last sync at value.
+    /// </summary>
     public DateTime? LastSyncAt { get; set; }
 }
 
+/// <summary>
+/// Represents cloud folder sync result data.
+/// </summary>
+/// <param name="OperationsRead">Operations read supplied to the member.</param>
+/// <param name="OperationsWritten">Operations written supplied to the member.</param>
+/// <param name="MutationsApplied">Mutations applied supplied to the member.</param>
+/// <param name="SyncedAt">Synced at supplied to the member.</param>
 public sealed record CloudFolderSyncResult(
     int OperationsRead,
     int OperationsWritten,
     int MutationsApplied,
     DateTime SyncedAt);
 
+/// <summary>
+/// Represents cloud folder sync manifest data.
+/// </summary>
+/// <param name="SchemaVersion">Schema version supplied to the member.</param>
+/// <param name="CreatedBy">Created by supplied to the member.</param>
+/// <param name="UpdatedAt">Updated at supplied to the member.</param>
 public sealed record CloudFolderSyncManifest(int SchemaVersion, string CreatedBy, DateTime UpdatedAt);
 
+/// <summary>
+/// Represents cloud folder sync device record data.
+/// </summary>
+/// <param name="DeviceId">Device id supplied to the member.</param>
+/// <param name="Platform">Platform supplied to the member.</param>
+/// <param name="AppVersion">App version supplied to the member.</param>
+/// <param name="UpdatedAt">Updated at supplied to the member.</param>
 public sealed record CloudFolderSyncDeviceRecord(
     string DeviceId,
     string Platform,
     string AppVersion,
     DateTime UpdatedAt);
 
+/// <summary>
+/// Lists the supported cloud folder sync operation kind values.
+/// </summary>
 public enum CloudFolderSyncOperationKind
 {
+    /// <summary>
+    /// Represents the upsert option.
+    /// </summary>
     Upsert,
+    /// <summary>
+    /// Represents the delete option.
+    /// </summary>
     Delete
 }
 
+/// <summary>
+/// Represents cloud folder sync operation data.
+/// </summary>
 public sealed record CloudFolderSyncOperation
 {
+    /// <summary>
+    /// Gets or sets the schema version value.
+    /// </summary>
     public int SchemaVersion { get; init; } = 1;
+    /// <summary>
+    /// Gets or sets the operation id value.
+    /// </summary>
     public string OperationId { get; init; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the device id value.
+    /// </summary>
     public string DeviceId { get; init; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the collection value.
+    /// </summary>
     public UserDataSyncCollection Collection { get; init; }
+    /// <summary>
+    /// Gets or sets the item id value.
+    /// </summary>
     public string ItemId { get; init; } = string.Empty;
+    /// <summary>
+    /// Gets or sets the kind value.
+    /// </summary>
     public CloudFolderSyncOperationKind Kind { get; init; }
+    /// <summary>
+    /// Gets or sets the updated at value.
+    /// </summary>
     public DateTime UpdatedAt { get; init; }
+    /// <summary>
+    /// Gets or sets the deleted at value.
+    /// </summary>
     public DateTime? DeletedAt { get; init; }
+    /// <summary>
+    /// Gets or sets the dictionary value.
+    /// </summary>
     public UserDataSyncDictionaryEntry? Dictionary { get; init; }
+    /// <summary>
+    /// Gets or sets the snippet value.
+    /// </summary>
     public UserDataSyncSnippet? Snippet { get; init; }
 
+    /// <summary>
+    /// Upserts dictionary.
+    /// </summary>
     public static CloudFolderSyncOperation UpsertDictionary(
         UserDataSyncDictionaryEntry entry,
         string itemId,
@@ -108,6 +224,9 @@ public sealed record CloudFolderSyncOperation
             Dictionary = entry
         };
 
+    /// <summary>
+    /// Upserts snippet.
+    /// </summary>
     public static CloudFolderSyncOperation UpsertSnippet(
         UserDataSyncSnippet snippet,
         string itemId,
@@ -125,6 +244,9 @@ public sealed record CloudFolderSyncOperation
             Snippet = snippet
         };
 
+    /// <summary>
+    /// Performs delete.
+    /// </summary>
     public static CloudFolderSyncOperation Delete(
         UserDataSyncCollection collection,
         string itemId,
@@ -144,6 +266,15 @@ public sealed record CloudFolderSyncOperation
         };
 }
 
+/// <summary>
+/// Represents cloud folder sync record data.
+/// </summary>
+/// <param name="Collection">Collection supplied to the member.</param>
+/// <param name="ItemId">Item id supplied to the member.</param>
+/// <param name="UpdatedAt">Updated at supplied to the member.</param>
+/// <param name="Version">Version supplied to the member.</param>
+/// <param name="Dictionary">Dictionary supplied to the member.</param>
+/// <param name="Snippet">Snippet supplied to the member.</param>
 public sealed record CloudFolderSyncRecord(
     UserDataSyncCollection Collection,
     string ItemId,
@@ -152,6 +283,9 @@ public sealed record CloudFolderSyncRecord(
     UserDataSyncDictionaryEntry? Dictionary,
     UserDataSyncSnippet? Snippet);
 
+/// <summary>
+/// Provides cloud folder sync engine behavior.
+/// </summary>
 public static class CloudFolderSyncEngine
 {
     private const string PackageDirectoryName = "typewhisper-sync";
@@ -160,9 +294,15 @@ public static class CloudFolderSyncEngine
     private const string OperationsDirectoryName = "ops";
     private static readonly TimeSpan TombstoneRetention = TimeSpan.FromDays(90);
 
+    /// <summary>
+    /// Gets the package path.
+    /// </summary>
     public static string PackagePath(string folderPath) =>
         Path.Combine(folderPath, EnsureRelativePathSegment(PackageDirectoryName, nameof(PackageDirectoryName)));
 
+    /// <summary>
+    /// Performs sync asynchronously.
+    /// </summary>
     public static Task<CloudFolderSyncResult> SyncAsync(
         string folderPath,
         IUserDataSyncStore? store,
@@ -219,6 +359,9 @@ public static class CloudFolderSyncEngine
             syncNow));
     }
 
+    /// <summary>
+    /// Performs records from.
+    /// </summary>
     public static Dictionary<string, CloudFolderSyncRecord> RecordsFrom(UserDataSyncSnapshot snapshot)
     {
         var records = new Dictionary<string, CloudFolderSyncRecord>(StringComparer.Ordinal);
@@ -250,6 +393,9 @@ public static class CloudFolderSyncEngine
         return records;
     }
 
+    /// <summary>
+    /// Returns the winning operations.
+    /// </summary>
     public static Dictionary<string, CloudFolderSyncOperation> WinningOperations(IEnumerable<CloudFolderSyncOperation> operations)
     {
         var winners = new Dictionary<string, CloudFolderSyncOperation>(StringComparer.Ordinal);

@@ -17,6 +17,9 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     private readonly string _licenseUrl;
     private readonly bool _ownsHttpClient;
 
+    /// <summary>
+    /// Performs supertonic asset manager.
+    /// </summary>
     public SupertonicAssetManager(string assetRoot)
         : this(assetRoot, new HttpClient { Timeout = TimeSpan.FromHours(1) }, DefaultFiles, LicenseDownloadUrl, ownsHttpClient: true)
     {
@@ -45,13 +48,22 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
         _ownsHttpClient = ownsHttpClient;
     }
 
+    /// <summary>
+    /// Gets the asset root.
+    /// </summary>
     public string AssetRoot { get; }
 
+    /// <summary>
+    /// Gets the are assets ready.
+    /// </summary>
     public bool AreAssetsReady =>
         _files.All(file => File.Exists(GetPath(file.RelativePath)))
         && File.Exists(GetPath(SupertonicPaths.LicenseFileName))
         && File.Exists(GetPath(SupertonicPaths.SourceFileName));
 
+    /// <summary>
+    /// Downloads missing assets asynchronously.
+    /// </summary>
     public async Task DownloadMissingAssetsAsync(IProgress<double>? progress, CancellationToken ct)
     {
         Directory.CreateDirectory(AssetRoot);
@@ -111,6 +123,9 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
         progress?.Report(1.0);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_ownsHttpClient)

@@ -2,8 +2,14 @@ using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides watch folder export builder behavior.
+/// </summary>
 public static class WatchFolderExportBuilder
 {
+    /// <summary>
+    /// Performs build.
+    /// </summary>
     public static WatchFolderExportArtifact Build(
         WatchFolderOutputFormat format,
         WatchFolderTranscriptionResult result,

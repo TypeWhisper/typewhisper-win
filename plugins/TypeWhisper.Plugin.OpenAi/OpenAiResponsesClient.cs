@@ -11,6 +11,9 @@ internal sealed class OpenAiResponsesClient
     private readonly string _baseUrl;
     private readonly string _apiKey;
 
+    /// <summary>
+    /// Performs open ai responses client.
+    /// </summary>
     public OpenAiResponsesClient(HttpClient httpClient, string baseUrl, string apiKey)
     {
         _httpClient = httpClient;
@@ -18,6 +21,9 @@ internal sealed class OpenAiResponsesClient
         _apiKey = apiKey;
     }
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(
         string systemPrompt,
         string userText,

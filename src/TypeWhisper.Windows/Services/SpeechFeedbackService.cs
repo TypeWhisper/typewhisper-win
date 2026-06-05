@@ -8,7 +8,18 @@ using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Represents tts provider option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record TtsProviderOption(string Id, string DisplayName);
+/// <summary>
+/// Represents tts voice option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="LocaleIdentifier">Locale identifier supplied to the member.</param>
 public sealed record TtsVoiceOption(string Id, string DisplayName, string? LocaleIdentifier = null);
 
 /// <summary>
@@ -16,6 +27,9 @@ public sealed record TtsVoiceOption(string Id, string DisplayName, string? Local
 /// </summary>
 public sealed class SpeechFeedbackService : IDisposable
 {
+    /// <summary>
+    /// Defines the default voice option id constant.
+    /// </summary>
     public const string DefaultVoiceOptionId = "__typewhisper_default_voice__";
 
     private readonly ISettingsService _settings;
@@ -29,6 +43,9 @@ public sealed class SpeechFeedbackService : IDisposable
     private bool _disposed;
     private long _playbackVersion;
 
+    /// <summary>
+    /// Initializes a new instance of the SpeechFeedbackService class.
+    /// </summary>
     public SpeechFeedbackService(ISettingsService settings, PluginManager pluginManager)
         : this(settings, pluginManager, new WindowsSapiTtsProvider(settings))
     {
@@ -45,8 +62,14 @@ public sealed class SpeechFeedbackService : IDisposable
         _pluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
+    /// <summary>
+    /// Gets or sets the is enabled value.
+    /// </summary>
     public bool IsEnabled { get; set; }
 
+    /// <summary>
+    /// Gets whether is speaking.
+    /// </summary>
     public bool IsSpeaking
     {
         get
@@ -56,15 +79,27 @@ public sealed class SpeechFeedbackService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Raised when providers changes.
+    /// </summary>
     public event EventHandler? ProvidersChanged;
 
+    /// <summary>
+    /// Gets the available providers.
+    /// </summary>
     public IReadOnlyList<TtsProviderOption> AvailableProviders =>
         AllProviders()
             .Select(p => new TtsProviderOption(p.ProviderId, p.ProviderDisplayName))
             .ToList();
 
+    /// <summary>
+    /// Resolves speak provider.
+    /// </summary>
     public string EffectiveProviderId => ResolveSpeakProvider().ProviderId;
 
+    /// <summary>
+    /// Returns voice options.
+    /// </summary>
     public IReadOnlyList<TtsVoiceOption> GetVoiceOptions(string? providerId)
     {
         var provider = FindProvider(providerId) ?? _systemProvider;
@@ -84,6 +119,9 @@ public sealed class SpeechFeedbackService : IDisposable
         return voices;
     }
 
+    /// <summary>
+    /// Returns selected voice id.
+    /// </summary>
     public string? GetSelectedVoiceId(string? providerId)
     {
         var provider = FindProvider(providerId) ?? _systemProvider;
@@ -92,6 +130,9 @@ public sealed class SpeechFeedbackService : IDisposable
             : provider.SelectedVoiceId;
     }
 
+    /// <summary>
+    /// Selects the provider voice used for subsequent speech output.
+    /// </summary>
     public void SelectVoice(string? providerId, string? voiceId)
     {
         var provider = FindProvider(providerId) ?? _systemProvider;
@@ -105,16 +146,28 @@ public sealed class SpeechFeedbackService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Returns whether default voice option id.
+    /// </summary>
     public static bool IsDefaultVoiceOptionId(string? voiceId) =>
         string.IsNullOrWhiteSpace(voiceId) ||
         string.Equals(voiceId, DefaultVoiceOptionId, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Performs speak.
+    /// </summary>
     public void Speak(string text, string? language = null) =>
         SpeakCore(new TtsSpeakRequest(text, language, TtsPurpose.Status), requireEnabled: true);
 
+    /// <summary>
+    /// Synthesizes automatic transcription.
+    /// </summary>
     public void SpeakAutomaticTranscription(string text, string? language = null) =>
         SpeakCore(new TtsSpeakRequest(text, language, TtsPurpose.Transcription), requireEnabled: true);
 
+    /// <summary>
+    /// Reads back.
+    /// </summary>
     public void ReadBack(string text, string? language = null)
     {
         if (IsSpeaking)
@@ -126,13 +179,25 @@ public sealed class SpeechFeedbackService : IDisposable
         SpeakCore(new TtsSpeakRequest(text, language, TtsPurpose.ManualReadback), requireEnabled: false);
     }
 
+    /// <summary>
+    /// Announces recording started.
+    /// </summary>
     public void AnnounceRecordingStarted() => Speak("Recording");
 
+    /// <summary>
+    /// Announces transcription complete.
+    /// </summary>
     public void AnnounceTranscriptionComplete(string text, string? language = null) =>
         SpeakAutomaticTranscription(text, language);
 
+    /// <summary>
+    /// Announces error.
+    /// </summary>
     public void AnnounceError(string reason) => Speak($"Error: {reason}");
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         CancellationTokenSource? cts;
@@ -313,6 +378,9 @@ public sealed class SpeechFeedbackService : IDisposable
     private void OnPluginStateChanged(object? sender, EventArgs e) =>
         ProvidersChanged?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;

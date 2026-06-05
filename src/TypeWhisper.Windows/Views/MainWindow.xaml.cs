@@ -6,6 +6,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Views;
 
+/// <summary>
+/// Provides main window behavior.
+/// </summary>
 public partial class MainWindow : Window
 {
     private const int GWL_EXSTYLE = -20;
@@ -35,9 +38,21 @@ public partial class MainWindow : Window
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo
     {
+        /// <summary>
+        /// Gets the cb size.
+        /// </summary>
         public int cbSize;
+        /// <summary>
+        /// Gets the rc monitor.
+        /// </summary>
         public RECT rcMonitor;
+        /// <summary>
+        /// Gets the rc work.
+        /// </summary>
         public RECT rcWork;
+        /// <summary>
+        /// Gets or sets the Win32 flags field.
+        /// </summary>
         public uint dwFlags;
     }
 
@@ -46,6 +61,9 @@ public partial class MainWindow : Window
 
     private readonly ISettingsService _settings;
 
+    /// <summary>
+    /// Initializes a new instance of the MainWindow class.
+    /// </summary>
     public MainWindow(ViewModels.DictationViewModel viewModel, ISettingsService settings)
     {
         InitializeComponent();
@@ -53,6 +71,9 @@ public partial class MainWindow : Window
         _settings = settings;
     }
 
+    /// <summary>
+    /// Marks the overlay window as non-activating and tool-window styled once the native handle exists.
+    /// </summary>
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);

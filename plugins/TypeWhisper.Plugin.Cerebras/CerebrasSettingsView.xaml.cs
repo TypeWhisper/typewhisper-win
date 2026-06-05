@@ -4,10 +4,16 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.Cerebras;
 
+/// <summary>
+/// Provides cerebras settings view behavior.
+/// </summary>
 public partial class CerebrasSettingsView : UserControl
 {
     private readonly CerebrasPlugin _plugin;
 
+    /// <summary>
+    /// Initializes a new instance of the CerebrasSettingsView class.
+    /// </summary>
     public CerebrasSettingsView(CerebrasPlugin plugin)
     {
         _plugin = plugin;

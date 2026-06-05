@@ -12,6 +12,9 @@ public partial class LiveTranscriptSettingsView : UserControl
     private readonly LiveTranscriptPlugin _plugin;
     private bool _initialized;
 
+    /// <summary>
+    /// Initializes a new instance of the LiveTranscriptSettingsView class.
+    /// </summary>
     public LiveTranscriptSettingsView(LiveTranscriptPlugin plugin)
     {
         _plugin = plugin;

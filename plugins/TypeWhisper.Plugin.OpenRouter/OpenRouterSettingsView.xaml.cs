@@ -7,6 +7,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenRouter;
 
+/// <summary>
+/// Provides open router settings view behavior.
+/// </summary>
 public partial class OpenRouterSettingsView : UserControl
 {
     private readonly OpenRouterPlugin _plugin;
@@ -14,6 +17,9 @@ public partial class OpenRouterSettingsView : UserControl
     private bool _isLoading;
     private bool _showApiKey;
 
+    /// <summary>
+    /// Initializes a new instance of the OpenRouterSettingsView class.
+    /// </summary>
     public OpenRouterSettingsView(OpenRouterPlugin plugin)
     {
         _plugin = plugin;
@@ -346,6 +352,9 @@ public partial class OpenRouterSettingsView : UserControl
 
     private sealed record ModelPickerItem(string Id, string DisplayName, string Pricing)
     {
+        /// <summary>
+        /// Gets the display text.
+        /// </summary>
         public string DisplayText =>
             string.IsNullOrWhiteSpace(Pricing) ? DisplayName : $"{DisplayName} - {Pricing}";
     }

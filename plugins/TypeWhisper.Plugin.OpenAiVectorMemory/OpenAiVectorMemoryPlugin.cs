@@ -10,6 +10,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenAiVectorMemory;
 
+/// <summary>
+/// Provides open ai vector memory plugin behavior.
+/// </summary>
 public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
 {
     private const string EmbeddingModel = "text-embedding-3-small";
@@ -29,10 +32,22 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.openai-vector-memory";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "OpenAI Vector Memory";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -41,6 +56,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={!string.IsNullOrEmpty(_apiKey)})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
@@ -48,6 +66,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView()
     {
         var panel = new StackPanel { Margin = new Thickness(8) };
@@ -100,6 +121,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
 
     // IMemoryStoragePlugin
 
+    /// <summary>
+    /// Performs store asynchronously.
+    /// </summary>
     public async Task StoreAsync(string content, CancellationToken ct)
     {
         EnsureConfigured();
@@ -126,6 +150,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Performs search asynchronously.
+    /// </summary>
     public async Task<IReadOnlyList<string>> SearchAsync(string query, int maxResults = 5, CancellationToken ct = default)
     {
         EnsureConfigured();
@@ -152,6 +179,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Returns all asynchronously.
+    /// </summary>
     public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -166,6 +196,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Performs delete asynchronously.
+    /// </summary>
     public async Task DeleteAsync(string content, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -183,6 +216,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Clears all asynchronously.
+    /// </summary>
     public async Task ClearAllAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -199,6 +235,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
         }
     }
 
+    /// <summary>
+    /// Counts asynchronously..
+    /// </summary>
     public async Task<int> CountAsync(CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
@@ -319,6 +358,9 @@ public sealed class OpenAiVectorMemoryPlugin : IMemoryStoragePlugin
             throw new InvalidOperationException("OpenAI API key not configured. Set it in plugin settings.");
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

@@ -3,11 +3,20 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.NumberNormalization;
 
+/// <summary>
+/// Applies number word normalization to transcription text and segments.
+/// </summary>
 public static class TranscriptionNumberNormalizationService
 {
+    /// <summary>
+    /// Resolves whether number normalization is enabled for a transcription request.
+    /// </summary>
     public static bool IsEnabled(bool globalEnabled = true, bool? normalizeNumbersOverride = null) =>
         normalizeNumbersOverride ?? globalEnabled;
 
+    /// <summary>
+    /// Normalizes spoken number words in transcription text.
+    /// </summary>
     public static string NormalizeText(
         string text,
         TranscriptionTask transcriptionTask,
@@ -34,6 +43,9 @@ public static class TranscriptionNumberNormalizationService
         return text;
     }
 
+    /// <summary>
+    /// Normalizes spoken number words in a transcription result and its segments.
+    /// </summary>
     public static TranscriptionResult NormalizeResult(
         TranscriptionResult result,
         TranscriptionTask transcriptionTask,
@@ -63,6 +75,9 @@ public static class TranscriptionNumberNormalizationService
         };
     }
 
+    /// <summary>
+    /// Normalizes spoken number words in transcription segments.
+    /// </summary>
     public static IReadOnlyList<TranscriptionSegment> NormalizeSegments(
         IReadOnlyList<TranscriptionSegment> segments,
         TranscriptionTask transcriptionTask,

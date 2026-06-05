@@ -11,8 +11,17 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Represents localized industry preset option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+/// <param name="TermPackId">Term pack id supplied to the member.</param>
 public sealed record LocalizedIndustryPresetOption(string Id, string DisplayName, string? TermPackId);
 
+/// <summary>
+/// Provides dictionary view model behavior.
+/// </summary>
 public partial class DictionaryViewModel : ObservableObject, IDisposable
 {
     private readonly IDictionaryService _dictionary;
@@ -28,6 +37,9 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private bool _vocabularyBoostingEnabled;
 
+    /// <summary>
+    /// Returns whether search text.
+    /// </summary>
     public bool HasSearchText => !string.IsNullOrWhiteSpace(SearchText);
 
     // Add form
@@ -37,12 +49,18 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _newCaseSensitive;
 
     // Segmented button helpers
+    /// <summary>
+    /// Gets whether is new type correction.
+    /// </summary>
     public bool IsNewTypeCorrection
     {
         get => NewEntryType == DictionaryEntryType.Correction;
         set { if (value) NewEntryType = DictionaryEntryType.Correction; }
     }
 
+    /// <summary>
+    /// Gets whether is new type term.
+    /// </summary>
     public bool IsNewTypeTerm
     {
         get => NewEntryType == DictionaryEntryType.Term;
@@ -57,20 +75,44 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _editCaseSensitive;
 
     // Entry count for display
+    /// <summary>
+    /// Performs entry count.
+    /// </summary>
     public int EntryCount => FilteredEntries.Cast<object>().Count();
+    /// <summary>
+    /// Performs active boosting term count.
+    /// </summary>
     public int ActiveBoostingTermCount => _dictionary.Entries.Count(entry =>
         entry.IsEnabled && entry.EntryType == DictionaryEntryType.Term);
+    /// <summary>
+    /// Gets the vocabulary boosting status text.
+    /// </summary>
     public string VocabularyBoostingStatusText => ActiveBoostingTermCount == 0
         ? Loc.Instance["Dictionary.BoostingNoTerms"]
         : Loc.Instance.GetString("Dictionary.BoostingReadyFormat", ActiveBoostingTermCount);
 
+    /// <summary>
+    /// Gets the configured dictionary entries.
+    /// </summary>
     public ObservableCollection<DictionaryEntry> Entries { get; } = [];
+    /// <summary>
+    /// Gets the filtered entries.
+    /// </summary>
     public ICollectionView FilteredEntries { get; }
+    /// <summary>
+    /// Gets the packs.
+    /// </summary>
     public ObservableCollection<TermPackViewModel> Packs { get; } = [];
+    /// <summary>
+    /// Gets the industry presets.
+    /// </summary>
     public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets { get; } = [];
 
     [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
+    /// <summary>
+    /// Initializes a new instance of the DictionaryViewModel class.
+    /// </summary>
     public DictionaryViewModel(
         IDictionaryService dictionary,
         ISettingsService settings,
@@ -98,6 +140,9 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         _ = LoadRemotePacksAsync();
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _dictionary.EntriesChanged -= RefreshEntries;
@@ -295,6 +340,9 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         InitializeIndustryPresets();
     }
 
+    /// <summary>
+    /// Applies industry preset.
+    /// </summary>
     public void ApplyIndustryPreset(string? presetId)
     {
         var preset = IndustryPreset.Resolve(presetId);
@@ -434,14 +482,26 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     }
 }
 
+/// <summary>
+/// Provides term pack view model behavior.
+/// </summary>
 public partial class TermPackViewModel : ObservableObject
 {
+    /// <summary>
+    /// Gets the pack.
+    /// </summary>
     public TermPack Pack { get; }
     [ObservableProperty] private bool _isEnabled;
 
+    /// <summary>
+    /// Performs terms preview.
+    /// </summary>
     public string TermsPreview => string.Join(", ", Pack.Terms.Take(8)) +
         (Pack.Terms.Length > 8 ? $" +{Pack.Terms.Length - 8}" : "");
 
+    /// <summary>
+    /// Initializes a new instance of the TermPackViewModel class.
+    /// </summary>
     public TermPackViewModel(TermPack pack, bool isEnabled)
     {
         Pack = pack;

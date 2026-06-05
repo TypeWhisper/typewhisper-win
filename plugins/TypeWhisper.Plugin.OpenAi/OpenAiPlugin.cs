@@ -10,6 +10,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.OpenAi;
 
+/// <summary>
+/// Provides open ai plugin behavior.
+/// </summary>
 public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ITtsProviderPlugin
 {
     private const string BaseUrl = "https://api.openai.com";
@@ -88,6 +91,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         new("gpt-5.1-codex-mini", "GPT-5.1 Codex Mini"),
     ];
 
+    /// <summary>
+    /// Initializes a new instance of the OpenAiPlugin class.
+    /// </summary>
     public OpenAiPlugin()
         : this(new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
     {
@@ -101,10 +107,22 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.openai";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "OpenAI / ChatGPT";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.1.1";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -129,35 +147,68 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new OpenAiSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "openai";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "OpenAI / ChatGPT";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
         TranscriptionModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList();
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
 
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation =>
         IsConfigured
         && SelectedModelEntry is { SupportsTranslation: true };
 
+    /// <summary>
+    /// Gets whether the provider supports live streaming transcription.
+    /// </summary>
     public bool SupportsStreaming =>
         IsConfigured
         && SelectedModelEntry is { SupportsStreaming: true };
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId) => SelectModelCore(modelId, persist: true);
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
@@ -182,6 +233,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             wavAudio, NormalizeLanguage(language), translate, _selectedResponseFormat, ct, prompt);
     }
 
+    /// <summary>
+    /// Opens a streaming transcription session for live audio.
+    /// </summary>
     public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -194,13 +248,22 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "OpenAI";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => _authMode switch
     {
         OpenAiAuthMode.ChatGpt => HasChatGptCredentials,
         _ => IsConfigured,
     };
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _authMode == OpenAiAuthMode.ChatGpt
             ? ChatGptModels
@@ -218,6 +281,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     internal string TemperatureMode => _temperatureMode;
     internal double TemperatureValue => _temperatureValue;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model)
@@ -489,9 +555,18 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     // ITtsProviderPlugin
 
     IReadOnlyList<PluginVoiceInfo> ITtsProviderPlugin.AvailableVoices => OpenAiTtsConfiguration.AvailableVoices;
+    /// <summary>
+    /// Gets the voices exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginVoiceInfo> AvailableVoices => OpenAiTtsConfiguration.AvailableVoices;
+    /// <summary>
+    /// Gets the currently selected provider voice identifier.
+    /// </summary>
     public string? SelectedVoiceId => _selectedVoiceId ?? OpenAiTtsConfiguration.DefaultVoiceId;
 
+    /// <summary>
+    /// Gets the user-facing summary of the current settings.
+    /// </summary>
     public string? SettingsSummary
     {
         get
@@ -502,12 +577,18 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         }
     }
 
+    /// <summary>
+    /// Selects the provider voice used for subsequent speech output.
+    /// </summary>
     public void SelectVoice(string? voiceId)
     {
         _selectedVoiceId = NormalizeVoiceId(voiceId);
         _host?.SetSetting(SelectedVoiceSettingName, _selectedVoiceId);
     }
 
+    /// <summary>
+    /// Synthesizes speech and returns a playback session.
+    /// </summary>
     public async Task<ITtsPlaybackSession> SpeakAsync(TtsSpeakRequest request, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -569,6 +650,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

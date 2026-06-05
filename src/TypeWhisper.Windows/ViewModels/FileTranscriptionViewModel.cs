@@ -12,6 +12,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides file transcription view model behavior.
+/// </summary>
 public partial class FileTranscriptionViewModel : ObservableObject
 {
     private const string WatchFolderDefaultSelectionId = "__default__";
@@ -55,25 +58,81 @@ public partial class FileTranscriptionViewModel : ObservableObject
     [ObservableProperty] private bool _isWatchFolderRunning;
     [ObservableProperty] private string? _currentlyProcessingWatchFile;
 
+    /// <summary>
+    /// Gets the items.
+    /// </summary>
     public ObservableCollection<FileTranscriptionQueueItemViewModel> Items { get; } = [];
+    /// <summary>
+    /// Gets the watch folder output format options.
+    /// </summary>
     public ObservableCollection<WatchFolderOutputFormatOption> WatchFolderOutputFormatOptions { get; } = [];
+    /// <summary>
+    /// Gets the watch folder language options.
+    /// </summary>
     public ObservableCollection<WatchFolderLanguageOption> WatchFolderLanguageOptions { get; } = [];
+    /// <summary>
+    /// Gets the file transcription engine options.
+    /// </summary>
     public ObservableCollection<WatchFolderEngineOption> FileTranscriptionEngineOptions { get; } = [];
+    /// <summary>
+    /// Gets the file transcription model options.
+    /// </summary>
     public ObservableCollection<WatchFolderModelOption> FileTranscriptionModelOptions { get; } = [];
+    /// <summary>
+    /// Gets the watch folder engine options.
+    /// </summary>
     public ObservableCollection<WatchFolderEngineOption> WatchFolderEngineOptions { get; } = [];
+    /// <summary>
+    /// Gets the watch folder model options.
+    /// </summary>
     public ObservableCollection<WatchFolderModelOption> WatchFolderModelOptions { get; } = [];
+    /// <summary>
+    /// Gets the watch folder history.
+    /// </summary>
     public ObservableCollection<WatchFolderHistoryItem> WatchFolderHistory { get; } = [];
+    /// <summary>
+    /// Gets whether has items.
+    /// </summary>
     public bool HasItems => Items.Count > 0;
+
+    /// <summary>
+    /// Gets whether the file queue contains items that can be cleared.
+    /// </summary>
     public bool HasClearableItems => Items.Any(IsClearableQueueItem);
+
+    /// <summary>
+    /// Returns whether watch folder path.
+    /// </summary>
     public bool HasWatchFolderPath => !string.IsNullOrWhiteSpace(WatchFolderPath);
+    /// <summary>
+    /// Returns whether watch folder output path.
+    /// </summary>
     public bool HasWatchFolderOutputPath => !string.IsNullOrWhiteSpace(WatchFolderOutputPath);
+    /// <summary>
+    /// Gets whether has watch folder history.
+    /// </summary>
     public bool HasWatchFolderHistory => WatchFolderHistory.Count > 0;
+    /// <summary>
+    /// Returns whether choose file transcription model.
+    /// </summary>
     public bool CanChooseFileTranscriptionModel => !string.IsNullOrWhiteSpace(FileTranscriptionEngineOverride);
+    /// <summary>
+    /// Gets whether is watch folder stopped.
+    /// </summary>
     public bool IsWatchFolderStopped => !IsWatchFolderRunning;
+    /// <summary>
+    /// Returns whether choose watch folder model.
+    /// </summary>
     public bool CanChooseWatchFolderModel => !string.IsNullOrWhiteSpace(WatchFolderEngineOverride);
+    /// <summary>
+    /// Gets the watch folder output path display.
+    /// </summary>
     public string WatchFolderOutputPathDisplay => HasWatchFolderOutputPath
         ? WatchFolderOutputPath!
         : Loc.Instance["WatchFolder.OutputSameAsWatch"];
+    /// <summary>
+    /// Gets the watch folder status text.
+    /// </summary>
     public string WatchFolderStatusText
     {
         get
@@ -87,6 +146,9 @@ public partial class FileTranscriptionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the FileTranscriptionViewModel class.
+    /// </summary>
     public FileTranscriptionViewModel(
         IFileTranscriptionProcessor processor,
         ModelManagerService modelManager,
@@ -255,6 +317,9 @@ public partial class FileTranscriptionViewModel : ObservableObject
         ExportFile(item, "txt", item.ResultText);
     }
 
+    /// <summary>
+    /// Performs handle file drop.
+    /// </summary>
     public void HandleFileDrop(string[] files)
     {
         AddFiles(files);
@@ -395,8 +460,14 @@ public partial class FileTranscriptionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Sets watch folder path.
+    /// </summary>
     public void SetWatchFolderPath(string path) => WatchFolderPath = path;
 
+    /// <summary>
+    /// Sets watch folder output path.
+    /// </summary>
     public void SetWatchFolderOutputPath(string path) => WatchFolderOutputPath = path;
 
     [RelayCommand]
@@ -429,6 +500,9 @@ public partial class FileTranscriptionViewModel : ObservableObject
         SyncWatchFolderState();
     }
 
+    /// <summary>
+    /// Starts watch folder from settings.
+    /// </summary>
     public void StartWatchFolderFromSettings()
     {
         if (!HasWatchFolderPath)
@@ -886,7 +960,27 @@ public partial class FileTranscriptionViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents watch folder output format option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WatchFolderOutputFormatOption(string Id, string DisplayName);
+/// <summary>
+/// Represents watch folder language option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WatchFolderLanguageOption(string Id, string DisplayName);
+/// <summary>
+/// Represents watch folder engine option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WatchFolderEngineOption(string Id, string DisplayName);
+/// <summary>
+/// Represents watch folder model option data.
+/// </summary>
+/// <param name="Id">Id supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WatchFolderModelOption(string Id, string DisplayName);

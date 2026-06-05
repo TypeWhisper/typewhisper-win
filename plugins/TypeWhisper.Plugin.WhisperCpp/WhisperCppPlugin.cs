@@ -11,6 +11,9 @@ using Whisper.net.LibraryLoader;
 
 namespace TypeWhisper.Plugin.WhisperCpp;
 
+/// <summary>
+/// Provides whisper cpp plugin behavior.
+/// </summary>
 public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
 {
     private const string CudaRuntimeDependencyHint =
@@ -61,6 +64,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
 
+    /// <summary>
+    /// Initializes a new instance of the WhisperCppPlugin class.
+    /// </summary>
     public WhisperCppPlugin()
     {
     }
@@ -70,17 +76,50 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _cudaRuntimeInstaller = cudaRuntimeInstaller;
     }
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.whisper-cpp";
+    /// <summary>
+    /// Gets the plugin name.
+    /// </summary>
     public string PluginName => "whisper.cpp (Local)";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.2";
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "whisper-cpp";
+    /// <summary>
+    /// Gets the provider display name.
+    /// </summary>
     public string ProviderDisplayName => "Local (whisper.cpp)";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => true;
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => true;
+    /// <summary>
+    /// Gets whether the provider can download models through the host.
+    /// </summary>
     public bool SupportsModelDownload => true;
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages => [];
+    /// <summary>
+    /// Gets the supported acceleration backends.
+    /// </summary>
     public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
     [
         TranscriptionAccelerationBackend.Cpu,
@@ -88,9 +127,18 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         TranscriptionAccelerationBackend.AmdVulkan,
         TranscriptionAccelerationBackend.AmdRocm
     ];
+    /// <summary>
+    /// Gets the acceleration preference.
+    /// </summary>
     public TranscriptionAccelerationPreference AccelerationPreference => _accelerationPreference;
+    /// <summary>
+    /// Gets the acceleration status.
+    /// </summary>
     public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
 
+    /// <summary>
+    /// Gets the transcription models.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(model =>
         new PluginModelInfo(model.Id, model.DisplayName)
         {
@@ -100,6 +148,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             LanguageCount = model.LanguageCount,
         }).ToList();
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -111,6 +162,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public async Task DeactivateAsync()
     {
         await UnloadModelAsync();
@@ -118,8 +172,14 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _pluginDirectory = null;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => null;
 
+    /// <summary>
+    /// Sets acceleration preference.
+    /// </summary>
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
         _runtimeRestartRequired = RequiresRuntimeRestart(preference)
@@ -142,6 +202,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 ResolveRocmLibraryPathFromEnvironment() is not null);
     }
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         _ = GetModel(modelId);
@@ -149,8 +212,14 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _host?.SetSetting("selectedModel", modelId);
     }
 
+    /// <summary>
+    /// Gets whether the requested model is available locally.
+    /// </summary>
     public bool IsModelDownloaded(string modelId) => File.Exists(GetModelPath(modelId));
 
+    /// <summary>
+    /// Downloads the requested model and reports progress when available.
+    /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
@@ -214,6 +283,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }
     }
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
         var modelPath = GetModelPath(modelId);
@@ -263,6 +335,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -323,6 +398,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }
     }
 
+    /// <summary>
+    /// Unloads model asynchronously..
+    /// </summary>
     public async Task UnloadModelAsync()
     {
         await _gate.WaitAsync();
@@ -338,6 +416,9 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         DisposeFactoryUnsafe();
@@ -536,7 +617,11 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
         var model = GetModel(modelId);
-        return Path.Combine(host.PluginDataDirectory, "Models", model.FileName);
+        var safeFileName = Path.GetFileName(model.FileName);
+        if (string.IsNullOrWhiteSpace(safeFileName) || safeFileName is "." or "..")
+            throw new InvalidOperationException("Model file name must not be empty.");
+
+        return Path.Join(host.PluginAssetDirectory, "Models", safeFileName);
     }
 
     internal static string BuildNativeLoadFailureMessage(

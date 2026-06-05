@@ -16,6 +16,9 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides http api service behavior.
+/// </summary>
 public sealed class HttpApiService : ILocalApiServer, IDisposable
 {
     private readonly ModelManagerService _modelManager;
@@ -44,8 +47,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         WriteIndented = false
     };
 
+    /// <summary>
+    /// Gets whether the service is currently running.
+    /// </summary>
     public bool IsRunning => _listener?.IsListening == true;
 
+    /// <summary>
+    /// Initializes a new instance of the HttpApiService class.
+    /// </summary>
     public HttpApiService(
         ModelManagerService modelManager,
         ISettingsService settings,
@@ -73,6 +82,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _dispatcher = CaptureActiveDispatcher();
     }
 
+    /// <summary>
+    /// Starts the service or session.
+    /// </summary>
     public void Start(int port)
     {
         if (_listener is { IsListening: true } && _runningPort == port) return;
@@ -89,6 +101,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _listenTask = Task.Run(() => ListenLoop(_cts.Token));
     }
 
+    /// <summary>
+    /// Stops the service or session.
+    /// </summary>
     public void Stop()
     {
         var cts = _cts;
@@ -727,6 +742,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { deleted = result.deleted, corrections = result.corrections, count = result.corrections.Count });
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -981,6 +999,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         bool AwaitDownload,
         bool? NormalizeNumbers)
     {
+        /// <summary>
+        /// Performs from.
+        /// </summary>
         public static TranscribeOptions From(TranscribeApiRequest request) =>
             new(
                 request.Language,
@@ -994,6 +1015,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 request.AwaitDownload,
                 request.NormalizeNumbers);
 
+        /// <summary>
+        /// Performs from.
+        /// </summary>
         public static TranscribeOptions From(LocalFileTranscribeApiRequest request) =>
             new(
                 request.Language,
@@ -1034,15 +1058,27 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
     private sealed record DictionaryCorrectionMutationRequest
     {
+        /// <summary>
+        /// Gets or sets the original value.
+        /// </summary>
         public string? Original { get; init; }
+        /// <summary>
+        /// Gets or sets the replacement value.
+        /// </summary>
         public string? Replacement { get; init; }
 
+        /// <summary>
+        /// Gets or sets the case sensitive value.
+        /// </summary>
         [JsonPropertyName("caseSensitive")]
         public bool CaseSensitive { get; init; }
     }
 
     private sealed record DictionaryTermDeleteRequest
     {
+        /// <summary>
+        /// Gets or sets the term value.
+        /// </summary>
         public string? Term { get; init; }
     }
 
@@ -1126,7 +1162,13 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
     private sealed record DictionaryTermsRequest
     {
+        /// <summary>
+        /// Gets or sets the terms value.
+        /// </summary>
         public IReadOnlyList<string> Terms { get; init; } = [];
+        /// <summary>
+        /// Gets or sets the replace value.
+        /// </summary>
         public bool? Replace { get; init; }
     }
 

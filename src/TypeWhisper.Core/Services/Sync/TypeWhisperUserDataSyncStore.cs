@@ -3,6 +3,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
 
+/// <summary>
+/// Provides type whisper user data sync store behavior.
+/// </summary>
 public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
 {
     private readonly IDictionaryService _dictionary;
@@ -10,6 +13,9 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
     private readonly Dictionary<Guid, Action> _observers = [];
     private bool _isApplyingRemoteChanges;
 
+    /// <summary>
+    /// Initializes a new instance of the TypeWhisperUserDataSyncStore class.
+    /// </summary>
     public TypeWhisperUserDataSyncStore(IDictionaryService dictionary, ISnippetService snippets)
     {
         _dictionary = dictionary;
@@ -18,6 +24,9 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
         _snippets.SnippetsChanged += NotifyLocalChange;
     }
 
+    /// <summary>
+    /// Creates a snapshot.
+    /// </summary>
     public UserDataSyncSnapshot Snapshot()
     {
         var dictionaryEntries = _dictionary is DictionaryService concreteDictionary
@@ -30,6 +39,9 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
         return new UserDataSyncSnapshot(dictionaryEntries, snippets);
     }
 
+    /// <summary>
+    /// Applies the configured transformation to the supplied input.
+    /// </summary>
     public void Apply(IReadOnlyList<UserDataSyncMutation> mutations)
     {
         if (mutations.Count == 0)
@@ -54,6 +66,9 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
         }
     }
 
+    /// <summary>
+    /// Observes local changes.
+    /// </summary>
     public Guid ObserveLocalChanges(Action handler)
     {
         var id = Guid.NewGuid();
@@ -61,6 +76,9 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
         return id;
     }
 
+    /// <summary>
+    /// Removes local change observer.
+    /// </summary>
     public void RemoveLocalChangeObserver(Guid id)
     {
         _observers.Remove(id);

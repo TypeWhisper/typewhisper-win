@@ -6,8 +6,14 @@ using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
+/// <summary>
+/// Provides premium section behavior.
+/// </summary>
 public partial class PremiumSection : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the PremiumSection class.
+    /// </summary>
     public PremiumSection()
     {
         InitializeComponent();

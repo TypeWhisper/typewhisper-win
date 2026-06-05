@@ -5,11 +5,17 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Groq;
 
+/// <summary>
+/// Provides groq settings view behavior.
+/// </summary>
 public partial class GroqSettingsView : UserControl
 {
     private readonly GroqPlugin _plugin;
     private bool _suppressPasswordChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the GroqSettingsView class.
+    /// </summary>
     public GroqSettingsView(GroqPlugin plugin)
     {
         _plugin = plugin;

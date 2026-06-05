@@ -43,6 +43,7 @@ public class SettingsServiceTests : IDisposable
             FileTranscriptionEngineOverride = "groq",
             FileTranscriptionModelOverride = "whisper-large-v3",
             LocalModelAcceleration = AppSettings.LocalModelAccelerationAmdRocm,
+            LocalModelStoragePath = @"D:\TypeWhisperModels",
             WatchFolderPath = @"C:\Watch",
             WatchFolderOutputPath = @"C:\Output",
             WatchFolderOutputFormat = "srt",
@@ -56,6 +57,7 @@ public class SettingsServiceTests : IDisposable
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
             TranscriptionNumberNormalizationEnabled = false,
+            LastTranslationTargetLanguage = "fr",
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
             OnlineAsrBatchLiveTranscriptionEnabled = true,
@@ -85,6 +87,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("groq", sut2.Current.FileTranscriptionEngineOverride);
         Assert.Equal("whisper-large-v3", sut2.Current.FileTranscriptionModelOverride);
         Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, sut2.Current.LocalModelAcceleration);
+        Assert.Equal(@"D:\TypeWhisperModels", sut2.Current.LocalModelStoragePath);
         Assert.Equal(@"C:\Watch", sut2.Current.WatchFolderPath);
         Assert.Equal(@"C:\Output", sut2.Current.WatchFolderOutputPath);
         Assert.Equal("srt", sut2.Current.WatchFolderOutputFormat);
@@ -98,6 +101,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.False(sut2.Current.TranscriptionNumberNormalizationEnabled);
+        Assert.Equal("fr", sut2.Current.LastTranslationTargetLanguage);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
         Assert.False(sut2.Current.LiveTranscriptionEnabled);
         Assert.True(sut2.Current.OnlineAsrBatchLiveTranscriptionEnabled);
@@ -172,6 +176,21 @@ public class SettingsServiceTests : IDisposable
         var sut = new SettingsService(_filePath);
 
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, sut.Current.LocalModelAcceleration);
+    }
+
+    [Fact]
+    public void Load_BlankLocalModelStoragePath_FallsBackToDefaultNull()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en",
+          "localModelStoragePath": "   "
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Null(sut.Current.LocalModelStoragePath);
     }
 
     [Fact]

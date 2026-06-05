@@ -14,6 +14,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+/// <summary>
+/// Provides settings view model behavior.
+/// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsService _settings;
@@ -55,6 +58,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private double _previewBubbleAutoHideSeconds = AppSettings.DefaultPreviewBubbleAutoHideMilliseconds / 1000d;
     [ObservableProperty] private HistoryRetentionOption? _selectedHistoryRetentionOption;
     [ObservableProperty] private string _transcriptionTask = "transcribe";
+    [ObservableProperty] private bool _quickTranslationModeEnabled;
     [ObservableProperty] private int? _selectedMicrophoneDevice;
     [ObservableProperty] private float _previewLevel;
     [ObservableProperty] private bool _saveToHistoryEnabled = true;
@@ -79,17 +83,59 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _selectedSpokenFeedbackProviderId = AppSettings.DefaultSpokenFeedbackProviderId;
     [ObservableProperty] private string? _selectedSpokenFeedbackVoiceId;
 
+    /// <summary>
+    /// Gets the translation target options.
+    /// </summary>
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
+    /// <summary>
+    /// Gets the history retention options.
+    /// </summary>
     public ObservableCollection<HistoryRetentionOption> HistoryRetentionOptions { get; } = [];
+    /// <summary>
+    /// Gets the curl examples.
+    /// </summary>
     public ObservableCollection<CommandExample> CurlExamples { get; } = [];
+    /// <summary>
+    /// Gets the cli examples.
+    /// </summary>
     public ObservableCollection<CommandExample> CliExamples { get; } = [];
+    /// <summary>
+    /// Gets the spoken feedback providers.
+    /// </summary>
     public ObservableCollection<TtsProviderOption> SpokenFeedbackProviders { get; } = [];
+    /// <summary>
+    /// Gets the spoken feedback voices.
+    /// </summary>
     public ObservableCollection<TtsVoiceOption> SpokenFeedbackVoices { get; } = [];
+
+    /// <summary>
+    /// Gets the configured main dictation hotkeys.
+    /// </summary>
     public ObservableCollection<string> MainDictationHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets hotkeys that force toggle recording mode.
+    /// </summary>
     public ObservableCollection<string> ToggleOnlyHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets hotkeys that force hold-to-record mode.
+    /// </summary>
     public ObservableCollection<string> HoldOnlyHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets hotkeys that open the recent transcriptions palette.
+    /// </summary>
     public ObservableCollection<string> RecentTranscriptionsHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets hotkeys that copy the most recent transcription.
+    /// </summary>
     public ObservableCollection<string> CopyLastTranscriptionHotkeys { get; } = [];
+
+    /// <summary>
+    /// Gets hotkeys that open the workflow palette.
+    /// </summary>
     public ObservableCollection<string> WorkflowPaletteHotkeys { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
@@ -124,12 +170,21 @@ public partial class SettingsViewModel : ObservableObject
         new(HistoryRetentionMode.UntilAppCloses, null, Loc.Instance["Advanced.RetentionUntilAppCloses"])
     ];
 
+    /// <summary>
+    /// Gets the microphones.
+    /// </summary>
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
+    /// <summary>
+    /// Gets the widget options.
+    /// </summary>
     public ObservableCollection<OverlayWidgetOption> WidgetOptions { get; } = [];
 
     private MicrophoneItem? _selectedMicrophoneItem;
     private bool _isSyncingMicrophoneSelection;
 
+    /// <summary>
+    /// Gets the selected microphone item.
+    /// </summary>
     public MicrophoneItem? SelectedMicrophoneItem
     {
         get => _selectedMicrophoneItem;
@@ -145,8 +200,14 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Gets the preview bubble auto hide seconds text.
+    /// </summary>
     public string PreviewBubbleAutoHideSecondsText =>
         Loc.Instance.GetString("Appearance.AutoHideSecondsFormat", PreviewBubbleAutoHideSeconds);
+    /// <summary>
+    /// Gets the live transcription font size text.
+    /// </summary>
     public string LiveTranscriptionFontSizeText =>
         Loc.Instance.GetString("Appearance.LiveTextSizeFormat", LiveTranscriptionFontSize);
 
@@ -186,6 +247,35 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnLiveTranscriptionFontSizeChanged(double value) =>
         OnPropertyChanged(nameof(LiveTranscriptionFontSizeText));
 
+    partial void OnQuickTranslationModeEnabledChanged(bool value)
+    {
+        if (_isLoading) return;
+
+        if (value)
+        {
+            if (string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            {
+                TranslationTargetLanguage =
+                    _settings.Current.LastTranslationTargetLanguage
+                    ?? DefaultQuickTranslationTargetLanguage();
+            }
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            TranslationTargetLanguage = null;
+    }
+
+    partial void OnTranslationTargetLanguageChanged(string? value)
+    {
+        if (_isLoading) return;
+
+        SetQuickTranslationModeSilently(!string.IsNullOrWhiteSpace(value));
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the SettingsViewModel class.
+    /// </summary>
     public SettingsViewModel(
         ISettingsService settings,
         AudioRecordingService audio,
@@ -368,6 +458,9 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Starts microphone preview.
+    /// </summary>
     public void StartMicrophonePreview()
     {
         _audio.PreviewLevelChanged -= OnPreviewLevelChanged;
@@ -377,6 +470,9 @@ public partial class SettingsViewModel : ObservableObject
         _audio.PreviewLevelChanged += OnPreviewLevelChanged;
     }
 
+    /// <summary>
+    /// Stops microphone preview.
+    /// </summary>
     public void StopMicrophonePreview()
     {
         _audio.PreviewLevelChanged -= OnPreviewLevelChanged;
@@ -427,7 +523,8 @@ public partial class SettingsViewModel : ObservableObject
             HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
             TranscriptionTask = TranscriptionTask,
             SelectedMicrophoneDevice = SelectedMicrophoneDevice,
-            TranslationTargetLanguage = TranslationTargetLanguage,
+            TranslationTargetLanguage = NormalizeTranslationTarget(TranslationTargetLanguage),
+            LastTranslationTargetLanguage = ResolveLastTranslationTarget(),
             ApiServerEnabled = ApiServerEnabled,
             ApiServerPort = ApiServerPort,
             ApiServerRequiresAuthentication = ApiServerRequiresAuthentication,
@@ -527,6 +624,7 @@ public partial class SettingsViewModel : ObservableObject
         TranscriptionTask = s.TranscriptionTask;
         SelectedMicrophoneDevice = s.SelectedMicrophoneDevice;
         TranslationTargetLanguage = s.TranslationTargetLanguage;
+        QuickTranslationModeEnabled = !string.IsNullOrWhiteSpace(s.TranslationTargetLanguage);
         ApiServerEnabled = s.ApiServerEnabled;
         ApiServerPort = s.ApiServerPort;
         ApiServerRequiresAuthentication = s.ApiServerRequiresAuthentication;
@@ -734,6 +832,31 @@ public partial class SettingsViewModel : ObservableObject
         RefreshMicrophones();
     }
 
+    private string? ResolveLastTranslationTarget()
+    {
+        var target = NormalizeTranslationTarget(TranslationTargetLanguage);
+        return target ?? _settings.Current.LastTranslationTargetLanguage;
+    }
+
+    private static string? NormalizeTranslationTarget(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private void SetQuickTranslationModeSilently(bool enabled)
+    {
+        if (QuickTranslationModeEnabled == enabled)
+            return;
+
+        var wasLoading = _isLoading;
+        _isLoading = true;
+        QuickTranslationModeEnabled = enabled;
+        _isLoading = wasLoading;
+    }
+
+    private static string DefaultQuickTranslationTargetLanguage() =>
+        TranslationModelInfo.SupportedLanguages.Any(language => language.Code == "en")
+            ? "en"
+            : TranslationModelInfo.SupportedLanguages.FirstOrDefault()?.Code ?? "en";
+
     private void OnTtsProvidersChanged(object? sender, EventArgs e)
     {
         _dispatchToUi(() =>
@@ -868,7 +991,27 @@ public partial class SettingsViewModel : ObservableObject
     }
 }
 
+/// <summary>
+/// Represents microphone item data.
+/// </summary>
+/// <param name="DeviceNumber">Device number supplied to the member.</param>
+/// <param name="Name">Name supplied to the member.</param>
 public sealed record MicrophoneItem(int? DeviceNumber, string Name);
+/// <summary>
+/// Represents overlay widget option data.
+/// </summary>
+/// <param name="Value">Value supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record OverlayWidgetOption(OverlayWidget Value, string DisplayName);
+/// <summary>
+/// Represents history retention option data.
+/// </summary>
+/// <param name="Mode">Mode supplied to the member.</param>
+/// <param name="Minutes">Minutes supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record HistoryRetentionOption(HistoryRetentionMode Mode, int? Minutes, string DisplayName);
+/// <summary>
+/// Represents command example data.
+/// </summary>
+/// <param name="Command">Command supplied to the member.</param>
 public sealed record CommandExample(string Command);

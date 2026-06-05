@@ -4,6 +4,9 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides history retention coordinator behavior.
+/// </summary>
 public sealed class HistoryRetentionCoordinator : IDisposable
 {
     private readonly IHistoryService _history;
@@ -11,12 +14,18 @@ public sealed class HistoryRetentionCoordinator : IDisposable
     private int _applyInProgress;
     private bool _initialized;
 
+    /// <summary>
+    /// Initializes a new instance of the HistoryRetentionCoordinator class.
+    /// </summary>
     public HistoryRetentionCoordinator(IHistoryService history, ISettingsService settings)
     {
         _history = history;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Initializes resources required before use.
+    /// </summary>
     public void Initialize()
     {
         if (_initialized) return;
@@ -28,6 +37,9 @@ public sealed class HistoryRetentionCoordinator : IDisposable
         ApplyRetention(_settings.Current, HistoryRetentionTrigger.Startup);
     }
 
+    /// <summary>
+    /// Performs handle shutdown.
+    /// </summary>
     public void HandleShutdown()
     {
         if (!_initialized) return;
@@ -69,6 +81,9 @@ public sealed class HistoryRetentionCoordinator : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_initialized) return;

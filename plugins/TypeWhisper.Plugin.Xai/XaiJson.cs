@@ -14,6 +14,9 @@ internal static class XaiJson
     public static JsonElement Element<T>(T value) =>
         JsonSerializer.SerializeToElement(value, JsonOptions).Clone();
 
+    /// <summary>
+    /// Creates json content.
+    /// </summary>
     public static StringContent CreateJsonContent(IReadOnlyDictionary<string, JsonElement> body) =>
         new(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
 }

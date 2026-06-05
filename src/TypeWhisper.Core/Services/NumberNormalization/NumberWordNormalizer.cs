@@ -3,11 +3,17 @@ using System.Text;
 
 namespace TypeWhisper.Core.Services.NumberNormalization;
 
+/// <summary>
+/// Normalizes supported spoken number words into digits.
+/// </summary>
 public static class NumberWordNormalizer
 {
     private static readonly HashSet<string> SupportedLanguageCodes = ["en", "de", "fr", "es", "zh", "ja"];
     private static readonly HashSet<char> CjkNumberCharacters = ['零', '〇', '一', '二', '两', '兩', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万', '萬', '亿', '億', '点', '點', '負', '负'];
 
+    /// <summary>
+    /// Normalizes supported number words in the supplied text for the requested language.
+    /// </summary>
     public static string Normalize(string text, string? language)
     {
         var languageCode = NormalizeLanguageCode(language);

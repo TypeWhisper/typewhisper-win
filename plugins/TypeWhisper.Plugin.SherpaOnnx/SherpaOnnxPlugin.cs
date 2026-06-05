@@ -10,6 +10,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.SherpaOnnx;
 
+/// <summary>
+/// Provides sherpa onnx plugin behavior.
+/// </summary>
 public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
 {
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
@@ -49,6 +52,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
 
+    /// <summary>
+    /// Initializes a new instance of the SherpaOnnxPlugin class.
+    /// </summary>
     public SherpaOnnxPlugin()
     {
     }
@@ -71,25 +77,64 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private string _canaryTgtLang = "en";
 
     // ITypeWhisperPlugin
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.sherpa-onnx";
+    /// <summary>
+    /// Performs modelle.
+    /// </summary>
     public string PluginName => "Lokale Modelle (sherpa-onnx)";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.2";
 
     // ITranscriptionEnginePlugin
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "sherpa-onnx";
+    /// <summary>
+    /// Gets the provider display name.
+    /// </summary>
     public string ProviderDisplayName => "Lokal (sherpa-onnx)";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => true;
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => _selectedModelId == "canary-180m-flash";
+    /// <summary>
+    /// Gets whether the provider can download models through the host.
+    /// </summary>
     public bool SupportsModelDownload => true;
+    /// <summary>
+    /// Gets the supported acceleration backends.
+    /// </summary>
     public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
     [
         TranscriptionAccelerationBackend.Cpu,
         TranscriptionAccelerationBackend.NvidiaCuda
     ];
+    /// <summary>
+    /// Gets the acceleration preference.
+    /// </summary>
     public TranscriptionAccelerationPreference AccelerationPreference => _accelerationPreference;
+    /// <summary>
+    /// Gets the acceleration status.
+    /// </summary>
     public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
 
+    /// <summary>
+    /// Gets the transcription models.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(m =>
         new PluginModelInfo(m.Id, m.DisplayName)
         {
@@ -99,13 +144,19 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             LanguageCount = m.LanguageCount,
         }).ToList();
 
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages =>
         _selectedModelId == "canary-180m-flash" ? CanarySupportedLanguages : [];
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
-        _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginDataDirectory, _httpClient);
+        _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
         SherpaOnnxNativeRuntime.RegisterResolver();
         if (_cudaRuntimeInstaller.IsInstalled && _cudaRuntimeInstaller.RuntimeDirectory is { } runtimeDirectory)
             SherpaOnnxNativeRuntime.ConfigureCudaRuntime(runtimeDirectory);
@@ -113,14 +164,23 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         UnloadRecognizer();
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => null;
 
+    /// <summary>
+    /// Sets acceleration preference.
+    /// </summary>
     public void SetAccelerationPreference(TranscriptionAccelerationPreference preference)
     {
         _accelerationPreference = preference;
@@ -132,12 +192,18 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             : CreatePendingAccelerationStatus(preference, cudaRuntimeInstalled);
     }
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         _ = GetModelDefinition(modelId);
         _selectedModelId = modelId;
     }
 
+    /// <summary>
+    /// Gets whether the requested model is available locally.
+    /// </summary>
     public bool IsModelDownloaded(string modelId)
     {
         var model = GetModelDefinition(modelId);
@@ -145,6 +211,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         return model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName)));
     }
 
+    /// <summary>
+    /// Downloads the requested model and reports progress when available.
+    /// </summary>
     public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
     {
         var model = GetModelDefinition(modelId);
@@ -194,6 +263,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         progress?.Report(1.0);
     }
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken ct)
     {
         var model = GetModelDefinition(modelId);
@@ -259,6 +331,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }, ct);
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
@@ -292,6 +367,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }, ct);
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         UnloadRecognizer();
@@ -421,8 +499,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             RequiresRestart: true);
     }
 
-    private string GetModelDirectory(string modelId) =>
-        Path.Combine(_host?.PluginDataDirectory ?? ".", "Models", modelId);
+    private string GetModelDirectory(string modelId)
+    {
+        var safeModelId = Path.GetFileName(modelId);
+        if (string.IsNullOrWhiteSpace(safeModelId) || safeModelId is "." or "..")
+            throw new ArgumentException("Model ID must not be empty.", nameof(modelId));
+
+        return Path.Join(_host?.PluginAssetDirectory ?? ".", "Models", safeModelId);
+    }
 
     private static ModelDefinition GetModelDefinition(string modelId) =>
         Models.FirstOrDefault(m => m.Id == modelId)

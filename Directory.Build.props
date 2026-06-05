@@ -6,4 +6,9 @@
     <Product>TypeWhisper</Product>
     <Copyright>Copyright © 2026 TypeWhisper</Copyright>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'TypeWhisper.Core.Tests' and '$(MSBuildProjectName)' != 'TypeWhisper.PluginSystem.Tests'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591;CS1572;CS1573;CS1574;CS1581;CS1584</WarningsAsErrors>
+  </PropertyGroup>
 </Project>

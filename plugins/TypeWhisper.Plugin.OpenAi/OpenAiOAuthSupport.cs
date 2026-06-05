@@ -18,9 +18,15 @@ internal enum OpenAiAuthMode
 
 internal static class OpenAiAuthModeExtensions
 {
+    /// <summary>
+    /// Converts to storage value.
+    /// </summary>
     public static string ToStorageValue(this OpenAiAuthMode mode) =>
         mode == OpenAiAuthMode.ChatGpt ? "chatgpt" : "api-key";
 
+    /// <summary>
+    /// Parses the supplied value into the expected representation.
+    /// </summary>
     public static OpenAiAuthMode Parse(string? value) =>
         string.Equals(value, "chatgpt", StringComparison.OrdinalIgnoreCase)
             ? OpenAiAuthMode.ChatGpt
@@ -39,13 +45,28 @@ internal sealed record OpenAiOAuthMetadata(string? AccountId, string? PlanType, 
 
 internal static class OpenAiOAuthClient
 {
+    /// <summary>
+    /// Defines the client id constant.
+    /// </summary>
     public const string ClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
+    /// <summary>
+    /// Defines the issuer constant.
+    /// </summary>
     public const string Issuer = "https://auth.openai.com";
+    /// <summary>
+    /// Defines the redirect uri constant.
+    /// </summary>
     public const string RedirectUri = "http://localhost:1455/auth/callback";
+    /// <summary>
+    /// Defines the callback port constant.
+    /// </summary>
     public const int CallbackPort = 1455;
 
     private const string AuthorizeOriginator = "opencode";
 
+    /// <summary>
+    /// Generates pkce codes.
+    /// </summary>
     public static OpenAiPkceCodes GeneratePkceCodes()
     {
         var verifier = RandomOAuthString(64);
@@ -53,9 +74,15 @@ internal static class OpenAiOAuthClient
         return new OpenAiPkceCodes(verifier, challenge);
     }
 
+    /// <summary>
+    /// Generates random state.
+    /// </summary>
     public static string RandomState() =>
         Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
 
+    /// <summary>
+    /// Builds authorize uri.
+    /// </summary>
     public static Uri BuildAuthorizeUri(string state, OpenAiPkceCodes pkce)
     {
         var query = new Dictionary<string, string>
@@ -75,6 +102,9 @@ internal static class OpenAiOAuthClient
         return new Uri($"{Issuer}/oauth/authorize?{BuildQuery(query)}");
     }
 
+    /// <summary>
+    /// Performs exchange authorization code asynchronously.
+    /// </summary>
     public static async Task<OpenAiOAuthTokenResponse> ExchangeAuthorizationCodeAsync(
         HttpClient httpClient,
         string code,
@@ -96,6 +126,9 @@ internal static class OpenAiOAuthClient
         return await SendTokenRequestAsync(httpClient, request, ct);
     }
 
+    /// <summary>
+    /// Refreshes token asynchronously.
+    /// </summary>
     public static async Task<OpenAiOAuthTokenResponse> RefreshTokenAsync(
         HttpClient httpClient,
         string refreshToken,
@@ -114,6 +147,9 @@ internal static class OpenAiOAuthClient
         return await SendTokenRequestAsync(httpClient, request, ct);
     }
 
+    /// <summary>
+    /// Performs extract metadata.
+    /// </summary>
     public static OpenAiOAuthMetadata ExtractMetadata(OpenAiOAuthTokenResponse tokens, string? preferredAccountId = null)
     {
         var idClaims = ParseJwtPayload(tokens.IdToken);
@@ -249,11 +285,17 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
     private readonly string _expectedState;
     private TcpListener? _listener;
 
+    /// <summary>
+    /// Initializes a loopback server that waits for the OpenAI OAuth callback.
+    /// </summary>
     public OpenAiLoopbackOAuthServer(string expectedState)
     {
         _expectedState = expectedState;
     }
 
+    /// <summary>
+    /// Starts the service or session.
+    /// </summary>
     public void Start()
     {
         _listener = new TcpListener(IPAddress.IPv6Any, OpenAiOAuthClient.CallbackPort);
@@ -261,6 +303,9 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
         _listener.Start();
     }
 
+    /// <summary>
+    /// Performs wait for code asynchronously.
+    /// </summary>
     public async Task<string> WaitForCodeAsync(CancellationToken ct)
     {
         var listener = _listener ?? throw new InvalidOperationException("OAuth callback server was not started.");
@@ -359,6 +404,9 @@ internal sealed class OpenAiLoopbackOAuthServer : IAsyncDisposable
         </html>
         """;
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public ValueTask DisposeAsync()
     {
         try { _listener?.Stop(); }

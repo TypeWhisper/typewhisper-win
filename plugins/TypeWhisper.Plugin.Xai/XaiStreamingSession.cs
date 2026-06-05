@@ -23,8 +23,14 @@ internal sealed class XaiStreamingSession : IStreamingSession
         _collector = collector;
     }
 
+    /// <summary>
+    /// Raised when transcript received.
+    /// </summary>
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
 
+    /// <summary>
+    /// Connects the streaming session before audio is sent.
+    /// </summary>
     public static async Task<XaiStreamingSession> ConnectAsync(
         string apiKey,
         string? language,
@@ -39,6 +45,9 @@ internal sealed class XaiStreamingSession : IStreamingSession
         return session;
     }
 
+    /// <summary>
+    /// Builds streaming uri.
+    /// </summary>
     public static Uri BuildStreamingUri(string? language, bool interimResults)
     {
         var query = new List<string>
@@ -57,6 +66,9 @@ internal sealed class XaiStreamingSession : IStreamingSession
         return new Uri("wss://api.x.ai/v1/stt?" + string.Join("&", query));
     }
 
+    /// <summary>
+    /// Creates streaming headers.
+    /// </summary>
     public static IReadOnlyDictionary<string, string> CreateStreamingHeaders(string apiKey) =>
         new Dictionary<string, string>
         {
@@ -71,6 +83,9 @@ internal sealed class XaiStreamingSession : IStreamingSession
         return ws;
     }
 
+    /// <summary>
+    /// Sends a PCM audio chunk to the active streaming session.
+    /// </summary>
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open || pcm16Audio.Length == 0)
@@ -90,6 +105,9 @@ internal sealed class XaiStreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Finalizes the stream and returns the provider transcript.
+    /// </summary>
     public async Task FinalizeAsync(CancellationToken ct)
     {
         if (_disposed || _ws.State != WebSocketState.Open)
@@ -161,6 +179,9 @@ internal sealed class XaiStreamingSession : IStreamingSession
         }
     }
 
+    /// <summary>
+    /// Releases asynchronous resources owned by this session.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)
@@ -229,6 +250,9 @@ internal sealed class XaiTranscriptCollector
     private string? _detectedLanguage;
     private double _duration;
 
+    /// <summary>
+    /// Applies an event update to the current state.
+    /// </summary>
     public StreamingTranscriptEvent? ApplyEvent(string json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -250,6 +274,9 @@ internal sealed class XaiTranscriptCollector
         };
     }
 
+    /// <summary>
+    /// Performs final result.
+    /// </summary>
     public PluginTranscriptionResult FinalResult(string? fallbackLanguage)
     {
         var text = !string.IsNullOrWhiteSpace(_doneText)

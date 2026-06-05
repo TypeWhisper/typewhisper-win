@@ -4,6 +4,9 @@ using System.Windows.Media;
 
 namespace TypeWhisper.Plugin.OpenAi;
 
+/// <summary>
+/// Provides open ai settings view behavior.
+/// </summary>
 public partial class OpenAiSettingsView : UserControl
 {
     private readonly OpenAiPlugin _plugin;
@@ -12,6 +15,9 @@ public partial class OpenAiSettingsView : UserControl
     private readonly ReasoningEffortOption[] _reasoningEffortOptions;
     private readonly TemperatureModeOption[] _temperatureModeOptions;
 
+    /// <summary>
+    /// Initializes a new instance of the OpenAiSettingsView class.
+    /// </summary>
     public OpenAiSettingsView(OpenAiPlugin plugin)
     {
         _plugin = plugin;

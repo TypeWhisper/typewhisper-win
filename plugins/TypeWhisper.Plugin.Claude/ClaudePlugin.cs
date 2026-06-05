@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Claude;
 
+/// <summary>
+/// Provides claude plugin behavior.
+/// </summary>
 public sealed class ClaudePlugin : ILlmProviderPlugin
 {
     private const string BaseUrl = "https://api.anthropic.com";
@@ -19,10 +22,22 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.claude";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Claude";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -30,12 +45,18 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView()
     {
         var panel = new StackPanel { Margin = new System.Windows.Thickness(8) };
@@ -56,15 +77,27 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "Claude";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => IsConfigured;
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
     [
         new PluginModelInfo("claude-sonnet-4-20250514", "Claude Sonnet 4"),
         new PluginModelInfo("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
     ];
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -133,6 +166,9 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
         return !string.IsNullOrWhiteSpace(apiKey) && apiKey.StartsWith("sk-ant-");
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

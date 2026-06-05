@@ -14,10 +14,16 @@ namespace TypeWhisper.Windows.Services;
 
 internal sealed class ModelManagerRequestException : Exception
 {
+    /// <summary>
+    /// Gets the provider or HTTP status code associated with the result.
+    /// </summary>
     public int StatusCode { get; }
 
-    public ModelManagerRequestException(int statusCode, string message)
-        : base(message)
+    /// <summary>
+    /// Performs model manager request exception.
+    /// </summary>
+    public ModelManagerRequestException(int statusCode, string message, Exception? innerException = null)
+        : base(message, innerException)
     {
         StatusCode = statusCode;
     }
@@ -28,6 +34,9 @@ internal sealed record ActiveModelTranscriptionResult(
     string? EngineId,
     string? ModelId);
 
+/// <summary>
+/// Provides model manager service behavior.
+/// </summary>
 public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
     private readonly PluginManager _pluginManager;
@@ -38,14 +47,23 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private System.Timers.Timer? _autoUnloadTimer;
     private bool _disposed;
 
+    /// <summary>
+    /// Raised when a property value changes.
+    /// </summary>
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// Gets the active model id.
+    /// </summary>
     public string? ActiveModelId
     {
         get => _activeModelId;
         private set { _activeModelId = value; OnPropertyChanged(); }
     }
 
+    /// <summary>
+    /// Gets the plugin manager.
+    /// </summary>
     public PluginManager PluginManager => _pluginManager;
 
     /// <summary>
@@ -77,6 +95,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     public static string GetPluginModelId(string pluginId, string modelId) =>
         $"plugin:{pluginId}:{modelId}";
 
+    /// <summary>
+    /// Gets the engine.
+    /// </summary>
     public ITranscriptionEngine Engine
     {
         get
@@ -106,12 +127,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the ModelManagerService class.
+    /// </summary>
     public ModelManagerService(PluginManager pluginManager, ISettingsService settings)
     {
         _pluginManager = pluginManager;
         _settings = settings;
     }
 
+    /// <summary>
+    /// Returns status.
+    /// </summary>
     public ModelStatus GetStatus(string modelId)
     {
         if (_modelStatuses.TryGetValue(modelId, out var tracked))
@@ -132,16 +159,38 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         if (plugin.SupportsModelDownload)
         {
-            if (!TryGetPluginModelDownloadStatus(plugin, pluginModelId, modelId, out var isDownloaded))
-                return _modelStatuses[modelId];
+            try
+            {
+                if (!TryGetPluginModelDownloadStatus(plugin, pluginModelId, modelId, out var isDownloaded))
+                    return _modelStatuses[modelId];
 
-            return isDownloaded ? ModelStatus.Ready : ModelStatus.NotDownloaded;
+                return isDownloaded ? ModelStatus.Ready : ModelStatus.NotDownloaded;
+            }
+            catch (LocalModelStorageUnavailableException ex)
+            {
+                return ModelStatus.Failed(ex.Message);
+            }
         }
 
         return plugin.IsConfigured ? ModelStatus.Ready : ModelStatus.NotDownloaded;
     }
 
+    /// <summary>
+    /// Returns whether downloaded.
+    /// </summary>
     public bool IsDownloaded(string modelId)
+    {
+        try
+        {
+            return IsDownloadedCore(modelId);
+        }
+        catch (LocalModelStorageUnavailableException)
+        {
+            return false;
+        }
+    }
+
+    private bool IsDownloadedCore(string modelId)
     {
         if (!IsPluginModel(modelId))
             return false;
@@ -160,6 +209,12 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         return plugin.IsConfigured;
     }
 
+    private static bool IsDownloadedCore(ITranscriptionEnginePlugin plugin, string pluginModelId) =>
+        plugin.IsModelDownloaded(pluginModelId);
+
+    /// <summary>
+    /// Downloads and load model asynchronously.
+    /// </summary>
     public async Task DownloadAndLoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         if (!IsPluginModel(modelId))
@@ -170,7 +225,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             .FirstOrDefault(e => e.PluginId == pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
 
-        if (plugin.SupportsModelDownload && !plugin.IsModelDownloaded(pluginModelId))
+        bool needsDownload;
+        try
+        {
+            needsDownload = plugin.SupportsModelDownload && !IsDownloadedCore(plugin, pluginModelId);
+        }
+        catch (LocalModelStorageUnavailableException ex)
+        {
+            SetStatus(modelId, ModelStatus.Failed(ex.Message));
+            throw;
+        }
+
+        if (needsDownload)
         {
             SetStatus(modelId, ModelStatus.DownloadingModel(0));
 
@@ -181,6 +247,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         await LoadModelAsync(modelId, cancellationToken);
     }
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public async Task LoadModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         if (!IsPluginModel(modelId))
@@ -240,6 +309,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             _ => TranscriptionAccelerationPreference.Auto
         };
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel()
     {
         CancelAutoUnload();
@@ -286,6 +358,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         _autoUnloadTimer = null;
     }
 
+    /// <summary>
+    /// Deletes model.
+    /// </summary>
     public void DeleteModel(string modelId)
     {
         if (ActiveModelId == modelId)
@@ -294,6 +369,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         SetStatus(modelId, ModelStatus.NotDownloaded);
     }
 
+    /// <summary>
+    /// Ensures model loaded asynchronously..
+    /// </summary>
     public async Task<bool> EnsureModelLoadedAsync(string? modelId = null, CancellationToken cancellationToken = default)
     {
         var targetModelId = modelId ?? _settings.Current.SelectedModelId;
@@ -315,7 +393,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return true;
         }
 
-        if (!IsDownloaded(targetModelId))
+        if (!IsDownloadedCore(targetModelId))
             return false;
 
         await LoadModelAsync(targetModelId, cancellationToken);
@@ -351,47 +429,54 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var hasOverride = !string.IsNullOrWhiteSpace(engineOverride)
             || !string.IsNullOrWhiteSpace(modelOverride);
 
-        if (!hasOverride)
+        try
         {
-            var targetModelId = _settings.Current.SelectedModelId;
-            if (string.IsNullOrWhiteSpace(targetModelId))
-                throw new ModelManagerRequestException(503, "No model loaded");
-
-            if (awaitDownload && IsPluginModel(targetModelId))
+            if (!hasOverride)
             {
-                var (pluginId, pluginModelId) = ParsePluginModelId(targetModelId);
-                var plugin = _pluginManager.TranscriptionEngines
-                    .FirstOrDefault(e => e.PluginId == pluginId);
+                var targetModelId = _settings.Current.SelectedModelId;
+                if (string.IsNullOrWhiteSpace(targetModelId))
+                    throw new ModelManagerRequestException(503, "No model loaded");
 
-                if (plugin?.SupportsModelDownload == true && !plugin.IsModelDownloaded(pluginModelId))
+                if (awaitDownload && IsPluginModel(targetModelId))
                 {
-                    await DownloadAndLoadModelAsync(targetModelId, cancellationToken);
-                    return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+                    var (pluginId, pluginModelId) = ParsePluginModelId(targetModelId);
+                    var plugin = _pluginManager.TranscriptionEngines
+                        .FirstOrDefault(e => e.PluginId == pluginId);
+
+                    if (plugin?.SupportsModelDownload == true && !IsDownloadedCore(plugin, pluginModelId))
+                    {
+                        await DownloadAndLoadModelAsync(targetModelId, cancellationToken);
+                        return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+                    }
                 }
+
+                if (!await EnsureModelLoadedAsync(targetModelId, cancellationToken))
+                    throw new ModelManagerRequestException(503, "No model loaded");
+
+                return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
             }
 
-            if (!await EnsureModelLoadedAsync(targetModelId, cancellationToken))
-                throw new ModelManagerRequestException(503, "No model loaded");
+            var resolved = ResolveRequestModel(engineOverride, modelOverride, awaitDownload);
+            var fullModelId = GetPluginModelId(resolved.Plugin.PluginId, resolved.ModelId);
 
-            return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: false);
+            if (resolved.Plugin.SupportsModelDownload
+                && !IsDownloadedCore(resolved.Plugin, resolved.ModelId)
+                && awaitDownload)
+            {
+                await DownloadAndLoadModelAsync(fullModelId, cancellationToken);
+            }
+            else
+            {
+                if (!await EnsureModelLoadedAsync(fullModelId, cancellationToken))
+                    throw new ModelManagerRequestException(503, $"Model '{resolved.ModelId}' could not be loaded");
+            }
+
+            return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: true);
         }
-
-        var resolved = ResolveRequestModel(engineOverride, modelOverride, awaitDownload);
-        var fullModelId = GetPluginModelId(resolved.Plugin.PluginId, resolved.ModelId);
-
-        if (resolved.Plugin.SupportsModelDownload
-            && !resolved.Plugin.IsModelDownloaded(resolved.ModelId)
-            && awaitDownload)
+        catch (LocalModelStorageUnavailableException ex)
         {
-            await DownloadAndLoadModelAsync(fullModelId, cancellationToken);
+            throw new ModelManagerRequestException(503, ex.Message, ex);
         }
-        else
-        {
-            if (!await EnsureModelLoadedAsync(fullModelId, cancellationToken))
-                throw new ModelManagerRequestException(503, $"Model '{resolved.ModelId}' could not be loaded");
-        }
-
-        return new TranscriptionRequestModelScope(this, previousActiveModelId, restore: true);
     }
 
     internal async Task<ActiveModelTranscriptionResult> TranscribeActiveAsync(
@@ -476,11 +561,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                 $"Model '{modelId}' is not offered by engine '{engine.ProviderId}'");
         }
 
-        if (engine.SupportsModelDownload && !engine.IsModelDownloaded(modelId) && !awaitDownload)
+        try
         {
-            throw new ModelManagerRequestException(
-                409,
-                $"Engine '{engine.ProviderId}' is not configured (missing API key or downloaded weights). Pass ?await_download=1 to wait for restore.");
+            if (engine.SupportsModelDownload && !IsDownloadedCore(engine, modelId) && !awaitDownload)
+            {
+                throw new ModelManagerRequestException(
+                    409,
+                    $"Engine '{engine.ProviderId}' is not configured (missing API key or downloaded weights). Pass ?await_download=1 to wait for restore.");
+            }
+        }
+        catch (LocalModelStorageUnavailableException ex)
+        {
+            throw new ModelManagerRequestException(503, ex.Message, ex);
         }
 
         if (!engine.SupportsModelDownload && !engine.IsConfigured)
@@ -572,13 +664,17 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     }
 
     private static bool IsRecoverablePluginStatusException(Exception ex) =>
-        ex is not OutOfMemoryException
+        ex is not LocalModelStorageUnavailableException
+            and not OutOfMemoryException
             and not AppDomainUnloadedException
             and not BadImageFormatException;
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)
@@ -607,6 +703,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             _restore = restore;
         }
 
+        /// <summary>
+        /// Releases asynchronous resources owned by this session.
+        /// </summary>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -629,20 +728,34 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 }
 
 /// <summary>
-/// No-op transcription engine returned when no plugin provides a real engine.
-/// Prevents null-reference / InvalidOperationException in callers.
+/// Provides no-op transcription engine behavior.
 /// </summary>
 internal sealed class NoOpTranscriptionEngine : ITranscriptionEngine
 {
+    /// <summary>
+    /// Gets the shared no-op engine instance.
+    /// </summary>
     public static readonly NoOpTranscriptionEngine Instance = new();
 
+    /// <summary>
+    /// Gets whether a transcription model is currently loaded.
+    /// </summary>
     public bool IsModelLoaded => false;
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public Task LoadModelAsync(string modelPath, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel() { }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public Task<TranscriptionResult> TranscribeAsync(
         float[] audioSamples, string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,
@@ -651,22 +764,36 @@ internal sealed class NoOpTranscriptionEngine : ITranscriptionEngine
 }
 
 /// <summary>
-/// Adapts a plugin transcription engine to the ITranscriptionEngine interface
-/// used by the rest of the application.
+/// Provides plugin transcription engine adapter behavior.
 /// </summary>
 internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
 {
     private readonly ITranscriptionEnginePlugin _plugin;
 
+    /// <summary>
+    /// Performs plugin transcription engine adapter.
+    /// </summary>
     public PluginTranscriptionEngineAdapter(ITranscriptionEnginePlugin plugin) => _plugin = plugin;
 
+    /// <summary>
+    /// Gets whether a transcription model is currently loaded.
+    /// </summary>
     public bool IsModelLoaded => _plugin.IsConfigured && _plugin.SelectedModelId is not null;
 
+    /// <summary>
+    /// Loads the selected transcription model into memory.
+    /// </summary>
     public Task LoadModelAsync(string modelPath, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    /// <summary>
+    /// Unloads the active transcription model from memory.
+    /// </summary>
     public void UnloadModel() { }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<TranscriptionResult> TranscribeAsync(
         float[] audioSamples, string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,

@@ -8,6 +8,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Groq;
 
+/// <summary>
+/// Provides groq plugin behavior.
+/// </summary>
 public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 {
     private const string BaseUrl = "https://api.groq.com/openai";
@@ -34,6 +37,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         new("moonshotai/kimi-k2-instruct-0905", "Kimi K2"),
     ];
 
+    /// <summary>
+    /// Initializes a new instance of the GroqPlugin class.
+    /// </summary>
     public GroqPlugin()
         : this(CreateHttpClient())
     {
@@ -46,10 +52,22 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.groq";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Groq";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.2";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -67,25 +85,49 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new GroqSettingsView(this);
 
     // ITranscriptionEnginePlugin
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "groq";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Groq";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
 
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
         TranscriptionModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList();
 
+    /// <summary>
+    /// Gets the currently selected provider model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
 
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation
     {
         get
@@ -97,6 +139,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         }
     }
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         var entry = TranscriptionModelEntries.FirstOrDefault(m => m.Id == modelId)
@@ -106,6 +151,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         _host?.SetSetting("selectedModel", modelId);
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
@@ -119,14 +167,26 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderName => "Groq";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => IsConfigured;
 
+    /// <summary>
+    /// Gets the models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _fetchedLlmModels.Count > 0
             ? _fetchedLlmModels.Select(m => new PluginModelInfo(m.Id, m.Id)).ToList()
             : FallbackLlmModels;
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -268,6 +328,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();

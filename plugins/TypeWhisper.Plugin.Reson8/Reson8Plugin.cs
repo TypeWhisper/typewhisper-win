@@ -9,6 +9,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Reson8;
 
+/// <summary>
+/// Provides reson8 plugin behavior.
+/// </summary>
 public sealed class Reson8Plugin : ITranscriptionEnginePlugin
 {
     internal const string DefaultModelId = "__default__";
@@ -40,6 +43,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
     private string _customAuthHeader = DefaultAuthHeader;
     private IReadOnlyList<Reson8CustomModel> _fetchedCustomModels = [];
 
+    /// <summary>
+    /// Initializes a new instance of the Reson8Plugin class.
+    /// </summary>
     public Reson8Plugin()
         : this(CreateHttpClient())
     {
@@ -50,10 +56,22 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
         _httpClient = httpClient;
     }
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.reson8";
+    /// <summary>
+    /// Gets the plugin display name shown by the host.
+    /// </summary>
     public string PluginName => "Reson8";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -65,22 +83,53 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         _host = null;
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new Reson8SettingsView(this);
 
+    /// <summary>
+    /// Gets the stable provider identifier used for model and settings selection.
+    /// </summary>
     public string ProviderId => "reson8";
+    /// <summary>
+    /// Gets the provider name displayed in the UI.
+    /// </summary>
     public string ProviderDisplayName => "Reson8";
+    /// <summary>
+    /// Gets whether the provider has the configuration required to run.
+    /// </summary>
     public bool IsConfigured => !string.IsNullOrEmpty(_apiKey);
+    /// <summary>
+    /// Gets the transcription models exposed by this provider.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels =>
         [new PluginModelInfo(DefaultModelId, "Default model"), .. _fetchedCustomModels.Select(m => new PluginModelInfo(m.Id, m.Name))];
+
+    /// <summary>
+    /// Gets the selected transcription model identifier.
+    /// </summary>
     public string? SelectedModelId => _selectedModelId;
+    /// <summary>
+    /// Gets whether the provider supports translation requests.
+    /// </summary>
     public bool SupportsTranslation => false;
+    /// <summary>
+    /// Gets whether the provider supports live streaming transcription.
+    /// </summary>
     public bool SupportsStreaming => true;
+    /// <summary>
+    /// Gets the language codes accepted by the provider.
+    /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
 
     internal string? ApiKey => _apiKey;
@@ -89,6 +138,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
     internal IReadOnlyList<Reson8CustomModel> FetchedCustomModels => _fetchedCustomModels;
     internal IPluginLocalization? Loc => _host?.Localization;
 
+    /// <summary>
+    /// Selects the provider model used for subsequent requests.
+    /// </summary>
     public void SelectModel(string modelId)
     {
         var normalized = NormalizeModelId(modelId);
@@ -96,6 +148,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
         _host?.SetSetting(SelectedModelSettingName, normalized);
     }
 
+    /// <summary>
+    /// Transcribes PCM audio using the selected provider configuration.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio,
         string? language,
@@ -126,6 +181,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
         return ParseTranscriptionResponse(json, NormalizeLanguage(language), pcm16.Length);
     }
 
+    /// <summary>
+    /// Transcribes streaming asynchronously.
+    /// </summary>
     public async Task<PluginTranscriptionResult> TranscribeStreamingAsync(
         byte[] wavAudio,
         string? language,
@@ -181,6 +239,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
         }
     }
 
+    /// <summary>
+    /// Opens a streaming transcription session for live audio.
+    /// </summary>
     public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
     {
         if (!IsConfigured)
@@ -437,6 +498,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(120) };
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         _httpClient.Dispose();
@@ -446,6 +510,9 @@ public sealed class Reson8Plugin : ITranscriptionEnginePlugin
 
 internal static class WavPcm16Extractor
 {
+    /// <summary>
+    /// Performs extract pcm16.
+    /// </summary>
     public static byte[] ExtractPcm16(byte[] wavAudio)
     {
         if (wavAudio.Length < 44

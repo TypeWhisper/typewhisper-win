@@ -10,6 +10,9 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.GemmaLocal;
 
+/// <summary>
+/// Provides gemma local plugin behavior.
+/// </summary>
 public sealed class GemmaLocalPlugin : ILlmProviderPlugin
 {
     private static readonly IReadOnlyList<GemmaModelDefinition> Models =
@@ -35,10 +38,22 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
 
     // ITypeWhisperPlugin
 
+    /// <summary>
+    /// Gets the stable plugin identifier used by the host.
+    /// </summary>
     public string PluginId => "com.typewhisper.gemma-local";
+    /// <summary>
+    /// Gets the plugin name.
+    /// </summary>
     public string PluginName => "Gemma 4 (Local)";
+    /// <summary>
+    /// Gets the plugin version reported to the host.
+    /// </summary>
     public string PluginVersion => "1.0.0";
 
+    /// <summary>
+    /// Activates the plugin and loads any persisted configuration.
+    /// </summary>
     public Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
@@ -66,6 +81,9 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deactivates the plugin and releases provider resources.
+    /// </summary>
     public Task DeactivateAsync()
     {
         UnloadModel();
@@ -73,13 +91,25 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Creates the settings view shown by the host, or null when no UI is required.
+    /// </summary>
     public UserControl? CreateSettingsView() => new GemmaLocalSettingsView(this);
 
     // ILlmProviderPlugin
 
+    /// <summary>
+    /// Gets the provider name.
+    /// </summary>
     public string ProviderName => "Gemma 4 (Local)";
+    /// <summary>
+    /// Gets whether the provider can currently accept requests.
+    /// </summary>
     public bool IsAvailable => _loadedModelId is not null;
 
+    /// <summary>
+    /// Gets the supported models.
+    /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels { get; } = Models.Select(m =>
         new PluginModelInfo(m.Id, m.DisplayName)
         {
@@ -88,6 +118,9 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
             IsRecommended = m.IsRecommended,
         }).ToList();
 
+    /// <summary>
+    /// Processes input text with the selected provider configuration.
+    /// </summary>
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         await _inferenceLock.WaitAsync(ct);
@@ -253,8 +286,14 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         return sb.ToString();
     }
 
-    private string GetModelDirectory(string modelId) =>
-        Path.Combine(_host?.PluginDataDirectory ?? ".", "Models", modelId);
+    private string GetModelDirectory(string modelId)
+    {
+        var safeModelId = Path.GetFileName(modelId);
+        if (string.IsNullOrWhiteSpace(safeModelId) || safeModelId is "." or "..")
+            throw new ArgumentException("Model ID must not be empty.", nameof(modelId));
+
+        return Path.Join(_host?.PluginAssetDirectory ?? ".", "Models", safeModelId);
+    }
 
     private string GetModelFilePath(string modelId, string fileName) =>
         Path.Combine(GetModelDirectory(modelId), fileName);
@@ -269,6 +308,9 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
         Debug.WriteLine($"[GemmaLocal] {message}");
     }
 
+    /// <summary>
+    /// Releases resources held by the instance.
+    /// </summary>
     public void Dispose()
     {
         UnloadModel();

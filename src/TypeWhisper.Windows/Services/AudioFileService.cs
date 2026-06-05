@@ -4,6 +4,9 @@ using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
+/// <summary>
+/// Provides audio file service behavior.
+/// </summary>
 public sealed class AudioFileService
 {
     private const int TargetSampleRate = 16000;
@@ -15,12 +18,18 @@ public sealed class AudioFileService
         ".mp4", ".mkv", ".avi", ".mov", ".webm"
     };
 
+    /// <summary>
+    /// Returns whether supported.
+    /// </summary>
     public static bool IsSupported(string filePath)
     {
         var ext = Path.GetExtension(filePath);
         return SupportedExtensions.Contains(ext);
     }
 
+    /// <summary>
+    /// Performs load audio asynchronously.
+    /// </summary>
     public async Task<float[]> LoadAudioAsync(string filePath, CancellationToken cancellationToken = default)
     {
         if (!File.Exists(filePath))
@@ -55,6 +64,9 @@ public sealed class AudioFileService
         return samples.ToArray();
     }
 
+    /// <summary>
+    /// Returns duration.
+    /// </summary>
     public static TimeSpan GetDuration(string filePath)
     {
         using var reader = new MediaFoundationReader(filePath);
