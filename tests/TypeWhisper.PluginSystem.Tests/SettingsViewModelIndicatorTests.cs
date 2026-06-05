@@ -59,6 +59,65 @@ public class SettingsViewModelIndicatorTests
         Assert.False(settings.Current.ApiServerRequiresAuthentication);
     }
 
+    [Fact]
+    public void TranslationModeEnabled_LoadsFromTranslationTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            TranslationTargetLanguage = "fr",
+            LastTranslationTargetLanguage = "fr"
+        });
+
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.True(sut.QuickTranslationModeEnabled);
+    }
+
+    [Fact]
+    public void QuickTranslationModeEnabled_RestoresLastTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            TranslationTargetLanguage = null,
+            LastTranslationTargetLanguage = "fr"
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.QuickTranslationModeEnabled = true;
+
+        Assert.Equal("fr", settings.Current.TranslationTargetLanguage);
+        Assert.Equal("fr", settings.Current.LastTranslationTargetLanguage);
+    }
+
+    [Fact]
+    public void QuickTranslationModeDisabled_ClearsTargetButKeepsLastTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            TranslationTargetLanguage = "de",
+            LastTranslationTargetLanguage = "de"
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.QuickTranslationModeEnabled = false;
+
+        Assert.Null(settings.Current.TranslationTargetLanguage);
+        Assert.Equal("de", settings.Current.LastTranslationTargetLanguage);
+    }
+
+    [Fact]
+    public void TranslationTargetSelection_StoresLastTarget_WhenRealLanguageSelected()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.TranslationTargetLanguage = "it";
+
+        Assert.Equal("it", settings.Current.TranslationTargetLanguage);
+        Assert.Equal("it", settings.Current.LastTranslationTargetLanguage);
+        Assert.True(sut.QuickTranslationModeEnabled);
+    }
+
     private static SettingsViewModel CreateSettingsViewModel(FakeSettingsService settings)
     {
         var pluginManager = TestPluginManagerFactory.Create(settings);

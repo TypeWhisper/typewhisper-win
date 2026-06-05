@@ -19,6 +19,7 @@ public partial class ModelManagerViewModel : ObservableObject
 {
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private readonly LocalModelStorageService _modelStorage;
     private readonly IAppRestartService? _appRestart;
     private readonly IAppNotificationService? _notifications;
     private readonly SemaphoreSlim _accelerationApplyLock = new(1, 1);
@@ -42,6 +43,11 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private bool _isAccelerationSectionVisible;
     [ObservableProperty] private bool _isAccelerationRestartRequired;
     [ObservableProperty] private string _accelerationRestartMessage = "";
+    [ObservableProperty] private string _modelStoragePath = "";
+    [ObservableProperty] private string _resolvedModelStoragePath = "";
+    [ObservableProperty] private string _modelStorageStatusText = "";
+    [ObservableProperty] private bool _isModelStorageBusy;
+    [ObservableProperty] private bool _hasModelStorageError;
 
     /// <summary>
     /// Gets the currently selected acceleration option.
@@ -92,10 +98,12 @@ public partial class ModelManagerViewModel : ObservableObject
         ModelManagerService modelManager,
         ISettingsService settings,
         IAppRestartService? appRestart = null,
-        IAppNotificationService? notifications = null)
+        IAppNotificationService? notifications = null,
+        LocalModelStorageService? modelStorage = null)
     {
         _modelManager = modelManager;
         _settings = settings;
+        _modelStorage = modelStorage ?? new LocalModelStorageService(settings, _modelManager.UnloadModel);
         _appRestart = appRestart;
         _notifications = notifications;
         _activeModelId = _modelManager.ActiveModelId;
@@ -103,6 +111,7 @@ public partial class ModelManagerViewModel : ObservableObject
             _settings.Current.LocalModelAcceleration);
 
         RebuildProviders();
+        RefreshModelStorage();
 
         _modelManager.PropertyChanged += (_, args) =>
         {
@@ -124,6 +133,7 @@ public partial class ModelManagerViewModel : ObservableObject
             SyncSelectedModelOption();
             SyncSelectedAccelerationOption();
             RefreshActiveModelDetails();
+            RefreshModelStorage();
         });
     }
 
@@ -500,6 +510,60 @@ public partial class ModelManagerViewModel : ObservableObject
     private void RestartForAcceleration()
     {
         _appRestart?.RestartMinimized();
+    }
+
+    partial void OnIsModelStorageBusyChanged(bool value)
+    {
+        MoveModelStorageCommand.NotifyCanExecuteChanged();
+        ResetModelStoragePathCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanMoveModelStorage() => !IsModelStorageBusy;
+    private bool CanResetModelStoragePath() => !IsModelStorageBusy;
+
+    [RelayCommand(CanExecute = nameof(CanMoveModelStorage))]
+    private async Task MoveModelStorage()
+    {
+        IsModelStorageBusy = true;
+        HasModelStorageError = false;
+        ModelStorageStatusText = Loc.Instance["Models.StorageMoving"];
+
+        try
+        {
+            await _modelStorage.MoveDownloadsAndUsePathAsync(ModelStoragePath);
+            RefreshModelStorage();
+            RefreshAllModels();
+            ModelStorageStatusText = Loc.Instance["Models.StorageMoved"];
+        }
+        catch (Exception ex)
+        {
+            HasModelStorageError = true;
+            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageErrorFormat", ex.Message);
+        }
+        finally
+        {
+            IsModelStorageBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanResetModelStoragePath))]
+    private void ResetModelStoragePath()
+    {
+        if (IsModelStorageBusy)
+            return;
+
+        HasModelStorageError = false;
+        _modelStorage.ResetToDefault();
+        RefreshModelStorage();
+        RefreshAllModels();
+    }
+
+    private void RefreshModelStorage()
+    {
+        ResolvedModelStoragePath = _modelStorage.ResolvedModelStoragePath;
+        ModelStoragePath = ResolvedModelStoragePath;
+        if (!IsModelStorageBusy && !HasModelStorageError)
+            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageCurrentFormat", ResolvedModelStoragePath);
     }
 }
 

@@ -1334,6 +1334,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                     ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                     : null,
                 TranslationTarget = translationTarget,
+                RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
                 EffectiveSourceLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
                 DetectedLanguage = detectedLanguage,
                 PluginPostProcessors = pluginProcessors,

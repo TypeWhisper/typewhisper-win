@@ -149,6 +149,10 @@ public record AppSettings
     /// Gets or sets the local model acceleration value.
     /// </summary>
     public string LocalModelAcceleration { get; init; } = LocalModelAccelerationAuto;
+    /// <summary>
+    /// Gets or sets the custom storage path for large local model assets.
+    /// </summary>
+    public string? LocalModelStoragePath { get; init; }
 
     // Manual file transcription
     /// <summary>
@@ -261,6 +265,10 @@ public record AppSettings
     /// Gets or sets the translation target language value.
     /// </summary>
     public string? TranslationTargetLanguage { get; init; }
+    /// <summary>
+    /// Gets or sets the last selected quick translation target language value.
+    /// </summary>
+    public string? LastTranslationTargetLanguage { get; init; }
 
     // Watch folder automation
     /// <summary>
@@ -564,6 +572,17 @@ public record AppSettings
             "amd_rocm" => LocalModelAccelerationAmdRocm,
             _ => LocalModelAccelerationAuto
         };
+    }
+
+    /// <summary>
+    /// Normalizes a local model storage path value.
+    /// </summary>
+    public static string? NormalizeLocalModelStoragePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
     }
 }
 

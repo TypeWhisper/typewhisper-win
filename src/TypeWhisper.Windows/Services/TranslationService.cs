@@ -5,6 +5,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Translation;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Services.Localization;
@@ -18,6 +19,7 @@ namespace TypeWhisper.Windows.Services;
 public sealed class TranslationService : ITranslationService, IDisposable
 {
     private readonly PluginManager _pluginManager;
+    private readonly ISettingsService _settings;
     private readonly HttpClient _httpClient = new();
     private readonly SemaphoreSlim _downloadSemaphore = new(1, 1);
     private readonly Dictionary<string, LoadedTranslationModel> _loadedModels = new();
@@ -31,9 +33,10 @@ public sealed class TranslationService : ITranslationService, IDisposable
     /// <summary>
     /// Initializes a new instance of the TranslationService class.
     /// </summary>
-    public TranslationService(PluginManager pluginManager)
+    public TranslationService(PluginManager pluginManager, ISettingsService settings)
     {
         _pluginManager = pluginManager;
+        _settings = settings;
     }
 
     /// <summary>
@@ -127,8 +130,11 @@ public sealed class TranslationService : ITranslationService, IDisposable
 
             var modelInfo = TranslationModelInfo.FindModel(sourceLang, targetLang)
                 ?? throw new NotSupportedException($"No translation model for {sourceLang}->{targetLang}");
+            var modelSubDirectory = SafeRelativeName(modelInfo.SubDirectory, nameof(modelInfo.SubDirectory));
 
-            var modelDir = Path.Combine(TypeWhisperEnvironment.ModelsPath, modelInfo.SubDirectory);
+            var modelDir = Path.Join(
+                LocalModelStorageService.ResolveAvailableModelStoragePath(_settings.Current),
+                modelSubDirectory);
             Directory.CreateDirectory(modelDir);
 
             await DownloadMissingFilesAsync(modelInfo, modelDir, ct);
@@ -155,7 +161,8 @@ public sealed class TranslationService : ITranslationService, IDisposable
     {
         foreach (var file in modelInfo.Files)
         {
-            var filePath = Path.Combine(modelDir, file.FileName);
+            var safeFileName = SafeLeafName(file.FileName, nameof(file.FileName));
+            var filePath = Path.Join(modelDir, safeFileName);
             if (File.Exists(filePath)) continue;
 
             System.Diagnostics.Debug.WriteLine($"Downloading translation model file: {file.FileName}");
@@ -177,8 +184,8 @@ public sealed class TranslationService : ITranslationService, IDisposable
 
     private static LoadedTranslationModel LoadModel(string modelDir)
     {
-        var config = MarianConfig.Load(Path.Combine(modelDir, "config.json"));
-        var tokenizer = MarianTokenizer.Load(Path.Combine(modelDir, "tokenizer.json"), config.EosTokenId);
+        var config = MarianConfig.Load(Path.Join(modelDir, "config.json"));
+        var tokenizer = MarianTokenizer.Load(Path.Join(modelDir, "tokenizer.json"), config.EosTokenId);
 
         var sessionOptions = new SessionOptions
         {
@@ -187,10 +194,33 @@ public sealed class TranslationService : ITranslationService, IDisposable
             IntraOpNumThreads = Environment.ProcessorCount
         };
 
-        var encoder = new InferenceSession(Path.Combine(modelDir, "encoder_model_quantized.onnx"), sessionOptions);
-        var decoder = new InferenceSession(Path.Combine(modelDir, "decoder_model_quantized.onnx"), sessionOptions);
+        var encoder = new InferenceSession(Path.Join(modelDir, "encoder_model_quantized.onnx"), sessionOptions);
+        var decoder = new InferenceSession(Path.Join(modelDir, "decoder_model_quantized.onnx"), sessionOptions);
 
         return new LoadedTranslationModel(encoder, decoder, tokenizer, config);
+    }
+
+    private static string SafeLeafName(string value, string parameterName)
+    {
+        var safeName = Path.GetFileName(value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeName) || safeName is "." or "..")
+            throw new InvalidOperationException($"Invalid path segment for {parameterName}.");
+
+        return safeName;
+    }
+
+    private static string SafeRelativeName(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value is "." or ".."
+            || Path.IsPathRooted(value)
+            || value.Contains(Path.DirectorySeparatorChar)
+            || value.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new InvalidOperationException($"Invalid relative path segment for {parameterName}.");
+        }
+
+        return value;
     }
 
     private static string RunInference(LoadedTranslationModel model, string text)

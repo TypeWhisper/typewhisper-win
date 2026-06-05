@@ -47,6 +47,9 @@ public sealed record PipelineOptions
     /// <summary>Translation target language, or null if no translation needed.</summary>
     public string? TranslationTarget { get; init; }
 
+    /// <summary>When true, translation failures abort processing instead of falling back to the current text.</summary>
+    public bool RequireTranslationSuccess { get; init; }
+
     /// <summary>Effective source language for translation (e.g. "de", "en").</summary>
     public string? EffectiveSourceLanguage { get; init; }
 
