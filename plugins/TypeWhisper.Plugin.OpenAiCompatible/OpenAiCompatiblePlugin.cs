@@ -537,7 +537,7 @@ public sealed class OpenAiCompatiblePlugin :
             {
                 fetchedModels = JsonSerializer.Deserialize<List<FetchedModel>>(modelsJson, JsonOptions) ?? [];
             }
-            catch
+            catch (JsonException)
             {
                 fetchedModels = [];
             }

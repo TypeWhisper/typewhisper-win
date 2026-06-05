@@ -36,6 +36,7 @@ public sealed class WorkflowsViewModelTests : IDisposable
         var defaultOption = Assert.Single(sut.AvailableProviders, option => option.Value is null);
         Assert.Equal("Default AI provider: OpenAI / GPT-5.5 (auto)", defaultOption.DisplayName);
         Assert.Same(defaultOption, sut.SelectedDefaultProvider);
+        Assert.Null(_settings.Current.DefaultLlmProvider);
     }
 
     [Fact]
@@ -68,6 +69,36 @@ public sealed class WorkflowsViewModelTests : IDisposable
         var option = Assert.Single(sut.AvailableProviders, provider => provider.Value is not null);
         Assert.Equal("plugin:openai-compatible-profile-a:gpt-local", option.Value);
         Assert.Equal("Local Gateway / GPT Local", option.DisplayName);
+    }
+
+    [Fact]
+    public void ProviderOptions_ClearStaleEditProviderOverrideOnRefresh()
+    {
+        AddLlmProvider(new FakeLlmProvider(
+            "com.test.openai",
+            "OpenAI",
+            [new PluginModelInfo("gpt-5.5", "GPT-5.5")]));
+        var sut = CreateViewModel();
+        sut.EditProviderOverride = "plugin:missing:gpt-4o";
+
+        InvokeRebuildProviderOptions(sut);
+
+        Assert.Null(sut.EditProviderOverride);
+        Assert.Same(
+            Assert.Single(sut.AvailableProviders, option => option.Value is null),
+            sut.SelectedEditProvider);
+    }
+
+    [Fact]
+    public void TaskOptions_PreserveTranslateWhenSelectedProfileCannotResolve()
+    {
+        var sut = CreateViewModel();
+        sut.EditTask = "translate";
+
+        sut.EditTranscriptionModelOverride = ModelManagerService.GetPluginModelId("missing-profile", "whisper");
+
+        Assert.Equal("translate", sut.EditTask);
+        Assert.DoesNotContain(sut.TaskOptions, option => option.Value == "translate");
     }
 
     [Fact]
@@ -278,6 +309,11 @@ public sealed class WorkflowsViewModelTests : IDisposable
         TestPluginManagerFactory.SetPrivateField(_pluginManager, "_allPlugins", new List<LoadedPlugin> { loaded });
         TestPluginManagerFactory.SetPrivateField(_pluginManager, "_llmProviders", new List<ILlmProviderPlugin> { provider });
     }
+
+    private static void InvokeRebuildProviderOptions(WorkflowsViewModel viewModel) =>
+        typeof(WorkflowsViewModel)
+            .GetMethod("RebuildProviderOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(viewModel, null);
 
     private sealed class FakeLlmProvider : ILlmProviderPlugin, ILlmProviderSelectionIdentity
     {

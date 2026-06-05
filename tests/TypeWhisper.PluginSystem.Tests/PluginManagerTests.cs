@@ -220,6 +220,7 @@ public class PluginManagerTests : IDisposable
         IAdditionalLlmProvidersProvider
     {
         private readonly ProfileRole _profileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A");
+        private readonly ProfileRole _duplicateProfileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A Duplicate");
         private bool _includeAdditionalRoles = true;
 
         public string PluginId => "com.test.multi";
@@ -235,9 +236,9 @@ public class PluginManagerTests : IDisposable
         public bool IsAvailable => true;
         public IReadOnlyList<PluginModelInfo> SupportedModels { get; } = [new("root-llm", "Root LLM")];
         public IReadOnlyList<ITranscriptionEnginePlugin> AdditionalTranscriptionEngines =>
-            _includeAdditionalRoles ? [_profileRole] : [];
+            _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
         public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders =>
-            _includeAdditionalRoles ? [_profileRole] : [];
+            _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
 
         public void ClearAdditionalRoles() => _includeAdditionalRoles = false;
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;

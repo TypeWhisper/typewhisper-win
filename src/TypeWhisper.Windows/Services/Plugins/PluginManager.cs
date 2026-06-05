@@ -267,15 +267,23 @@ public sealed class PluginManager : IDisposable
                 .Select(p => p.Instance)
                 .ToList();
 
-            _llmProviders = activePlugins.OfType<ILlmProviderPlugin>().ToList();
-            _llmProviders.AddRange(activePlugins
-                .OfType<IAdditionalLlmProvidersProvider>()
-                .SelectMany(provider => provider.AdditionalLlmProviders));
+            _llmProviders = activePlugins
+                .OfType<ILlmProviderPlugin>()
+                .Concat(activePlugins
+                    .OfType<IAdditionalLlmProvidersProvider>()
+                    .SelectMany(provider => provider.AdditionalLlmProviders))
+                .GroupBy(provider => provider.GetLlmSelectionId(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
 
-            _transcriptionEngines = activePlugins.OfType<ITranscriptionEnginePlugin>().ToList();
-            _transcriptionEngines.AddRange(activePlugins
-                .OfType<IAdditionalTranscriptionEnginesProvider>()
-                .SelectMany(provider => provider.AdditionalTranscriptionEngines));
+            _transcriptionEngines = activePlugins
+                .OfType<ITranscriptionEnginePlugin>()
+                .Concat(activePlugins
+                    .OfType<IAdditionalTranscriptionEnginesProvider>()
+                    .SelectMany(provider => provider.AdditionalTranscriptionEngines))
+                .GroupBy(engine => engine.GetTranscriptionSelectionId(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
 
             _ttsProviders = activePlugins.OfType<ITtsProviderPlugin>().ToList();
             _postProcessors = activePlugins.OfType<IPostProcessorPlugin>()

@@ -1028,10 +1028,20 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         AvailableProviders.Add(new ProviderOption(null, GetDefaultProviderLabel(explicitOptions)));
         foreach (var option in explicitOptions)
             AvailableProviders.Add(option);
+        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider);
+        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride);
         _isRefreshingProviders = false;
+        if (clearDefaultProvider)
+            DefaultLlmProvider = null;
+        if (clearEditProvider)
+            EditProviderOverride = null;
         OnPropertyChanged(nameof(SelectedDefaultProvider));
         OnPropertyChanged(nameof(SelectedEditProvider));
     }
+
+    private bool IsStaleProviderSelection(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && !AvailableProviders.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
 
     private string GetDefaultProviderLabel(IReadOnlyList<ProviderOption> explicitOptions)
     {
@@ -1076,9 +1086,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             new("transcribe", Loc.Instance["Workflows.TaskTranscribe"])
         };
 
-        if (SelectedTranscriptionEngineSupportsTranslation())
+        var selectedEngine = SelectedTranscriptionEngine();
+        if (selectedEngine?.SupportsTranslation == true)
             options.Add(new SettingOption("translate", Loc.Instance["Workflows.TaskTranslate"]));
-        else if (string.Equals(selected, "translate", StringComparison.OrdinalIgnoreCase))
+        else if (selectedEngine is not null && string.Equals(selected, "translate", StringComparison.OrdinalIgnoreCase))
             selected = null;
 
         ReplaceCollection(TaskOptions, options);
@@ -1209,13 +1220,16 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         string.IsNullOrWhiteSpace(query) || domain.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private bool SelectedTranscriptionEngineSupportsTranslation()
+        => SelectedTranscriptionEngine()?.SupportsTranslation == true;
+
+    private ITranscriptionEnginePlugin? SelectedTranscriptionEngine()
     {
         var modelId = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride)
             ? _settings.Current.SelectedModelId
             : EditTranscriptionModelOverride;
 
         if (string.IsNullOrWhiteSpace(modelId) || !ModelManagerService.IsPluginModel(modelId))
-            return false;
+            return null;
 
         try
         {
@@ -1224,12 +1238,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
                 .FirstOrDefault(engine => string.Equals(
                     engine.GetTranscriptionSelectionId(),
                     pluginId,
-                    StringComparison.OrdinalIgnoreCase))
-                ?.SupportsTranslation == true;
+                    StringComparison.OrdinalIgnoreCase));
         }
         catch
         {
-            return false;
+            return null;
         }
     }
 
