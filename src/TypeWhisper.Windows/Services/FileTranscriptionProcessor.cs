@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services.NumberNormalization;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
@@ -74,12 +75,22 @@ public sealed class FileTranscriptionProcessor(
         var result = activeResult.Result;
         var pipelineResult = await pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
+            TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            TranscriptionTask = task,
+            DetectedLanguage = result.DetectedLanguage,
+            ConfiguredLanguage = language,
             VocabularyBooster = currentSettings.VocabularyBoostingEnabled ? vocabularyBoosting.Apply : null,
             DictionaryCorrector = dictionary.ApplyCorrections
         }, cancellationToken);
+        var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
+            result,
+            task,
+            language,
+            [],
+            currentSettings.TranscriptionNumberNormalizationEnabled);
 
         modelManager.ScheduleAutoUnload();
 
-        return new FileTranscriptionProcessResult(result, pipelineResult.Text);
+        return new FileTranscriptionProcessResult(normalizedResult, pipelineResult.Text);
     }
 }

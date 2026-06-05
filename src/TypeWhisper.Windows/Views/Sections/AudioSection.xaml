@@ -350,6 +350,23 @@
                                                  OffContent=""/>
                             </Grid>
                         </Border>
+                        <Border Grid.Row="7" Background="#18FFFFFF"/>
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str Dictation.NormalizeNumbers}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str Dictation.NormalizeNumbersHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,4,18,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.TranscriptionNumberNormalizationEnabled}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </Border>
             </StackPanel>

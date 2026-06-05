@@ -55,6 +55,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     [ObservableProperty] private string _editOutputFormat = "";
     [ObservableProperty] private bool _editAutoEnter;
     [ObservableProperty] private string? _editTargetActionPluginId;
+    [ObservableProperty] private WorkflowNumberNormalizationMode _editNumberNormalizationMode = WorkflowNumberNormalizationMode.Inherit;
     [ObservableProperty] private bool _isAppPickerOpen;
     [ObservableProperty] private string _appPickerSearchText = "";
     [ObservableProperty] private string? _currentWebsiteDomain;
@@ -72,6 +73,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     public ObservableCollection<SettingOption> LanguageOptions { get; } = [];
     public ObservableCollection<SettingOption> TaskOptions { get; } = [];
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
+    public ObservableCollection<WorkflowNumberNormalizationOption> NumberNormalizationOptions { get; } = [];
     public ObservableCollection<ModelOption> AvailableModelOptions { get; } = [];
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
     public ObservableCollection<ActionPluginOption> ActionPluginOptions { get; } = [];
@@ -501,6 +503,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditOutputFormat = workflow.Output.Format ?? "";
         EditAutoEnter = workflow.Output.AutoEnter;
         EditTargetActionPluginId = workflow.Output.TargetActionPluginId;
+        EditNumberNormalizationMode = workflow.Output.NumberNormalizationMode;
         NewHotkey = "";
 
         ReplaceCollection(ProcessNameChips, workflow.Trigger.ProcessNames);
@@ -529,7 +532,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             {
                 Format = string.IsNullOrWhiteSpace(EditOutputFormat) ? null : EditOutputFormat.Trim(),
                 AutoEnter = EditAutoEnter,
-                TargetActionPluginId = string.IsNullOrWhiteSpace(EditTargetActionPluginId) ? null : EditTargetActionPluginId
+                TargetActionPluginId = string.IsNullOrWhiteSpace(EditTargetActionPluginId) ? null : EditTargetActionPluginId,
+                NumberNormalizationModeRaw = EditNumberNormalizationMode.ToRawValue()
             },
             CreatedAt = IsCreatingNew ? DateTime.UtcNow : _editingCreatedAt,
             UpdatedAt = DateTime.UtcNow
@@ -837,6 +841,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             new SettingOption("transcribe", Loc.Instance["Workflows.TaskTranscribe"])
         ]);
         RebuildTaskOptions();
+        ReplaceCollection(NumberNormalizationOptions,
+        [
+            new WorkflowNumberNormalizationOption(
+                WorkflowNumberNormalizationMode.Inherit,
+                Loc.Instance["Workflows.NumberFormattingGlobal"]),
+            new WorkflowNumberNormalizationOption(
+                WorkflowNumberNormalizationMode.Enabled,
+                Loc.Instance["Workflows.NumberFormattingOn"]),
+            new WorkflowNumberNormalizationOption(
+                WorkflowNumberNormalizationMode.Disabled,
+                Loc.Instance["Workflows.NumberFormattingOff"])
+        ]);
         ReplaceCollection(TranslationTargetOptions, TranslationModelInfo.ProfileTargetOptions);
     }
 
@@ -1285,6 +1301,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     partial void OnEditTranscriptionModelOverrideChanged(string? value) => RebuildTaskOptions();
     partial void OnEditTranslationTargetLanguageChanged(string value) => NotifyEditorStateChanged();
     partial void OnEditCustomInstructionChanged(string value) => NotifyEditorStateChanged();
+    partial void OnEditNumberNormalizationModeChanged(WorkflowNumberNormalizationMode value) => NotifyEditorStateChanged();
     partial void OnIsCreatingNewChanged(bool value)
     {
         OnPropertyChanged(nameof(EditorTitle));
@@ -1336,6 +1353,7 @@ public enum WorkflowTriggerMode
 public sealed record WorkflowTemplateOption(WorkflowTemplate Template, string Name, string Description, string IconGlyph);
 public sealed record WorkflowTriggerModeOption(WorkflowTriggerMode Mode, string DisplayName, string IconGlyph);
 public sealed record WorkflowHotkeyBehaviorOption(WorkflowHotkeyBehavior Behavior, string DisplayName);
+public sealed record WorkflowNumberNormalizationOption(WorkflowNumberNormalizationMode Mode, string DisplayName);
 public sealed record WorkflowAppPickerOption(string ProcessName, string DisplayName, string Detail, ImageSource? Icon, bool IsSelected);
 public sealed record WorkflowDomainSuggestionOption(string Domain, string Detail, bool IsCurrent);
 public sealed record SettingOption(string? Value, string DisplayName);

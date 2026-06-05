@@ -84,7 +84,8 @@ internal sealed record TranscribeApiRequest(
     string? Prompt,
     string? Engine,
     string? Model,
-    bool AwaitDownload);
+    bool AwaitDownload,
+    bool? NormalizeNumbers);
 
 internal sealed record LocalFileTranscribeApiRequest(
     string Path,
@@ -96,7 +97,8 @@ internal sealed record LocalFileTranscribeApiRequest(
     string? Prompt,
     string? Engine,
     string? Model,
-    bool AwaitDownload);
+    bool AwaitDownload,
+    bool? NormalizeNumbers);
 
 internal sealed record MultipartPart(
     string Name,
@@ -125,6 +127,7 @@ internal static class HttpApiRequestParser
         string? prompt = null;
         string? engine = null;
         string? model = null;
+        bool? normalizeNumbers = null;
 
         if (contentType.Contains("multipart/form-data", StringComparison.OrdinalIgnoreCase))
         {
@@ -147,6 +150,7 @@ internal static class HttpApiRequestParser
             prompt = Field(parts, "prompt");
             engine = Field(parts, "engine");
             model = Field(parts, "model");
+            normalizeNumbers = ParseBooleanOverride(Field(parts, "normalize_numbers"), "normalize_numbers");
         }
         else if (request.Body.Length > 0)
         {
@@ -163,6 +167,9 @@ internal static class HttpApiRequestParser
             prompt = Clean(Header(request.Headers, "x-prompt"));
             engine = Clean(Header(request.Headers, "x-engine"));
             model = Clean(Header(request.Headers, "x-model"));
+            normalizeNumbers = ParseBooleanOverride(
+                Clean(Header(request.Headers, "x-normalize-numbers")),
+                "x-normalize-numbers");
         }
         else
         {
@@ -189,7 +196,8 @@ internal static class HttpApiRequestParser
             prompt,
             engine,
             model,
-            awaitDownload);
+            awaitDownload,
+            normalizeNumbers);
     }
 
     public static LocalFileTranscribeApiRequest ParseTranscribeLocalFile(HttpApiRequest request)
@@ -233,7 +241,8 @@ internal static class HttpApiRequestParser
             Clean(payload.Prompt),
             Clean(payload.Engine),
             Clean(payload.Model),
-            awaitDownload || payload.AwaitDownload);
+            awaitDownload || payload.AwaitDownload,
+            payload.NormalizeNumbers);
     }
 
     public static IReadOnlyList<MultipartPart> ParseMultipart(byte[] body, string boundary)
@@ -392,6 +401,19 @@ internal static class HttpApiRequestParser
             ? TranscriptionTask.Translate
             : TranscriptionTask.Transcribe;
 
+    private static bool? ParseBooleanOverride(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "1" or "true" or "yes" or "on" => true,
+            "0" or "false" or "no" or "off" => false,
+            _ => throw new HttpApiRequestException(400, $"Invalid '{fieldName}' value")
+        };
+    }
+
     private static string? ExtensionFromFileName(string? fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))
@@ -453,5 +475,6 @@ internal static class HttpApiRequestParser
         public string? Engine { get; init; }
         public string? Model { get; init; }
         public bool AwaitDownload { get; init; }
+        public bool? NormalizeNumbers { get; init; }
     }
 }

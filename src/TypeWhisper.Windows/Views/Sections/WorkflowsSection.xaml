@@ -1258,6 +1258,14 @@
                                     <TextBlock Text="{loc:Str Workflows.Output}" Style="{StaticResource WorkflowPanelTitleStyle}"/>
                                     <TextBlock Text="{loc:Str Workflows.OutputFormat}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <TextBox Text="{Binding Workflows.EditOutputFormat, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,12"/>
+                                    <TextBlock Text="{loc:Str Workflows.NumberFormatting}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
+                                    <ComboBox ItemsSource="{Binding Workflows.NumberNormalizationOptions}"
+                                              SelectedValue="{Binding Workflows.EditNumberNormalizationMode}"
+                                              SelectedValuePath="Mode"
+                                              DisplayMemberPath="DisplayName"
+                                              Style="{StaticResource WorkflowComboBoxStyle}"
+                                              Margin="0,0,0,6"/>
+                                    <TextBlock Text="{loc:Str Workflows.NumberFormattingHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
                                     <CheckBox Content="{loc:Str Workflows.AutoEnter}" IsChecked="{Binding Workflows.EditAutoEnter}" Margin="0,0,0,12"/>
                                     <TextBlock Text="{loc:Str Workflows.ActionPlugin}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding Workflows.ActionPluginOptions}"

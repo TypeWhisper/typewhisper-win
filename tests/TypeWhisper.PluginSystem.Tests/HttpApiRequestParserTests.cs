@@ -21,6 +21,7 @@ public class HttpApiRequestParserTests
             ("prompt", null, null, "Project names"u8.ToArray()),
             ("engine", null, null, "groq"u8.ToArray()),
             ("model", null, null, "whisper-large-v3"u8.ToArray()),
+            ("normalize_numbers", null, null, "off"u8.ToArray()),
             ("file", "audio.wav", "audio/wav", [1, 2, 3, 4]));
 
         var request = new HttpApiRequest(
@@ -42,6 +43,7 @@ public class HttpApiRequestParserTests
         Assert.Equal("Project names", parsed.Prompt);
         Assert.Equal("groq", parsed.Engine);
         Assert.Equal("whisper-large-v3", parsed.Model);
+        Assert.False(parsed.NormalizeNumbers);
         Assert.True(parsed.AwaitDownload);
     }
 
@@ -91,7 +93,8 @@ public class HttpApiRequestParserTests
                 ["x-response-format"] = "verbose_json",
                 ["x-prompt"] = "Names",
                 ["x-engine"] = "openai",
-                ["x-model"] = "gpt-4o-transcribe"
+                ["x-model"] = "gpt-4o-transcribe",
+                ["x-normalize-numbers"] = "yes"
             },
             [9, 8, 7]);
 
@@ -105,6 +108,75 @@ public class HttpApiRequestParserTests
         Assert.Equal("Names", parsed.Prompt);
         Assert.Equal("openai", parsed.Engine);
         Assert.Equal("gpt-4o-transcribe", parsed.Model);
+        Assert.True(parsed.NormalizeNumbers);
+    }
+
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("true", true)]
+    [InlineData("yes", true)]
+    [InlineData("on", true)]
+    [InlineData("0", false)]
+    [InlineData("false", false)]
+    [InlineData("no", false)]
+    [InlineData("off", false)]
+    public void ParseTranscribe_ReadsNormalizeNumbersBooleanVariants(string rawValue, bool expected)
+    {
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["content-type"] = "audio/wav",
+                ["x-normalize-numbers"] = rawValue
+            },
+            [9, 8, 7]);
+
+        var parsed = HttpApiRequestParser.ParseTranscribe(request);
+
+        Assert.Equal(expected, parsed.NormalizeNumbers);
+    }
+
+    [Fact]
+    public void ParseTranscribe_RejectsInvalidNormalizeNumbersHeader()
+    {
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["content-type"] = "audio/wav",
+                ["x-normalize-numbers"] = "maybe"
+            },
+            [9, 8, 7]);
+
+        var ex = Assert.Throws<HttpApiRequestException>(() => HttpApiRequestParser.ParseTranscribe(request));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("Invalid 'x-normalize-numbers' value", ex.Message);
+    }
+
+    [Fact]
+    public void ParseTranscribe_RejectsInvalidMultipartNormalizeNumbers()
+    {
+        var boundary = "Boundary123";
+        var body = Multipart(boundary,
+            ("normalize_numbers", null, null, "maybe"u8.ToArray()),
+            ("file", "audio.wav", "audio/wav", [1]));
+
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["content-type"] = $"multipart/form-data; boundary={boundary}" },
+            body);
+
+        var ex = Assert.Throws<HttpApiRequestException>(() => HttpApiRequestParser.ParseTranscribe(request));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("Invalid 'normalize_numbers' value", ex.Message);
     }
 
     [Fact]
@@ -159,6 +231,21 @@ public class HttpApiRequestParserTests
 
         Assert.Equal(400, ex.StatusCode);
         Assert.Contains("language_hints", ex.Message);
+    }
+
+    [Fact]
+    public void ParseTranscribeLocalFile_ReadsNormalizeNumbers()
+    {
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe/local-file",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["content-type"] = "application/json" },
+            Encoding.UTF8.GetBytes("""{"path":"C:\\Audio\\test.wav","normalize_numbers":false}"""));
+
+        var parsed = HttpApiRequestParser.ParseTranscribeLocalFile(request);
+
+        Assert.False(parsed.NormalizeNumbers);
     }
 
     private static byte[] Multipart(

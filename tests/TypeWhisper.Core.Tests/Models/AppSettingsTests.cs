@@ -29,6 +29,12 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultTranscriptionNumberNormalizationEnabled_IsTrue()
+    {
+        Assert.True(AppSettings.Default.TranscriptionNumberNormalizationEnabled);
+    }
+
+    [Fact]
     public void DefaultLocalModelAcceleration_IsAuto()
     {
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);

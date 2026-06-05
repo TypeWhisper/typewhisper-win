@@ -46,6 +46,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private float _audioDuckingLevel = 0.2f;
     [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
+    [ObservableProperty] private bool _transcriptionNumberNormalizationEnabled = true;
     [ObservableProperty] private IndicatorStyle _indicatorStyle = IndicatorStyle.StatusIsland;
     [ObservableProperty] private bool _liveTranscriptionEnabled = true;
     [ObservableProperty] private bool _onlineAsrBatchLiveTranscriptionEnabled;
@@ -414,6 +415,7 @@ public partial class SettingsViewModel : ObservableObject
             WhisperModeEnabled = WhisperModeEnabled,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
+            TranscriptionNumberNormalizationEnabled = TranscriptionNumberNormalizationEnabled,
             IndicatorStyle = IndicatorStyle,
             LiveTranscriptionEnabled = LiveTranscriptionEnabled,
             OnlineAsrBatchLiveTranscriptionEnabled = OnlineAsrBatchLiveTranscriptionEnabled,
@@ -513,6 +515,7 @@ public partial class SettingsViewModel : ObservableObject
         WhisperModeEnabled = s.WhisperModeEnabled;
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
+        TranscriptionNumberNormalizationEnabled = s.TranscriptionNumberNormalizationEnabled;
         IndicatorStyle = s.IndicatorStyle;
         LiveTranscriptionEnabled = s.LiveTranscriptionEnabled;
         OnlineAsrBatchLiveTranscriptionEnabled = s.OnlineAsrBatchLiveTranscriptionEnabled;

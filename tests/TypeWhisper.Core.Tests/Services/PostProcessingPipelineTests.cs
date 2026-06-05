@@ -164,6 +164,127 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_NumberNormalization_RunsBeforeLaterPostProcessing()
+    {
+        var executionOrder = new List<string>();
+
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = true,
+            TranscriptionTask = TranscriptionTask.Transcribe,
+            DetectedLanguage = "en",
+            ConfiguredLanguage = "en",
+            AppFormatter = (text, _) =>
+            {
+                executionOrder.Add($"Formatting:{text}");
+                return text + "+FMT";
+            },
+            LlmHandler = (text, _) =>
+            {
+                executionOrder.Add($"LLM:{text}");
+                return Task.FromResult(text + "+LLM");
+            },
+            SnippetExpander = text =>
+            {
+                executionOrder.Add($"Snippets:{text}");
+                return text + "+SNP";
+            },
+            VocabularyBooster = text =>
+            {
+                executionOrder.Add($"Boosting:{text}");
+                return text + "+BOOST";
+            },
+            DictionaryCorrector = text =>
+            {
+                executionOrder.Add($"Dictionary:{text}");
+                return text + "+DICT";
+            },
+            TranslationHandler = (text, _, _, _) =>
+            {
+                executionOrder.Add($"Translation:{text}");
+                return Task.FromResult(text + "+TR");
+            },
+            TranslationTarget = "fr"
+        };
+
+        var result = await _sut.ProcessAsync("twenty three", options);
+
+        Assert.Equal("23+FMT+LLM+SNP+BOOST+DICT+TR", result.Text);
+        Assert.Equal(
+            [
+                "Formatting:23",
+                "LLM:23+FMT",
+                "Snippets:23+FMT+LLM",
+                "Boosting:23+FMT+LLM+SNP",
+                "Dictionary:23+FMT+LLM+SNP+BOOST",
+                "Translation:23+FMT+LLM+SNP+BOOST+DICT"
+            ],
+            executionOrder);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NumberNormalizationOverrideFalse_PreservesWords()
+    {
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = true,
+            NormalizeNumbersOverride = false,
+            DetectedLanguage = "en"
+        };
+
+        var result = await _sut.ProcessAsync("twenty three", options);
+
+        Assert.Equal("twenty three", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NumberNormalizationOverrideTrue_WinsOverGlobalOff()
+    {
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = false,
+            NormalizeNumbersOverride = true,
+            DetectedLanguage = "en"
+        };
+
+        var result = await _sut.ProcessAsync("twenty three", options);
+
+        Assert.Equal("23", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NumberNormalization_UsesLaterConfiguredLanguageCandidate()
+    {
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = true,
+            DetectedLanguage = "de",
+            ConfiguredLanguage = "de",
+            ConfiguredLanguageCandidates = ["de", "en"]
+        };
+
+        var result = await _sut.ProcessAsync("Set the value to twenty three", options);
+
+        Assert.Equal("Set the value to 23", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NumberNormalization_UsesEnglishForTranslateTask()
+    {
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = true,
+            TranscriptionTask = TranscriptionTask.Translate,
+            DetectedLanguage = "de",
+            ConfiguredLanguage = "de"
+        };
+
+        var result = await _sut.ProcessAsync("twenty three", options);
+
+        Assert.Equal("23", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_MultiplePlugins_SortedByPriority()
     {
         var executionOrder = new List<string>();

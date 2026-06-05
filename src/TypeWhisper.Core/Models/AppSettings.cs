@@ -56,6 +56,7 @@ public record AppSettings
     public bool PauseMediaDuringRecording { get; init; }
     public bool SoundFeedbackEnabled { get; init; } = true;
     public bool TranscribeShortQuietClipsAggressively { get; init; }
+    public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
     // Live transcription (streaming preview while recording)
     public bool LiveTranscriptionEnabled { get; init; } = true;

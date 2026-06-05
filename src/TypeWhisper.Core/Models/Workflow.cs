@@ -142,6 +142,46 @@ public sealed record WorkflowOutput
     public string? Format { get; init; }
     public bool AutoEnter { get; init; }
     public string? TargetActionPluginId { get; init; }
+
+    [JsonPropertyName("numberNormalizationModeRaw")]
+    public string? NumberNormalizationModeRaw { get; init; }
+
+    [JsonIgnore]
+    public WorkflowNumberNormalizationMode NumberNormalizationMode =>
+        WorkflowNumberNormalizationModes.Parse(NumberNormalizationModeRaw);
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<WorkflowNumberNormalizationMode>))]
+public enum WorkflowNumberNormalizationMode
+{
+    Inherit,
+    Enabled,
+    Disabled
+}
+
+public static class WorkflowNumberNormalizationModes
+{
+    public static WorkflowNumberNormalizationMode Parse(string? rawValue) =>
+        rawValue?.Trim().ToLowerInvariant() switch
+        {
+            "enabled" => WorkflowNumberNormalizationMode.Enabled,
+            "disabled" => WorkflowNumberNormalizationMode.Disabled,
+            _ => WorkflowNumberNormalizationMode.Inherit
+        };
+
+    public static string? ToRawValue(this WorkflowNumberNormalizationMode mode) => mode switch
+    {
+        WorkflowNumberNormalizationMode.Enabled => "enabled",
+        WorkflowNumberNormalizationMode.Disabled => "disabled",
+        _ => null
+    };
+
+    public static bool? OverrideValue(this WorkflowNumberNormalizationMode mode) => mode switch
+    {
+        WorkflowNumberNormalizationMode.Enabled => true,
+        WorkflowNumberNormalizationMode.Disabled => false,
+        _ => null
+    };
 }
 
 public sealed record Workflow

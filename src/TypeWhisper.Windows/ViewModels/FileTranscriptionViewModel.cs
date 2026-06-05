@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.NumberNormalization;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
@@ -573,9 +574,19 @@ public partial class FileTranscriptionViewModel : ObservableObject
             var result = activeResult.Result;
             var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
             {
+                TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
+                TranscriptionTask = TranscriptionTask.Transcribe,
+                DetectedLanguage = result.DetectedLanguage,
+                ConfiguredLanguage = language,
                 VocabularyBooster = GetVocabularyBooster(),
                 DictionaryCorrector = _dictionary.ApplyCorrections
             }, ct);
+            var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
+                result,
+                TranscriptionTask.Transcribe,
+                language,
+                [],
+                _settings.Current.TranscriptionNumberNormalizationEnabled);
 
             _modelManager.ScheduleAutoUnload();
 
@@ -584,7 +595,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
                 result.DetectedLanguage,
                 result.Duration,
                 result.ProcessingTime,
-                result.Segments,
+                normalizedResult.Segments,
                 activeResult.EngineId,
                 activeResult.ModelId);
         }
