@@ -23,6 +23,21 @@ public sealed record PipelineOptions
     /// <summary>Applies app-aware formatting to text. Params: text, processName.</summary>
     public Func<string, string?, string>? AppFormatter { get; init; }
 
+    /// <summary>Global number normalization setting. Workflow/API overrides can supersede this.</summary>
+    public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
+
+    /// <summary>Per-request or workflow override for spoken number normalization.</summary>
+    public bool? NormalizeNumbersOverride { get; init; }
+
+    /// <summary>Transcription task used to choose normalization languages.</summary>
+    public TranscriptionTask TranscriptionTask { get; init; } = TranscriptionTask.Transcribe;
+
+    /// <summary>Configured input language, such as "en", "de", or "auto".</summary>
+    public string? ConfiguredLanguage { get; init; }
+
+    /// <summary>Configured language hint candidates used when detected language does not normalize.</summary>
+    public IReadOnlyList<string> ConfiguredLanguageCandidates { get; init; } = [];
+
     /// <summary>Process name of the target app for formatting.</summary>
     public string? TargetProcessName { get; init; }
 

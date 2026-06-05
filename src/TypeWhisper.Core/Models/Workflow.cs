@@ -311,6 +311,76 @@ public sealed record WorkflowOutput
     /// Gets or sets the target action plugin id value.
     /// </summary>
     public string? TargetActionPluginId { get; init; }
+
+    /// <summary>
+    /// Gets or sets the raw number normalization mode value stored in workflow JSON.
+    /// </summary>
+    [JsonPropertyName("numberNormalizationModeRaw")]
+    public string? NumberNormalizationModeRaw { get; init; }
+
+    /// <summary>
+    /// Gets the parsed number normalization mode.
+    /// </summary>
+    [JsonIgnore]
+    public WorkflowNumberNormalizationMode NumberNormalizationMode =>
+        WorkflowNumberNormalizationModes.Parse(NumberNormalizationModeRaw);
+}
+
+/// <summary>
+/// Represents workflow-level number normalization behavior.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<WorkflowNumberNormalizationMode>))]
+public enum WorkflowNumberNormalizationMode
+{
+    /// <summary>
+    /// Uses the global number normalization setting.
+    /// </summary>
+    Inherit,
+    /// <summary>
+    /// Enables number normalization for this workflow.
+    /// </summary>
+    Enabled,
+    /// <summary>
+    /// Disables number normalization for this workflow.
+    /// </summary>
+    Disabled
+}
+
+/// <summary>
+/// Provides conversion helpers for workflow number normalization modes.
+/// </summary>
+public static class WorkflowNumberNormalizationModes
+{
+    /// <summary>
+    /// Parses a raw workflow number normalization mode value.
+    /// </summary>
+    public static WorkflowNumberNormalizationMode Parse(string? rawValue) =>
+        rawValue?.Trim().ToLowerInvariant() switch
+        {
+            "enabled" => WorkflowNumberNormalizationMode.Enabled,
+            "disabled" => WorkflowNumberNormalizationMode.Disabled,
+            _ => WorkflowNumberNormalizationMode.Inherit
+        };
+
+    /// <summary>
+    /// Converts a workflow number normalization mode to its serialized value.
+    /// </summary>
+    public static string? ToRawValue(this WorkflowNumberNormalizationMode mode) => mode switch
+    {
+        WorkflowNumberNormalizationMode.Enabled => "enabled",
+        WorkflowNumberNormalizationMode.Disabled => "disabled",
+        _ => null
+    };
+
+    /// <summary>
+    /// Converts a workflow number normalization mode to an override value.
+    /// </summary>
+    public static bool? OverrideValue(this WorkflowNumberNormalizationMode mode) => mode switch
+    {
+        WorkflowNumberNormalizationMode.Enabled => true,
+        WorkflowNumberNormalizationMode.Disabled => false,
+        _ => null
+    };
 }
 
 /// <summary>

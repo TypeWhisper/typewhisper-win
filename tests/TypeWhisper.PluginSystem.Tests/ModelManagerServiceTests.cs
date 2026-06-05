@@ -329,6 +329,70 @@ public class ModelManagerServiceTests
         Assert.Equal("CUDA unavailable", status.ErrorMessage);
     }
 
+    [Fact]
+    public void GetStatus_ReturnsError_WhenPluginDownloadStatusThrows()
+    {
+        const string pluginId = "com.typewhisper.granite-speech";
+        const string modelId = "granite";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            DownloadStatusException = new MissingMethodException(
+                typeof(IPluginHostServices).FullName,
+                "PluginAssetDirectory")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        var status = sut.GetStatus(fullModelId);
+        var isDownloaded = sut.IsDownloaded(fullModelId);
+
+        Assert.Equal(ModelStatusType.Error, status.Type);
+        Assert.Contains("PluginAssetDirectory", status.ErrorMessage);
+        Assert.False(isDownloaded);
+    }
+
+    [Fact]
+    public void IsDownloaded_DoesNotRaiseRepeatedStatusChanges_WhenPluginDownloadStatusThrows()
+    {
+        const string pluginId = "com.typewhisper.granite-speech";
+        const string modelId = "granite";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            DownloadStatusException = new MissingMethodException(
+                typeof(IPluginHostServices).FullName,
+                "PluginAssetDirectory")
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+        var statusChangedCount = 0;
+
+        sut.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName != nameof(ModelManagerService.GetStatus))
+                return;
+
+            statusChangedCount++;
+            if (statusChangedCount < 3)
+                sut.IsDownloaded(fullModelId);
+        };
+
+        Assert.False(sut.IsDownloaded(fullModelId));
+
+        Assert.Equal(1, statusChangedCount);
+    }
+
     private PluginManager CreatePluginManager(params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -393,6 +457,7 @@ public class ModelManagerServiceTests
         public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
             ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
         public Exception? LoadException { get; init; }
+        public Exception? DownloadStatusException { get; init; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -400,6 +465,13 @@ public class ModelManagerServiceTests
         public void SelectModel(string modelId) => SelectedModelId = modelId;
         public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
             LastAccelerationPreference = preference;
+        public bool IsModelDownloaded(string modelId)
+        {
+            if (DownloadStatusException is not null)
+                throw DownloadStatusException;
+
+            return true;
+        }
 
         public Task LoadModelAsync(string modelId, CancellationToken ct)
         {

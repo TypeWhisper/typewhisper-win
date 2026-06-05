@@ -199,6 +199,10 @@ public record AppSettings
     /// Gets or sets the transcribe short quiet clips aggressively value.
     /// </summary>
     public bool TranscribeShortQuietClipsAggressively { get; init; }
+    /// <summary>
+    /// Gets or sets whether spoken number words are normalized in transcription output.
+    /// </summary>
+    public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
     // Live transcription (streaming preview while recording)
     /// <summary>

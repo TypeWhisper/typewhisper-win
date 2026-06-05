@@ -1317,6 +1317,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
             var pipelineOptions = new PipelineOptions
             {
+                TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
+                NormalizeNumbersOverride = job.ActiveWorkflow?.Output.NumberNormalizationMode.OverrideValue(),
+                TranscriptionTask = job.EffectiveTask,
+                DetectedLanguage = detectedLanguage,
+                ConfiguredLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
                 AppFormatter = AppFormatterService.Format,
                 TargetProcessName = job.CapturedProcessName,
                 VocabularyBooster = GetVocabularyBooster(),
@@ -1336,7 +1341,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable
                 TranslationTarget = translationTarget,
                 RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
                 EffectiveSourceLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
-                DetectedLanguage = detectedLanguage,
                 PluginPostProcessors = pluginProcessors,
                 StatusCallback = async status =>
                 {
