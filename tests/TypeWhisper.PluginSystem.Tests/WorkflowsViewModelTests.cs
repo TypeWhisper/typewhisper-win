@@ -55,6 +55,22 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ProviderOptions_UseLlmSelectionIdForAdditionalProfileRoles()
+    {
+        AddLlmProvider(new FakeLlmProvider(
+            "com.typewhisper.openai-compatible",
+            "Local Gateway",
+            [new PluginModelInfo("gpt-local", "GPT Local")],
+            selectionId: "openai-compatible-profile-a"));
+
+        var sut = CreateViewModel();
+
+        var option = Assert.Single(sut.AvailableProviders, provider => provider.Value is not null);
+        Assert.Equal("plugin:openai-compatible-profile-a:gpt-local", option.Value);
+        Assert.Equal("Local Gateway / GPT Local", option.DisplayName);
+    }
+
+    [Fact]
     public void StartEdit_LoadsSingleHotkeyWorkflowAsOneHotkeyChip()
     {
         var workflow = NewWorkflow("Rewrite", WorkflowTrigger.Hotkey("Ctrl+Alt+R"));
@@ -263,19 +279,27 @@ public sealed class WorkflowsViewModelTests : IDisposable
         TestPluginManagerFactory.SetPrivateField(_pluginManager, "_llmProviders", new List<ILlmProviderPlugin> { provider });
     }
 
-    private sealed class FakeLlmProvider : ILlmProviderPlugin
+    private sealed class FakeLlmProvider : ILlmProviderPlugin, ILlmProviderSelectionIdentity
     {
-        public FakeLlmProvider(string pluginId, string providerName, IReadOnlyList<PluginModelInfo> supportedModels)
+        private readonly string? _selectionId;
+
+        public FakeLlmProvider(
+            string pluginId,
+            string providerName,
+            IReadOnlyList<PluginModelInfo> supportedModels,
+            string? selectionId = null)
         {
             PluginId = pluginId;
             PluginName = providerName;
             ProviderName = providerName;
             SupportedModels = supportedModels;
+            _selectionId = selectionId;
         }
 
         public string PluginId { get; }
         public string PluginName { get; }
         public string PluginVersion => "1.0.0";
+        public string LlmSelectionId => _selectionId ?? PluginId;
         public string ProviderName { get; }
         public bool IsAvailable { get; set; } = true;
         public IReadOnlyList<PluginModelInfo> SupportedModels { get; }

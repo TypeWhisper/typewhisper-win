@@ -152,6 +152,42 @@ public class PluginManagerTests : IDisposable
     }
 
     [Fact]
+    public void CapabilityIndices_IncludeAdditionalRolesWithoutDuplicatingAllPlugins()
+    {
+        var manager = CreateManager();
+        var plugin = new MultiRolePlugin();
+        var manifest = new PluginManifest
+        {
+            Id = plugin.PluginId,
+            Name = plugin.PluginName,
+            Version = plugin.PluginVersion,
+            AssemblyName = "Fake.dll",
+            PluginClass = plugin.GetType().FullName!
+        };
+        var context = new PluginAssemblyLoadContext(typeof(PluginManagerTests).Assembly.Location);
+        var loaded = new LoadedPlugin(manifest, plugin, context, AppContext.BaseDirectory);
+
+        TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { loaded });
+        TestPluginManagerFactory.SetPrivateField(manager, "_activatedPlugins", new HashSet<string> { plugin.PluginId });
+        TestPluginManagerFactory.InvokeRebuildCapabilityIndices(manager);
+
+        Assert.Single(manager.AllPlugins);
+        Assert.Equal(
+            ["com.test.multi", "openai-compatible-profile-a"],
+            manager.TranscriptionEngines.Select(engine => engine.GetTranscriptionSelectionId()).ToArray());
+        Assert.Equal(
+            ["com.test.multi", "openai-compatible-profile-a"],
+            manager.LlmProviders.Select(provider => provider.GetLlmSelectionId()).ToArray());
+
+        plugin.ClearAdditionalRoles();
+        TestPluginManagerFactory.InvokeRebuildCapabilityIndices(manager);
+
+        Assert.Single(manager.AllPlugins);
+        Assert.Equal(["com.test.multi"], manager.TranscriptionEngines.Select(engine => engine.GetTranscriptionSelectionId()).ToArray());
+        Assert.Equal(["com.test.multi"], manager.LlmProviders.Select(provider => provider.GetLlmSelectionId()).ToArray());
+    }
+
+    [Fact]
     public async Task PluginStateChanged_FiredOnInitialize()
     {
         var manager = CreateManager();
@@ -175,6 +211,95 @@ public class PluginManagerTests : IDisposable
         {
             // Best-effort cleanup in tests
         }
+    }
+
+    private sealed class MultiRolePlugin :
+        ITranscriptionEnginePlugin,
+        ILlmProviderPlugin,
+        IAdditionalTranscriptionEnginesProvider,
+        IAdditionalLlmProvidersProvider
+    {
+        private readonly ProfileRole _profileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A");
+        private bool _includeAdditionalRoles = true;
+
+        public string PluginId => "com.test.multi";
+        public string PluginName => "Multi";
+        public string PluginVersion => "1.0.0";
+        public string ProviderId => "multi";
+        public string ProviderDisplayName => "Multi";
+        public bool IsConfigured => true;
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("root-transcribe", "Root Transcribe")];
+        public string? SelectedModelId => "root-transcribe";
+        public bool SupportsTranslation => false;
+        public string ProviderName => "Multi";
+        public bool IsAvailable => true;
+        public IReadOnlyList<PluginModelInfo> SupportedModels { get; } = [new("root-llm", "Root LLM")];
+        public IReadOnlyList<ITranscriptionEnginePlugin> AdditionalTranscriptionEngines =>
+            _includeAdditionalRoles ? [_profileRole] : [];
+        public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders =>
+            _includeAdditionalRoles ? [_profileRole] : [];
+
+        public void ClearAdditionalRoles() => _includeAdditionalRoles = false;
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public UserControl? CreateSettingsView() => null;
+        public void SelectModel(string modelId) { }
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct) =>
+            Task.FromResult(new PluginTranscriptionResult("", language ?? "", 0));
+        public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct) =>
+            Task.FromResult(userText);
+        public void Dispose() { }
+    }
+
+    private sealed class ProfileRole :
+        ITranscriptionEnginePlugin,
+        ILlmProviderPlugin,
+        ITranscriptionEngineSelectionIdentity,
+        ILlmProviderSelectionIdentity
+    {
+        private readonly string _displayName;
+
+        public ProfileRole(string pluginId, string selectionId, string displayName)
+        {
+            PluginId = pluginId;
+            TranscriptionSelectionId = selectionId;
+            LlmSelectionId = selectionId;
+            _displayName = displayName;
+        }
+
+        public string PluginId { get; }
+        public string PluginName => _displayName;
+        public string PluginVersion => "1.0.0";
+        public string TranscriptionSelectionId { get; }
+        public string LlmSelectionId { get; }
+        public string ProviderId => TranscriptionSelectionId;
+        public string ProviderDisplayName => _displayName;
+        public bool IsConfigured => true;
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("profile-transcribe", "Profile Transcribe")];
+        public string? SelectedModelId => "profile-transcribe";
+        public bool SupportsTranslation => false;
+        public string ProviderName => _displayName;
+        public bool IsAvailable => true;
+        public IReadOnlyList<PluginModelInfo> SupportedModels { get; } = [new("profile-llm", "Profile LLM")];
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public UserControl? CreateSettingsView() => null;
+        public void SelectModel(string modelId) { }
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct) =>
+            Task.FromResult(new PluginTranscriptionResult("", language ?? "", 0));
+        public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct) =>
+            Task.FromResult(userText);
+        public void Dispose() { }
     }
 }
 

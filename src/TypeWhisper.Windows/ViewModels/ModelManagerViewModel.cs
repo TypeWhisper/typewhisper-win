@@ -133,15 +133,16 @@ public partial class ModelManagerViewModel : ObservableObject
         AvailableModelOptions.Clear();
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines)
         {
+            var selectionId = engine.GetTranscriptionSelectionId();
             var isLlmProvider = _modelManager.PluginManager.LlmProviders
-                .Any(l => l.PluginId == engine.PluginId);
+                .Any(l => string.Equals(l.GetLlmSelectionId(), selectionId, StringComparison.OrdinalIgnoreCase));
             var providerVm = new ProviderViewModel(
-                engine.PluginId, engine.ProviderDisplayName,
+                selectionId, engine.ProviderDisplayName,
                 engine.IsConfigured, isLlmProvider, engine.SupportsModelDownload);
 
             foreach (var model in engine.TranscriptionModels)
             {
-                var fullId = ModelManagerService.GetPluginModelId(engine.PluginId, model.Id);
+                var fullId = ModelManagerService.GetPluginModelId(selectionId, model.Id);
                 var status = _modelManager.GetStatus(fullId);
                 providerVm.Models.Add(new ModelItemViewModel(
                     fullId, model, engine.IsConfigured,
@@ -173,7 +174,10 @@ public partial class ModelManagerViewModel : ObservableObject
         foreach (var providerVm in Providers)
         {
             var engine = _modelManager.PluginManager.TranscriptionEngines
-                .FirstOrDefault(e => e.PluginId == providerVm.ProviderId);
+                .FirstOrDefault(e => string.Equals(
+                    e.GetTranscriptionSelectionId(),
+                    providerVm.ProviderId,
+                    StringComparison.OrdinalIgnoreCase));
             var isConfigured = engine?.IsConfigured ?? false;
             providerVm.IsConfigured = isConfigured;
             foreach (var m in providerVm.Models)
@@ -460,7 +464,10 @@ public partial class ModelManagerViewModel : ObservableObject
 
         var (pluginId, _) = ModelManagerService.ParsePluginModelId(displayModelId);
         return _modelManager.PluginManager.TranscriptionEngines
-            .FirstOrDefault(e => e.PluginId == pluginId);
+            .FirstOrDefault(e => string.Equals(
+                e.GetTranscriptionSelectionId(),
+                pluginId,
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private string? GetDisplayModelId() =>

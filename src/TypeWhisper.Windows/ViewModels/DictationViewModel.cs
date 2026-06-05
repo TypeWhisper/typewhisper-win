@@ -1685,7 +1685,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         {
             var (pluginId, _) = ModelManagerService.ParsePluginModelId(activeModelId);
             return _modelManager.PluginManager.TranscriptionEngines
-                .FirstOrDefault(plugin => plugin.PluginId == pluginId)
+                .FirstOrDefault(plugin => string.Equals(
+                    plugin.GetTranscriptionSelectionId(),
+                    pluginId,
+                    StringComparison.OrdinalIgnoreCase))
                 ?.ProviderId ?? activeModelId;
         }
 

@@ -85,6 +85,34 @@ public sealed class PromptProcessingServiceTests : IDisposable
         Assert.Equal("Go ahead and do that", ExtractDictatedText(secondary.LastUserText!));
     }
 
+    [Fact]
+    public async Task ProcessAsync_ResolvesProviderOverrideByLlmSelectionId()
+    {
+        var root = new CapturingLlmProvider("com.test.openai-compatible", "OpenAI Compatible", "root-model");
+        var profile = new CapturingLlmProvider(
+            "com.test.openai-compatible",
+            "Local Gateway",
+            "profile-model",
+            selectionId: "openai-compatible-profile-a")
+        {
+            ResponseText = "profile result"
+        };
+        SetLlmProviders(_pluginManager, root, profile);
+        var sut = new PromptProcessingService(_pluginManager, _settings);
+
+        var result = await sut.ProcessAsync(
+            "Return transformed text.",
+            "Profile input",
+            "plugin:openai-compatible-profile-a:profile-model",
+            modelOverride: null,
+            CancellationToken.None);
+
+        Assert.Equal("profile result", result);
+        Assert.Null(root.LastUserText);
+        Assert.Equal("profile-model", profile.LastModel);
+        Assert.Equal("Profile input", ExtractDictatedText(profile.LastUserText!));
+    }
+
     private static string ExtractDictatedText(string framedText)
     {
         using var doc = JsonDocument.Parse(ExtractJsonPayload(framedText));
@@ -129,19 +157,27 @@ public sealed class PromptProcessingServiceTests : IDisposable
 
     public void Dispose() => _pluginManager.Dispose();
 
-    private sealed class CapturingLlmProvider : ILlmProviderPlugin
+    private sealed class CapturingLlmProvider : ILlmProviderPlugin, ILlmProviderSelectionIdentity
     {
-        public CapturingLlmProvider(string pluginId, string providerName, string modelId)
+        private readonly string? _selectionId;
+
+        public CapturingLlmProvider(
+            string pluginId,
+            string providerName,
+            string modelId,
+            string? selectionId = null)
         {
             PluginId = pluginId;
             PluginName = providerName;
             ProviderName = providerName;
             SupportedModels = [new PluginModelInfo(modelId, modelId)];
+            _selectionId = selectionId;
         }
 
         public string PluginId { get; }
         public string PluginName { get; }
         public string PluginVersion => "1.0.0";
+        public string LlmSelectionId => _selectionId ?? PluginId;
         public string ProviderName { get; }
         public bool IsAvailable { get; set; } = true;
         public IReadOnlyList<PluginModelInfo> SupportedModels { get; }

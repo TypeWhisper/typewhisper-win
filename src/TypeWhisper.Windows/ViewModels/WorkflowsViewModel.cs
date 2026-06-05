@@ -7,6 +7,7 @@ using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Translation;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
@@ -996,12 +997,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         var explicitOptions = new List<ProviderOption>();
         foreach (var provider in _pluginManager.LlmProviders.Where(p => p.IsAvailable))
         {
-            var plugin = _pluginManager.AllPlugins.FirstOrDefault(p => p.Instance == provider);
-            if (plugin is null) continue;
-
+            var selectionId = provider.GetLlmSelectionId();
             foreach (var model in provider.SupportedModels)
                 explicitOptions.Add(new ProviderOption(
-                    $"plugin:{plugin.Manifest.Id}:{model.Id}",
+                    $"plugin:{selectionId}:{model.Id}",
                     $"{provider.ProviderName} / {model.DisplayName}"));
         }
 
@@ -1039,9 +1038,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         AvailableModelOptions.Add(new ModelOption(null, Loc.Instance["Workflows.GlobalDefault"]));
         foreach (var engine in _modelManager.PluginManager.TranscriptionEngines)
         {
+            var selectionId = engine.GetTranscriptionSelectionId();
             foreach (var model in engine.TranscriptionModels)
                 AvailableModelOptions.Add(new ModelOption(
-                    ModelManagerService.GetPluginModelId(engine.PluginId, model.Id),
+                    ModelManagerService.GetPluginModelId(selectionId, model.Id),
                     $"{engine.ProviderDisplayName}: {model.DisplayName}"));
         }
         EditTranscriptionModelOverride = selected;
@@ -1202,7 +1202,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         {
             var (pluginId, _) = ModelManagerService.ParsePluginModelId(modelId);
             return _modelManager.PluginManager.TranscriptionEngines
-                .FirstOrDefault(engine => string.Equals(engine.PluginId, pluginId, StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(engine => string.Equals(
+                    engine.GetTranscriptionSelectionId(),
+                    pluginId,
+                    StringComparison.OrdinalIgnoreCase))
                 ?.SupportsTranslation == true;
         }
         catch

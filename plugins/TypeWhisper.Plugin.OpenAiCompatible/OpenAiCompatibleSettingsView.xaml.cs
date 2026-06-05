@@ -5,20 +5,27 @@ using System.Windows.Media;
 namespace TypeWhisper.Plugin.OpenAiCompatible;
 
 /// <summary>
-/// Provides open ai compatible settings view behavior.
+/// Provides OpenAI-compatible settings view behavior.
 /// </summary>
 public partial class OpenAiCompatibleSettingsView : UserControl
 {
     private readonly OpenAiCompatiblePlugin _plugin;
+    private bool _isLoadingProfile;
 
     /// <summary>
-    /// Initializes a new instance of the OpenAiCompatibleSettingsView class.
+    /// Initializes a new instance of the <see cref="OpenAiCompatibleSettingsView"/> class.
     /// </summary>
     public OpenAiCompatibleSettingsView(OpenAiCompatiblePlugin plugin)
     {
         _plugin = plugin;
         InitializeComponent();
 
+        ProfilesHeader.Text = L("Settings.Profiles");
+        AddProfileButton.Content = L("Settings.AddProfile");
+        DeleteProfileButton.Content = L("Settings.DeleteProfile");
+        RenameProfileButton.Content = L("Settings.RenameProfile");
+        ServerUrlHeader.Text = L("Settings.ServerUrl");
+        ApiKeyHeader.Text = L("Settings.ApiKey");
         ConnectButton.Content = L("Settings.Connect");
         ApiKeyHintText.Text = L("Settings.ApiKeyHint");
         ModelSelectionHeader.Text = L("Settings.ModelSelection");
@@ -36,22 +43,67 @@ public partial class OpenAiCompatibleSettingsView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        UrlBox.Text = _plugin.BaseUrl ?? "http://localhost:11434";
+        RefreshProfiles(OpenAiCompatiblePlugin.DefaultProfileId);
+    }
 
-        if (!string.IsNullOrEmpty(_plugin.ApiKey))
-            ApiKeyBox.Password = _plugin.ApiKey;
+    private void RefreshProfiles(string? selectedProfileId = null)
+    {
+        var requestedProfileId = string.IsNullOrWhiteSpace(selectedProfileId)
+            ? SelectedProfileId()
+            : selectedProfileId;
 
-        ManualTranscriptionBox.Text = _plugin.SelectedTranscriptionModelId ?? "";
-        ManualLlmBox.Text = _plugin.SelectedLlmModelId ?? "";
-
-        if (_plugin.IsConfigured)
+        _isLoadingProfile = true;
+        try
         {
-            ModelsSection.Visibility = Visibility.Visible;
-            var models = _plugin.FetchedModels.ToList();
-            PopulateModels(models);
+            ProfilePicker.ItemsSource = _plugin.Profiles.ToList();
+            ProfilePicker.SelectedItem = _plugin.Profiles.FirstOrDefault(profile => profile.Id == requestedProfileId)
+                                         ?? _plugin.Profiles.FirstOrDefault();
+        }
+        finally
+        {
+            _isLoadingProfile = false;
+        }
 
-            if (models.Count > 0)
-                ShowConnectionSuccess(models.Count, _plugin.BaseUrl ?? "");
+        LoadSelectedProfile();
+    }
+
+    private void LoadSelectedProfile()
+    {
+        var profile = SelectedProfile();
+        if (profile is null)
+            return;
+
+        _isLoadingProfile = true;
+        try
+        {
+            ProfileNameBox.Text = profile.Name;
+            UrlBox.Text = string.IsNullOrWhiteSpace(profile.BaseUrl)
+                ? "http://localhost:11434"
+                : profile.BaseUrl;
+            ApiKeyBox.Password = _plugin.GetApiKey(profile.Id) ?? "";
+            ManualTranscriptionBox.Text = profile.SelectedModelId ?? "";
+            ManualLlmBox.Text = profile.SelectedLlmModelId ?? "";
+            DeleteProfileButton.IsEnabled = profile.Id != OpenAiCompatiblePlugin.DefaultProfileId;
+
+            ConnectionStatusPanel.Visibility = Visibility.Collapsed;
+            var models = profile.FetchedModels.ToList();
+            if (!string.IsNullOrWhiteSpace(profile.BaseUrl))
+            {
+                ModelsSection.Visibility = Visibility.Visible;
+                PopulateModels(models);
+                if (models.Count > 0)
+                    ShowConnectionSuccess(models.Count, profile.BaseUrl);
+            }
+            else
+            {
+                ModelsSection.Visibility = Visibility.Collapsed;
+                PickerSection.Visibility = Visibility.Collapsed;
+                ManualSection.Visibility = Visibility.Collapsed;
+            }
+        }
+        finally
+        {
+            _isLoadingProfile = false;
         }
     }
 
@@ -59,15 +111,18 @@ public partial class OpenAiCompatibleSettingsView : UserControl
     {
         e.Handled = true;
 
+        var profile = SelectedProfile();
+        if (profile is null)
+            return;
+
         var url = UrlBox.Text.Trim();
         if (string.IsNullOrEmpty(url))
             return;
 
-        _plugin.SetBaseUrl(url);
+        _plugin.SetBaseUrl(url, profile.Id);
 
         var key = ApiKeyBox.Password.Trim();
-        if (!string.IsNullOrEmpty(key))
-            await _plugin.SetApiKeyAsync(key);
+        await _plugin.SetApiKeyAsync(key, profile.Id);
 
         ConnectButton.IsEnabled = false;
         ConnectButton.Content = L("Settings.Connecting");
@@ -76,21 +131,30 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         try
         {
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var models = await _plugin.FetchModelsAsync(cts.Token);
+            var models = await _plugin.FetchModelsAsync(profile.Id, cts.Token);
             var connected = models.Count > 0;
 
             if (!connected)
             {
                 using var cts2 = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
-                connected = await _plugin.ValidateConnectionAsync(cts2.Token);
+                connected = await _plugin.ValidateConnectionAsync(profile.Id, cts2.Token);
             }
 
             if (connected)
             {
-                _plugin.SetFetchedModels(models);
+                _plugin.SetFetchedModelsForProfile(profile.Id, models);
+                if (models.Count > 0)
+                {
+                    if (string.IsNullOrWhiteSpace(profile.SelectedModelId))
+                        _plugin.SelectModelForProfile(profile.Id, models[0].Id);
+                    if (string.IsNullOrWhiteSpace(profile.SelectedLlmModelId))
+                        _plugin.SelectLlmModelForProfile(profile.Id, models[0].Id);
+                }
+
                 ModelsSection.Visibility = Visibility.Visible;
                 PopulateModels(models);
-                ShowConnectionSuccess(models.Count, url);
+                ShowConnectionSuccess(models.Count, profile.BaseUrl);
+                RefreshProfiles(profile.Id);
             }
             else
             {
@@ -122,13 +186,6 @@ public partial class OpenAiCompatibleSettingsView : UserControl
 
     private void ShowConnectionSuccess(int modelCount, string url)
     {
-        var transcriptionCount = 0;
-        var llmCount = 0;
-
-        // All models could be used for either purpose
-        transcriptionCount = modelCount;
-        llmCount = modelCount;
-
         var detail = L("Settings.ConnectionSuccess", url, modelCount);
         ShowConnectionStatus("\u2705", L("Settings.Connected", modelCount), detail,
             new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)));
@@ -143,24 +200,32 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         ConnectionDetail.Text = detail;
     }
 
-    private void OnApiKeyChanged(object sender, RoutedEventArgs e)
+    private async void OnApiKeyChanged(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        _ = _plugin.SetApiKeyAsync(ApiKeyBox.Password);
+        if (_isLoadingProfile)
+            return;
+
+        if (SelectedProfile() is { } profile)
+            await _plugin.SetApiKeyAsync(ApiKeyBox.Password, profile.Id);
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        var profile = SelectedProfile();
+        if (profile is null)
+            return;
+
         RefreshButton.IsEnabled = false;
         try
         {
-            var models = await _plugin.FetchModelsAsync();
-            _plugin.SetFetchedModels(models);
+            var models = await _plugin.FetchModelsAsync(profile.Id);
+            _plugin.SetFetchedModelsForProfile(profile.Id, models);
             PopulateModels(models);
 
             if (models.Count > 0)
-                ShowConnectionSuccess(models.Count, _plugin.BaseUrl ?? "");
+                ShowConnectionSuccess(models.Count, profile.BaseUrl);
         }
         finally
         {
@@ -170,6 +235,10 @@ public partial class OpenAiCompatibleSettingsView : UserControl
 
     private void PopulateModels(List<FetchedModel> models)
     {
+        var profile = SelectedProfile();
+        if (profile is null)
+            return;
+
         if (models.Count > 0)
         {
             PickerSection.Visibility = Visibility.Visible;
@@ -178,10 +247,10 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             TranscriptionModelPicker.ItemsSource = models;
             LlmModelPicker.ItemsSource = models;
 
-            var selectedTranscription = models.FirstOrDefault(m => m.Id == _plugin.SelectedTranscriptionModelId);
+            var selectedTranscription = models.FirstOrDefault(m => m.Id == profile.SelectedModelId);
             TranscriptionModelPicker.SelectedItem = selectedTranscription ?? models.FirstOrDefault();
 
-            var selectedLlm = models.FirstOrDefault(m => m.Id == _plugin.SelectedLlmModelId);
+            var selectedLlm = models.FirstOrDefault(m => m.Id == profile.SelectedLlmModelId);
             LlmModelPicker.SelectedItem = selectedLlm ?? models.FirstOrDefault();
         }
         else
@@ -194,32 +263,88 @@ public partial class OpenAiCompatibleSettingsView : UserControl
     private void OnTranscriptionModelChanged(object sender, SelectionChangedEventArgs e)
     {
         e.Handled = true;
-        if (TranscriptionModelPicker.SelectedItem is FetchedModel model)
-            _plugin.SelectModel(model.Id);
+        if (_isLoadingProfile)
+            return;
+
+        if (SelectedProfile() is { } profile && TranscriptionModelPicker.SelectedItem is FetchedModel model)
+            _plugin.SelectModelForProfile(profile.Id, model.Id);
     }
 
     private void OnLlmModelChanged(object sender, SelectionChangedEventArgs e)
     {
         e.Handled = true;
-        if (LlmModelPicker.SelectedItem is FetchedModel model)
-            _plugin.SelectLlmModel(model.Id);
+        if (_isLoadingProfile)
+            return;
+
+        if (SelectedProfile() is { } profile && LlmModelPicker.SelectedItem is FetchedModel model)
+            _plugin.SelectLlmModelForProfile(profile.Id, model.Id);
     }
 
     private void OnSaveManualTranscription(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        if (SelectedProfile() is not { } profile)
+            return;
+
         var id = ManualTranscriptionBox.Text.Trim();
         if (!string.IsNullOrEmpty(id))
-            _plugin.SelectModel(id);
+            _plugin.SelectModelForProfile(profile.Id, id);
     }
 
     private void OnSaveManualLlm(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        if (SelectedProfile() is not { } profile)
+            return;
+
         var id = ManualLlmBox.Text.Trim();
         if (!string.IsNullOrEmpty(id))
-            _plugin.SelectLlmModel(id);
+            _plugin.SelectLlmModelForProfile(profile.Id, id);
     }
+
+    private void OnProfileSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        e.Handled = true;
+        if (_isLoadingProfile)
+            return;
+
+        LoadSelectedProfile();
+    }
+
+    private void OnAddProfileClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        var profile = _plugin.AddProfile(L("Settings.NewProfileDefaultName"));
+        RefreshProfiles(profile.Id);
+    }
+
+    private void OnRenameProfileClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (SelectedProfile() is not { } profile)
+            return;
+
+        _plugin.RenameProfile(profile.Id, ProfileNameBox.Text);
+        RefreshProfiles(profile.Id);
+    }
+
+    private async void OnDeleteProfileClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (SelectedProfile() is not { } profile)
+            return;
+
+        if (await _plugin.DeleteProfileAsync(profile.Id))
+            RefreshProfiles(OpenAiCompatiblePlugin.DefaultProfileId);
+    }
+
+    private OpenAiCompatibleProfile? SelectedProfile() =>
+        ProfilePicker.SelectedItem as OpenAiCompatibleProfile
+        ?? _plugin.Profiles.FirstOrDefault(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId)
+        ?? _plugin.Profiles.FirstOrDefault();
+
+    private string SelectedProfileId() =>
+        SelectedProfile()?.Id ?? OpenAiCompatiblePlugin.DefaultProfileId;
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
     private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;

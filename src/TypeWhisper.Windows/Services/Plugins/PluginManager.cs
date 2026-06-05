@@ -268,7 +268,15 @@ public sealed class PluginManager : IDisposable
                 .ToList();
 
             _llmProviders = activePlugins.OfType<ILlmProviderPlugin>().ToList();
+            _llmProviders.AddRange(activePlugins
+                .OfType<IAdditionalLlmProvidersProvider>()
+                .SelectMany(provider => provider.AdditionalLlmProviders));
+
             _transcriptionEngines = activePlugins.OfType<ITranscriptionEnginePlugin>().ToList();
+            _transcriptionEngines.AddRange(activePlugins
+                .OfType<IAdditionalTranscriptionEnginesProvider>()
+                .SelectMany(provider => provider.AdditionalTranscriptionEngines));
+
             _ttsProviders = activePlugins.OfType<ITtsProviderPlugin>().ToList();
             _postProcessors = activePlugins.OfType<IPostProcessorPlugin>()
                 .OrderBy(p => p.Priority)

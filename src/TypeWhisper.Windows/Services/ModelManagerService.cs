@@ -105,8 +105,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             if (_activeModelId is not null && IsPluginModel(_activeModelId))
             {
                 var (pluginId, _) = ParsePluginModelId(_activeModelId);
-                var plugin = _pluginManager.TranscriptionEngines
-                    .FirstOrDefault(e => e.PluginId == pluginId);
+                var plugin = FindTranscriptionEngine(pluginId);
                 if (plugin is not null)
                     return new PluginTranscriptionEngineAdapter(plugin);
             }
@@ -123,7 +122,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             if (_activeModelId is null || !IsPluginModel(_activeModelId))
                 return null;
             var (pluginId, _) = ParsePluginModelId(_activeModelId);
-            return _pluginManager.TranscriptionEngines.FirstOrDefault(e => e.PluginId == pluginId);
+            return FindTranscriptionEngine(pluginId);
         }
     }
 
@@ -151,8 +150,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return ModelStatus.Ready;
 
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
-        var plugin = _pluginManager.TranscriptionEngines
-            .FirstOrDefault(e => e.PluginId == pluginId);
+        var plugin = FindTranscriptionEngine(pluginId);
 
         if (plugin is null)
             return ModelStatus.NotDownloaded;
@@ -172,8 +170,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             return false;
 
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
-        var plugin = _pluginManager.TranscriptionEngines
-            .FirstOrDefault(e => e.PluginId == pluginId);
+        var plugin = FindTranscriptionEngine(pluginId);
 
         if (plugin is null)
             return false;
@@ -193,8 +190,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             throw new ArgumentException($"Unknown model: {modelId}");
 
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
-        var plugin = _pluginManager.TranscriptionEngines
-            .FirstOrDefault(e => e.PluginId == pluginId)
+        var plugin = FindTranscriptionEngine(pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
 
         if (plugin.SupportsModelDownload && !plugin.IsModelDownloaded(pluginModelId))
@@ -217,8 +213,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             throw new ArgumentException($"Unknown model: {modelId}");
 
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
-        var plugin = _pluginManager.TranscriptionEngines
-            .FirstOrDefault(e => e.PluginId == pluginId)
+        var plugin = FindTranscriptionEngine(pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
 
         if (!plugin.IsConfigured && !plugin.SupportsModelDownload)
@@ -399,8 +394,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             if (awaitDownload && IsPluginModel(targetModelId))
             {
                 var (pluginId, pluginModelId) = ParsePluginModelId(targetModelId);
-                var plugin = _pluginManager.TranscriptionEngines
-                    .FirstOrDefault(e => e.PluginId == pluginId);
+                var plugin = FindTranscriptionEngine(pluginId);
 
                 if (plugin?.SupportsModelDownload == true && !plugin.IsModelDownloaded(pluginModelId))
                 {
@@ -416,7 +410,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
 
         var resolved = ResolveRequestModel(engineOverride, modelOverride, awaitDownload);
-        var fullModelId = GetPluginModelId(resolved.Plugin.PluginId, resolved.ModelId);
+        var fullModelId = GetPluginModelId(resolved.Plugin.GetTranscriptionSelectionId(), resolved.ModelId);
 
         if (resolved.Plugin.SupportsModelDownload
             && !resolved.Plugin.IsModelDownloaded(resolved.ModelId)
@@ -531,6 +525,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         return new RequestModel(engine, modelId);
     }
+
+    private ITranscriptionEnginePlugin? FindTranscriptionEngine(string selectionId) =>
+        _pluginManager.TranscriptionEngines.FirstOrDefault(engine =>
+            string.Equals(engine.GetTranscriptionSelectionId(), selectionId, StringComparison.OrdinalIgnoreCase));
 
     private Task RestoreRequestModelAsync(string? previousActiveModelId)
     {

@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.ViewModels;
 
@@ -308,7 +309,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         var models = _modelManager.PluginManager.TranscriptionEngines
             .SelectMany(engine => engine.TranscriptionModels.Select(model =>
             {
-                var fullId = ModelManagerService.GetPluginModelId(engine.PluginId, model.Id);
+                var fullId = ModelManagerService.GetPluginModelId(engine.GetTranscriptionSelectionId(), model.Id);
                 var downloaded = _modelManager.IsDownloaded(fullId);
                 var status = engine.SupportsModelDownload
                     ? downloaded ? "ready" : "not_downloaded"

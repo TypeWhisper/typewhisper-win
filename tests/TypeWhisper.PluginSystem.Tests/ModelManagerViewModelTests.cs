@@ -47,6 +47,38 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public void Constructor_UsesTranscriptionSelectionIdForAdditionalProfileRole()
+    {
+        const string rootPluginId = "com.typewhisper.openai-compatible";
+        const string selectionId = "openai-compatible-profile-a";
+        const string modelId = "whisper-profile";
+        var fullModelId = ModelManagerService.GetPluginModelId(selectionId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var pluginManager = CreatePluginManager(settings,
+            new FakeTranscriptionPlugin(
+                rootPluginId,
+                "Local Gateway",
+                modelId,
+                "Whisper Profile",
+                configured: true,
+                selectionId: selectionId));
+        var modelManager = new ModelManagerService(pluginManager, settings);
+
+        var sut = new ModelManagerViewModel(modelManager, settings);
+
+        var provider = Assert.Single(sut.Providers);
+        Assert.Equal(selectionId, provider.ProviderId);
+        Assert.Equal(fullModelId, Assert.Single(sut.AvailableModelOptions).FullId);
+        Assert.Equal(fullModelId, sut.SelectedModelOptionId);
+        Assert.Equal("Local Gateway", sut.ActiveProviderDisplayName);
+        Assert.Equal("Whisper Profile", sut.ActiveModelDisplayName);
+    }
+
+    [Fact]
     public void Constructor_ExposesAccelerationOptionsAndUsesSavedSelection()
     {
         var settings = new FakeSettingsService(new AppSettings
@@ -737,8 +769,10 @@ public class ModelManagerViewModelTests
         }
     }
 
-    private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin
+    private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity
     {
+        private readonly string? _selectionId;
+
         public FakeTranscriptionPlugin(
             string pluginId,
             string providerDisplayName,
@@ -748,7 +782,8 @@ public class ModelManagerViewModelTests
             TranscriptionAccelerationStatus? accelerationStatus = null,
             bool supportsModelDownload = false,
             IReadOnlyList<TranscriptionAccelerationBackend>? supportedAccelerationBackends = null,
-            Func<TranscriptionAccelerationPreference, TranscriptionAccelerationStatus>? accelerationStatusFactory = null)
+            Func<TranscriptionAccelerationPreference, TranscriptionAccelerationStatus>? accelerationStatusFactory = null,
+            string? selectionId = null)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
@@ -760,11 +795,13 @@ public class ModelManagerViewModelTests
             SupportsModelDownload = supportsModelDownload;
             SupportedAccelerationBackends = supportedAccelerationBackends ?? [TranscriptionAccelerationBackend.Cpu];
             _accelerationStatusFactory = accelerationStatusFactory;
+            _selectionId = selectionId;
         }
 
         public string PluginId { get; }
         public string PluginName => PluginId;
         public string PluginVersion => "1.0.0";
+        public string TranscriptionSelectionId => _selectionId ?? PluginId;
         public string ProviderId => PluginId;
         public string ProviderDisplayName { get; }
         public bool IsConfigured { get; set; }

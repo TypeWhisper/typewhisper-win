@@ -1,4 +1,11 @@
 {
+  "Settings.Profiles": "Profiles",
+  "Settings.AddProfile": "Add",
+  "Settings.DeleteProfile": "Delete",
+  "Settings.RenameProfile": "Rename",
+  "Settings.NewProfileDefaultName": "New Profile",
+  "Settings.ServerUrl": "\uD83C\uDF10 Server URL",
+  "Settings.ApiKey": "\uD83D\uDD11 API Key (optional)",
   "Settings.Connect": "Connect",
   "Settings.Save": "Save",
   "Settings.ApiKeyHint": "Not needed for local servers like Ollama or LM Studio",
