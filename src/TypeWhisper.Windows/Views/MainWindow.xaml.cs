@@ -1,8 +1,16 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
+using Microsoft.Win32;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Services;
+using DrawingRectangle = System.Drawing.Rectangle;
+using FormsCursor = System.Windows.Forms.Cursor;
+using FormsScreen = System.Windows.Forms.Screen;
 
 namespace TypeWhisper.Windows.Views;
 
@@ -14,6 +22,8 @@ public partial class MainWindow : Window
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private static readonly Size DefaultOverlaySize = new(300, 50);
+    private static readonly TimeSpan OverlayRecoveryDelay = TimeSpan.FromMilliseconds(700);
 
     [LibraryImport("user32.dll")]
     private static partial int GetWindowLongW(IntPtr hWnd, int nIndex);
@@ -21,45 +31,10 @@ public partial class MainWindow : Window
     [LibraryImport("user32.dll")]
     private static partial int SetWindowLongW(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    [LibraryImport("user32.dll")]
-    private static partial IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetMonitorInfoW(IntPtr hMonitor, ref MonitorInfo lpmi);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetCursorPos(out POINT lpPoint);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int X, Y; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        /// <summary>
-        /// Gets the cb size.
-        /// </summary>
-        public int cbSize;
-        /// <summary>
-        /// Gets the rc monitor.
-        /// </summary>
-        public RECT rcMonitor;
-        /// <summary>
-        /// Gets the rc work.
-        /// </summary>
-        public RECT rcWork;
-        /// <summary>
-        /// Gets or sets the Win32 flags field.
-        /// </summary>
-        public uint dwFlags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int Left, Top, Right, Bottom; }
-
     private readonly ISettingsService _settings;
+    private readonly ViewModels.DictationViewModel _viewModel;
+    private readonly DispatcherTimer _overlayRecoveryTimer;
+    private OverlayPlacementTarget _currentPlacementTarget = OverlayPlacementTarget.CursorMonitor;
 
     /// <summary>
     /// Initializes a new instance of the MainWindow class.
@@ -68,7 +43,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        _viewModel = viewModel;
         _settings = settings;
+        _overlayRecoveryTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = OverlayRecoveryDelay
+        };
+        _overlayRecoveryTimer.Tick += OnOverlayRecoveryTimerTick;
     }
 
     /// <summary>
@@ -85,8 +66,15 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        PositionOverlay();
-        _settings.SettingsChanged += _ => Dispatcher.Invoke(PositionOverlay);
+        PositionOverlay(OverlayPlacementTarget.CursorMonitor);
+        _settings.SettingsChanged += OnSettingsChanged;
+        PropertyChangedEventManager.AddHandler(
+            _viewModel,
+            OnViewModelPropertyChanged,
+            nameof(ViewModels.DictationViewModel.IsOverlayVisible));
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -94,41 +82,121 @@ public partial class MainWindow : Window
         PositionOverlay();
     }
 
-    private void PositionOverlay()
+    /// <summary>
+    /// Releases static Windows event subscriptions that otherwise keep the overlay window alive.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
     {
-        // Get the monitor where the cursor is
-        GetCursorPos(out var cursor);
-        var hMonitor = MonitorFromPoint(cursor, 2 /* MONITOR_DEFAULTTONEAREST */);
+        _settings.SettingsChanged -= OnSettingsChanged;
+        PropertyChangedEventManager.RemoveHandler(
+            _viewModel,
+            OnViewModelPropertyChanged,
+            nameof(ViewModels.DictationViewModel.IsOverlayVisible));
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        _overlayRecoveryTimer.Stop();
+        _overlayRecoveryTimer.Tick -= OnOverlayRecoveryTimerTick;
 
-        var mi = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfoW(hMonitor, ref mi))
+        base.OnClosed(e);
+    }
+
+    private void OnSettingsChanged(AppSettings settings) =>
+        Dispatcher.InvokeAsync(PositionOverlay);
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!_viewModel.IsOverlayVisible)
+            return;
+
+        PositionOverlay(OverlayPlacementTarget.CursorMonitor);
+        ReassertTopmost();
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
+        DispatchPrimaryOverlayRecovery();
+
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume)
+            DispatchPrimaryOverlayRecovery();
+    }
+
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason == SessionSwitchReason.SessionUnlock)
+            DispatchPrimaryOverlayRecovery();
+    }
+
+    private void DispatchPrimaryOverlayRecovery()
+    {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            return;
+
+        Dispatcher.InvokeAsync(SchedulePrimaryOverlayRecovery);
+    }
+
+    private void SchedulePrimaryOverlayRecovery()
+    {
+        if (!Dispatcher.CheckAccess())
         {
-            var fallback = SystemParameters.WorkArea;
-            Left = fallback.Left + (fallback.Width - ActualWidth) / 2;
-            Top = _settings.Current.OverlayPosition == OverlayPosition.Top
-                ? fallback.Top
-                : fallback.Bottom - ActualHeight;
+            Dispatcher.InvokeAsync(SchedulePrimaryOverlayRecovery);
             return;
         }
 
-        // Physical pixels to WPF DIPs
-        var source = PresentationSource.FromVisual(this);
-        var dpiToWpfX = source?.CompositionTarget?.TransformFromDevice.M11 ?? 1.0;
-        var dpiToWpfY = source?.CompositionTarget?.TransformFromDevice.M22 ?? 1.0;
+        _overlayRecoveryTimer.Stop();
+        _overlayRecoveryTimer.Start();
+    }
 
-        var workLeft = mi.rcWork.Left * dpiToWpfX;
-        var workTop = mi.rcWork.Top * dpiToWpfY;
-        var workWidth = (mi.rcWork.Right - mi.rcWork.Left) * dpiToWpfX;
-        var workBottom = mi.rcWork.Bottom * dpiToWpfY;
+    private void OnOverlayRecoveryTimerTick(object? sender, EventArgs e)
+    {
+        _overlayRecoveryTimer.Stop();
+        RecoverOverlayToPrimary();
+    }
 
-        var width = ActualWidth > 0 ? ActualWidth : 300;
-        var height = ActualHeight > 0 ? ActualHeight : 50;
+    private void RecoverOverlayToPrimary()
+    {
+        PositionOverlay(OverlayPlacementTarget.PrimaryMonitor);
+        ReassertTopmost();
+    }
 
-        Left = workLeft + (workWidth - width) / 2;
+    private void ReassertTopmost()
+    {
+        Topmost = false;
+        Topmost = true;
+    }
 
-        if (_settings.Current.OverlayPosition == OverlayPosition.Top)
-            Top = workTop;
-        else
-            Top = workBottom - height;
+    private void PositionOverlay() =>
+        PositionOverlay(_currentPlacementTarget);
+
+    private void PositionOverlay(OverlayPlacementTarget target)
+    {
+        _currentPlacementTarget = target;
+        var point = OverlayPlacementCalculator.Calculate(
+            GetWorkArea(target),
+            new Size(ActualWidth, ActualHeight),
+            _settings.Current.OverlayPosition,
+            DefaultOverlaySize);
+
+        Left = point.X;
+        Top = point.Y;
+    }
+
+    private Rect GetWorkArea(OverlayPlacementTarget target) =>
+        OverlayPlacementCalculator.SelectWorkArea(
+            target,
+            TryGetScreenWorkArea(FormsScreen.FromPoint(FormsCursor.Position)),
+            TryGetScreenWorkArea(FormsScreen.PrimaryScreen),
+            SystemParameters.WorkArea);
+
+    private Rect? TryGetScreenWorkArea(FormsScreen? screen) =>
+        screen is null ? null : DeviceRectToWpf(screen.WorkingArea);
+
+    private Rect DeviceRectToWpf(DrawingRectangle rectangle)
+    {
+        var transform = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        var topLeft = transform.Transform(new Point(rectangle.Left, rectangle.Top));
+        var bottomRight = transform.Transform(new Point(rectangle.Right, rectangle.Bottom));
+        return new Rect(topLeft, bottomRight);
     }
 }
