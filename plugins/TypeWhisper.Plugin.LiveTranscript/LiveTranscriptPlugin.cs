@@ -48,7 +48,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     /// <summary>
     /// Gets whether uses host appearance.
