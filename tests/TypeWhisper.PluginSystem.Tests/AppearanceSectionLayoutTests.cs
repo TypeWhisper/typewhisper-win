@@ -111,6 +111,21 @@ public sealed class AppearanceSectionLayoutTests
         Assert.Contains("IsEnabled=\"{Binding Settings.LiveTranscriptionEnabled}\"", row);
     }
 
+    [Fact]
+    public void AppearanceSection_DoesNotOfferManualOverlayLocationReset()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "AppearanceSection.xaml");
+
+        Assert.DoesNotContain("Appearance.ResetOverlayLocation", xaml);
+        Assert.DoesNotContain("Appearance.ResetOverlayLocationHint", xaml);
+        Assert.DoesNotContain("Settings.ResetOverlayLocationCommand", xaml);
+    }
+
     private static void AssertWidgetSettingCollapsesForCompactBadge(string xamlBlock)
     {
         Assert.Contains("Settings.IndicatorStyle", xamlBlock);

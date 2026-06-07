@@ -32,4 +32,51 @@ public sealed class MainWindowLayoutTests
         Assert.Contains("TextOptions.TextRenderingMode=\"ClearType\"", xaml);
         Assert.Contains("RenderOptions.ClearTypeHint=\"Enabled\"", xaml);
     }
+
+    [Fact]
+    public void MainWindow_RepositionsAfterDisplayPowerAndUnlockEvents()
+    {
+        var code = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "MainWindow.xaml.cs");
+
+        Assert.Contains("SystemEvents.DisplaySettingsChanged", code);
+        Assert.Contains("SystemEvents.PowerModeChanged", code);
+        Assert.Contains("SystemEvents.SessionSwitch", code);
+        Assert.Contains("PowerModes.Resume", code);
+        Assert.Contains("SessionSwitchReason.SessionUnlock", code);
+        Assert.Contains("SchedulePrimaryOverlayRecovery", code);
+    }
+
+    [Fact]
+    public void MainWindow_ReassertsTopmostAfterPrimaryRecovery()
+    {
+        var code = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "MainWindow.xaml.cs");
+
+        Assert.Contains("OverlayPlacementTarget.PrimaryMonitor", code);
+        Assert.Contains("ReassertTopmost", code);
+        Assert.Contains("Topmost = false", code);
+        Assert.Contains("Topmost = true", code);
+    }
+
+    [Fact]
+    public void MainWindow_RepositionsToCursorMonitorWhenOverlayBecomesVisible()
+    {
+        var code = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "MainWindow.xaml.cs");
+
+        Assert.Contains("PropertyChangedEventManager.AddHandler", code);
+        Assert.Contains("nameof(ViewModels.DictationViewModel.IsOverlayVisible)", code);
+        Assert.Contains("OnViewModelPropertyChanged", code);
+        Assert.Contains("PositionOverlay(OverlayPlacementTarget.CursorMonitor)", code);
+    }
 }
