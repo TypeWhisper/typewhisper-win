@@ -124,9 +124,9 @@ public sealed class DictionaryService : IDictionaryService
 
             if (text.Contains(entry.Original, comparison))
             {
-                var pattern = Regex.Escape(entry.Original);
+                var pattern = BuildCorrectionPattern(entry.Original);
                 var options = entry.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                text = Regex.Replace(text, @"\b" + pattern + @"\b", entry.Replacement!, options);
+                text = Regex.Replace(text, pattern, entry.Replacement!, options);
 
                 IncrementUsageCount(entry.Id);
             }
@@ -595,6 +595,20 @@ public sealed class DictionaryService : IDictionaryService
 
     private static bool IsUserAuthored(DictionaryEntry entry) =>
         !entry.Id.StartsWith(PackEntryPrefix, StringComparison.Ordinal);
+
+    private static string BuildCorrectionPattern(string original)
+    {
+        var pattern = Regex.Escape(original);
+        return ContainsScriptWithoutWhitespaceBoundaries(original) ? pattern : @"\b" + pattern + @"\b";
+    }
+
+    private static bool ContainsScriptWithoutWhitespaceBoundaries(string text) =>
+        text.Any(IsScriptWithoutWhitespaceBoundaries);
+
+    private static bool IsScriptWithoutWhitespaceBoundaries(char ch) =>
+        ch is >= '\u3040' and <= '\u30FF' // Hiragana and Katakana
+            or >= '\u3400' and <= '\u9FFF' // CJK ideographs
+            or >= '\uAC00' and <= '\uD7AF'; // Hangul syllables
 
     private static DictionaryEntry BackfillTimestamps(DictionaryEntry entry)
     {
