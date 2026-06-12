@@ -121,6 +121,38 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void ApplyCorrections_ReplacesChinesePhraseWithoutWhitespace()
+    {
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "北京",
+            Replacement = "上海"
+        });
+
+        var result = _sut.ApplyCorrections("我想去北京吃饭");
+
+        Assert.Equal("我想去上海吃饭", result);
+    }
+
+    [Fact]
+    public void ApplyCorrections_ReplacesCjkCompatibilityIdeographWithoutWhitespace()
+    {
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "1",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "\uF900",
+            Replacement = "compat"
+        });
+
+        var result = _sut.ApplyCorrections("before\uF900after");
+
+        Assert.Equal("beforecompatafter", result);
+    }
+
+    [Fact]
     public void GetTermsForPrompt_ReturnsCommaSeparated()
     {
         _sut.AddEntry(new DictionaryEntry { Id = "1", EntryType = DictionaryEntryType.Term, Original = "React" });
