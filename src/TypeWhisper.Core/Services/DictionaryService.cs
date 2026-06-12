@@ -608,7 +608,8 @@ public sealed class DictionaryService : IDictionaryService
     private static bool IsScriptWithoutWhitespaceBoundaries(char ch) =>
         ch is >= '\u3040' and <= '\u30FF' // Hiragana and Katakana
             or >= '\u3400' and <= '\u9FFF' // CJK ideographs
-            or >= '\uAC00' and <= '\uD7AF'; // Hangul syllables
+            or >= '\uAC00' and <= '\uD7AF' // Hangul syllables
+            or >= '\uF900' and <= '\uFAFF'; // CJK Compatibility Ideographs
 
     private static DictionaryEntry BackfillTimestamps(DictionaryEntry entry)
     {
