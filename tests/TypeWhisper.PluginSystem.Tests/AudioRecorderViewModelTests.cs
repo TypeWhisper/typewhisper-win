@@ -375,7 +375,8 @@ public sealed class AudioRecorderViewModelTests
             .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.wav";
-        var filePath = Path.Combine(TypeWhisperEnvironment.AudioPath, Path.GetFileName(fileName));
+        var safeFileName = Path.GetFileName(fileName);
+        var filePath = Path.Join(TypeWhisperEnvironment.AudioPath, safeFileName);
         await File.WriteAllBytesAsync(filePath, WavEncoder.Encode(BuildSamples()));
 
         try
