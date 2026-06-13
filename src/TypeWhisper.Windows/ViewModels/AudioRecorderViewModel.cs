@@ -49,6 +49,12 @@ public sealed record RecordingItem(
     /// Gets whether this recording can be transcribed.
     /// </summary>
     public bool CanTranscribe => !IsTranscribing && File.Exists(FilePath);
+    /// <summary>
+    /// Gets the tooltip for the transcription command.
+    /// </summary>
+    public string TranscribeToolTip => HasError
+        ? Loc.Instance["Recorder.Retry"]
+        : Loc.Instance["Recorder.Transcribe"];
 }
 
 /// <summary>
@@ -279,16 +285,29 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             });
             throw;
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            var message = ex.Message;
-            _errorLog.AddEntry(message, ErrorCategory.Transcription);
-            ReplaceRecording(current, current with
-            {
-                IsTranscribing = false,
-                ErrorMessage = Loc.Instance.GetString("Recorder.FailedFormat", message)
-            });
-            SetErrorStatus(message);
+            HandleTranscriptionFailure(current, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            HandleTranscriptionFailure(current, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            HandleTranscriptionFailure(current, ex);
+        }
+        catch (ModelManagerRequestException ex)
+        {
+            HandleTranscriptionFailure(current, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            HandleTranscriptionFailure(current, ex);
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            HandleTranscriptionFailure(current, ex);
         }
         finally
         {
@@ -297,9 +316,24 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         }
     }
 
-    [RelayCommand]
-    private void DeleteRecording(RecordingItem item)
+    private void HandleTranscriptionFailure(RecordingItem current, Exception ex)
     {
+        var message = ex.Message;
+        _errorLog.AddEntry(message, ErrorCategory.Transcription);
+        ReplaceRecording(current, current with
+        {
+            IsTranscribing = false,
+            ErrorMessage = Loc.Instance.GetString("Recorder.FailedFormat", message)
+        });
+        SetErrorStatus(message);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanDeleteRecording))]
+    private void DeleteRecording(RecordingItem? item)
+    {
+        if (item is null || item.IsTranscribing)
+            return;
+
         try
         {
             if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
@@ -311,6 +345,9 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasRecordings));
         RefreshRecordingCommandState();
     }
+
+    private static bool CanDeleteRecording(RecordingItem? item) =>
+        item is { IsTranscribing: false };
 
     private void LoadExistingRecordings()
     {
@@ -360,6 +397,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     {
         IsTranscribing = Recordings.Any(item => item.IsTranscribing);
         TranscribeRecordingCommand.NotifyCanExecuteChanged();
+        DeleteRecordingCommand.NotifyCanExecuteChanged();
     }
 
     private void SetLocalizedStatus(string key)

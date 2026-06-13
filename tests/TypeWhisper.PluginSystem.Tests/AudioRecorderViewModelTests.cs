@@ -295,6 +295,76 @@ public sealed class AudioRecorderViewModelTests
     }
 
     [Fact]
+    public async Task Recorder_DeleteIsDisabledWhileRecordingIsTranscribing()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        TypeWhisperEnvironment.EnsureDirectories();
+
+        var existingRecordings = Directory
+            .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var selectedModelId = ModelManagerService.GetPluginModelId(
+            FakeRecorderTranscriptionPlugin.PluginIdValue,
+            "tiny");
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedModelId = selectedModelId
+        });
+        var pendingTranscription = new TaskCompletionSource<PluginTranscriptionResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new FakeRecorderTranscriptionPlugin((_, _, _, _, _) => pendingTranscription.Task);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", selectedModelId);
+
+        var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        sut.ToggleRecordingCommand.Execute(null);
+        captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
+        sut.ToggleRecordingCommand.Execute(null);
+
+        var transcribingItem = await WaitForRecordingAsync(
+            sut,
+            recording => recording.IsTranscribing);
+
+        try
+        {
+            Assert.False(sut.DeleteRecordingCommand.CanExecute(transcribingItem));
+            sut.DeleteRecordingCommand.Execute(transcribingItem);
+            Assert.Contains(sut.Recordings, recording => recording.FilePath == transcribingItem.FilePath);
+            Assert.True(File.Exists(transcribingItem.FilePath));
+
+            pendingTranscription.SetResult(new PluginTranscriptionResult("done", "en", 1));
+            await WaitForRecordingAsync(
+                sut,
+                recording => recording.FilePath == transcribingItem.FilePath
+                    && recording.Transcript == "done"
+                    && !recording.IsTranscribing);
+        }
+        finally
+        {
+            if (!pendingTranscription.Task.IsCompleted)
+                pendingTranscription.SetResult(new PluginTranscriptionResult("done", "en", 1));
+            TryDeleteNewRecordings(existingRecordings);
+        }
+    }
+
+    [Fact]
     public async Task Recorder_RetryUsesConfiguredLanguageTaskAndQuickTranslation()
     {
         Loc.Instance.Initialize();
@@ -305,7 +375,7 @@ public sealed class AudioRecorderViewModelTests
             .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.wav";
-        var filePath = Path.Combine(TypeWhisperEnvironment.AudioPath, fileName);
+        var filePath = Path.Combine(TypeWhisperEnvironment.AudioPath, Path.GetFileName(fileName));
         await File.WriteAllBytesAsync(filePath, WavEncoder.Encode(BuildSamples()));
 
         try

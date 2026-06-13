@@ -169,7 +169,7 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal"
                                             VerticalAlignment="Center" Margin="12,0,0,0">
                                     <ui:Button Appearance="Secondary"
-                                               ToolTip="{loc:Str Recorder.Transcribe}" Padding="6,4"
+                                               ToolTip="{Binding TranscribeToolTip}" Padding="6,4"
                                                VerticalAlignment="Center"
                                                IsEnabled="{Binding CanTranscribe}"
                                                Command="{Binding DataContext.Recorder.TranscribeRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

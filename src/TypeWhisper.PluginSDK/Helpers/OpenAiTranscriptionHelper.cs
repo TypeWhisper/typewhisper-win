@@ -43,11 +43,11 @@ public static class OpenAiTranscriptionHelper
     /// <summary>
     /// Transcribes PCM audio using the selected provider configuration.
     /// </summary>
-    public static async Task<PluginTranscriptionResult> TranscribeAsync(
+    public static Task<PluginTranscriptionResult> TranscribeAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, byte[] wavAudio, string? language, bool translate,
         string responseFormat, CancellationToken ct, string? prompt = null) =>
-        await TranscribeAsync(
+        TranscribeAsync(
             httpClient,
             baseUrl,
             apiKey,
@@ -67,6 +67,8 @@ public static class OpenAiTranscriptionHelper
         string model, OpenAiTranscriptionUpload upload, string? language, bool translate,
         string responseFormat, CancellationToken ct, string? prompt = null)
     {
+        ArgumentNullException.ThrowIfNull(upload);
+
         var endpoint = translate
             ? $"{baseUrl}/v1/audio/translations"
             : $"{baseUrl}/v1/audio/transcriptions";

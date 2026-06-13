@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Controls;
 using NAudio.Wave;
@@ -180,17 +181,28 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         GroqTranscriptionUpload upload;
         try
         {
+            ct.ThrowIfCancellationRequested();
             upload = _compressedUploadFactory(wavAudio);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception ex)
+        catch (InvalidDataException ex)
         {
-            throw new InvalidOperationException(
-                $"Groq audio upload could not be compressed before transcription: {ex.Message}",
-                ex);
+            throw CreateCompressionException(ex);
+        }
+        catch (IOException ex)
+        {
+            throw CreateCompressionException(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw CreateCompressionException(ex);
+        }
+        catch (COMException ex)
+        {
+            throw CreateCompressionException(ex);
         }
 
         return await TranscribeUploadAsync(
@@ -427,10 +439,15 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         request.Content = content;
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseTranscriptionResponse(json);
     }
+
+    private static InvalidOperationException CreateCompressionException(Exception ex) =>
+        new(
+            $"Groq audio upload could not be compressed before transcription: {ex.Message}",
+            ex);
 
     private static PluginTranscriptionResult ParseTranscriptionResponse(string json)
     {

@@ -205,6 +205,35 @@ public class GroqPluginTests
     }
 
     [Fact]
+    public async Task TranscribeAsync_CanceledBeforeCompressionSkipsEncoder()
+    {
+        var handler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Upload should not be attempted."));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+        var encoderCalled = false;
+
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(handler);
+        var sut = new GroqPlugin(
+            httpClient,
+            transcriptionHttpClient,
+            _ =>
+            {
+                encoderCalled = true;
+                return new GroqTranscriptionUpload([1], "audio.m4a", "audio/mp4");
+            });
+        await sut.ActivateAsync(host);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            sut.TranscribeAsync([1, 2, 3], null, false, null, cts.Token));
+
+        Assert.False(encoderCalled);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesSelectedLlmModelWhenCallerDoesNotOverride()
     {
         var handler = new CapturingHandler((_, body) =>
