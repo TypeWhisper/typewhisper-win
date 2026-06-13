@@ -30,4 +30,17 @@ public sealed class WelcomeWindowLayoutTests
         Assert.Contains("RecommendedCloudPlugin.Progress", xaml);
         Assert.Contains("RecommendedCloudPlugin.InstallErrorMessage", xaml);
     }
+
+    [Fact]
+    public void WelcomeWindow_ShowsPendingRestartStateForRecommendedPlugins()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "WelcomeWindow.xaml");
+
+        Assert.Contains("ConverterParameter=PendingRestart", xaml);
+        Assert.Contains("Welcome.RestartRequired", xaml);
+    }
 }

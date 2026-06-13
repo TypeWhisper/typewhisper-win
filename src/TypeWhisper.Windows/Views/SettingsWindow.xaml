@@ -81,6 +81,7 @@
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
                                                                 <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
                                                             </Grid.ColumnDefinitions>
                                                             <TextBlock Text="{Binding IconGlyph}"
                                                                        FontFamily="Segoe MDL2 Assets"
@@ -92,6 +93,15 @@
                                                                        Margin="8,0,0,0"
                                                                        VerticalAlignment="Center"
                                                                        Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
+                                                            <Border x:Name="SidebarRouteBadge"
+                                                                    Grid.Column="2"
+                                                                    Width="8"
+                                                                    Height="8"
+                                                                    CornerRadius="4"
+                                                                    Margin="8,0,2,0"
+                                                                    Background="{StaticResource WarningBrush}"
+                                                                    ToolTip="{Binding BadgeText}"
+                                                                    Visibility="{Binding BadgeText, Converter={StaticResource NonEmptyToVis}}"/>
                                                         </Grid>
                                                     </Button>
                                                 </DataTemplate>

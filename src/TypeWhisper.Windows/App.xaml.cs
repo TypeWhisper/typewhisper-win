@@ -101,6 +101,17 @@ public partial class App : Application
         Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
             ?? Loc.Instance.DetectSystemLanguage();
 
+        // Apply staged plugin updates before plugin assemblies are loaded.
+        var pluginRegistry = _serviceProvider.GetRequiredService<PluginRegistryService>();
+        try
+        {
+            pluginRegistry.ApplyPendingUpdatesAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PluginRegistry] Failed to apply pending updates at startup: {ex.Message}");
+        }
+
         // Initialize plugins (must happen after settings.Load so enabled state is available)
         var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();
         pluginManager.InitializeAsync().GetAwaiter().GetResult();
@@ -116,7 +127,6 @@ public partial class App : Application
         StartProtocolCallbackWatcher();
 
         // Plugin registry: first-run auto-install + update check (non-blocking)
-        var pluginRegistry = _serviceProvider.GetRequiredService<PluginRegistryService>();
         _ = pluginRegistry.FirstRunAutoInstallAsync()
             .ContinueWith(_ => pluginRegistry.CheckForUpdatesAsync(), TaskScheduler.Default)
             .ContinueWith(t =>

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -48,6 +49,22 @@ public partial class PluginsViewModel : ObservableObject
     /// Gets the marketplace plugin count.
     /// </summary>
     public int MarketplacePluginCount => RegistryPlugins.Count;
+    /// <summary>
+    /// Gets the marketplace plugin update count.
+    /// </summary>
+    public int AvailablePluginUpdateCount => RegistryPlugins.Count(plugin => plugin.InstallState == PluginInstallState.UpdateAvailable);
+    /// <summary>
+    /// Gets whether marketplace plugin updates are available.
+    /// </summary>
+    public bool HasAvailablePluginUpdates => AvailablePluginUpdateCount > 0;
+    /// <summary>
+    /// Gets the sidebar navigation badge text for plugin updates.
+    /// </summary>
+    public string? PluginUpdateNavigationBadgeText => HasAvailablePluginUpdates ? AvailablePluginUpdateCount.ToString() : null;
+    /// <summary>
+    /// Gets the marketplace plugin update summary text.
+    /// </summary>
+    public string PluginUpdateSummaryText => Loc.Instance.GetString("Plugins.PluginUpdateSummaryFormat", AvailablePluginUpdateCount);
     /// <summary>
     /// Performs installed summary text.
     /// </summary>
@@ -113,11 +130,13 @@ public partial class PluginsViewModel : ObservableObject
         {
             var isEnabled = _pluginManager.IsEnabled(plugin.Manifest.Id);
             var vm = new PluginItemViewModel(plugin, isEnabled, _pluginManager, _registryService);
+            vm.RegistryPlugin = FindRegistryPlugin(vm.Id);
             if (expandedIds.Contains(vm.Id))
                 vm.IsExpanded = true;
             Plugins.Add(vm);
         }
 
+        SyncInstalledPluginRegistryItems();
         NotifyStateChanged();
     }
 
@@ -125,6 +144,9 @@ public partial class PluginsViewModel : ObservableObject
     {
         foreach (var plugin in RegistryPlugins)
             plugin.RefreshInstallState();
+
+        SyncInstalledPluginRegistryItems();
+        NotifyStateChanged();
     }
 
     [RelayCommand]
@@ -141,16 +163,21 @@ public partial class PluginsViewModel : ObservableObject
                 .ThenBy(plugin => plugin.Name)
                 .ToList();
 
+            foreach (var plugin in RegistryPlugins)
+                plugin.PropertyChanged -= OnRegistryPluginPropertyChanged;
+
             RegistryPlugins.Clear();
             MarketplaceGroups.Clear();
             MarketplaceCapabilityFilters.Clear();
 
             foreach (var plugin in registryItems)
             {
+                plugin.PropertyChanged += OnRegistryPluginPropertyChanged;
                 RegistryPlugins.Add(plugin);
             }
 
             RebuildMarketplaceFilters();
+            SyncInstalledPluginRegistryItems();
             NotifyStateChanged();
         }
         finally
@@ -191,12 +218,25 @@ public partial class PluginsViewModel : ObservableObject
         OnPropertyChanged(nameof(InstalledPluginCount));
         OnPropertyChanged(nameof(EnabledPluginCount));
         OnPropertyChanged(nameof(MarketplacePluginCount));
+        OnPropertyChanged(nameof(AvailablePluginUpdateCount));
+        OnPropertyChanged(nameof(HasAvailablePluginUpdates));
+        OnPropertyChanged(nameof(PluginUpdateNavigationBadgeText));
+        OnPropertyChanged(nameof(PluginUpdateSummaryText));
         OnPropertyChanged(nameof(InstalledSummaryText));
         OnPropertyChanged(nameof(MarketplaceSummaryText));
         OnPropertyChanged(nameof(SelectedMarketplaceCapabilityFilterName));
         OnPropertyChanged(nameof(MarketplaceCategorySummaryText));
         OnPropertyChanged(nameof(HasMarketplaceCategories));
         OnPropertyChanged(nameof(HasActiveMarketplaceCapabilityFilters));
+    }
+
+    private void OnRegistryPluginPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RegistryPluginItemViewModel.InstallState))
+        {
+            SyncInstalledPluginRegistryItems();
+            NotifyStateChanged();
+        }
     }
 
     internal bool FocusInstalledPlugin(string pluginId)
@@ -223,9 +263,19 @@ public partial class PluginsViewModel : ObservableObject
                 plugin.NotifyLocalizationChanged();
 
             RebuildMarketplaceFilters();
+            SyncInstalledPluginRegistryItems();
             NotifyStateChanged();
         });
     }
+
+    private void SyncInstalledPluginRegistryItems()
+    {
+        foreach (var plugin in Plugins)
+            plugin.RegistryPlugin = FindRegistryPlugin(plugin.Id);
+    }
+
+    private RegistryPluginItemViewModel? FindRegistryPlugin(string pluginId) =>
+        RegistryPlugins.FirstOrDefault(plugin => string.Equals(plugin.Id, pluginId, StringComparison.OrdinalIgnoreCase));
 
     private void RebuildMarketplaceFilters()
     {
@@ -355,6 +405,7 @@ public partial class PluginItemViewModel : ObservableObject
     private readonly LoadedPlugin _plugin;
     private readonly PluginManager _pluginManager;
     private readonly PluginRegistryService _registryService;
+    private RegistryPluginItemViewModel? _registryPlugin;
 
     /// <summary>
     /// Gets the id.
@@ -453,6 +504,40 @@ public partial class PluginItemViewModel : ObservableObject
     /// Gets the location badge.
     /// </summary>
     public string LocationBadge => IsLocal ? Loc.Instance["Plugins.Local"] : Loc.Instance["Plugins.Cloud"];
+    /// <summary>
+    /// Gets the matching marketplace registry plugin.
+    /// </summary>
+    public RegistryPluginItemViewModel? RegistryPlugin
+    {
+        get => _registryPlugin;
+        internal set
+        {
+            if (ReferenceEquals(_registryPlugin, value))
+                return;
+
+            if (_registryPlugin is not null)
+                _registryPlugin.PropertyChanged -= OnRegistryPluginPropertyChanged;
+
+            _registryPlugin = value;
+
+            if (_registryPlugin is not null)
+                _registryPlugin.PropertyChanged += OnRegistryPluginPropertyChanged;
+
+            NotifyUpdateStateChanged();
+        }
+    }
+    /// <summary>
+    /// Gets whether an update is available for this installed plugin.
+    /// </summary>
+    public bool HasUpdateAvailable => RegistryPlugin?.InstallState == PluginInstallState.UpdateAvailable;
+    /// <summary>
+    /// Gets whether an update is staged and requires restart.
+    /// </summary>
+    public bool IsUpdatePendingRestart => RegistryPlugin?.InstallState == PluginInstallState.PendingRestart;
+    /// <summary>
+    /// Gets the available update version.
+    /// </summary>
+    public string? AvailableUpdateVersion => HasUpdateAvailable ? RegistryPlugin?.Version : null;
 
     /// <summary>
     /// Initializes a new instance of the PluginItemViewModel class.
@@ -506,6 +591,38 @@ public partial class PluginItemViewModel : ObservableObject
         await _registryService.UninstallPluginAsync(Id);
     }
 
+    [RelayCommand(CanExecute = nameof(CanUpdateRegistryPlugin))]
+    private async Task UpdateRegistryPluginAsync()
+    {
+        if (RegistryPlugin is null)
+            return;
+
+        await RegistryPlugin.UpdateCommand.ExecuteAsync(null);
+        NotifyUpdateStateChanged();
+    }
+
+    private bool CanUpdateRegistryPlugin() =>
+        HasUpdateAvailable && RegistryPlugin?.UpdateCommand.CanExecute(null) == true;
+
+    private void OnRegistryPluginPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(RegistryPluginItemViewModel.InstallState)
+            or nameof(RegistryPluginItemViewModel.IsWorking)
+            or nameof(RegistryPluginItemViewModel.Version))
+        {
+            NotifyUpdateStateChanged();
+        }
+    }
+
+    private void NotifyUpdateStateChanged()
+    {
+        OnPropertyChanged(nameof(RegistryPlugin));
+        OnPropertyChanged(nameof(HasUpdateAvailable));
+        OnPropertyChanged(nameof(IsUpdatePendingRestart));
+        OnPropertyChanged(nameof(AvailableUpdateVersion));
+        UpdateRegistryPluginCommand.NotifyCanExecuteChanged();
+    }
+
     private IEnumerable<string> ResolveDeclaredAndDetectedCategories()
     {
         foreach (var category in _plugin.Manifest.Categories ?? [])
@@ -540,5 +657,6 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(LocationBadge));
+        NotifyUpdateStateChanged();
     }
 }
