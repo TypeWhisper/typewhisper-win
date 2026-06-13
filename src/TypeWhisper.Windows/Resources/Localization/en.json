@@ -587,6 +587,10 @@
   "Recorder.NoAudioCaptured": "No audio captured",
   "Recorder.SavedTranscribing": "Saved. Transcribing...",
   "Recorder.SavedNoModel": "Saved (no model loaded)",
+  "Recorder.Transcribe": "Transcribe",
+  "Recorder.Retry": "Retry transcription",
+  "Recorder.TranscribingItem": "Transcribing...",
+  "Recorder.FailedFormat": "Failed: {0}",
 
   "Info.Subtitle": "Speech-to-text for your Windows desktop",
   "Info.Version": "Version",

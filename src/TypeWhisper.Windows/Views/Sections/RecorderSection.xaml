@@ -157,17 +157,33 @@
                                                Foreground="{StaticResource HintBrush}"
                                                TextTrimming="CharacterEllipsis" MaxHeight="32"
                                                Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding ItemStatusText}" FontSize="11"
+                                               Foreground="{StaticResource HintBrush}"
+                                               TextTrimming="CharacterEllipsis" MaxHeight="32"
+                                               Margin="0,4,0,0"
+                                               Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
                                                FontSize="10" Foreground="{StaticResource HintBrush}"
                                                Margin="0,2,0,0"/>
                                 </StackPanel>
-                                <ui:Button Grid.Column="1" Appearance="Secondary"
-                                           ToolTip="{loc:Str Recorder.Delete}" Padding="6,4"
-                                           VerticalAlignment="Center"
-                                           Command="{Binding DataContext.Recorder.DeleteRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                           CommandParameter="{Binding}">
-                                    <ui:SymbolIcon Symbol="Delete24"/>
-                                </ui:Button>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                            VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <ui:Button Appearance="Secondary"
+                                               ToolTip="{Binding TranscribeToolTip}" Padding="6,4"
+                                               VerticalAlignment="Center"
+                                               IsEnabled="{Binding CanTranscribe}"
+                                               Command="{Binding DataContext.Recorder.TranscribeRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                               CommandParameter="{Binding}">
+                                        <ui:SymbolIcon Symbol="Play24"/>
+                                    </ui:Button>
+                                    <ui:Button Appearance="Secondary"
+                                               ToolTip="{loc:Str Recorder.Delete}" Padding="6,4"
+                                               VerticalAlignment="Center" Margin="6,0,0,0"
+                                               Command="{Binding DataContext.Recorder.DeleteRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                               CommandParameter="{Binding}">
+                                        <ui:SymbolIcon Symbol="Delete24"/>
+                                    </ui:Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>

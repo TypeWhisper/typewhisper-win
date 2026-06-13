@@ -6,6 +6,14 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginSDK.Helpers;
 
 /// <summary>
+/// Represents caller-supplied audio upload data for Whisper-compatible APIs.
+/// </summary>
+/// <param name="Data">Encoded audio bytes supplied to the multipart file field.</param>
+/// <param name="FileName">File name reported in the multipart file field.</param>
+/// <param name="ContentType">MIME content type for the encoded audio.</param>
+public sealed record OpenAiTranscriptionUpload(byte[] Data, string FileName, string ContentType);
+
+/// <summary>
 /// Static helper for Whisper-compatible audio transcription API calls.
 /// Extracted from CloudProviderBase for reuse by transcription engine plugins.
 /// </summary>
@@ -35,19 +43,40 @@ public static class OpenAiTranscriptionHelper
     /// <summary>
     /// Transcribes PCM audio using the selected provider configuration.
     /// </summary>
-    public static async Task<PluginTranscriptionResult> TranscribeAsync(
+    public static Task<PluginTranscriptionResult> TranscribeAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, byte[] wavAudio, string? language, bool translate,
+        string responseFormat, CancellationToken ct, string? prompt = null) =>
+        TranscribeAsync(
+            httpClient,
+            baseUrl,
+            apiKey,
+            model,
+            new OpenAiTranscriptionUpload(wavAudio, "audio.wav", "audio/wav"),
+            language,
+            translate,
+            responseFormat,
+            ct,
+            prompt);
+
+    /// <summary>
+    /// Transcribes caller-supplied encoded audio using the selected provider configuration.
+    /// </summary>
+    public static async Task<PluginTranscriptionResult> TranscribeAsync(
+        HttpClient httpClient, string baseUrl, string apiKey,
+        string model, OpenAiTranscriptionUpload upload, string? language, bool translate,
         string responseFormat, CancellationToken ct, string? prompt = null)
     {
+        ArgumentNullException.ThrowIfNull(upload);
+
         var endpoint = translate
             ? $"{baseUrl}/v1/audio/translations"
             : $"{baseUrl}/v1/audio/transcriptions";
 
         using var content = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(wavAudio);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        content.Add(fileContent, "file", "audio.wav");
+        var fileContent = new ByteArrayContent(upload.Data);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(upload.ContentType);
+        content.Add(fileContent, "file", upload.FileName);
         content.Add(new StringContent(model), "model");
         content.Add(new StringContent(responseFormat), "response_format");
 

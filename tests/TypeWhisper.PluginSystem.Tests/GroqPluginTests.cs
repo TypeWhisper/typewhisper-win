@@ -142,6 +142,98 @@ public class GroqPluginTests
     }
 
     [Fact]
+    public async Task TranscribeAsync_UsesCompressedUploadAndLongTimeoutClient()
+    {
+        string? transcriptionBody = null;
+        var normalHandler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Normal HTTP client should not be used for transcription."));
+        var transcriptionHandler = new CapturingHandler((request, body) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.groq.com/openai/v1/audio/transcriptions", request.RequestUri?.ToString());
+            Assert.Equal("Bearer groq-key", request.Headers.Authorization?.ToString());
+
+            transcriptionBody = body;
+            Assert.NotNull(body);
+            AssertMultipartToken(body, "filename", "audio.m4a");
+            Assert.Contains("Content-Type: audio/mp4", body);
+            Assert.DoesNotContain("filename=\"audio.wav\"", body);
+            Assert.DoesNotContain("filename=audio.wav", body);
+
+            return JsonResponse("""{"text":"ok","language":"en","duration":1.0}""");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+
+        using var normalHttpClient = new HttpClient(normalHandler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(transcriptionHandler);
+        var sut = new GroqPlugin(
+            normalHttpClient,
+            transcriptionHttpClient,
+            _ => new GroqTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync([4, 5, 6], "en", false, null, CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromMinutes(10), transcriptionHttpClient.Timeout);
+        Assert.NotNull(transcriptionBody);
+        Assert.Equal("ok", result.Text);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_EncoderFailureThrowsClearExceptionBeforeUpload()
+    {
+        var handler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Upload should not be attempted."));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(handler);
+        var sut = new GroqPlugin(
+            httpClient,
+            transcriptionHttpClient,
+            _ => throw new InvalidOperationException("codec unavailable"));
+        await sut.ActivateAsync(host);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.TranscribeAsync([1, 2, 3], null, false, null, CancellationToken.None));
+
+        Assert.Contains("Groq audio upload could not be compressed", ex.Message);
+        Assert.Contains("codec unavailable", ex.Message);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_CanceledBeforeCompressionSkipsEncoder()
+    {
+        var handler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Upload should not be attempted."));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+        var encoderCalled = false;
+
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(handler);
+        var sut = new GroqPlugin(
+            httpClient,
+            transcriptionHttpClient,
+            _ =>
+            {
+                encoderCalled = true;
+                return new GroqTranscriptionUpload([1], "audio.m4a", "audio/mp4");
+            });
+        await sut.ActivateAsync(host);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            sut.TranscribeAsync([1, 2, 3], null, false, null, cts.Token));
+
+        Assert.False(encoderCalled);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesSelectedLlmModelWhenCallerDoesNotOverride()
     {
         var handler = new CapturingHandler((_, body) =>
@@ -253,6 +345,14 @@ public class GroqPluginTests
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             return responder(request, body);
         }
+    }
+
+    private static void AssertMultipartToken(string body, string name, string value)
+    {
+        Assert.True(
+            body.Contains($"{name}=\"{value}\"", StringComparison.Ordinal)
+            || body.Contains($"{name}={value}", StringComparison.Ordinal),
+            $"Multipart body did not contain {name}={value}:{Environment.NewLine}{body}");
     }
 
     private sealed class TestPluginHostServices : IPluginHostServices

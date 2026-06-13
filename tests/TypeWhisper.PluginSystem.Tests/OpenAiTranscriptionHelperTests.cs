@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http;
+using System.Text;
 using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -23,6 +25,63 @@ public class OpenAiTranscriptionHelperTests
             ]);
 
         Assert.NotNull(method);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_CustomUploadPreservesMultipartFieldsAndParsesResponse()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler(async request =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.example.test/v1/audio/transcriptions", request.RequestUri?.ToString());
+            Assert.Equal("Bearer test-key", request.Headers.Authorization?.ToString());
+
+            capturedBody = await request.Content!.ReadAsStringAsync();
+            AssertMultipartToken(capturedBody, "name", "file");
+            AssertMultipartToken(capturedBody, "filename", "audio.m4a");
+            Assert.Contains("Content-Type: audio/mp4", capturedBody);
+            AssertMultipartToken(capturedBody, "name", "model");
+            Assert.Contains("whisper-large-v3", capturedBody);
+            AssertMultipartToken(capturedBody, "name", "language");
+            Assert.Contains("de", capturedBody);
+            AssertMultipartToken(capturedBody, "name", "response_format");
+            Assert.Contains("verbose_json", capturedBody);
+            AssertMultipartToken(capturedBody, "name", "prompt");
+            Assert.Contains("Bitte sauber transkribieren", capturedBody);
+            Assert.DoesNotContain("audio.wav", capturedBody);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"text":"  hallo welt  ","language":"de","duration":12.5}""",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        using var httpClient = new HttpClient(handler);
+        var upload = new OpenAiTranscriptionUpload(
+            Encoding.UTF8.GetBytes("compressed-bytes"),
+            "audio.m4a",
+            "audio/mp4");
+
+        var result = await OpenAiTranscriptionHelper.TranscribeAsync(
+            httpClient,
+            "https://api.example.test",
+            "test-key",
+            "whisper-large-v3",
+            upload,
+            "de",
+            translate: false,
+            "verbose_json",
+            CancellationToken.None,
+            "Bitte sauber transkribieren");
+
+        Assert.NotNull(capturedBody);
+        Assert.Equal("hallo welt", result.Text);
+        Assert.Equal("de", result.DetectedLanguage);
+        Assert.Equal(12.5, result.DurationSeconds);
     }
 
     [Fact]
@@ -142,5 +201,22 @@ public class OpenAiTranscriptionHelperTests
 
         Assert.NotNull(result.NoSpeechProbability);
         Assert.True(result.NoSpeechProbability < 0.1f);
+    }
+
+    private sealed class CapturingHandler(
+        Func<HttpRequestMessage, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            responder(request);
+    }
+
+    private static void AssertMultipartToken(string body, string name, string value)
+    {
+        Assert.True(
+            body.Contains($"{name}=\"{value}\"", StringComparison.Ordinal)
+            || body.Contains($"{name}={value}", StringComparison.Ordinal),
+            $"Multipart body did not contain {name}={value}:{Environment.NewLine}{body}");
     }
 }
