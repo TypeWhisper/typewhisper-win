@@ -785,7 +785,8 @@ public partial class FileTranscriptionViewModel : ObservableObject
             new("de", "Deutsch"),
             new("en", "English"),
             new("fr", "Francais"),
-            new("es", "Espanol")
+            new("es", "Espanol"),
+            new("zh", "中文")
         ]);
 
         RefreshWatchFolderEnginesAndModels();

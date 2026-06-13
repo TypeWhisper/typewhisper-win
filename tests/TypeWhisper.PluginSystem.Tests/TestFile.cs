@@ -9,12 +9,24 @@ internal static class TestFile
 
     public static string ProjectFile(params string[] parts)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
-            directory = directory.Parent;
+        var directory = FindProjectRoot(AppContext.BaseDirectory)
+            ?? FindProjectRoot(Environment.CurrentDirectory)
+            ?? FindProjectRoot(Environment.GetEnvironmentVariable("TYPEWHISPER_REPO_ROOT"));
 
         Assert.NotNull(directory);
         return Path.Join([directory.FullName, .. parts]);
+    }
+
+    private static DirectoryInfo? FindProjectRoot(string? startPath)
+    {
+        if (string.IsNullOrWhiteSpace(startPath))
+            return null;
+
+        var directory = new DirectoryInfo(startPath);
+        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
+            directory = directory.Parent;
+
+        return directory;
     }
 
     public static string ExtractBlock(string text, string marker, int maxLength = 1800)

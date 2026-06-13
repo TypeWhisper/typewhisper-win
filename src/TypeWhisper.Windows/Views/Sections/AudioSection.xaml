@@ -260,6 +260,7 @@
                                     <ComboBoxItem Content="English" Tag="en"/>
                                     <ComboBoxItem Content="Français" Tag="fr"/>
                                     <ComboBoxItem Content="Español" Tag="es"/>
+                                    <ComboBoxItem Content="中文" Tag="zh"/>
                                     <ComboBoxItem Content="Italiano" Tag="it"/>
                                     <ComboBoxItem Content="Português" Tag="pt"/>
                                     <ComboBoxItem Content="Nederlands" Tag="nl"/>
