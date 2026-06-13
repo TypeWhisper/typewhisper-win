@@ -17,6 +17,8 @@ namespace TypeWhisper.Windows.Services.Plugins;
 public sealed class PluginRegistryService
 {
     private const string RegistryUrl = "https://typewhisper.github.io/typewhisper-win/plugins.json";
+    private const string PendingUpdatesDirectoryName = ".pending-updates";
+    private const string StagingDirectoryName = ".staging";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(24);
 
@@ -52,8 +54,8 @@ public sealed class PluginRegistryService
         _pluginLoader = pluginLoader;
         _settings = settings;
         _httpClient = httpClient ?? new HttpClient();
-        _pluginsPath = pluginsPath ?? TypeWhisperEnvironment.PluginsPath;
-        _pendingUpdatesPath = Path.Combine(_pluginsPath, ".pending-updates");
+        _pluginsPath = Path.GetFullPath(pluginsPath ?? TypeWhisperEnvironment.PluginsPath);
+        _pendingUpdatesPath = GetValidatedChildDirectory(_pluginsPath, PendingUpdatesDirectoryName, "pending updates directory");
         _replaceActiveDirectoryAsync = replaceActiveDirectoryAsync ?? ReplaceActiveDirectoryAsync;
     }
 
@@ -92,13 +94,16 @@ public sealed class PluginRegistryService
     /// </summary>
     public PluginInstallState GetInstallState(RegistryPlugin registryPlugin)
     {
-        var pendingManifest = ReadManifest(Path.Combine(_pendingUpdatesPath, registryPlugin.Id));
+        var pendingDir = GetValidatedPendingDirectory(registryPlugin.Id);
+        var pluginDir = GetValidatedPluginDirectory(registryPlugin.Id);
+
+        var pendingManifest = ReadManifest(pendingDir);
         if (ManifestMatchesRegistry(pendingManifest, registryPlugin))
             return PluginInstallState.PendingRestart;
 
         var local = _pluginManager.GetPlugin(registryPlugin.Id);
         var localVersion = local?.Manifest.Version;
-        var diskManifest = ReadManifest(Path.Combine(_pluginsPath, registryPlugin.Id));
+        var diskManifest = ReadManifest(pluginDir);
         if (ManifestIdMatches(diskManifest, registryPlugin.Id))
             localVersion = SelectNewestVersion(localVersion, diskManifest!.Version);
 
@@ -127,9 +132,10 @@ public sealed class PluginRegistryService
         Directory.CreateDirectory(_pluginsPath);
         Directory.CreateDirectory(_pendingUpdatesPath);
 
-        var pluginDir = Path.Combine(_pluginsPath, registryPlugin.Id);
-        var stagingRoot = Path.Combine(_pluginsPath, ".staging");
-        var stagingDir = Path.Combine(stagingRoot, $"{registryPlugin.Id}-{Guid.NewGuid():N}");
+        ValidatePluginId(registryPlugin.Id);
+        var pluginDir = GetValidatedPluginDirectory(registryPlugin.Id);
+        var stagingRoot = GetValidatedChildDirectory(_pluginsPath, StagingDirectoryName, "plugin staging directory");
+        var stagingDir = GetValidatedChildDirectory(stagingRoot, $"{registryPlugin.Id}-{Guid.NewGuid():N}", "plugin staging instance directory");
         var tempZip = Path.GetTempFileName();
 
         try
@@ -186,7 +192,7 @@ public sealed class PluginRegistryService
             if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
                 return PluginInstallResult.PendingRestart;
 
-            DeleteDirectoryIfExists(Path.Combine(_pendingUpdatesPath, registryPlugin.Id));
+            DeleteDirectoryIfExists(GetValidatedPendingDirectory(registryPlugin.Id));
             Debug.WriteLine($"[PluginRegistry] Installed plugin: {registryPlugin.Id} v{registryPlugin.Version}");
             return PluginInstallResult.Installed;
         }
@@ -207,11 +213,12 @@ public sealed class PluginRegistryService
     /// </summary>
     public async Task UninstallPluginAsync(string pluginId)
     {
+        ValidatePluginId(pluginId);
         await _pluginManager.UnloadPluginAsync(pluginId);
 
-        DeleteDirectoryIfExists(Path.Combine(_pendingUpdatesPath, pluginId));
+        DeleteDirectoryIfExists(GetValidatedPendingDirectory(pluginId));
 
-        var pluginDir = Path.Combine(_pluginsPath, pluginId);
+        var pluginDir = GetValidatedPluginDirectory(pluginId);
         if (Directory.Exists(pluginDir))
         {
             try
@@ -237,8 +244,11 @@ public sealed class PluginRegistryService
         foreach (var pendingDir in Directory.GetDirectories(_pendingUpdatesPath))
         {
             var pluginId = Path.GetFileName(pendingDir);
-            if (string.IsNullOrWhiteSpace(pluginId))
+            if (!IsValidPluginId(pluginId))
+            {
+                Debug.WriteLine($"[PluginRegistry] Skipping invalid pending update directory: {pendingDir}");
                 continue;
+            }
 
             var manifest = ReadManifest(pendingDir);
             if (!ManifestIdMatches(manifest, pluginId))
@@ -247,10 +257,10 @@ public sealed class PluginRegistryService
                 continue;
             }
 
-            var pluginDir = Path.Combine(_pluginsPath, pluginId);
+            var pluginDir = GetValidatedPluginDirectory(pluginId);
             try
             {
-                await ReplaceActiveDirectoryAsync(pendingDir, pluginDir, ct);
+                await _replaceActiveDirectoryAsync(pendingDir, pluginDir, ct);
                 Debug.WriteLine($"[PluginRegistry] Applied pending plugin update: {pluginId} v{manifest!.Version}");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -346,7 +356,7 @@ public sealed class PluginRegistryService
 
     private void QueuePendingUpdate(string pluginId, string stagingDir)
     {
-        var pendingDir = Path.Combine(_pendingUpdatesPath, pluginId);
+        var pendingDir = GetValidatedPendingDirectory(pluginId);
         DeleteDirectoryIfExists(pendingDir);
         Directory.CreateDirectory(_pendingUpdatesPath);
         Directory.Move(stagingDir, pendingDir);
@@ -421,10 +431,59 @@ public sealed class PluginRegistryService
 
     private static void CollectUnloadedPluginContexts()
     {
-        GC.Collect();
         GC.WaitForPendingFinalizers();
-        GC.Collect();
     }
+
+    private string GetValidatedPluginDirectory(string pluginId)
+    {
+        ValidatePluginId(pluginId);
+        return GetValidatedChildDirectory(_pluginsPath, pluginId, "plugin directory");
+    }
+
+    private string GetValidatedPendingDirectory(string pluginId)
+    {
+        ValidatePluginId(pluginId);
+        return GetValidatedChildDirectory(_pendingUpdatesPath, pluginId, "pending plugin directory");
+    }
+
+    private static string GetValidatedChildDirectory(string rootDirectory, string childName, string description)
+    {
+        if (string.IsNullOrWhiteSpace(childName) ||
+            Path.IsPathRooted(childName) ||
+            childName.Contains(Path.DirectorySeparatorChar) ||
+            childName.Contains(Path.AltDirectorySeparatorChar) ||
+            childName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new InvalidOperationException($"Invalid {description} name.");
+        }
+
+        var fullRoot = Path.GetFullPath(rootDirectory);
+        var fullRootWithSeparator = EnsureTrailingSeparator(fullRoot);
+        var fullPath = Path.GetFullPath(Path.Combine(fullRoot, childName));
+        if (!fullPath.StartsWith(fullRootWithSeparator, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"The {description} resolves outside the expected root.");
+
+        return fullPath;
+    }
+
+    private static void ValidatePluginId(string pluginId)
+    {
+        if (!IsValidPluginId(pluginId))
+            throw new InvalidOperationException("Invalid plugin id.");
+    }
+
+    private static bool IsValidPluginId(string? pluginId) =>
+        !string.IsNullOrWhiteSpace(pluginId) &&
+        !Path.IsPathRooted(pluginId) &&
+        !pluginId.Contains("..", StringComparison.Ordinal) &&
+        !pluginId.Contains(Path.DirectorySeparatorChar) &&
+        !pluginId.Contains(Path.AltDirectorySeparatorChar) &&
+        pluginId.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+
+    private static string EnsureTrailingSeparator(string path) =>
+        path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
+            ? path
+            : path + Path.DirectorySeparatorChar;
 
     private static void DeleteDirectoryIfExists(string path)
     {

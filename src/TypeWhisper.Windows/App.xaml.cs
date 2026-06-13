@@ -103,7 +103,14 @@ public partial class App : Application
 
         // Apply staged plugin updates before plugin assemblies are loaded.
         var pluginRegistry = _serviceProvider.GetRequiredService<PluginRegistryService>();
-        pluginRegistry.ApplyPendingUpdatesAsync().GetAwaiter().GetResult();
+        try
+        {
+            pluginRegistry.ApplyPendingUpdatesAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PluginRegistry] Failed to apply pending updates at startup: {ex.Message}");
+        }
 
         // Initialize plugins (must happen after settings.Load so enabled state is available)
         var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();

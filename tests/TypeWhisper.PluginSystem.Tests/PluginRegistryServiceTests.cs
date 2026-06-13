@@ -22,6 +22,7 @@ public class PluginRegistryServiceTests : IDisposable
     private readonly Mock<ISettingsService> _settings = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
+    private readonly List<IDisposable> _disposables = [];
     private readonly string _pluginsRoot;
     private PluginManager? _manager;
 
@@ -39,34 +40,34 @@ public class PluginRegistryServiceTests : IDisposable
         return _manager;
     }
 
-    private static HttpClient CreateMockHttpClient(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
+    private HttpClient CreateMockHttpClient(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         var handler = new Mock<HttpMessageHandler>();
         handler.Protected()
             .Setup<Task<HttpResponseMessage>>("SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage(statusCode)
+            .ReturnsAsync(() => TrackDisposable(new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(responseJson)
-            });
+            }));
 
-        return new HttpClient(handler.Object);
+        return TrackDisposable(new HttpClient(handler.Object));
     }
 
-    private static HttpClient CreateMockHttpClient(byte[] responseBytes, HttpStatusCode statusCode = HttpStatusCode.OK)
+    private HttpClient CreateMockHttpClient(byte[] responseBytes, HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         var handler = new Mock<HttpMessageHandler>();
         handler.Protected()
             .Setup<Task<HttpResponseMessage>>("SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage(statusCode)
+            .ReturnsAsync(() => TrackDisposable(new HttpResponseMessage(statusCode)
             {
                 Content = new ByteArrayContent(responseBytes)
-            });
+            }));
 
-        return new HttpClient(handler.Object);
+        return TrackDisposable(new HttpClient(handler.Object));
     }
 
     [Fact]
@@ -210,10 +211,10 @@ public class PluginRegistryServiceTests : IDisposable
             .ReturnsAsync(() =>
             {
                 callCount++;
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) };
+                return TrackDisposable(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });
             });
 
-        var httpClient = new HttpClient(handler.Object);
+        var httpClient = TrackDisposable(new HttpClient(handler.Object));
         var manager = CreateManager();
         var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
 
@@ -312,6 +313,22 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("..")]
+    [InlineData("../escape")]
+    [InlineData("com.test/escape")]
+    [InlineData("com.test\\escape")]
+    public void GetInstallState_InvalidPluginId_RejectsPathLikeIds(string pluginId)
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var registryPlugin = CreateRegistryPlugin(pluginId, "1.0.0");
+
+        Assert.Throws<InvalidOperationException>(() => service.GetInstallState(registryPlugin));
+    }
+
     [Fact]
     public async Task ApplyPendingUpdatesAsync_ReplacesActivePluginDirectoryBeforeLoad()
     {
@@ -330,6 +347,38 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.False(Directory.Exists(pendingDir));
         Assert.False(File.Exists(Path.Combine(activeDir, "active.txt")));
         Assert.True(File.Exists(Path.Combine(activeDir, "pending.txt")));
+        Assert.Equal("1.0.2", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task ApplyPendingUpdatesAsync_UsesInjectedReplacementDelegate()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-delegate";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingDir = Path.Combine(_pluginsRoot, ".pending-updates", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        WritePluginManifest(pendingDir, pluginId, "1.0.2");
+        var replaceCallCount = 0;
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            replaceActiveDirectoryAsync: (sourceDirectory, targetDirectory, _) =>
+            {
+                replaceCallCount++;
+                Assert.Equal(pendingDir, sourceDirectory);
+                Assert.Equal(activeDir, targetDirectory);
+                Directory.Delete(targetDirectory, recursive: true);
+                Directory.Move(sourceDirectory, targetDirectory);
+                return Task.CompletedTask;
+            });
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.Equal(1, replaceCallCount);
+        Assert.False(Directory.Exists(pendingDir));
         Assert.Equal("1.0.2", ReadManifest(activeDir).Version);
     }
 
@@ -540,6 +589,10 @@ public class PluginRegistryServiceTests : IDisposable
     public void Dispose()
     {
         _manager?.Dispose();
+        foreach (var disposable in _disposables)
+            disposable.Dispose();
+
+        _disposables.Clear();
         try
         {
             if (Directory.Exists(_pluginsRoot))
@@ -561,6 +614,13 @@ public class PluginRegistryServiceTests : IDisposable
         Size = 100,
         DownloadUrl = "https://example.com/plugin.zip"
     };
+
+    private T TrackDisposable<T>(T disposable)
+        where T : IDisposable
+    {
+        _disposables.Add(disposable);
+        return disposable;
+    }
 
     private static void WritePluginManifest(string pluginDir, string id, string version)
     {
