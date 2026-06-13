@@ -239,6 +239,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         _updateService = updateService;
         _settingsService = settingsService;
         _errorLog = errorLog;
+        Plugins.PropertyChanged += OnPluginsPropertyChanged;
         Loc.Instance.LanguageChanged += (_, _) =>
         {
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
@@ -246,6 +247,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
                 RefreshUpdateChannelOptions();
                 RefreshIndicatorPreviewText();
                 BuildNavigation();
+                SyncPluginUpdateNavigationBadge();
                 SyncRouteMetadata(CurrentRoute);
                 SyncNavigationSelection();
                 OnPropertyChanged(nameof(CurrentAppVersionDisplay));
@@ -257,6 +259,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SyncSelectedUpdateChannel(_settingsService.Current);
         RefreshIndicatorPreviewText();
         BuildNavigation();
+        SyncPluginUpdateNavigationBadge();
         RefreshErrorLog();
         _errorLog.EntriesChanged += RefreshErrorLog;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
@@ -496,6 +499,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         }
     }
 
+    private void OnPluginsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PluginsViewModel.PluginUpdateNavigationBadgeText))
+            DispatchToUi(SyncPluginUpdateNavigationBadge);
+    }
+
     private void TickIndicatorPreview()
     {
         _indicatorPreviewPhase += 0.42;
@@ -584,6 +593,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             foreach (var item in group.Items)
                 _navigationLookup[item.Route] = item;
         }
+    }
+
+    private void SyncPluginUpdateNavigationBadge()
+    {
+        if (_navigationLookup.TryGetValue(SettingsRoute.Integrations, out var item))
+            item.BadgeText = Plugins.PluginUpdateNavigationBadgeText;
     }
 
     private void SyncNavigationSelection()

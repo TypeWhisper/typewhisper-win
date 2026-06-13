@@ -104,6 +104,11 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// Returns whether install error.
     /// </summary>
     public bool HasInstallError => !string.IsNullOrWhiteSpace(InstallErrorMessage);
+    /// <summary>
+    /// Gets whether the plugin is installed or has an installed update available.
+    /// </summary>
+    public bool IsInstalledOrUpdateAvailable =>
+        InstallState is PluginInstallState.Installed or PluginInstallState.UpdateAvailable;
 
     /// <summary>
     /// Initializes a new instance of the RegistryPluginItemViewModel class.
@@ -134,8 +139,10 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         try
         {
             var progressReporter = new Progress<double>(p => Progress = p);
-            await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = PluginInstallState.Installed;
+            var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
+            InstallState = result == PluginInstallResult.PendingRestart
+                ? PluginInstallState.PendingRestart
+                : PluginInstallState.Installed;
             Progress = 1;
         }
         catch (Exception ex)
@@ -179,8 +186,10 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         try
         {
             var progressReporter = new Progress<double>(p => Progress = p);
-            await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = PluginInstallState.Installed;
+            var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
+            InstallState = result == PluginInstallResult.PendingRestart
+                ? PluginInstallState.PendingRestart
+                : PluginInstallState.Installed;
             Progress = 1;
         }
         catch (Exception ex)
@@ -197,6 +206,11 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     partial void OnInstallErrorMessageChanged(string value)
     {
         OnPropertyChanged(nameof(HasInstallError));
+    }
+
+    partial void OnInstallStateChanged(PluginInstallState value)
+    {
+        OnPropertyChanged(nameof(IsInstalledOrUpdateAvailable));
     }
 
     private static string FormatSize(long bytes) => bytes switch

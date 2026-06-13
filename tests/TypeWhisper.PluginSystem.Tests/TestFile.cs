@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -11,7 +12,8 @@ internal static class TestFile
     {
         var directory = FindProjectRoot(AppContext.BaseDirectory)
             ?? FindProjectRoot(Environment.CurrentDirectory)
-            ?? FindProjectRoot(Environment.GetEnvironmentVariable("TYPEWHISPER_REPO_ROOT"));
+            ?? FindProjectRoot(Environment.GetEnvironmentVariable("TYPEWHISPER_REPO_ROOT"))
+            ?? FindProjectRoot(Path.GetDirectoryName(ThisFilePath()));
 
         Assert.NotNull(directory);
         return Path.Join([directory.FullName, .. parts]);
@@ -28,6 +30,8 @@ internal static class TestFile
 
         return directory;
     }
+
+    private static string ThisFilePath([CallerFilePath] string path = "") => path;
 
     public static string ExtractBlock(string text, string marker, int maxLength = 1800)
     {
