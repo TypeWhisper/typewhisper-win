@@ -102,6 +102,15 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LanguageOptions_IncludeChineseSpokenLanguage()
+    {
+        var sut = CreateViewModel();
+
+        var option = Assert.Single(sut.LanguageOptions, option => option.Value == "zh");
+        Assert.Equal("中文", option.DisplayName);
+    }
+
+    [Fact]
     public void StartEdit_LoadsSingleHotkeyWorkflowAsOneHotkeyChip()
     {
         var workflow = NewWorkflow("Rewrite", WorkflowTrigger.Hotkey("Ctrl+Alt+R"));

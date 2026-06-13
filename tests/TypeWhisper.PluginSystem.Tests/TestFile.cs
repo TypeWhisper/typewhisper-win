@@ -10,17 +10,21 @@ internal static class TestFile
 
     public static string ProjectFile(params string[] parts)
     {
-        var directory = FindRepoRoot(AppContext.BaseDirectory)
-            ?? FindRepoRoot(Directory.GetCurrentDirectory())
-            ?? FindRepoRoot(Path.GetDirectoryName(ThisFilePath())!);
+        var directory = FindProjectRoot(AppContext.BaseDirectory)
+            ?? FindProjectRoot(Environment.CurrentDirectory)
+            ?? FindProjectRoot(Environment.GetEnvironmentVariable("TYPEWHISPER_REPO_ROOT"))
+            ?? FindProjectRoot(Path.GetDirectoryName(ThisFilePath()));
 
         Assert.NotNull(directory);
         return Path.Join([directory.FullName, .. parts]);
     }
 
-    private static DirectoryInfo? FindRepoRoot(string startDirectory)
+    private static DirectoryInfo? FindProjectRoot(string? startPath)
     {
-        var directory = new DirectoryInfo(startDirectory);
+        if (string.IsNullOrWhiteSpace(startPath))
+            return null;
+
+        var directory = new DirectoryInfo(startPath);
         while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
             directory = directory.Parent;
 
