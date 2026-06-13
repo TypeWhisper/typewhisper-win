@@ -178,6 +178,15 @@ public class FileTranscriptionViewModelTests
         Assert.Equal(Loc.Instance["FileTranscription.StatusDefault"], sut.StatusText);
     }
 
+    [Fact]
+    public void WatchFolderLanguageOptions_IncludeChineseSpokenLanguage()
+    {
+        var sut = CreateSut(new FakeProcessor());
+
+        var option = Assert.Single(sut.WatchFolderLanguageOptions, option => option.Id == "zh");
+        Assert.Equal("中文", option.DisplayName);
+    }
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));

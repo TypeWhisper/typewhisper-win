@@ -988,7 +988,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             new SettingOption("de", "Deutsch"),
             new SettingOption("en", "English"),
             new SettingOption("fr", "Francais"),
-            new SettingOption("es", "Espanol")
+            new SettingOption("es", "Espanol"),
+            new SettingOption("zh", "中文")
         ]);
         ReplaceCollection(TaskOptions,
         [
@@ -1253,6 +1254,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         "en" => "English",
         "fr" => "Francais",
         "es" => "Espanol",
+        "zh" => "中文",
         _ => language
     };
 
