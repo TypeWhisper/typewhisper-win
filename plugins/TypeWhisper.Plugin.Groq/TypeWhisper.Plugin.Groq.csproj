@@ -11,6 +11,7 @@
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>

@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using Moq;
 using TypeWhisper.Core;
+using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
@@ -28,8 +29,12 @@ public sealed class AudioRecorderViewModelTests
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
         var captures = new FakeAudioInputCaptureFactory();
         using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var selectedModelId = ModelManagerService.GetPluginModelId(
+            FakeRecorderTranscriptionPlugin.PluginIdValue,
+            "tiny");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
+            SelectedModelId = selectedModelId,
             TranslationTargetLanguage = "de"
         });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
@@ -42,7 +47,7 @@ public sealed class AudioRecorderViewModelTests
         TestPluginManagerFactory.SetPrivateField(
             modelManager,
             "_activeModelId",
-            ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"));
+            selectedModelId);
 
         var translation = new Mock<ITranslationService>();
         translation
@@ -57,6 +62,8 @@ public sealed class AudioRecorderViewModelTests
             audio,
             modelManager,
             settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
             new PostProcessingPipeline(),
             translation.Object);
 
@@ -91,8 +98,12 @@ public sealed class AudioRecorderViewModelTests
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
         var captures = new FakeAudioInputCaptureFactory();
         using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var selectedModelId = ModelManagerService.GetPluginModelId(
+            FakeRecorderTranscriptionPlugin.PluginIdValue,
+            "tiny");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
+            SelectedModelId = selectedModelId,
             TranslationTargetLanguage = "de"
         });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
@@ -105,7 +116,7 @@ public sealed class AudioRecorderViewModelTests
         TestPluginManagerFactory.SetPrivateField(
             modelManager,
             "_activeModelId",
-            ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"));
+            selectedModelId);
 
         var translation = new Mock<ITranslationService>();
         translation
@@ -120,6 +131,8 @@ public sealed class AudioRecorderViewModelTests
             audio,
             modelManager,
             settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
             new PostProcessingPipeline(),
             translation.Object);
         var existingRecorderItems = sut.Recordings.Count;
@@ -140,6 +153,229 @@ public sealed class AudioRecorderViewModelTests
         }
     }
 
+    [Fact]
+    public async Task Recorder_LogsFailureAndKeepsRecording_WhenProviderThrowsExternalComponentException()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        TypeWhisperEnvironment.EnsureDirectories();
+
+        var existingRecordings = Directory
+            .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var selectedModelId = ModelManagerService.GetPluginModelId(
+            FakeRecorderTranscriptionPlugin.PluginIdValue,
+            "tiny");
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedModelId = selectedModelId
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new FakeRecorderTranscriptionPlugin(
+            (_, _, _, _, _) => Task.FromException<PluginTranscriptionResult>(
+                new InvalidOperationException("External component has thrown an exception.")));
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", selectedModelId);
+
+        var errorLog = new FakeErrorLogService();
+        var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            errorLog,
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        sut.ToggleRecordingCommand.Execute(null);
+        captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
+        sut.ToggleRecordingCommand.Execute(null);
+
+        var item = await WaitForRecordingAsync(
+            sut,
+            recording => recording.ErrorMessage?.Contains(
+                "External component has thrown an exception",
+                StringComparison.Ordinal) == true
+                && !recording.IsTranscribing);
+
+        try
+        {
+            Assert.True(File.Exists(item.FilePath));
+            Assert.Null(item.Transcript);
+            Assert.False(File.Exists(Path.ChangeExtension(item.FilePath, ".txt")));
+            var entry = Assert.Single(errorLog.Entries);
+            Assert.Equal(ErrorCategory.Transcription, entry.Category);
+            Assert.Contains("External component has thrown an exception", entry.Message);
+        }
+        finally
+        {
+            TryDeleteNewRecordings(existingRecordings);
+        }
+    }
+
+    [Fact]
+    public async Task Recorder_RetryTranscribesExistingFailedRecording_AndWritesTranscriptFile()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        TypeWhisperEnvironment.EnsureDirectories();
+
+        var existingRecordings = Directory
+            .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var selectedModelId = ModelManagerService.GetPluginModelId(
+            FakeRecorderTranscriptionPlugin.PluginIdValue,
+            "tiny");
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedModelId = selectedModelId
+        });
+        var callCount = 0;
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new FakeRecorderTranscriptionPlugin((_, _, _, _, _) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? Task.FromException<PluginTranscriptionResult>(
+                    new InvalidOperationException("External component has thrown an exception."))
+                : Task.FromResult(new PluginTranscriptionResult("retry transcript", "en", 1));
+        });
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", selectedModelId);
+
+        var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        sut.ToggleRecordingCommand.Execute(null);
+        captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
+        sut.ToggleRecordingCommand.Execute(null);
+
+        var failedItem = await WaitForRecordingAsync(
+            sut,
+            recording => recording.ErrorMessage is not null && !recording.IsTranscribing);
+
+        sut.TranscribeRecordingCommand.Execute(failedItem);
+
+        var succeededItem = await WaitForRecordingAsync(
+            sut,
+            recording => recording.FilePath == failedItem.FilePath
+                && recording.Transcript == "retry transcript"
+                && !recording.IsTranscribing);
+
+        try
+        {
+            Assert.Null(succeededItem.ErrorMessage);
+            var transcriptPath = Path.ChangeExtension(succeededItem.FilePath, ".txt");
+            Assert.Equal("retry transcript", await File.ReadAllTextAsync(transcriptPath));
+        }
+        finally
+        {
+            TryDeleteNewRecordings(existingRecordings);
+        }
+    }
+
+    [Fact]
+    public async Task Recorder_RetryUsesConfiguredLanguageTaskAndQuickTranslation()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        TypeWhisperEnvironment.EnsureDirectories();
+
+        var existingRecordings = Directory
+            .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.wav";
+        var filePath = Path.Combine(TypeWhisperEnvironment.AudioPath, fileName);
+        await File.WriteAllBytesAsync(filePath, WavEncoder.Encode(BuildSamples()));
+
+        try
+        {
+            var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+            var captures = new FakeAudioInputCaptureFactory();
+            using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+            var selectedModelId = ModelManagerService.GetPluginModelId(
+                FakeRecorderTranscriptionPlugin.PluginIdValue,
+                "tiny");
+            var settings = new FakeSettingsService(AppSettings.Default with
+            {
+                SelectedModelId = selectedModelId,
+                Language = "de",
+                TranscriptionTask = "translate",
+                TranslationTargetLanguage = "fr"
+            });
+            using var pluginManager = TestPluginManagerFactory.Create(settings);
+            var plugin = new FakeRecorderTranscriptionPlugin((_, _, _, _, _) =>
+                Task.FromResult(new PluginTranscriptionResult("hello there", "de", 1)));
+            TestPluginManagerFactory.SetPrivateField(
+                pluginManager,
+                "_transcriptionEngines",
+                new List<ITranscriptionEnginePlugin> { plugin });
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", selectedModelId);
+
+            var translation = new Mock<ITranslationService>();
+            translation
+                .Setup(t => t.TranslateAsync(
+                    "hello there",
+                    "de",
+                    "fr",
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync("bonjour");
+
+            var sut = new AudioRecorderViewModel(
+                audio,
+                modelManager,
+                settings,
+                new AudioFileService(),
+                new FakeErrorLogService(),
+                new PostProcessingPipeline(),
+                translation.Object);
+            var item = Assert.Single(sut.Recordings, recording => recording.FilePath == filePath);
+
+            sut.TranscribeRecordingCommand.Execute(item);
+
+            var succeededItem = await WaitForRecordingAsync(
+                sut,
+                recording => recording.FilePath == filePath
+                    && recording.Transcript == "bonjour"
+                    && !recording.IsTranscribing);
+
+            Assert.Null(succeededItem.ErrorMessage);
+            var call = Assert.Single(plugin.Calls);
+            Assert.Equal("de", call.Language);
+            Assert.True(call.Translate);
+            translation.Verify(t => t.TranslateAsync(
+                "hello there",
+                "de",
+                "fr",
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            TryDeleteNewRecordings(existingRecordings);
+        }
+    }
+
     private static byte[] BuildPcm16Chunk()
     {
         var buffer = new byte[3200];
@@ -153,6 +389,9 @@ public sealed class AudioRecorderViewModelTests
 
         return buffer;
     }
+
+    private static float[] BuildSamples() =>
+        Enumerable.Repeat(0.25f, 1600).ToArray();
 
     private static async Task<string> WaitForNewTranscriptFileAsync(ISet<string> existingTranscripts)
     {
@@ -186,6 +425,22 @@ public sealed class AudioRecorderViewModelTests
         }
 
         throw new TimeoutException("Condition was not met.");
+    }
+
+    private static async Task<RecordingItem> WaitForRecordingAsync(
+        AudioRecorderViewModel sut,
+        Func<RecordingItem, bool> predicate)
+    {
+        for (var attempt = 0; attempt < 80; attempt++)
+        {
+            var item = sut.Recordings.FirstOrDefault(predicate);
+            if (item is not null)
+                return item;
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException("Recorder item did not reach the expected state.");
     }
 
     private static void TryDeleteRecordingFiles(string transcriptPath)
@@ -226,16 +481,26 @@ public sealed class AudioRecorderViewModelTests
 
     private sealed class FakeRecorderTranscriptionPlugin : ITranscriptionEnginePlugin
     {
-        private readonly string _text;
-        private readonly string? _detectedLanguage;
+        public const string PluginIdValue = "com.typewhisper.recorder-test";
+
+        private readonly Func<byte[], string?, bool, string?, CancellationToken, Task<PluginTranscriptionResult>>
+            _transcribeAsync;
 
         public FakeRecorderTranscriptionPlugin(string text, string? detectedLanguage)
+            : this((_, _, _, _, _) =>
+                Task.FromResult(new PluginTranscriptionResult(text, detectedLanguage, 1.0, null)))
         {
-            _text = text;
-            _detectedLanguage = detectedLanguage;
         }
 
-        public string PluginId => "com.typewhisper.recorder-test";
+        public FakeRecorderTranscriptionPlugin(
+            Func<byte[], string?, bool, string?, CancellationToken, Task<PluginTranscriptionResult>> transcribeAsync)
+        {
+            _transcribeAsync = transcribeAsync;
+        }
+
+        public List<RecorderTranscriptionCall> Calls { get; } = [];
+
+        public string PluginId => PluginIdValue;
         public string PluginName => "Recorder Test";
         public string PluginVersion => "1.0.0";
         public string ProviderId => "recorder-test";
@@ -243,7 +508,7 @@ public sealed class AudioRecorderViewModelTests
         public bool IsConfigured => true;
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("tiny", "Tiny")];
         public string? SelectedModelId { get; private set; } = "tiny";
-        public bool SupportsTranslation => false;
+        public bool SupportsTranslation => true;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -258,7 +523,32 @@ public sealed class AudioRecorderViewModelTests
             string? prompt,
             CancellationToken ct)
         {
-            return Task.FromResult(new PluginTranscriptionResult(_text, _detectedLanguage, 1.0, null));
+            Calls.Add(new RecorderTranscriptionCall(language, translate, prompt));
+            return _transcribeAsync(wavAudio, language, translate, prompt, ct);
         }
     }
+
+    private sealed class FakeErrorLogService : IErrorLogService
+    {
+        private readonly List<ErrorLogEntry> _entries = [];
+
+        public IReadOnlyList<ErrorLogEntry> Entries => _entries;
+
+        public event Action? EntriesChanged;
+
+        public void AddEntry(string message, string category = "general")
+        {
+            _entries.Add(ErrorLogEntry.Create(message, category));
+            EntriesChanged?.Invoke();
+        }
+
+        public void ClearAll() => _entries.Clear();
+
+        public string ExportDiagnostics() => "";
+    }
+
+    private sealed record RecorderTranscriptionCall(
+        string? Language,
+        bool Translate,
+        string? Prompt);
 }

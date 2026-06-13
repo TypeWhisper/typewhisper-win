@@ -1,7 +1,9 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Windows.Controls;
+using NAudio.Wave;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -14,7 +16,12 @@ namespace TypeWhisper.Plugin.Groq;
 public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 {
     private const string BaseUrl = "https://api.groq.com/openai";
+    private const int TranscriptionUploadBitRate = 48_000;
+    private static readonly TimeSpan DefaultHttpTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultTranscriptionHttpTimeout = TimeSpan.FromMinutes(10);
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _transcriptionHttpClient;
+    private readonly Func<byte[], GroqTranscriptionUpload> _compressedUploadFactory;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
@@ -41,13 +48,23 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// Initializes a new instance of the GroqPlugin class.
     /// </summary>
     public GroqPlugin()
-        : this(CreateHttpClient())
+        : this(CreateHttpClient(), CreateTranscriptionHttpClient())
     {
     }
 
     internal GroqPlugin(HttpClient httpClient)
+        : this(httpClient, httpClient)
+    {
+    }
+
+    internal GroqPlugin(
+        HttpClient httpClient,
+        HttpClient transcriptionHttpClient,
+        Func<byte[], GroqTranscriptionUpload>? compressedUploadFactory = null)
     {
         _httpClient = httpClient;
+        _transcriptionHttpClient = transcriptionHttpClient;
+        _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
     }
 
     // ITypeWhisperPlugin
@@ -63,7 +80,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.2";
+    public string PluginVersion => "1.0.3";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -160,9 +177,33 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         if (!IsConfigured || _selectedApiModelName is null)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
 
-        return await OpenAiTranscriptionHelper.TranscribeAsync(
-            _httpClient, BaseUrl, _apiKey!, _selectedApiModelName,
-            wavAudio, language, translate, "verbose_json", ct, prompt);
+        GroqTranscriptionUpload upload;
+        try
+        {
+            upload = _compressedUploadFactory(wavAudio);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Groq audio upload could not be compressed before transcription: {ex.Message}",
+                ex);
+        }
+
+        return await TranscribeUploadAsync(
+            _transcriptionHttpClient,
+            BaseUrl,
+            _apiKey!,
+            _selectedApiModelName,
+            upload,
+            language,
+            translate,
+            "verbose_json",
+            ct,
+            prompt);
     }
 
     // ILlmProviderPlugin
@@ -326,7 +367,113 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
             .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromSeconds(30) };
+    internal static HttpClient CreateTranscriptionHttpClient(HttpMessageHandler? handler = null) =>
+        CreateHttpClient(DefaultTranscriptionHttpTimeout, handler);
+
+    private static HttpClient CreateHttpClient() => CreateHttpClient(DefaultHttpTimeout);
+
+    private static HttpClient CreateHttpClient(TimeSpan timeout, HttpMessageHandler? handler = null) =>
+        handler is null
+            ? new HttpClient { Timeout = timeout }
+            : new HttpClient(handler) { Timeout = timeout };
+
+    private static GroqTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
+    {
+        if (wavAudio.Length == 0)
+            throw new InvalidOperationException("No WAV audio bytes were provided.");
+
+        using var input = new MemoryStream(wavAudio, writable: false);
+        using var reader = new WaveFileReader(input);
+        using var output = new MemoryStream();
+        MediaFoundationEncoder.EncodeToAac(reader, output, TranscriptionUploadBitRate);
+
+        var bytes = output.ToArray();
+        if (bytes.Length == 0)
+            throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
+
+        return new GroqTranscriptionUpload(bytes, "audio.m4a", "audio/mp4");
+    }
+
+    private static async Task<PluginTranscriptionResult> TranscribeUploadAsync(
+        HttpClient httpClient,
+        string baseUrl,
+        string apiKey,
+        string model,
+        GroqTranscriptionUpload upload,
+        string? language,
+        bool translate,
+        string responseFormat,
+        CancellationToken ct,
+        string? prompt)
+    {
+        var endpoint = translate
+            ? $"{baseUrl}/v1/audio/translations"
+            : $"{baseUrl}/v1/audio/transcriptions";
+
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(upload.Data);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(upload.ContentType);
+        content.Add(fileContent, "file", upload.FileName);
+        content.Add(new StringContent(model), "model");
+        content.Add(new StringContent(responseFormat), "response_format");
+
+        if (!string.IsNullOrEmpty(language) && language != "auto")
+            content.Add(new StringContent(language), "language");
+
+        if (!string.IsNullOrWhiteSpace(prompt))
+            content.Add(new StringContent(prompt), "prompt");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Content = content;
+
+        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        return ParseTranscriptionResponse(json);
+    }
+
+    private static PluginTranscriptionResult ParseTranscriptionResponse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var text = root.TryGetProperty("text", out var textEl) ? textEl.GetString() ?? "" : "";
+        var language = root.TryGetProperty("language", out var langEl) ? langEl.GetString() : null;
+        var duration = root.TryGetProperty("duration", out var durEl) ? durEl.GetDouble() : 0;
+
+        var segments = new List<PluginTranscriptionSegment>();
+        float? minNoSpeechProb = null;
+        if (root.TryGetProperty("segments", out var segmentsEl)
+            && segmentsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var seg in segmentsEl.EnumerateArray())
+            {
+                var segmentText = seg.TryGetProperty("text", out var segTextEl)
+                    ? segTextEl.GetString() ?? ""
+                    : "";
+                var start = seg.TryGetProperty("start", out var startEl)
+                    ? startEl.GetDouble()
+                    : 0;
+                var end = seg.TryGetProperty("end", out var endEl)
+                    ? endEl.GetDouble()
+                    : 0;
+                segments.Add(new PluginTranscriptionSegment(segmentText, start, end));
+
+                if (seg.TryGetProperty("no_speech_prob", out var nspEl))
+                {
+                    var prob = (float)nspEl.GetDouble();
+                    minNoSpeechProb = minNoSpeechProb is null
+                        ? prob
+                        : Math.Min(minNoSpeechProb.Value, prob);
+                }
+            }
+        }
+
+        return new PluginTranscriptionResult(text.Trim(), language, duration, minNoSpeechProb)
+        {
+            Segments = segments
+        };
+    }
 
     /// <summary>
     /// Releases resources held by the instance.
@@ -334,10 +481,14 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     public void Dispose()
     {
         _httpClient.Dispose();
+        if (!ReferenceEquals(_httpClient, _transcriptionHttpClient))
+            _transcriptionHttpClient.Dispose();
     }
 
     private sealed record TranscriptionModelEntry(
         string Id, string DisplayName, string ApiModelName, bool SupportsTranslation);
 }
+
+internal sealed record GroqTranscriptionUpload(byte[] Data, string FileName, string ContentType);
 
 internal sealed record FetchedLlmModel(string Id, string? OwnedBy);

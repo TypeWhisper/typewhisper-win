@@ -7,7 +7,6 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
-using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
@@ -21,7 +20,36 @@ namespace TypeWhisper.Windows.ViewModels;
 /// <param name="CreatedAt">Created at supplied to the member.</param>
 /// <param name="Duration">Duration supplied to the member.</param>
 /// <param name="Transcript">Transcript supplied to the member.</param>
-public sealed record RecordingItem(string FileName, string FilePath, DateTime CreatedAt, TimeSpan Duration, string? Transcript);
+/// <param name="IsTranscribing">Transcription progress flag supplied to the member.</param>
+/// <param name="ErrorMessage">Failure message supplied to the member.</param>
+public sealed record RecordingItem(
+    string FileName,
+    string FilePath,
+    DateTime CreatedAt,
+    TimeSpan Duration,
+    string? Transcript,
+    bool IsTranscribing = false,
+    string? ErrorMessage = null)
+{
+    /// <summary>
+    /// Gets whether a per-recording status line should be shown.
+    /// </summary>
+    public bool HasStatus => IsTranscribing || HasError;
+    /// <summary>
+    /// Gets whether this recording has a transcription failure.
+    /// </summary>
+    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
+    /// <summary>
+    /// Gets the per-recording status text.
+    /// </summary>
+    public string ItemStatusText => IsTranscribing
+        ? Loc.Instance["Recorder.TranscribingItem"]
+        : ErrorMessage ?? "";
+    /// <summary>
+    /// Gets whether this recording can be transcribed.
+    /// </summary>
+    public bool CanTranscribe => !IsTranscribing && File.Exists(FilePath);
+}
 
 /// <summary>
 /// Provides audio recorder view model behavior.
@@ -31,6 +59,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     private readonly AudioRecordingService _audio;
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
+    private readonly AudioFileService _audioFile;
+    private readonly IErrorLogService _errorLog;
     private readonly IPostProcessingPipeline _pipeline;
     private readonly ITranslationService _translation;
     private System.Timers.Timer? _timer;
@@ -59,12 +89,16 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         AudioRecordingService audio,
         ModelManagerService modelManager,
         ISettingsService settings,
+        AudioFileService audioFile,
+        IErrorLogService errorLog,
         IPostProcessingPipeline pipeline,
         ITranslationService translation)
     {
         _audio = audio;
         _modelManager = modelManager;
         _settings = settings;
+        _audioFile = audioFile;
+        _errorLog = errorLog;
         _pipeline = pipeline;
         _translation = translation;
         _audio.AudioLevelChanged += (_, e) =>
@@ -128,55 +162,139 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         var wav = WavEncoder.Encode(samples);
         await File.WriteAllBytesAsync(filePath, wav);
 
-        SetLocalizedStatus("Recorder.SavedTranscribing");
-        IsTranscribing = true;
-
-        // Auto-transcribe
-        string? transcript = null;
-        var processingFailed = false;
-        try
+        var item = new RecordingItem(fileName, filePath, DateTime.Now, duration, null, IsTranscribing: true);
+        DispatchToUi(() =>
         {
-            var engine = _modelManager.ActiveTranscriptionPlugin;
-            if (engine is not null)
-            {
-                var result = await engine.TranscribeAsync(wav, null, false, null, CancellationToken.None);
-                transcript = await PostProcessTranscriptAsync(result);
-                if (!string.IsNullOrEmpty(transcript))
-                {
-                    var txtPath = Path.ChangeExtension(filePath, ".txt");
-                    await File.WriteAllTextAsync(txtPath, transcript);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            processingFailed = true;
-            StatusText = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
-        }
+            Recordings.Insert(0, item);
+            OnPropertyChanged(nameof(HasRecordings));
+            RefreshRecordingCommandState();
+        });
 
-        IsTranscribing = false;
-
-        var item = new RecordingItem(fileName, filePath, DateTime.Now, duration, transcript);
-        DispatchToUi(() => Recordings.Insert(0, item));
-        if (!processingFailed)
-            SetLocalizedStatus(transcript is not null ? "Status.Done" : "Recorder.SavedNoModel");
+        await TranscribeRecordingAsync(
+            item,
+            _ => Task.FromResult(samples),
+            CancellationToken.None);
         DurationText = "0:00";
     }
 
-    private async Task<string> PostProcessTranscriptAsync(PluginTranscriptionResult result)
+    private async Task<string> PostProcessTranscriptAsync(
+        TranscriptionResult result,
+        TranscriptionTask task,
+        string? configuredLanguage,
+        CancellationToken ct)
     {
-        var translationTarget = _settings.Current.TranslationTargetLanguage;
+        var currentSettings = _settings.Current;
+        var translationTarget = currentSettings.TranslationTargetLanguage;
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
+            TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            TranscriptionTask = task,
+            ConfiguredLanguage = configuredLanguage,
             TranslationHandler = !string.IsNullOrEmpty(translationTarget)
                 ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                 : null,
             TranslationTarget = translationTarget,
             RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
             DetectedLanguage = result.DetectedLanguage
-        }, CancellationToken.None);
+        }, ct);
 
         return pipelineResult.Text;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanTranscribeRecording))]
+    private async Task TranscribeRecordingAsync(RecordingItem? item)
+    {
+        if (item is null)
+            return;
+
+        await TranscribeRecordingAsync(
+            item,
+            token => _audioFile.LoadAudioAsync(item.FilePath, token),
+            CancellationToken.None);
+    }
+
+    private static bool CanTranscribeRecording(RecordingItem? item) =>
+        item?.CanTranscribe == true;
+
+    private async Task TranscribeRecordingAsync(
+        RecordingItem item,
+        Func<CancellationToken, Task<float[]>> loadSamples,
+        CancellationToken ct)
+    {
+        var current = ReplaceRecording(item, item with { IsTranscribing = true, ErrorMessage = null });
+        SetLocalizedStatus("Recorder.SavedTranscribing");
+
+        try
+        {
+            var settings = _settings.Current;
+            if (string.IsNullOrWhiteSpace(settings.SelectedModelId))
+            {
+                ReplaceRecording(current, current with { IsTranscribing = false });
+                SetLocalizedStatus("Recorder.SavedNoModel");
+                return;
+            }
+
+            var samples = await loadSamples(ct);
+            if (samples.Length == 0)
+                throw new InvalidOperationException(Loc.Instance["Recorder.NoAudioCaptured"]);
+
+            await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(
+                null,
+                null,
+                false,
+                ct);
+
+            var configuredLanguage = settings.Language == "auto" ? null : settings.Language;
+            var task = settings.TranscriptionTask == "translate"
+                ? TranscriptionTask.Translate
+                : TranscriptionTask.Transcribe;
+            var activeResult = await _modelManager.TranscribeActiveAsync(
+                samples,
+                configuredLanguage,
+                task,
+                prompt: null,
+                ct);
+            var transcript = await PostProcessTranscriptAsync(activeResult.Result, task, configuredLanguage, ct);
+
+            if (!string.IsNullOrEmpty(transcript))
+            {
+                var txtPath = Path.ChangeExtension(current.FilePath, ".txt");
+                await File.WriteAllTextAsync(txtPath, transcript, ct);
+            }
+
+            ReplaceRecording(current, current with
+            {
+                Transcript = transcript,
+                IsTranscribing = false,
+                ErrorMessage = null
+            });
+            SetLocalizedStatus("Status.Done");
+        }
+        catch (OperationCanceledException)
+        {
+            ReplaceRecording(current, current with
+            {
+                IsTranscribing = false,
+                ErrorMessage = Loc.Instance["Status.Cancelled"]
+            });
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var message = ex.Message;
+            _errorLog.AddEntry(message, ErrorCategory.Transcription);
+            ReplaceRecording(current, current with
+            {
+                IsTranscribing = false,
+                ErrorMessage = Loc.Instance.GetString("Recorder.FailedFormat", message)
+            });
+            SetErrorStatus(message);
+        }
+        finally
+        {
+            _modelManager.ScheduleAutoUnload();
+            DispatchToUi(RefreshRecordingCommandState);
+        }
     }
 
     [RelayCommand]
@@ -190,6 +308,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         }
         catch { }
         Recordings.Remove(item);
+        OnPropertyChanged(nameof(HasRecordings));
+        RefreshRecordingCommandState();
     }
 
     private void LoadExistingRecordings()
@@ -210,10 +330,48 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         catch { }
     }
 
+    private RecordingItem ReplaceRecording(RecordingItem item, RecordingItem replacement)
+    {
+        DispatchToUi(() =>
+        {
+            var index = Recordings.IndexOf(item);
+            if (index < 0)
+            {
+                for (var i = 0; i < Recordings.Count; i++)
+                {
+                    if (string.Equals(Recordings[i].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+
+            if (index >= 0)
+                Recordings[index] = replacement;
+
+            RefreshRecordingCommandState();
+        });
+
+        return replacement;
+    }
+
+    private void RefreshRecordingCommandState()
+    {
+        IsTranscribing = Recordings.Any(item => item.IsTranscribing);
+        TranscribeRecordingCommand.NotifyCanExecuteChanged();
+    }
+
     private void SetLocalizedStatus(string key)
     {
         _statusKey = key;
         StatusText = Loc.Instance[key];
+    }
+
+    private void SetErrorStatus(string message)
+    {
+        _statusKey = null;
+        StatusText = Loc.Instance.GetString("Status.ErrorFormat", message);
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e)
