@@ -95,7 +95,15 @@
             <ScrollViewer x:Name="InstalledPanel" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Border Style="{StaticResource SettingsFilterRowStyle}">
-                        <TextBlock Text="{Binding Plugins.InstalledSummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0"/>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Plugins.InstalledSummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0"/>
+                            <TextBlock Text="{Binding Plugins.PluginUpdateSummaryText}"
+                                       Foreground="{StaticResource WarningBrush}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Margin="0,4,0,0"
+                                       Visibility="{Binding Plugins.HasAvailablePluginUpdates, Converter={StaticResource BoolToVis}}"/>
+                        </StackPanel>
                     </Border>
 
                     <Border x:Name="EmptyState"
@@ -179,10 +187,30 @@
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding StatusLabel}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Foreground="{StaticResource WarningBrush}" FontSize="10">
+                                                            <Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.UpdateAvailablePrefix], Mode=OneWay}"/>
+                                                            <Run Text="{Binding AvailableUpdateVersion, Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding IsUpdatePendingRestart, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Foreground="{StaticResource WarningBrush}" FontSize="10">
+                                                            <Run Text="&#x21BB; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.RestartRequiredBadge], Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                    </Border>
                                                 </WrapPanel>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:Button Appearance="Secondary"
+                                                           Content="{loc:Str Plugins.Update}"
+                                                           Command="{Binding UpdateRegistryPluginCommand}"
+                                                           Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVis}}"
+                                                           Margin="0,0,8,0"/>
                                                 <ui:Button Appearance="Secondary"
                                                            ToolTip="{loc:Str Plugins.Uninstall}"
                                                            Command="{Binding UninstallCommand}"
@@ -358,14 +386,15 @@
                                                            Command="{Binding InstallCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
-                                                <ui:Button Appearance="Secondary"
-                                                           Content="{loc:Str Plugins.Update}"
-                                                           Command="{Binding UpdateCommand}"
-                                                           Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=UpdateAvailable}"/>
                                                 <TextBlock Foreground="{StaticResource ActiveIndicatorBrush}"
                                                            FontSize="12"
-                                                           Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}">
+                                                           Visibility="{Binding IsInstalledOrUpdateAvailable, Converter={StaticResource BoolToVis}}">
                                                     <Run Text="&#x2705; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.InstalledBadge], Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock Foreground="{StaticResource WarningBrush}"
+                                                           FontSize="12"
+                                                           Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=PendingRestart}">
+                                                    <Run Text="&#x21BB; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.RestartRequiredBadge], Mode=OneWay}"/>
                                                 </TextBlock>
                                             </StackPanel>
                                         </Grid>

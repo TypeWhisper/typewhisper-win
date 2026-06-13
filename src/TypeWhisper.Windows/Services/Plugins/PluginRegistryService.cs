@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text.Json;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Windows.Services.Plugins;
 
@@ -28,6 +29,9 @@ public sealed class PluginRegistryService
     private readonly PluginLoader _pluginLoader;
     private readonly ISettingsService _settings;
     private readonly HttpClient _httpClient;
+    private readonly string _pluginsPath;
+    private readonly string _pendingUpdatesPath;
+    private readonly Func<string, string, CancellationToken, Task> _replaceActiveDirectoryAsync;
 
     private List<RegistryPlugin>? _cachedRegistry;
     private DateTime _cacheTimestamp;
@@ -40,12 +44,17 @@ public sealed class PluginRegistryService
         PluginManager pluginManager,
         PluginLoader pluginLoader,
         ISettingsService settings,
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        string? pluginsPath = null,
+        Func<string, string, CancellationToken, Task>? replaceActiveDirectoryAsync = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
         _settings = settings;
         _httpClient = httpClient ?? new HttpClient();
+        _pluginsPath = pluginsPath ?? TypeWhisperEnvironment.PluginsPath;
+        _pendingUpdatesPath = Path.Combine(_pluginsPath, ".pending-updates");
+        _replaceActiveDirectoryAsync = replaceActiveDirectoryAsync ?? ReplaceActiveDirectoryAsync;
     }
 
     /// <summary>
@@ -83,13 +92,22 @@ public sealed class PluginRegistryService
     /// </summary>
     public PluginInstallState GetInstallState(RegistryPlugin registryPlugin)
     {
+        var pendingManifest = ReadManifest(Path.Combine(_pendingUpdatesPath, registryPlugin.Id));
+        if (ManifestMatchesRegistry(pendingManifest, registryPlugin))
+            return PluginInstallState.PendingRestart;
+
         var local = _pluginManager.GetPlugin(registryPlugin.Id);
-        if (local is null)
+        var localVersion = local?.Manifest.Version;
+        var diskManifest = ReadManifest(Path.Combine(_pluginsPath, registryPlugin.Id));
+        if (ManifestIdMatches(diskManifest, registryPlugin.Id))
+            localVersion = SelectNewestVersion(localVersion, diskManifest!.Version);
+
+        if (localVersion is null)
             return PluginInstallState.NotInstalled;
 
         // Compare versions
         if (Version.TryParse(registryPlugin.Version, out var remoteVer) &&
-            Version.TryParse(local.Manifest.Version, out var localVer) &&
+            Version.TryParse(localVersion, out var localVer) &&
             remoteVer > localVer)
         {
             return PluginInstallState.UpdateAvailable;
@@ -101,31 +119,28 @@ public sealed class PluginRegistryService
     /// <summary>
     /// Downloads and installs a plugin from the registry.
     /// </summary>
-    public async Task InstallPluginAsync(
+    public async Task<PluginInstallResult> InstallPluginAsync(
         RegistryPlugin registryPlugin,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
-        var pluginDir = Path.Combine(TypeWhisperEnvironment.PluginsPath, registryPlugin.Id);
+        Directory.CreateDirectory(_pluginsPath);
+        Directory.CreateDirectory(_pendingUpdatesPath);
 
-        // Unload existing version if present
-        if (_pluginManager.GetPlugin(registryPlugin.Id) is not null)
-            await _pluginManager.UnloadPluginAsync(registryPlugin.Id);
-
-        // Clean target directory
-        if (Directory.Exists(pluginDir))
-            Directory.Delete(pluginDir, recursive: true);
-
-        Directory.CreateDirectory(pluginDir);
+        var pluginDir = Path.Combine(_pluginsPath, registryPlugin.Id);
+        var stagingRoot = Path.Combine(_pluginsPath, ".staging");
+        var stagingDir = Path.Combine(stagingRoot, $"{registryPlugin.Id}-{Guid.NewGuid():N}");
+        var tempZip = Path.GetTempFileName();
 
         try
         {
-            // Download ZIP
-            var tempZip = Path.GetTempFileName();
-            try
+            Directory.CreateDirectory(stagingRoot);
+
+            using (var response = await _httpClient.GetAsync(
+                       registryPlugin.DownloadUrl,
+                       HttpCompletionOption.ResponseHeadersRead,
+                       ct))
             {
-                using var response = await _httpClient.GetAsync(
-                    registryPlugin.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
                 response.EnsureSuccessStatusCode();
 
                 var totalBytes = response.Content.Headers.ContentLength ?? registryPlugin.Size;
@@ -142,40 +157,48 @@ public sealed class PluginRegistryService
                     progress?.Report(totalBytes > 0 ? (double)bytesRead / totalBytes : 0);
                 }
             }
-            catch
-            {
-                // Cleanup on failure
-                if (File.Exists(tempZip))
-                    File.Delete(tempZip);
-                throw;
-            }
 
-            // Extract
-            ZipFile.ExtractToDirectory(tempZip, pluginDir, overwriteFiles: true);
-            File.Delete(tempZip);
+            ZipFile.ExtractToDirectory(tempZip, stagingDir, overwriteFiles: true);
 
             // Unblock downloaded files
-            PluginLoader.UnblockDirectory(pluginDir);
+            PluginLoader.UnblockDirectory(stagingDir);
+            ValidateStagedPlugin(registryPlugin, stagingDir);
 
-            // Load and activate
+            // Unload existing version if present
+            if (_pluginManager.GetPlugin(registryPlugin.Id) is not null)
+            {
+                await _pluginManager.UnloadPluginAsync(registryPlugin.Id);
+                CollectUnloadedPluginContexts();
+            }
+
+            try
+            {
+                await _replaceActiveDirectoryAsync(stagingDir, pluginDir, ct);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                QueuePendingUpdate(registryPlugin.Id, stagingDir);
+                Debug.WriteLine($"[PluginRegistry] Queued plugin update pending restart: {registryPlugin.Id} ({ex.Message})");
+                return PluginInstallResult.PendingRestart;
+            }
+
             await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: true);
             if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
-                throw new InvalidOperationException("The downloaded plugin package could not be loaded.");
+                return PluginInstallResult.PendingRestart;
 
+            DeleteDirectoryIfExists(Path.Combine(_pendingUpdatesPath, registryPlugin.Id));
             Debug.WriteLine($"[PluginRegistry] Installed plugin: {registryPlugin.Id} v{registryPlugin.Version}");
+            return PluginInstallResult.Installed;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[PluginRegistry] Failed to install {registryPlugin.Id}: {ex.Message}");
-
-            // Cleanup on failure
-            if (Directory.Exists(pluginDir))
-            {
-                try { Directory.Delete(pluginDir, recursive: true); }
-                catch { /* best effort */ }
-            }
-
             throw;
+        }
+        finally
+        {
+            DeleteFileIfExists(tempZip);
+            DeleteDirectoryIfExists(stagingDir);
         }
     }
 
@@ -186,7 +209,9 @@ public sealed class PluginRegistryService
     {
         await _pluginManager.UnloadPluginAsync(pluginId);
 
-        var pluginDir = Path.Combine(TypeWhisperEnvironment.PluginsPath, pluginId);
+        DeleteDirectoryIfExists(Path.Combine(_pendingUpdatesPath, pluginId));
+
+        var pluginDir = Path.Combine(_pluginsPath, pluginId);
         if (Directory.Exists(pluginDir))
         {
             try
@@ -197,6 +222,40 @@ public sealed class PluginRegistryService
             catch (Exception ex)
             {
                 Debug.WriteLine($"[PluginRegistry] Failed to delete directory for {pluginId}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies plugin updates that were staged because the running app could not replace loaded files.
+    /// </summary>
+    public async Task ApplyPendingUpdatesAsync(CancellationToken ct = default)
+    {
+        if (!Directory.Exists(_pendingUpdatesPath))
+            return;
+
+        foreach (var pendingDir in Directory.GetDirectories(_pendingUpdatesPath))
+        {
+            var pluginId = Path.GetFileName(pendingDir);
+            if (string.IsNullOrWhiteSpace(pluginId))
+                continue;
+
+            var manifest = ReadManifest(pendingDir);
+            if (!ManifestIdMatches(manifest, pluginId))
+            {
+                Debug.WriteLine($"[PluginRegistry] Skipping invalid pending update directory: {pendingDir}");
+                continue;
+            }
+
+            var pluginDir = Path.Combine(_pluginsPath, pluginId);
+            try
+            {
+                await ReplaceActiveDirectoryAsync(pendingDir, pluginDir, ct);
+                Debug.WriteLine($"[PluginRegistry] Applied pending plugin update: {pluginId} v{manifest!.Version}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Debug.WriteLine($"[PluginRegistry] Failed to apply pending update for {pluginId}: {ex.Message}");
             }
         }
     }
@@ -271,5 +330,117 @@ public sealed class PluginRegistryService
             return true;
 
         return !Version.TryParse(minHostVersion, out var minVer) || hostVersion >= minVer;
+    }
+
+    private static void ValidateStagedPlugin(RegistryPlugin registryPlugin, string stagingDir)
+    {
+        var manifest = ReadManifest(stagingDir)
+            ?? throw new InvalidOperationException("The downloaded plugin package does not contain a valid manifest.json.");
+
+        if (!string.Equals(manifest.Id, registryPlugin.Id, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The downloaded plugin package id does not match the registry entry.");
+
+        if (!string.Equals(manifest.Version, registryPlugin.Version, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The downloaded plugin package version does not match the registry entry.");
+    }
+
+    private void QueuePendingUpdate(string pluginId, string stagingDir)
+    {
+        var pendingDir = Path.Combine(_pendingUpdatesPath, pluginId);
+        DeleteDirectoryIfExists(pendingDir);
+        Directory.CreateDirectory(_pendingUpdatesPath);
+        Directory.Move(stagingDir, pendingDir);
+    }
+
+    private static async Task ReplaceActiveDirectoryAsync(
+        string sourceDirectory,
+        string targetDirectory,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var backupDirectory = targetDirectory + ".replacing-" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            if (Directory.Exists(targetDirectory))
+                Directory.Move(targetDirectory, backupDirectory);
+
+            Directory.Move(sourceDirectory, targetDirectory);
+            DeleteDirectoryIfExists(backupDirectory);
+        }
+        catch
+        {
+            if (!Directory.Exists(targetDirectory) && Directory.Exists(backupDirectory))
+                Directory.Move(backupDirectory, targetDirectory);
+
+            throw;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private static PluginManifest? ReadManifest(string pluginDir)
+    {
+        var manifestPath = Path.Combine(pluginDir, "manifest.json");
+        if (!File.Exists(manifestPath))
+            return null;
+
+        try
+        {
+            var json = File.ReadAllText(manifestPath);
+            return JsonSerializer.Deserialize<PluginManifest>(json, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PluginRegistry] Failed to read manifest at {manifestPath}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static bool ManifestMatchesRegistry(PluginManifest? manifest, RegistryPlugin registryPlugin) =>
+        ManifestIdMatches(manifest, registryPlugin.Id) &&
+        string.Equals(manifest!.Version, registryPlugin.Version, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ManifestIdMatches(PluginManifest? manifest, string pluginId) =>
+        manifest is not null &&
+        string.Equals(manifest.Id, pluginId, StringComparison.OrdinalIgnoreCase);
+
+    private static string SelectNewestVersion(string? first, string second)
+    {
+        if (string.IsNullOrWhiteSpace(first))
+            return second;
+
+        if (Version.TryParse(first, out var firstVersion) &&
+            Version.TryParse(second, out var secondVersion))
+        {
+            return secondVersion > firstVersion ? second : first;
+        }
+
+        return first;
+    }
+
+    private static void CollectUnloadedPluginContexts()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    private static void DeleteDirectoryIfExists(string path)
+    {
+        if (!Directory.Exists(path))
+            return;
+
+        try { Directory.Delete(path, recursive: true); }
+        catch { /* best effort */ }
+    }
+
+    private static void DeleteFileIfExists(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        try { File.Delete(path); }
+        catch { /* best effort */ }
     }
 }

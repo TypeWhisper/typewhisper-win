@@ -137,7 +137,26 @@ public enum PluginInstallState
     /// </summary>
     UpdateAvailable,
     /// <summary>
+    /// Represents the pending restart option.
+    /// </summary>
+    PendingRestart,
+    /// <summary>
     /// Represents the bundled option.
     /// </summary>
     Bundled
+}
+
+/// <summary>
+/// Lists the supported plugin install result values.
+/// </summary>
+public enum PluginInstallResult
+{
+    /// <summary>
+    /// Represents a plugin installed and loaded in the current process.
+    /// </summary>
+    Installed,
+    /// <summary>
+    /// Represents a plugin package staged for the next app restart.
+    /// </summary>
+    PendingRestart
 }

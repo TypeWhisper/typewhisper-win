@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -9,13 +10,24 @@ internal static class TestFile
 
     public static string ProjectFile(params string[] parts)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
-            directory = directory.Parent;
+        var directory = FindRepoRoot(AppContext.BaseDirectory)
+            ?? FindRepoRoot(Directory.GetCurrentDirectory())
+            ?? FindRepoRoot(Path.GetDirectoryName(ThisFilePath())!);
 
         Assert.NotNull(directory);
         return Path.Join([directory.FullName, .. parts]);
     }
+
+    private static DirectoryInfo? FindRepoRoot(string startDirectory)
+    {
+        var directory = new DirectoryInfo(startDirectory);
+        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx")))
+            directory = directory.Parent;
+
+        return directory;
+    }
+
+    private static string ThisFilePath([CallerFilePath] string path = "") => path;
 
     public static string ExtractBlock(string text, string marker, int maxLength = 1800)
     {

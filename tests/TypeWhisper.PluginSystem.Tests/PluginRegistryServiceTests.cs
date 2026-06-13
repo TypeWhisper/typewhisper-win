@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http;
+using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using Moq;
 using Moq.Protected;
@@ -20,10 +22,13 @@ public class PluginRegistryServiceTests : IDisposable
     private readonly Mock<ISettingsService> _settings = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
+    private readonly string _pluginsRoot;
     private PluginManager? _manager;
 
     public PluginRegistryServiceTests()
     {
+        _pluginsRoot = Path.Combine(Path.GetTempPath(), "TypeWhisper.PluginRegistryServiceTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_pluginsRoot);
         _workflows.Setup(w => w.Workflows).Returns(new List<Workflow>());
         _settings.Setup(s => s.Current).Returns(new AppSettings());
     }
@@ -44,6 +49,21 @@ public class PluginRegistryServiceTests : IDisposable
             .ReturnsAsync(new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(responseJson)
+            });
+
+        return new HttpClient(handler.Object);
+    }
+
+    private static HttpClient CreateMockHttpClient(byte[] responseBytes, HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage(statusCode)
+            {
+                Content = new ByteArrayContent(responseBytes)
             });
 
         return new HttpClient(handler.Object);
@@ -239,7 +259,7 @@ public class PluginRegistryServiceTests : IDisposable
     public void GetInstallState_NotInstalled_WhenPluginNotLoaded()
     {
         var manager = CreateManager();
-        var service = new PluginRegistryService(manager, _loader, _settings.Object);
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
 
         var registryPlugin = new RegistryPlugin
         {
@@ -248,6 +268,136 @@ public class PluginRegistryServiceTests : IDisposable
         };
 
         Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public void GetInstallState_Installed_WhenDiskManifestMatchesRegistryVersion()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var registryPlugin = CreateRegistryPlugin("com.test.disk-installed", "1.0.2");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.2");
+
+        Assert.Equal(PluginInstallState.Installed, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public void GetInstallState_PendingRestart_WhenPendingUpdateMatchesRegistryVersion()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var registryPlugin = CreateRegistryPlugin("com.test.pending", "1.0.2");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.0");
+        WritePluginManifest(Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id), registryPlugin.Id, "1.0.2");
+
+        var plugin = new Mock<ITypeWhisperPlugin>();
+        plugin.Setup(p => p.PluginId).Returns(registryPlugin.Id);
+        plugin.Setup(p => p.PluginName).Returns(registryPlugin.Name);
+        plugin.Setup(p => p.PluginVersion).Returns("1.0.0");
+        var manifest = new PluginManifest
+        {
+            Id = registryPlugin.Id,
+            Name = registryPlugin.Name,
+            Version = "1.0.0",
+            AssemblyName = "TestPlugin.dll",
+            PluginClass = "TestPlugin"
+        };
+        var loadedPlugin = new LoadedPlugin(
+            manifest,
+            plugin.Object,
+            new PluginAssemblyLoadContext(typeof(PluginRegistryServiceTests).Assembly.Location),
+            Path.Combine(_pluginsRoot, registryPlugin.Id));
+        TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { loadedPlugin });
+
+        Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task ApplyPendingUpdatesAsync_ReplacesActivePluginDirectoryBeforeLoad()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var pluginId = "com.test.apply-pending";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingDir = Path.Combine(_pluginsRoot, ".pending-updates", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        File.WriteAllText(Path.Combine(activeDir, "active.txt"), "old");
+        WritePluginManifest(pendingDir, pluginId, "1.0.2");
+        File.WriteAllText(Path.Combine(pendingDir, "pending.txt"), "new");
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.False(Directory.Exists(pendingDir));
+        Assert.False(File.Exists(Path.Combine(activeDir, "active.txt")));
+        Assert.True(File.Exists(Path.Combine(activeDir, "pending.txt")));
+        Assert.Equal("1.0.2", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_DownloadFailure_LeavesExistingPluginDirectoryUntouched()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.download-failure", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        File.WriteAllText(Path.Combine(activeDir, "keep.txt"), "keep");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient("download failed", HttpStatusCode.InternalServerError),
+            _pluginsRoot);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.True(File.Exists(Path.Combine(activeDir, "keep.txt")));
+        Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_InvalidStagedManifest_DoesNotReplaceActivePluginDirectory()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.invalid-package", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        File.WriteAllText(Path.Combine(activeDir, "keep.txt"), "keep");
+        var package = CreatePluginPackage("com.test.other-plugin", "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.True(File.Exists(Path.Combine(activeDir, "keep.txt")));
+        Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_ReplacementLockFailure_QueuesPendingRestart()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.locked", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) => throw new IOException("locked"));
+
+        var result = await service.InstallPluginAsync(registryPlugin);
+
+        var pendingDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        Assert.Equal(PluginInstallResult.PendingRestart, result);
+        Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
+        Assert.Equal("1.0.2", ReadManifest(pendingDir).Version);
     }
 
     [Fact]
@@ -335,6 +485,27 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RegistryPluginItem_UpdatePendingRestart_ExposesPendingState()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.pending-vm", "1.0.2");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.0");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(CreatePluginPackage(registryPlugin.Id, "1.0.2")),
+            _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) => throw new IOException("locked"));
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+        await item.UpdateCommand.ExecuteAsync(null);
+
+        Assert.Equal(PluginInstallState.PendingRestart, item.InstallState);
+        Assert.False(item.HasInstallError);
+    }
+
+    [Fact]
     public async Task FirstRunAutoInstallAsync_SetsFlag()
     {
         AppSettings? savedSettings = null;
@@ -369,5 +540,71 @@ public class PluginRegistryServiceTests : IDisposable
     public void Dispose()
     {
         _manager?.Dispose();
+        try
+        {
+            if (Directory.Exists(_pluginsRoot))
+                Directory.Delete(_pluginsRoot, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup in tests.
+        }
+    }
+
+    private static RegistryPlugin CreateRegistryPlugin(string id, string version) => new()
+    {
+        Id = id,
+        Name = "Test Plugin",
+        Version = version,
+        Author = "A",
+        Description = "D",
+        Size = 100,
+        DownloadUrl = "https://example.com/plugin.zip"
+    };
+
+    private static void WritePluginManifest(string pluginDir, string id, string version)
+    {
+        Directory.CreateDirectory(pluginDir);
+        var manifest = new PluginManifest
+        {
+            Id = id,
+            Name = "Test Plugin",
+            Version = version,
+            AssemblyName = "TestPlugin.dll",
+            PluginClass = "TestPlugin"
+        };
+        File.WriteAllText(Path.Combine(pluginDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+    }
+
+    private static PluginManifest ReadManifest(string pluginDir)
+    {
+        var json = File.ReadAllText(Path.Combine(pluginDir, "manifest.json"));
+        return JsonSerializer.Deserialize<PluginManifest>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    }
+
+    private static byte[] CreatePluginPackage(string id, string version)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var manifest = archive.CreateEntry("manifest.json");
+            using (var writer = new StreamWriter(manifest.Open()))
+            {
+                writer.Write(JsonSerializer.Serialize(new PluginManifest
+                {
+                    Id = id,
+                    Name = "Test Plugin",
+                    Version = version,
+                    AssemblyName = "TestPlugin.dll",
+                    PluginClass = "TestPlugin"
+                }));
+            }
+
+            var assembly = archive.CreateEntry("TestPlugin.dll");
+            using var assemblyStream = assembly.Open();
+            assemblyStream.Write([1, 2, 3, 4]);
+        }
+
+        return stream.ToArray();
     }
 }

@@ -577,6 +577,17 @@
                                                                            FontSize="11"
                                                                            FontWeight="SemiBold"/>
                                                             </Border>
+                                                            <Border Background="#16F2A93B"
+                                                                    BorderBrush="#33F2A93B"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="999"
+                                                                    Padding="10,5"
+                                                                    Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=PendingRestart}">
+                                                                <TextBlock Text="{loc:Str Welcome.RestartRequired}"
+                                                                           Foreground="{StaticResource WarningBrush}"
+                                                                           FontSize="11"
+                                                                           FontWeight="SemiBold"/>
+                                                            </Border>
                                                         </Grid>
                                                     </Grid>
                                                 </Border>

@@ -145,7 +145,7 @@ public sealed partial class SettingsNavigationItem : ObservableObject
         Route = route;
         Title = title;
         IconGlyph = iconGlyph;
-        BadgeText = badgeText;
+        _badgeText = badgeText;
     }
 
     /// <summary>
@@ -160,10 +160,8 @@ public sealed partial class SettingsNavigationItem : ObservableObject
     /// Gets the icon glyph.
     /// </summary>
     public string IconGlyph { get; }
-    /// <summary>
-    /// Gets the badge text.
-    /// </summary>
-    public string? BadgeText { get; }
+    [ObservableProperty]
+    private string? _badgeText;
 
     [ObservableProperty]
     private bool _isSelected;
