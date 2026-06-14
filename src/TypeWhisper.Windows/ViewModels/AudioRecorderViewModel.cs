@@ -507,7 +507,19 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             var txt = Path.ChangeExtension(item.FilePath, ".txt");
             if (File.Exists(txt)) File.Delete(txt);
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
         {
             Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
         }
@@ -627,7 +639,19 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 Recordings.Add(new RecordingItem(fi.Name, file, fi.CreationTime, duration, transcript));
             }
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
         {
             Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
         }

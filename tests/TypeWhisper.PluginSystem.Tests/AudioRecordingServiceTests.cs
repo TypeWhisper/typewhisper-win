@@ -547,6 +547,9 @@ public sealed class RecorderAudioPipelineTests
         Assert.Contains("Path.GetFileName(segment)", method);
         Assert.Contains("string.IsNullOrEmpty(fileName) ? string.Empty : fileName", method);
         Assert.DoesNotContain("?? segment", method);
+        Assert.DoesNotContain("catch (Exception ex)", source);
+        Assert.Contains("catch (IOException ex)", source);
+        Assert.Contains("catch (UnauthorizedAccessException ex)", source);
     }
 
     [Fact]

@@ -42,7 +42,19 @@ internal static class AudioCaptureDiagnostics
                 File.AppendAllText(LogPath, line);
             }
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
         {
             Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
         }
@@ -58,7 +70,19 @@ internal static class AudioCaptureDiagnostics
             Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
             File.WriteAllText(LogPath, "");
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics reset failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics reset failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Audio capture diagnostics reset failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
         {
             Debug.WriteLine($"Audio capture diagnostics reset failed: {ex.Message}");
         }
