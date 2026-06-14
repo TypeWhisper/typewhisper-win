@@ -33,12 +33,14 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _recentTranscriptionsHotkey = "";
     [ObservableProperty] private string _copyLastTranscriptionHotkey = "";
     [ObservableProperty] private string _workflowPaletteHotkey = "";
+    [ObservableProperty] private string _recorderToggleHotkey = "";
     [ObservableProperty] private string _newMainDictationHotkey = "";
     [ObservableProperty] private string _newToggleOnlyHotkey = "";
     [ObservableProperty] private string _newHoldOnlyHotkey = "";
     [ObservableProperty] private string _newRecentTranscriptionsHotkey = "";
     [ObservableProperty] private string _newCopyLastTranscriptionHotkey = "";
     [ObservableProperty] private string _newWorkflowPaletteHotkey = "";
+    [ObservableProperty] private string _newRecorderToggleHotkey = "";
     [ObservableProperty] private string _shortcutsError = "";
     [ObservableProperty] private string _language = "auto";
     [ObservableProperty] private bool _autoPaste = true;
@@ -137,6 +139,10 @@ public partial class SettingsViewModel : ObservableObject
     /// Gets hotkeys that open the workflow palette.
     /// </summary>
     public ObservableCollection<string> WorkflowPaletteHotkeys { get; } = [];
+    /// <summary>
+    /// Gets hotkeys that toggle the recorder.
+    /// </summary>
+    public ObservableCollection<string> RecorderToggleHotkeys { get; } = [];
 
     private static IReadOnlyList<TranslationTargetOption> LocalizeTranslationOptions(IReadOnlyList<TranslationTargetOption> options) =>
         options.Select(o => o.DisplayName switch
@@ -314,7 +320,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (_isLoading) return;
             if (_isSyncingShortcutHotkeys) return;
-            if (IsTransientShortcutProperty(args.PropertyName)) return;
+            if (IsTransientSettingsProperty(args.PropertyName)) return;
 
             if (args.PropertyName == nameof(SelectedMicrophoneItem))
                 return;
@@ -438,6 +444,17 @@ public partial class SettingsViewModel : ObservableObject
         RemoveShortcutHotkey(WorkflowPaletteHotkeys, hotkey);
 
     [RelayCommand]
+    private void AddRecorderToggleHotkey(string? hotkey = null) =>
+        AddShortcutHotkey(
+            RecorderToggleHotkeys,
+            hotkey ?? NewRecorderToggleHotkey,
+            value => NewRecorderToggleHotkey = value);
+
+    [RelayCommand]
+    private void RemoveRecorderToggleHotkey(string? hotkey) =>
+        RemoveShortcutHotkey(RecorderToggleHotkeys, hotkey);
+
+    [RelayCommand]
     private void InstallCli()
     {
         try
@@ -495,6 +512,7 @@ public partial class SettingsViewModel : ObservableObject
         var recentTranscriptionsHotkeys = NormalizeHotkeyList(RecentTranscriptionsHotkeys);
         var copyLastTranscriptionHotkeys = NormalizeHotkeyList(CopyLastTranscriptionHotkeys);
         var workflowPaletteHotkeys = NormalizeHotkeyList(WorkflowPaletteHotkeys);
+        var recorderToggleHotkeys = NormalizeHotkeyList(RecorderToggleHotkeys);
         var mainDictationHotkey = FirstOrEmpty(mainDictationHotkeys);
         var selectedVoiceId = SpeechFeedbackService.IsDefaultVoiceOptionId(SelectedSpokenFeedbackVoiceId)
             ? null
@@ -538,6 +556,8 @@ public partial class SettingsViewModel : ObservableObject
             CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys),
             WorkflowPaletteHotkeys = workflowPaletteHotkeys,
             WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys),
+            RecorderToggleHotkeys = recorderToggleHotkeys,
+            RecorderToggleHotkey = FirstOrEmpty(recorderToggleHotkeys),
             AudioDuckingEnabled = AudioDuckingEnabled,
             AudioDuckingLevel = AudioDuckingLevel,
             PauseMediaDuringRecording = PauseMediaDuringRecording,
@@ -595,6 +615,7 @@ public partial class SettingsViewModel : ObservableObject
         var recentTranscriptionsHotkeys = NormalizeHotkeyList(s.GetRecentTranscriptionsHotkeys());
         var copyLastTranscriptionHotkeys = NormalizeHotkeyList(s.GetCopyLastTranscriptionHotkeys());
         var workflowPaletteHotkeys = NormalizeHotkeyList(s.GetWorkflowPaletteHotkeys());
+        var recorderToggleHotkeys = NormalizeHotkeyList(s.GetRecorderToggleHotkeys());
         var mainDictationHotkey = FirstOrEmpty(mainDictationHotkeys);
 
         ReplaceCollection(MainDictationHotkeys, mainDictationHotkeys);
@@ -603,6 +624,7 @@ public partial class SettingsViewModel : ObservableObject
         ReplaceCollection(RecentTranscriptionsHotkeys, recentTranscriptionsHotkeys);
         ReplaceCollection(CopyLastTranscriptionHotkeys, copyLastTranscriptionHotkeys);
         ReplaceCollection(WorkflowPaletteHotkeys, workflowPaletteHotkeys);
+        ReplaceCollection(RecorderToggleHotkeys, recorderToggleHotkeys);
 
         ToggleHotkey = mainDictationHotkey;
         PushToTalkHotkey = mainDictationHotkey;
@@ -633,6 +655,7 @@ public partial class SettingsViewModel : ObservableObject
         RecentTranscriptionsHotkey = FirstOrEmpty(recentTranscriptionsHotkeys);
         CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys);
         WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys);
+        RecorderToggleHotkey = FirstOrEmpty(recorderToggleHotkeys);
         AudioDuckingEnabled = s.AudioDuckingEnabled;
         AudioDuckingLevel = s.AudioDuckingLevel;
         PauseMediaDuringRecording = s.PauseMediaDuringRecording;
@@ -659,6 +682,7 @@ public partial class SettingsViewModel : ObservableObject
         RecentTranscriptionsHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
         CopyLastTranscriptionHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
         WorkflowPaletteHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
+        RecorderToggleHotkeys.CollectionChanged += OnShortcutHotkeysChanged;
     }
 
     private void OnShortcutHotkeysChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -713,7 +737,8 @@ public partial class SettingsViewModel : ObservableObject
         .. NormalizeHotkeyList(HoldOnlyHotkeys),
         .. NormalizeHotkeyList(RecentTranscriptionsHotkeys),
         .. NormalizeHotkeyList(CopyLastTranscriptionHotkeys),
-        .. NormalizeHotkeyList(WorkflowPaletteHotkeys)
+        .. NormalizeHotkeyList(WorkflowPaletteHotkeys),
+        .. NormalizeHotkeyList(RecorderToggleHotkeys)
     ];
 
     private void SyncShortcutHotkeyPropertiesFromCollections()
@@ -729,6 +754,7 @@ public partial class SettingsViewModel : ObservableObject
             RecentTranscriptionsHotkey = FirstOrEmpty(NormalizeHotkeyList(RecentTranscriptionsHotkeys));
             CopyLastTranscriptionHotkey = FirstOrEmpty(NormalizeHotkeyList(CopyLastTranscriptionHotkeys));
             WorkflowPaletteHotkey = FirstOrEmpty(NormalizeHotkeyList(WorkflowPaletteHotkeys));
+            RecorderToggleHotkey = FirstOrEmpty(NormalizeHotkeyList(RecorderToggleHotkeys));
         }
         finally
         {
@@ -736,13 +762,15 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private static bool IsTransientShortcutProperty(string? propertyName) =>
-        propertyName is nameof(NewMainDictationHotkey)
+    private static bool IsTransientSettingsProperty(string? propertyName) =>
+        propertyName is nameof(PreviewLevel)
+            or nameof(NewMainDictationHotkey)
             or nameof(NewToggleOnlyHotkey)
             or nameof(NewHoldOnlyHotkey)
             or nameof(NewRecentTranscriptionsHotkey)
             or nameof(NewCopyLastTranscriptionHotkey)
             or nameof(NewWorkflowPaletteHotkey)
+            or nameof(NewRecorderToggleHotkey)
             or nameof(ShortcutsError);
 
     private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string?> values) =>
@@ -906,7 +934,7 @@ public partial class SettingsViewModel : ObservableObject
 
         try
         {
-            dispatcher.Invoke(action);
+            _ = dispatcher.BeginInvoke(action);
         }
         catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {

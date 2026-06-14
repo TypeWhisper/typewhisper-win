@@ -14,7 +14,7 @@ namespace TypeWhisper.Windows.Services;
 public sealed class StreamingHandler : IDisposable
 {
     private readonly ModelManagerService _modelManager;
-    private readonly AudioRecordingService _audio;
+    private readonly IStreamingAudioSource _audio;
     private readonly IDictionaryService _dictionary;
     private readonly StreamingTranscriptState _transcriptState = new();
     private readonly object _streamingAudioLock = new();
@@ -42,7 +42,7 @@ public sealed class StreamingHandler : IDisposable
     /// </summary>
     public StreamingHandler(
         ModelManagerService modelManager,
-        AudioRecordingService audio,
+        IStreamingAudioSource audio,
         IDictionaryService dictionary)
     {
         _modelManager = modelManager;

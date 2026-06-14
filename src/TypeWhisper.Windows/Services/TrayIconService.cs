@@ -37,6 +37,10 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
     /// </summary>
     public event EventHandler? ReadBackLastTranscriptionRequested;
     /// <summary>
+    /// Raised when recorder toggle requested.
+    /// </summary>
+    public event EventHandler? ToggleRecorderRequested;
+    /// <summary>
     /// Raised when update check requested.
     /// </summary>
     public event EventHandler? UpdateCheckRequested;
@@ -107,6 +111,9 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         var readBackItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.ReadBackLast"] };
         readBackItem.Click += (_, _) => ReadBackLastTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
+        var recorderItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.ToggleRecorder"] };
+        recorderItem.Click += (_, _) => ToggleRecorderRequested?.Invoke(this, EventArgs.Empty);
+
         var updateItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.CheckUpdates"] };
         updateItem.Click += (_, _) => UpdateCheckRequested?.Invoke(this, EventArgs.Empty);
 
@@ -120,6 +127,7 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         menu.Items.Add(recentItem);
         menu.Items.Add(copyLastItem);
         menu.Items.Add(readBackItem);
+        menu.Items.Add(recorderItem);
         menu.Items.Add(updateItem);
         menu.Items.Add(separatorItem);
         menu.Items.Add(exitItem);

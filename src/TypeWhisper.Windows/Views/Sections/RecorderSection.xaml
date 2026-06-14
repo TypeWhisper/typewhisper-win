@@ -13,182 +13,437 @@
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="600" Margin="24">
+        <StackPanel MaxWidth="820" Margin="24">
             <TextBlock Text="{loc:Str Nav.Recorder}" Style="{StaticResource SectionHeaderStyle}"/>
             <TextBlock Text="{loc:Str Recorder.Description}"
-                       Style="{StaticResource HintStyle}" Margin="0,0,0,24"/>
+                       Style="{StaticResource HintStyle}"
+                       FontSize="12.5"
+                       Margin="0,0,0,22"/>
 
-            <!-- Recording controls -->
-            <Border Background="{StaticResource InputBackgroundBrush}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                    CornerRadius="8" Padding="24" HorizontalAlignment="Center" Margin="0,0,0,24">
-                <StackPanel HorizontalAlignment="Center">
-                    <!-- Mode -->
-                    <Grid Width="280" Margin="0,0,0,18">
+            <Grid Margin="0,0,0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.25*"/>
+                    <ColumnDefinition Width="0.85*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Grid.Column="0"
+                        Style="{StaticResource SettingsGroupPanelStyle}"
+                        Margin="0,0,18,18">
+                    <StackPanel Margin="18,16">
+                        <TextBlock Text="{loc:Str Recorder.SourcesTitle}"
+                                   Style="{StaticResource SettingsGroupTitleStyle}"/>
+                        <TextBlock Text="{loc:Str Recorder.SourcesHint}"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,0,18"/>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                                <TextBlock Text="{loc:Str Recorder.Microphone}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Recorder.MicrophoneHint}"
+                                           Style="{StaticResource HintStyle}"/>
+                                <TextBlock Text="{loc:Str Recorder.MicLevel}"
+                                           Style="{StaticResource HintStyle}"
+                                           FontSize="11"
+                                           Margin="0,12,0,0"/>
+                                <ProgressBar Value="{Binding Recorder.MicLevel}"
+                                             Maximum="1"
+                                             Height="5"
+                                             Margin="0,5,0,0"/>
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding Recorder.MicEnabled}"
+                                             OnContent=""
+                                             OffContent=""
+                                             VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <Border Height="1"
+                                Background="{StaticResource SurfaceStrokeBrush}"
+                                Margin="0,0,0,16"/>
+
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                                <TextBlock Text="{loc:Str Recorder.SystemAudio}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Recorder.SystemAudioHint}"
+                                           Style="{StaticResource HintStyle}"/>
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding Recorder.SystemAudioEnabled}"
+                                             OnContent=""
+                                             OffContent=""
+                                             VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <StackPanel IsEnabled="{Binding Recorder.SystemAudioEnabled}">
+                            <TextBlock Text="{loc:Str Recorder.SystemAudioOutput}"
+                                       Style="{StaticResource LabelStyle}"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="{loc:Str Recorder.SystemAudioOutputHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       Margin="0,0,0,8"/>
+                            <ComboBox ItemsSource="{Binding Recorder.SystemAudioDevices}"
+                                      SelectedItem="{Binding Recorder.SelectedSystemAudioDevice}"
+                                      MinWidth="320"/>
+
+                            <TextBlock Text="{loc:Str Recorder.SystemLevel}"
+                                       Style="{StaticResource HintStyle}"
+                                       FontSize="11"
+                                       Margin="0,14,0,0"/>
+                            <ProgressBar Value="{Binding Recorder.SystemLevel}"
+                                         Maximum="1"
+                                         Height="5"
+                                         Margin="0,5,0,0"/>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding Recorder.SystemAudioWarningMessage}"
+                                   Foreground="{StaticResource DangerBrush}"
+                                   TextWrapping="Wrap"
+                                   FontSize="12"
+                                   Margin="0,14,0,0"
+                                   Visibility="{Binding Recorder.HasSystemAudioWarning, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="0"
+                        Grid.Column="1"
+                        Style="{StaticResource SettingsGroupPanelStyle}"
+                        Margin="0,0,0,18">
+                    <StackPanel Margin="18,16">
+                        <TextBlock Text="{loc:Str Recorder.CaptureTitle}"
+                                   Style="{StaticResource SettingsGroupTitleStyle}"/>
+                        <TextBlock Text="{loc:Str Recorder.CaptureHint}"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,0,18"/>
+
+                        <TextBlock Text="{Binding Recorder.DurationText}"
+                                   FontSize="44"
+                                   FontFamily="Consolas"
+                                   Foreground="{StaticResource TextBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,2,0,18"/>
+
+                        <ui:Button Appearance="Primary"
+                                   Command="{Binding Recorder.ToggleRecordingCommand}"
+                                   HorizontalAlignment="Stretch"
+                                   Padding="18,12"
+                                   FontSize="14">
+                            <ui:Button.Content>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#x23FA;"
+                                               FontSize="16"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <Grid VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str Recorder.Record}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{loc:Str Recorder.Stop}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </StackPanel>
+                            </ui:Button.Content>
+                        </ui:Button>
+
+                        <TextBlock Text="{Binding Recorder.StatusText}"
+                                   Foreground="{StaticResource HintBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   Margin="0,12,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Style="{StaticResource SettingsGroupPanelStyle}">
+                    <StackPanel Margin="18,16">
+                        <TextBlock Text="{loc:Str Recorder.OutputTitle}"
+                                   Style="{StaticResource SettingsGroupTitleStyle}"/>
+                        <TextBlock Text="{loc:Str Recorder.OutputHint}"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,0,18"/>
+
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="{loc:Str Recorder.Format}"
+                                           Style="{StaticResource LabelStyle}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Recorder.OutputFormats}"
+                                          SelectedItem="{Binding Recorder.OutputFormat}"
+                                          MinWidth="150"/>
+                                <TextBlock Text="{loc:Str Recorder.FormatHint}"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="6,0,6,0">
+                                <TextBlock Text="{loc:Str Recorder.Tracks}"
+                                           Style="{StaticResource LabelStyle}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Recorder.TrackModes}"
+                                          SelectedItem="{Binding Recorder.TrackMode}"
+                                          MinWidth="150"/>
+                                <TextBlock Text="{loc:Str Recorder.TracksHint}"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="12,0,0,0">
+                                <TextBlock Text="{loc:Str Recorder.Ducking}"
+                                           Style="{StaticResource LabelStyle}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Recorder.MicDuckingModes}"
+                                          SelectedItem="{Binding Recorder.MicDuckingMode}"
+                                          MinWidth="150"/>
+                                <TextBlock Text="{loc:Str Recorder.DuckingHint}"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Height="1"
+                                Background="{StaticResource SurfaceStrokeBrush}"
+                                Margin="0,0,0,16"/>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                                <TextBlock Text="{loc:Str Recorder.TranscriptionEnabled}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Recorder.TranscriptionHint}"
+                                           Style="{StaticResource HintStyle}"/>
+                            </StackPanel>
+                            <ui:ToggleSwitch Grid.Column="1"
+                                             IsChecked="{Binding Recorder.TranscriptionEnabled}"
+                                             OnContent=""
+                                             OffContent=""
+                                             VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                                <TextBlock Text="{loc:Str Recorder.ModeTitle}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <TextBlock Text="{loc:Str Recorder.ModeHint}"
+                                           Style="{StaticResource HintStyle}"/>
+                            </StackPanel>
+                            <Grid Grid.Column="1" VerticalAlignment="Top">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{loc:Str Recorder.ModeDictation}"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           FontSize="12.5">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
+                                                    <Setter Property="FontWeight" Value="Normal"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding Settings.QuickTranslationModeEnabled}"
+                                                 OnContent=""
+                                                 OffContent=""
+                                                 VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2"
+                                           Text="{loc:Str Recorder.ModeTranslate}"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           FontSize="12.5">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
+                                            <Setter Property="FontWeight" Value="Normal"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                <StackPanel>
+                    <Grid Margin="18,16,18,14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Text="{loc:Str Recorder.ModeDictation}"
-                                   HorizontalAlignment="Right"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,12,0"
-                                   FontSize="12.5">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
-                                            <Setter Property="FontWeight" Value="Normal"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-
-                        <ui:ToggleSwitch Grid.Column="1"
-                                         IsChecked="{Binding Settings.QuickTranslationModeEnabled}"
-                                         OnContent=""
-                                         OffContent=""
-                                         VerticalAlignment="Center"/>
-
-                        <TextBlock Grid.Column="2"
-                                   Text="{loc:Str Recorder.ModeTranslate}"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Center"
-                                   Margin="12,0,0,0"
-                                   FontSize="12.5">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
-                                    <Setter Property="FontWeight" Value="Normal"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
-                                            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-                                            <Setter Property="FontWeight" Value="SemiBold"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                        <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                            <TextBlock Text="{loc:Str Recorder.Recordings}"
+                                       Style="{StaticResource SettingsGroupTitleStyle}"/>
+                            <TextBlock Text="{loc:Str Recorder.RecordingsHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       Margin="0"/>
+                        </StackPanel>
+                        <ui:Button Grid.Column="1"
+                                   Appearance="Secondary"
+                                   Command="{Binding Recorder.OpenRecordingsFolderCommand}"
+                                   VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE8DA;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"/>
+                                <TextBlock Text="{loc:Str Recorder.OpenFolder}"/>
+                            </StackPanel>
+                        </ui:Button>
                     </Grid>
 
-                    <!-- Duration -->
-                    <TextBlock Text="{Binding Recorder.DurationText}"
-                               FontSize="48" FontFamily="Consolas"
-                               Foreground="{StaticResource TextBrush}"
-                               HorizontalAlignment="Center" Margin="0,0,0,16"/>
-
-                    <!-- Record/Stop button -->
-                    <ui:Button Appearance="Primary"
-                               Command="{Binding Recorder.ToggleRecordingCommand}"
-                               HorizontalAlignment="Center"
-                               Padding="24,12" FontSize="14">
-                        <ui:Button.Content>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#x23FA;" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <Grid VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str Recorder.Record}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <TextBlock Text="{loc:Str Recorder.Stop}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Recorder.IsRecording}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </Grid>
-                            </StackPanel>
-                        </ui:Button.Content>
-                    </ui:Button>
-
-                    <!-- Level meter -->
-                    <ProgressBar Value="{Binding Recorder.AudioLevel}" Maximum="1" Height="4"
-                                 Margin="0,16,0,0" Width="200"
-                                 Visibility="{Binding Recorder.IsRecording, Converter={StaticResource BoolToVis}}"/>
-
-                    <!-- Status -->
-                    <TextBlock Text="{Binding Recorder.StatusText}"
-                               Foreground="{StaticResource HintBrush}" FontSize="12"
-                               HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                    <ItemsControl ItemsSource="{Binding Recorder.Recordings}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource SettingsCollectionRowStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding FileName}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextBrush}"/>
+                                            <TextBlock Text="{Binding Transcript}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxHeight="32"
+                                                       Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding ItemStatusText}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxHeight="32"
+                                                       Margin="0,4,0,0"
+                                                       Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
+                                                    Margin="12,0,0,0">
+                                            <ui:Button Appearance="Secondary"
+                                                       ToolTip="{loc:Str Recorder.CopyTranscript}"
+                                                       Padding="6,4"
+                                                       VerticalAlignment="Center"
+                                                       Command="{Binding DataContext.Recorder.CopyTranscriptCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       CommandParameter="{Binding}">
+                                                <TextBlock Text="&#xE8C8;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="13"/>
+                                            </ui:Button>
+                                            <ui:Button Appearance="Secondary"
+                                                       ToolTip="{loc:Str Recorder.ShowInExplorer}"
+                                                       Padding="6,4"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"
+                                                       Command="{Binding DataContext.Recorder.RevealRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       CommandParameter="{Binding}">
+                                                <TextBlock Text="&#xE838;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="13"/>
+                                            </ui:Button>
+                                            <ui:Button Appearance="Secondary"
+                                                       ToolTip="{Binding TranscribeToolTip}"
+                                                       Padding="6,4"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"
+                                                       IsEnabled="{Binding CanTranscribe}"
+                                                       Command="{Binding DataContext.Recorder.TranscribeRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       CommandParameter="{Binding}">
+                                                <TextBlock Text="&#xE72C;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="13"/>
+                                            </ui:Button>
+                                            <ui:Button Appearance="Secondary"
+                                                       ToolTip="{loc:Str Recorder.Delete}"
+                                                       Padding="6,4"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"
+                                                       Command="{Binding DataContext.Recorder.DeleteRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                       CommandParameter="{Binding}">
+                                                <ui:SymbolIcon Symbol="Delete24"/>
+                                            </ui:Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Border>
-
-            <!-- Recordings list -->
-            <TextBlock Text="{loc:Str Recorder.Recordings}" FontSize="16" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextBrush}" Margin="0,0,0,12"
-                       Visibility="{Binding Recorder.HasRecordings, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"/>
-
-            <ItemsControl ItemsSource="{Binding Recorder.Recordings}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="{StaticResource InputBackgroundBrush}"
-                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                CornerRadius="6" Padding="14,10" Margin="0,0,0,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0">
-                                    <TextBlock Text="{Binding FileName}" FontSize="12" FontWeight="SemiBold"
-                                               Foreground="{StaticResource TextBrush}"/>
-                                    <TextBlock Text="{Binding Transcript}" FontSize="11"
-                                               Foreground="{StaticResource HintBrush}"
-                                               TextTrimming="CharacterEllipsis" MaxHeight="32"
-                                               Margin="0,4,0,0"/>
-                                    <TextBlock Text="{Binding ItemStatusText}" FontSize="11"
-                                               Foreground="{StaticResource HintBrush}"
-                                               TextTrimming="CharacterEllipsis" MaxHeight="32"
-                                               Margin="0,4,0,0"
-                                               Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"/>
-                                    <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
-                                               FontSize="10" Foreground="{StaticResource HintBrush}"
-                                               Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                            VerticalAlignment="Center" Margin="12,0,0,0">
-                                    <ui:Button Appearance="Secondary"
-                                               ToolTip="{Binding TranscribeToolTip}" Padding="6,4"
-                                               VerticalAlignment="Center"
-                                               IsEnabled="{Binding CanTranscribe}"
-                                               Command="{Binding DataContext.Recorder.TranscribeRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                               CommandParameter="{Binding}">
-                                        <ui:SymbolIcon Symbol="Play24"/>
-                                    </ui:Button>
-                                    <ui:Button Appearance="Secondary"
-                                               ToolTip="{loc:Str Recorder.Delete}" Padding="6,4"
-                                               VerticalAlignment="Center" Margin="6,0,0,0"
-                                               Command="{Binding DataContext.Recorder.DeleteRecordingCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                               CommandParameter="{Binding}">
-                                        <ui:SymbolIcon Symbol="Delete24"/>
-                                    </ui:Button>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

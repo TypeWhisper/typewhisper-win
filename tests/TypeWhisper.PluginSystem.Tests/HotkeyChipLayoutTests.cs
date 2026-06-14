@@ -120,7 +120,7 @@ public sealed class HotkeyChipLayoutTests
         Assert.Contains("RecordedCommand=\"{Binding Settings.AddMainDictationHotkeyCommand}\"", shortcutsXaml);
         Assert.Contains("UseAddGlyph=\"True\"", shortcutsXaml);
         Assert.Contains("Settings.RemoveMainDictationHotkeyCommand", shortcutsXaml);
-        Assert.Equal(6, Count(shortcutsXaml, "AutomationProperties.Name=\"{loc:Str Shortcuts.RemoveHotkey}\""));
+        Assert.Equal(7, Count(shortcutsXaml, "AutomationProperties.Name=\"{loc:Str Shortcuts.RemoveHotkey}\""));
         Assert.DoesNotContain("ActionCommand", shortcutsXaml);
         Assert.DoesNotContain("Width=\"282\"", shortcutsXaml);
         Assert.DoesNotContain("HotkeyAddButtonStyle", shortcutsXaml);

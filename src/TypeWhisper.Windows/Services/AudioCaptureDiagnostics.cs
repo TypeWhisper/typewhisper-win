@@ -1,0 +1,63 @@
+using System.IO;
+using System.Threading;
+
+namespace TypeWhisper.Windows.Services;
+
+internal static class AudioCaptureDiagnostics
+{
+    private static readonly object Lock = new();
+    private static readonly bool Enabled =
+        string.Equals(
+            Environment.GetEnvironmentVariable("TYPEWHISPER_AUDIO_DIAGNOSTICS"),
+            "1",
+            StringComparison.Ordinal);
+
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "TypeWhisper",
+        "Logs",
+        "audio-capture-diagnostics.log");
+
+    public static void Log(string message)
+    {
+        if (!Enabled)
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            var line = string.Concat(
+                DateTime.UtcNow.ToString("O"),
+                " [tid=",
+                Environment.CurrentManagedThreadId.ToString(),
+                " apt=",
+                Thread.CurrentThread.GetApartmentState().ToString(),
+                "] ",
+                message,
+                Environment.NewLine);
+
+            lock (Lock)
+            {
+                File.AppendAllText(LogPath, line);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    public static void Reset()
+    {
+        if (!Enabled)
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            File.WriteAllText(LogPath, "");
+        }
+        catch
+        {
+        }
+    }
+}

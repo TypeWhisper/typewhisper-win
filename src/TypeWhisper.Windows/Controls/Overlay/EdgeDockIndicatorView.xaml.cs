@@ -118,9 +118,11 @@ public partial class EdgeDockIndicatorView : UserControl
             or LiveTranscriptionFontSizeProperty)
         {
             var propertyChanged = e.PropertyName is null or "";
+            var previewVisibilityChanged = e.PropertyName == ShowBuiltInPartialPreviewProperty;
+            var animatePreview = propertyChanged || previewVisibilityChanged;
             QueuePartialPreviewUpdate(
-                animated: IsVisible,
-                animateText: IsVisible && (propertyChanged || e.PropertyName == PartialTextProperty));
+                animated: IsVisible && animatePreview,
+                animateText: IsVisible && animatePreview);
         }
     }
 

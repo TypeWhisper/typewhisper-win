@@ -125,4 +125,39 @@ public sealed class StatusIslandLayoutTests
         Assert.Contains("PartialTextTransform", codeBehind);
         Assert.Contains("UIElement.OpacityProperty", codeBehind);
     }
+
+    [Fact]
+    public void StatusIsland_DoesNotRestartTextAnimationForEveryPartialTextUpdate()
+    {
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "Overlay",
+            "DictationOverlayView.xaml.cs");
+
+        var handler = TestFile.ExtractBlock(codeBehind, "private void OnDataContextPropertyChanged", 1000);
+
+        Assert.Contains("or PartialTextProperty", handler);
+        Assert.Contains("previewVisibilityChanged", handler);
+        Assert.Contains("e.PropertyName == ShowBuiltInPartialPreviewProperty", handler);
+        Assert.DoesNotContain("e.PropertyName == PartialTextProperty));", handler);
+    }
+
+    [Fact]
+    public void StatusIsland_DoesNotRestartPreviewAnimationForEveryPartialTextUpdate()
+    {
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "Overlay",
+            "DictationOverlayView.xaml.cs");
+
+        var handler = TestFile.ExtractBlock(codeBehind, "private void OnDataContextPropertyChanged", 1000);
+
+        Assert.Contains("animatePreview", handler);
+        Assert.Contains("animated: IsVisible && animatePreview", handler);
+        Assert.DoesNotContain("animated: IsVisible,", handler);
+    }
 }

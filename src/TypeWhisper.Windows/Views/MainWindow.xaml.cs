@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.ViewModels;
 using DrawingRectangle = System.Drawing.Rectangle;
 using FormsCursor = System.Windows.Forms.Cursor;
 using FormsScreen = System.Windows.Forms.Screen;
@@ -32,14 +33,14 @@ public partial class MainWindow : Window
     private static partial int SetWindowLongW(IntPtr hWnd, int nIndex, int dwNewLong);
 
     private readonly ISettingsService _settings;
-    private readonly ViewModels.DictationViewModel _viewModel;
+    private readonly RecordingOverlayViewModel _viewModel;
     private readonly DispatcherTimer _overlayRecoveryTimer;
     private OverlayPlacementTarget _currentPlacementTarget = OverlayPlacementTarget.CursorMonitor;
 
     /// <summary>
     /// Initializes a new instance of the MainWindow class.
     /// </summary>
-    public MainWindow(ViewModels.DictationViewModel viewModel, ISettingsService settings)
+    public MainWindow(RecordingOverlayViewModel viewModel, ISettingsService settings)
     {
         InitializeComponent();
         DataContext = viewModel;
@@ -71,7 +72,7 @@ public partial class MainWindow : Window
         PropertyChangedEventManager.AddHandler(
             _viewModel,
             OnViewModelPropertyChanged,
-            nameof(ViewModels.DictationViewModel.IsOverlayVisible));
+            nameof(RecordingOverlayViewModel.IsOverlayVisible));
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
@@ -91,7 +92,7 @@ public partial class MainWindow : Window
         PropertyChangedEventManager.RemoveHandler(
             _viewModel,
             OnViewModelPropertyChanged,
-            nameof(ViewModels.DictationViewModel.IsOverlayVisible));
+            nameof(RecordingOverlayViewModel.IsOverlayVisible));
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;

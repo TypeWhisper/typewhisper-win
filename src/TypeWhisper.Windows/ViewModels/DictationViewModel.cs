@@ -1678,6 +1678,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
     private void OnAudioLevelChanged(object? sender, AudioLevelEventArgs e)
     {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(() => AudioLevel = e.RmsLevel);
+            return;
+        }
+
         AudioLevel = e.RmsLevel;
     }
 

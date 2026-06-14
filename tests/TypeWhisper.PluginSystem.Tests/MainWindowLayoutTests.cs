@@ -75,8 +75,28 @@ public sealed class MainWindowLayoutTests
             "MainWindow.xaml.cs");
 
         Assert.Contains("PropertyChangedEventManager.AddHandler", code);
-        Assert.Contains("nameof(ViewModels.DictationViewModel.IsOverlayVisible)", code);
+        Assert.Contains("nameof(RecordingOverlayViewModel.IsOverlayVisible)", code);
         Assert.Contains("OnViewModelPropertyChanged", code);
         Assert.Contains("PositionOverlay(OverlayPlacementTarget.CursorMonitor)", code);
+    }
+
+    [Fact]
+    public void RecordingOverlay_DoesNotBroadcastVisibilityForEveryLevelChange()
+    {
+        var code = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "RecordingOverlayViewModel.cs");
+
+        Assert.DoesNotContain("OnPropertyChanged(string.Empty)", code);
+        Assert.DoesNotContain("OnPropertyChanged(\"\")", code);
+        Assert.Contains("_lastPublishedValues", code);
+        Assert.Contains("PublishIfChanged(nameof(IsOverlayVisible), IsOverlayVisible)", code);
+        Assert.Contains("PublishIfChanged(nameof(AudioLevel), AudioLevel)", code);
+        Assert.Contains("PublishIfChanged(nameof(PartialText), PartialText)", code);
+        Assert.Contains("PublishIfChanged(nameof(ShowBuiltInPartialPreview), ShowBuiltInPartialPreview)", code);
+        Assert.DoesNotContain("OnPropertyChanged(nameof(PartialText))", code);
+        Assert.DoesNotContain("OnPropertyChanged(nameof(ShowBuiltInPartialPreview))", code);
     }
 }

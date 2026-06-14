@@ -447,6 +447,45 @@ public sealed class AudioRecorderViewModelTests
         }
     }
 
+    [Fact]
+    public void Recorder_IgnoresUnrelatedSettingsChangesWithoutRefreshingSystemAudioDevices()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var systemAudioFactory = new FakeSystemAudioLoopbackCaptureFactory(
+            [new SystemAudioOutputDevice("wave-link-monitor", "Wave Link Monitor")]);
+        using var capture = new RecorderCaptureService(
+            audio,
+            new SystemAudioCaptureService(systemAudioFactory));
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            RecorderSystemAudioDeviceId = "wave-link-monitor"
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        using var sut = new AudioRecorderViewModel(
+            capture,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        Assert.Equal(1, systemAudioFactory.AvailableDeviceRequestCount);
+
+        settings.Save(settings.Current with
+        {
+            LiveTranscriptionEnabled = !settings.Current.LiveTranscriptionEnabled
+        });
+
+        Assert.Equal(1, systemAudioFactory.AvailableDeviceRequestCount);
+    }
+
     private static byte[] BuildPcm16Chunk()
     {
         var buffer = new byte[3200];
@@ -504,7 +543,16 @@ public sealed class AudioRecorderViewModelTests
     {
         for (var attempt = 0; attempt < 80; attempt++)
         {
-            var item = sut.Recordings.FirstOrDefault(predicate);
+            RecordingItem? item;
+            try
+            {
+                item = sut.Recordings.FirstOrDefault(predicate);
+            }
+            catch (InvalidOperationException)
+            {
+                await Task.Delay(50);
+                continue;
+            }
             if (item is not null)
                 return item;
 
