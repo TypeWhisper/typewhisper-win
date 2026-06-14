@@ -57,11 +57,11 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     /// <summary>
     /// Gets whether inline feedback is visible.
     /// </summary>
-    public bool ShowInlineFeedback => UseDictation ? _dictation.ShowInlineFeedback : false;
+    public bool ShowInlineFeedback => UseDictation && _dictation.ShowInlineFeedback;
     /// <summary>
     /// Gets whether detached feedback is visible.
     /// </summary>
-    public bool ShowDetachedFeedback => UseDictation ? _dictation.ShowDetachedFeedback : false;
+    public bool ShowDetachedFeedback => UseDictation && _dictation.ShowDetachedFeedback;
     /// <summary>
     /// Gets whether overlay chrome has visible content.
     /// </summary>

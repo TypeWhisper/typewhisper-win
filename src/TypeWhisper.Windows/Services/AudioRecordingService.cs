@@ -1171,10 +1171,10 @@ internal static class WasapiAudioInputDeviceOrdering
         var remainingIndexes = Enumerable.Range(0, wasapiDeviceNames.Count).ToList();
         var orderedIndexes = new List<int>(wasapiDeviceNames.Count);
 
-        foreach (var waveInDeviceName in waveInDeviceNames)
+        foreach (var remainingIndex in waveInDeviceNames.Select(waveInDeviceName =>
+                     remainingIndexes.FindIndex(index =>
+                         DeviceNamesMatch(wasapiDeviceNames[index], waveInDeviceName))))
         {
-            var remainingIndex = remainingIndexes.FindIndex(index =>
-                DeviceNamesMatch(wasapiDeviceNames[index], waveInDeviceName));
             if (remainingIndex < 0)
                 continue;
 

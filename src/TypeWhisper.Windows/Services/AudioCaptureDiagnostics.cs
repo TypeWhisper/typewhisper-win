@@ -64,6 +64,9 @@ internal static class AudioCaptureDiagnostics
         }
     }
 
-    private static string SafePathSegment(string segment) =>
-        Path.GetFileName(segment) ?? segment;
+    private static string SafePathSegment(string segment)
+    {
+        var fileName = Path.GetFileName(segment);
+        return string.IsNullOrEmpty(fileName) ? string.Empty : fileName;
+    }
 }

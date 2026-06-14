@@ -528,7 +528,24 @@ public sealed class RecorderAudioPipelineTests
             "RecorderCaptureService.cs");
         var method = TestFile.ExtractBlock(source, "private static string WriteOutputFile", 900);
 
-        Assert.Contains("Path.GetFileName(fileName)", method);
+        Assert.Contains("var safeFileName = Path.GetFileName(fileName);", method);
+        Assert.Contains("string.IsNullOrEmpty(safeFileName)", method);
+        Assert.DoesNotContain("?? fileName", method);
+    }
+
+    [Fact]
+    public void AudioCaptureDiagnostics_SanitizesPathSegmentsWithoutUnsafeFallback()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "AudioCaptureDiagnostics.cs");
+        var method = TestFile.ExtractBlock(source, "private static string SafePathSegment", 400);
+
+        Assert.Contains("Path.GetFileName(segment)", method);
+        Assert.Contains("string.IsNullOrEmpty(fileName) ? string.Empty : fileName", method);
+        Assert.DoesNotContain("?? segment", method);
     }
 
     [Fact]

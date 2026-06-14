@@ -288,9 +288,13 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
         Directory.CreateDirectory(TypeWhisperEnvironment.AudioPath);
         var extension = options.OutputFormat == RecorderOutputFormat.M4A ? "m4a" : "wav";
         var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.{extension}";
+        var safeFileName = Path.GetFileName(fileName);
+        if (string.IsNullOrEmpty(safeFileName))
+            throw new InvalidOperationException("Recorder output file name is invalid.");
+
         var path = Path.Combine(
             TypeWhisperEnvironment.AudioPath,
-            Path.GetFileName(fileName) ?? fileName);
+            safeFileName);
 
         if (options.OutputFormat == RecorderOutputFormat.Wav)
         {
