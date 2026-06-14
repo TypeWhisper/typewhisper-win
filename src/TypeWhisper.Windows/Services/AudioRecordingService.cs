@@ -668,7 +668,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 subscriber(sender, args);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))
             {
                 System.Diagnostics.Debug.WriteLine($"{eventName} subscriber failed: {ex.Message}");
                 AudioCaptureDiagnostics.Log($"{eventName} subscriber failed {ex.GetType().Name}: {ex.Message}");
@@ -676,14 +676,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
+    private static bool IsNonFatalAudioCallbackException(Exception ex) =>
+        ex is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException
+            and not AppDomainUnloadedException
+            and not BadImageFormatException
+            and not CannotUnloadAppDomainException;
+
     private int SafeDeviceCount()
     {
         try
         {
             return _deviceProvider.DeviceCount;
         }
-        catch
+        catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))
         {
+            AudioCaptureDiagnostics.Log($"Device count check failed {ex.GetType().Name}: {ex.Message}");
             return -1;
         }
     }

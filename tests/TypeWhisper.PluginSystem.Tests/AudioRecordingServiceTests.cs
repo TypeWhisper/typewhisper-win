@@ -553,6 +553,21 @@ public sealed class RecorderAudioPipelineTests
     }
 
     [Fact]
+    public void AudioRecordingService_FiltersNonFatalCallbackExceptions()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "AudioRecordingService.cs");
+
+        Assert.Contains("catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))", source);
+        Assert.Contains("ex is not OutOfMemoryException", source);
+        Assert.Contains("and not AccessViolationException", source);
+        Assert.DoesNotContain("catch\r\n        {\r\n            return -1;", source);
+    }
+
+    [Fact]
     public void SystemAudioCapture_UsesSelectedOutputDevice()
     {
         var factory = new FakeSystemAudioLoopbackCaptureFactory(
