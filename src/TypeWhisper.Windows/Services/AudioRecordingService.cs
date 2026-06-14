@@ -214,7 +214,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             AudioCaptureDiagnostics.Log(
                 $"WarmUp success active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
         {
             AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
             System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
@@ -641,7 +641,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 RaiseDeviceAvailableIfDeviceLossWasReported();
             }
         }
-        catch { }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private void RaiseAudioLevelChanged(float peak, float rms) =>
@@ -668,7 +671,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 subscriber(sender, args);
             }
-            catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
                 System.Diagnostics.Debug.WriteLine($"{eventName} subscriber failed: {ex.Message}");
                 AudioCaptureDiagnostics.Log($"{eventName} subscriber failed {ex.GetType().Name}: {ex.Message}");
@@ -676,7 +679,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
-    private static bool IsNonFatalAudioCallbackException(Exception ex) =>
+    private static bool IsNonFatalAudioException(Exception ex) =>
         ex is not OutOfMemoryException
             and not StackOverflowException
             and not AccessViolationException
@@ -690,7 +693,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         {
             return _deviceProvider.DeviceCount;
         }
-        catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
         {
             AudioCaptureDiagnostics.Log($"Device count check failed {ex.GetType().Name}: {ex.Message}");
             return -1;
@@ -813,7 +816,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _previewWaveIn.StartRecording();
             _isPreviewing = true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
         {
             System.Diagnostics.Debug.WriteLine($"StartPreview failed: {ex.Message}");
             StopPreview();

@@ -663,7 +663,19 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         {
             return AudioFileService.GetDuration(file);
         }
-        catch
+        catch (IOException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (NotSupportedException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (ArgumentException)
         {
             return TimeSpan.Zero;
         }

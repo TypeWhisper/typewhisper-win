@@ -561,10 +561,11 @@ public sealed class RecorderAudioPipelineTests
             "Services",
             "AudioRecordingService.cs");
 
-        Assert.Contains("catch (Exception ex) when (IsNonFatalAudioCallbackException(ex))", source);
+        Assert.Contains("catch (Exception ex) when (IsNonFatalAudioException(ex))", source);
         Assert.Contains("ex is not OutOfMemoryException", source);
         Assert.Contains("and not AccessViolationException", source);
         Assert.DoesNotContain("catch\r\n        {\r\n            return -1;", source);
+        Assert.DoesNotContain("catch { }", source);
     }
 
     [Fact]
