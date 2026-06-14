@@ -399,7 +399,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
             {
                 action();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!IsFatal(ex))
             {
                 error = ex;
             }
@@ -415,6 +415,14 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         if (error is not null)
             throw error;
     }
+
+    private static bool IsFatal(Exception ex) =>
+        ex is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException;
 
     private static void PumpDispatcherUntil(Func<bool> condition, TimeSpan timeout)
     {
