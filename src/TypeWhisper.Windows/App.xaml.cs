@@ -275,12 +275,20 @@ public partial class App : Application
         {
             await action();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsNonFatalTrayActionException(ex))
         {
             System.Diagnostics.Debug.WriteLine($"Tray action failed: {ex}");
             LogCrash(ex);
         }
     }
+
+    private static bool IsNonFatalTrayActionException(Exception ex) =>
+        ex is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException
+            and not AppDomainUnloadedException
+            and not BadImageFormatException
+            and not CannotUnloadAppDomainException;
 
     private async Task ProcessProtocolArgsAsync(string[] args)
     {

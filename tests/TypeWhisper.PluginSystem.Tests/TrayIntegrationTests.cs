@@ -30,5 +30,7 @@ public sealed class TrayIntegrationTests
         Assert.Contains("void RunTrayActionOnUiThread(Func<Task> action)", code);
         Assert.Contains("_trayIcon.CopyLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(async () =>", code);
         Assert.Contains("_trayIcon.UpdateCheckRequested += (_, _) => RunTrayActionOnUiThread(async () =>", code);
+        Assert.Contains("catch (Exception ex) when (IsNonFatalTrayActionException(ex))", code);
+        Assert.Contains("IsNonFatalTrayActionException", code);
     }
 }
