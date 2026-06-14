@@ -530,6 +530,7 @@ public sealed class RecorderAudioPipelineTests
 
         Assert.Contains("var safeFileName = Path.GetFileName(fileName);", method);
         Assert.Contains("string.IsNullOrEmpty(safeFileName)", method);
+        Assert.Contains("Path.Join(", method);
         Assert.DoesNotContain("?? fileName", method);
     }
 

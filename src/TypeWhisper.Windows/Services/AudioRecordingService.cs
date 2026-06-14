@@ -1173,11 +1173,9 @@ internal static class WasapiAudioInputDeviceOrdering
 
         foreach (var remainingIndex in waveInDeviceNames.Select(waveInDeviceName =>
                      remainingIndexes.FindIndex(index =>
-                         DeviceNamesMatch(wasapiDeviceNames[index], waveInDeviceName))))
+                         DeviceNamesMatch(wasapiDeviceNames[index], waveInDeviceName)))
+                     .Where(remainingIndex => remainingIndex >= 0))
         {
-            if (remainingIndex < 0)
-                continue;
-
             orderedIndexes.Add(remainingIndexes[remainingIndex]);
             remainingIndexes.RemoveAt(remainingIndex);
         }
