@@ -385,7 +385,7 @@
                                                        MaxHeight="32"
                                                        Margin="0,4,0,0"
                                                        Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"/>
-                                            <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}"
+                                            <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:g}'}"
                                                        FontSize="10"
                                                        Foreground="{StaticResource HintBrush}"
                                                        Margin="0,2,0,0"/>

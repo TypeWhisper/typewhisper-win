@@ -604,7 +604,7 @@
   "Recorder.SystemLevel": "システム",
   "Recorder.Format": "形式",
   "Recorder.Tracks": "トラック",
-  "Recorder.Ducking": "エコー処理",
+  "Recorder.Ducking": "オーディオダッキング",
   "Recorder.TranscriptionEnabled": "録音を文字起こし",
   "Recorder.OpenFolder": "フォルダーを開く",
   "Recorder.CopyTranscript": "文字起こしをコピー",

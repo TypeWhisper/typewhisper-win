@@ -1,3 +1,4 @@
+using System.Reflection;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -133,7 +134,34 @@ public sealed class SettingsViewModelHotkeyTests
         Assert.Equal(0, settings.SaveCount);
     }
 
-    private static SettingsViewModel CreateSettingsViewModel(FakeSettingsService settings)
+    [Fact]
+    public void PreviewLevelUpdates_AreCoalescedBeforeDispatch()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        var queuedActions = new List<Action>();
+        var sut = CreateSettingsViewModel(settings, queuedActions.Add);
+        var method = typeof(SettingsViewModel).GetMethod(
+            "OnPreviewLevelChanged",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(sut, [null, new AudioLevelEventArgs(0.1f, 0.1f)]);
+        method.Invoke(sut, [null, new AudioLevelEventArgs(0.3f, 0.2f)]);
+
+        var queued = Assert.Single(queuedActions);
+        queued();
+        Assert.Equal(1f, sut.PreviewLevel);
+
+        method.Invoke(sut, [null, new AudioLevelEventArgs(0.1f, 0.05f)]);
+
+        Assert.Equal(2, queuedActions.Count);
+        queuedActions[1]();
+        Assert.Equal(0.25f, sut.PreviewLevel);
+    }
+
+    private static SettingsViewModel CreateSettingsViewModel(
+        FakeSettingsService settings,
+        Action<Action>? dispatchToUi = null)
     {
         var pluginManager = TestPluginManagerFactory.Create(settings);
         var system = new FakeTtsProvider("windows-sapi", "System Voice");
@@ -142,6 +170,6 @@ public sealed class SettingsViewModelHotkeyTests
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
 
-        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: action => action());
+        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: dispatchToUi ?? (action => action()));
     }
 }

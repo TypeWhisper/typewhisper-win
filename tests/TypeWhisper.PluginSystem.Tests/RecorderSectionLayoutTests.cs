@@ -50,6 +50,8 @@ public sealed class RecorderSectionLayoutTests
         Assert.Contains("Recorder.TranscriptionHint", xaml);
         Assert.Contains("Recorder.ModeTitle", xaml);
         Assert.Contains("Recorder.ModeHint", xaml);
+        Assert.Contains("StringFormat='{}{0:g}'", xaml);
+        Assert.DoesNotContain("dd.MM.yyyy HH:mm", xaml);
         Assert.DoesNotContain("HorizontalAlignment=\"Center\" Margin=\"0,0,0,24\"", xaml);
         Assert.DoesNotContain("MaxWidth=\"600\"", xaml);
     }
@@ -84,6 +86,18 @@ public sealed class RecorderSectionLayoutTests
             Assert.True(localization.TryGetValue(key, out var value), $"{language} should define {key}.");
             Assert.False(string.IsNullOrWhiteSpace(value), $"{language} value for {key} should not be empty.");
         }
+    }
+
+    [Theory]
+    [InlineData("en", "Audio ducking")]
+    [InlineData("de", "Audio-Ducking")]
+    [InlineData("ja", "オーディオダッキング")]
+    [InlineData("ru", "Приглушение аудио")]
+    public void RecorderSection_DuckingLabelUsesDuckingTerminology(string language, string expected)
+    {
+        var localization = LoadLocalization(language);
+
+        Assert.Equal(expected, localization["Recorder.Ducking"]);
     }
 
     private static Dictionary<string, string> LoadLocalization(string language)

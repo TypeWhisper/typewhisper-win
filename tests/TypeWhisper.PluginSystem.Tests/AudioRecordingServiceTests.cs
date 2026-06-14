@@ -489,6 +489,49 @@ public sealed class RecorderAudioPipelineTests
     }
 
     [Fact]
+    public void RecorderCaptureService_PublishesStreamingDeltaUnderLock()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "RecorderCaptureService.cs");
+        var method = TestFile.ExtractBlock(source, "private void PublishMixedDelta", 900);
+        var lockIndex = method.IndexOf("lock (_lock)", StringComparison.Ordinal);
+        var deltaIndex = method.IndexOf("GetBufferDelta(_lastPublishedSampleCount)", StringComparison.Ordinal);
+        var updateIndex = method.IndexOf("_lastPublishedSampleCount += delta.Length", StringComparison.Ordinal);
+
+        Assert.True(lockIndex >= 0, "PublishMixedDelta should lock around delta publishing state.");
+        Assert.InRange(deltaIndex, lockIndex, updateIndex);
+    }
+
+    [Fact]
+    public void SystemAudioLoopbackFactory_DisposesDeviceEnumerators()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "SystemAudioCaptureService.cs");
+        var factory = TestFile.ExtractBlock(source, "internal sealed class WasapiLoopbackCaptureFactory", 1600);
+
+        Assert.Equal(2, TestFile.CountOccurrences(factory, "using var enumerator = new MMDeviceEnumerator();"));
+    }
+
+    [Fact]
+    public void RecorderCaptureService_NormalizesGeneratedRecordingFileName()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "RecorderCaptureService.cs");
+        var method = TestFile.ExtractBlock(source, "private static string WriteOutputFile", 900);
+
+        Assert.Contains("Path.GetFileName(fileName)", method);
+    }
+
+    [Fact]
     public void SystemAudioCapture_UsesSelectedOutputDevice()
     {
         var factory = new FakeSystemAudioLoopbackCaptureFactory(

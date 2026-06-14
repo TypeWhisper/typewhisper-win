@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
@@ -14,9 +15,9 @@ internal static class AudioCaptureDiagnostics
 
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper",
-        "Logs",
-        "audio-capture-diagnostics.log");
+        SafePathSegment("TypeWhisper"),
+        SafePathSegment("Logs"),
+        SafePathSegment("audio-capture-diagnostics.log"));
 
     public static void Log(string message)
     {
@@ -41,8 +42,9 @@ internal static class AudioCaptureDiagnostics
                 File.AppendAllText(LogPath, line);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
         }
     }
 
@@ -56,8 +58,12 @@ internal static class AudioCaptureDiagnostics
             Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
             File.WriteAllText(LogPath, "");
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"Audio capture diagnostics reset failed: {ex.Message}");
         }
     }
+
+    private static string SafePathSegment(string segment) =>
+        Path.GetFileName(segment) ?? segment;
 }

@@ -275,6 +275,7 @@ public sealed class HotkeyService : IDisposable
     // --- Hybrid: short press = toggle, long hold = PTT ---
 
     private DateTime _lastActionTime;
+    private DateTime _lastRecorderToggleActionTime;
     private static readonly TimeSpan DebounceInterval = TimeSpan.FromMilliseconds(300);
 
     private void OnHybridKeyDown(object? sender, EventArgs e)
@@ -388,6 +389,9 @@ public sealed class HotkeyService : IDisposable
     private void OnRecorderToggleKeyDown(object? sender, EventArgs e)
     {
         if (!IsEnabled) return;
+        var now = DateTime.UtcNow;
+        if (now - _lastRecorderToggleActionTime < DebounceInterval) return;
+        _lastRecorderToggleActionTime = now;
         RecorderToggleRequested?.Invoke(this, EventArgs.Empty);
     }
 

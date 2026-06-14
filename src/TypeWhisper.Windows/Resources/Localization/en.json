@@ -615,7 +615,7 @@
   "Recorder.SystemLevel": "System",
   "Recorder.Format": "Format",
   "Recorder.Tracks": "Tracks",
-  "Recorder.Ducking": "Echo handling",
+  "Recorder.Ducking": "Audio ducking",
   "Recorder.TranscriptionEnabled": "Transcribe recording",
   "Recorder.OpenFolder": "Open folder",
   "Recorder.CopyTranscript": "Copy transcript",

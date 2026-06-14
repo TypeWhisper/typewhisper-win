@@ -135,6 +135,7 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
         }
         catch (OperationCanceledException)
         {
+            // Stopping should continue even if the short drain delay is canceled.
         }
 
         float[] micSamples = [];
@@ -261,12 +262,13 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
 
     private void PublishMixedDelta()
     {
-        var delta = GetBufferDelta(_lastPublishedSampleCount);
-        if (delta.Length == 0)
-            return;
-
+        float[] delta;
         lock (_lock)
         {
+            delta = GetBufferDelta(_lastPublishedSampleCount);
+            if (delta.Length == 0)
+                return;
+
             _lastPublishedSampleCount += delta.Length;
         }
 
@@ -285,9 +287,10 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
     {
         Directory.CreateDirectory(TypeWhisperEnvironment.AudioPath);
         var extension = options.OutputFormat == RecorderOutputFormat.M4A ? "m4a" : "wav";
+        var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.{extension}";
         var path = Path.Combine(
             TypeWhisperEnvironment.AudioPath,
-            $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.{extension}");
+            Path.GetFileName(fileName) ?? fileName);
 
         if (options.OutputFormat == RecorderOutputFormat.Wav)
         {
@@ -365,13 +368,13 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
             return;
 
         StopWarningTimer();
-        if (_isRecording)
-        {
-            _microphone.AudioLevelChanged -= OnMicrophoneLevelChanged;
-            _microphone.SamplesAvailable -= OnMicrophoneSamplesAvailable;
-            _systemAudio.AudioLevelChanged -= OnSystemLevelChanged;
-            _systemAudio.SamplesAvailable -= OnSystemSamplesAvailable;
-        }
+        _isRecording = false;
+        _microphone.AudioLevelChanged -= OnMicrophoneLevelChanged;
+        _microphone.SamplesAvailable -= OnMicrophoneSamplesAvailable;
+        _systemAudio.AudioLevelChanged -= OnSystemLevelChanged;
+        _systemAudio.SamplesAvailable -= OnSystemSamplesAvailable;
+        _microphone.Dispose();
+        _systemAudio.Dispose();
 
         _disposed = true;
     }

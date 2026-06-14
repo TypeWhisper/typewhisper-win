@@ -25,6 +25,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly CliInstallService _cliInstall;
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly Action<Action> _dispatchToUi;
+    private readonly object _previewLevelLock = new();
+    private float _pendingPreviewLevel;
+    private bool _previewLevelDispatchQueued;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -494,13 +497,41 @@ public partial class SettingsViewModel : ObservableObject
     {
         _audio.PreviewLevelChanged -= OnPreviewLevelChanged;
         _audio.StopPreview();
+        lock (_previewLevelLock)
+        {
+            _pendingPreviewLevel = 0;
+        }
         PreviewLevel = 0;
     }
 
     private void OnPreviewLevelChanged(object? sender, AudioLevelEventArgs e)
     {
-        _dispatchToUi(() =>
-            PreviewLevel = Math.Min(e.RmsLevel * 5f, 1f)); // Scale for visibility
+        var level = Math.Min(e.RmsLevel * 5f, 1f); // Scale for visibility.
+        var shouldDispatch = false;
+        lock (_previewLevelLock)
+        {
+            _pendingPreviewLevel = level;
+            if (!_previewLevelDispatchQueued)
+            {
+                _previewLevelDispatchQueued = true;
+                shouldDispatch = true;
+            }
+        }
+
+        if (shouldDispatch)
+            _dispatchToUi(ApplyPendingPreviewLevel);
+    }
+
+    private void ApplyPendingPreviewLevel()
+    {
+        float level;
+        lock (_previewLevelLock)
+        {
+            level = _pendingPreviewLevel;
+            _previewLevelDispatchQueued = false;
+        }
+
+        PreviewLevel = level;
     }
 
     [RelayCommand]

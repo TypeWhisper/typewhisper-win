@@ -77,6 +77,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     private string? _statusKey;
     private bool _isLoadingSettings;
     private Guid? _activeApiSessionId;
+    private bool _disposed;
 
     [ObservableProperty] private bool _isRecording;
     [ObservableProperty] private string _durationText = "0:00";
@@ -506,7 +507,10 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             var txt = Path.ChangeExtension(item.FilePath, ".txt");
             if (File.Exists(txt)) File.Delete(txt);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
         Recordings.Remove(item);
         OnPropertyChanged(nameof(HasRecordings));
         RefreshRecordingCommandState();
@@ -527,6 +531,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or System.Runtime.InteropServices.ExternalException)
         {
+            Debug.WriteLine($"Copying recorder transcript failed: {ex.Message}");
         }
     }
 
@@ -622,7 +627,10 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 Recordings.Add(new RecordingItem(fi.Name, file, fi.CreationTime, duration, transcript));
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
     }
 
     private static TimeSpan TryGetDuration(string file)
@@ -872,10 +880,15 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     /// </summary>
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
         Loc.Instance.LanguageChanged -= OnLanguageChanged;
         _settings.SettingsChanged -= OnSettingsChanged;
         _streamingHandler.Dispose();
         _timer?.Dispose();
+        _capture.Dispose();
+        _disposed = true;
     }
 }
 

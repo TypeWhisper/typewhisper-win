@@ -141,7 +141,7 @@ public sealed class StatusIslandLayoutTests
         Assert.Contains("or PartialTextProperty", handler);
         Assert.Contains("previewVisibilityChanged", handler);
         Assert.Contains("e.PropertyName == ShowBuiltInPartialPreviewProperty", handler);
-        Assert.DoesNotContain("e.PropertyName == PartialTextProperty));", handler);
+        Assert.DoesNotContain("e.PropertyName == PartialTextProperty", handler);
     }
 
     [Fact]

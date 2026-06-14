@@ -604,7 +604,7 @@
   "Recorder.SystemLevel": "Система",
   "Recorder.Format": "Формат",
   "Recorder.Tracks": "Дорожки",
-  "Recorder.Ducking": "Обработка эха",
+  "Recorder.Ducking": "Приглушение аудио",
   "Recorder.TranscriptionEnabled": "Транскрибировать запись",
   "Recorder.OpenFolder": "Открыть папку",
   "Recorder.CopyTranscript": "Копировать транскрипт",

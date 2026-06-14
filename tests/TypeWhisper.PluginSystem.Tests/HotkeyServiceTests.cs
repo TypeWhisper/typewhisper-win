@@ -136,6 +136,26 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void RecorderToggleRequested_IsDebounced()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default with { RecorderToggleHotkey = "Ctrl+Alt+R" }),
+            new FakeWorkflowService());
+        var raiseCount = 0;
+        sut.RecorderToggleRequested += (_, _) => raiseCount++;
+
+        var method = typeof(HotkeyService).GetMethod(
+            "OnRecorderToggleKeyDown",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(sut, [null, EventArgs.Empty]);
+        method.Invoke(sut, [null, EventArgs.Empty]);
+
+        Assert.Equal(1, raiseCount);
+    }
+
+    [Fact]
     public void WorkflowTextProcessingRequested_EventIsRaised()
     {
         var workflow = NewWorkflow(

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using NAudio;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -272,8 +273,9 @@ public sealed class SystemAudioCaptureService : IDisposable
                 if (_isRecording)
                     _capture.StopRecording();
             }
-            catch (MmException)
+            catch (MmException ex)
             {
+                Debug.WriteLine($"Stopping system audio capture during dispose failed: {ex.Message}");
             }
 
             _capture.Dispose();
@@ -304,16 +306,18 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
 
     public IReadOnlyList<SystemAudioOutputDevice> GetAvailableDevices()
     {
-        var enumerator = new MMDeviceEnumerator();
+        using var enumerator = new MMDeviceEnumerator();
         var renderDevices = enumerator
             .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-            .Select(device => new SystemAudioOutputDevice(device.ID, device.FriendlyName));
+            .Select(device => new SystemAudioOutputDevice(device.ID, device.FriendlyName))
+            .ToList();
         var captureMixDevices = enumerator
             .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
             .Where(IsSystemAudioCaptureMix)
             .Select(device => new SystemAudioOutputDevice(
                 CaptureDevicePrefix + device.ID,
-                device.FriendlyName));
+                device.FriendlyName))
+            .ToList();
 
         return [.. renderDevices.Concat(captureMixDevices)];
     }
@@ -323,7 +327,7 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
         if (string.IsNullOrWhiteSpace(deviceId))
             return new WasapiCaptureAdapter(new WasapiLoopbackCapture());
 
-        var enumerator = new MMDeviceEnumerator();
+        using var enumerator = new MMDeviceEnumerator();
         if (deviceId.StartsWith(CaptureDevicePrefix, StringComparison.OrdinalIgnoreCase))
         {
             var captureDevice = enumerator.GetDevice(deviceId[CaptureDevicePrefix.Length..]);
