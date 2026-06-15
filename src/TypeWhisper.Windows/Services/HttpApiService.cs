@@ -32,6 +32,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly ITranslationService _translation;
     private readonly DictationViewModel _dictation;
     private readonly IWorkflowService _workflows;
+    private readonly IRecorderApiController? _recorder;
     private readonly Func<string> _apiTokenProvider;
     private readonly Dispatcher? _dispatcher;
 
@@ -67,7 +68,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         ITranslationService translation,
         DictationViewModel dictation,
         IWorkflowService workflows,
-        Func<string>? apiTokenProvider = null)
+        Func<string>? apiTokenProvider = null,
+        IRecorderApiController? recorder = null)
     {
         _modelManager = modelManager;
         _settings = settings;
@@ -79,6 +81,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _translation = translation;
         _dictation = dictation;
         _workflows = workflows;
+        _recorder = recorder;
         _apiTokenProvider = apiTokenProvider ?? LoadOrCreateApiToken;
         _dispatcher = CaptureActiveDispatcher();
     }
@@ -243,6 +246,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
                 ("/v1/dictation/transcription", "GET") => HandleDictationTranscription(request),
+                ("/v1/recorder/start", "POST") => await HandleRecorderStart(request, ct),
+                ("/v1/recorder/stop", "POST") => await HandleRecorderStop(ct),
+                ("/v1/recorder/status", "GET") => HandleRecorderStatus(),
+                ("/v1/recorder/session", "GET") => HandleRecorderSession(request),
                 ("/v1/rules", "GET") => HandleGetRules(),
                 ("/v1/profiles", "GET") => HandleGetProfiles(),
                 ("/v1/rules/toggle", "PUT") => HandleToggleRule(request),
@@ -599,6 +606,77 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         });
     }
 
+    private async Task<HttpApiResponse> HandleRecorderStart(HttpApiRequest request, CancellationToken ct)
+    {
+        if (_recorder is null)
+            return Error(503, "Recorder is unavailable");
+
+        if (!TryParseOptionalBool(request.QueryString["mic"], out var micOverride))
+            return Error(400, "Invalid boolean value for 'mic'");
+        if (!TryParseOptionalBool(request.QueryString["system_audio"], out var systemAudioOverride))
+            return Error(400, "Invalid boolean value for 'system_audio'");
+
+        var settings = _settings.Current;
+        var micEnabled = micOverride ?? settings.RecorderMicEnabled;
+        var systemAudioEnabled = systemAudioOverride ?? settings.RecorderSystemAudioEnabled;
+
+        if (!micEnabled && !systemAudioEnabled)
+            return Error(400, "At least one recorder source must be enabled");
+        if (_recorder.IsRecording)
+            return Error(409, "Recorder is already recording");
+
+        var id = await InvokeOnDispatcherAsync(() =>
+            _recorder.StartRecordingForApiAsync(micEnabled, systemAudioEnabled, ct));
+
+        return Json(new { id, status = "recording" });
+    }
+
+    private async Task<HttpApiResponse> HandleRecorderStop(CancellationToken ct)
+    {
+        if (_recorder is null)
+            return Error(503, "Recorder is unavailable");
+
+        if (!_recorder.IsRecording)
+            return Error(409, "Recorder is not recording");
+
+        var id = await InvokeOnDispatcherAsync(() => _recorder.StopRecordingForApiAsync(ct));
+        if (id is null)
+            return Error(500, "Missing active recorder session");
+
+        return Json(new { id, status = "finalizing" });
+    }
+
+    private HttpApiResponse HandleRecorderStatus()
+    {
+        return Json(new
+        {
+            recording = _recorder?.IsRecording ?? false
+        });
+    }
+
+    private HttpApiResponse HandleRecorderSession(HttpApiRequest request)
+    {
+        if (_recorder is null)
+            return Error(503, "Recorder is unavailable");
+
+        var idString = request.QueryString["id"];
+        if (!Guid.TryParse(idString, out var id))
+            return Error(400, "Missing or invalid 'id' query parameter");
+
+        var session = _recorder.GetRecorderApiSession(id);
+        if (session is null)
+            return Error(404, "Recorder session not found");
+
+        return Json(new
+        {
+            id = session.Id,
+            status = session.Status.ToString().ToLowerInvariant(),
+            text = session.Text,
+            output_file = session.OutputFile,
+            error = session.Error
+        });
+    }
+
     private HttpApiResponse HandleGetRules()
     {
         var rules = _workflows.Workflows
@@ -771,6 +849,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             ("/v1/dictation/stop", "POST") => true,
             ("/v1/dictation/status", "GET") => true,
             ("/v1/dictation/transcription", "GET") => true,
+            ("/v1/recorder/start", "POST") => true,
+            ("/v1/recorder/stop", "POST") => true,
+            ("/v1/recorder/status", "GET") => true,
+            ("/v1/recorder/session", "GET") => true,
             ("/v1/rules", "GET") => true,
             ("/v1/profiles", "GET") => true,
             ("/v1/rules/toggle", "PUT") => true,
@@ -1106,6 +1188,33 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
     private static int ParseInt(string? value, int fallback) =>
         int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    private static bool TryParseOptionalBool(string? value, out bool? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (bool.TryParse(value, out var boolValue))
+        {
+            parsed = boolValue;
+            return true;
+        }
+
+        if (value == "1")
+        {
+            parsed = true;
+            return true;
+        }
+
+        if (value == "0")
+        {
+            parsed = false;
+            return true;
+        }
+
+        return false;
+    }
 
     private static string SanitizeExtension(string extension)
     {

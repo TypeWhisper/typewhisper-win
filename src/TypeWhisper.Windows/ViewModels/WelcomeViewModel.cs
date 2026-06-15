@@ -642,9 +642,12 @@ public partial class WelcomeViewModel : ObservableObject
 
     private void OnMicLevel(object? sender, AudioLevelEventArgs e)
     {
-        MicLevel = e.RmsLevel;
-        if (e.RmsLevel > 0.01f)
-            MicWorking = true;
+        DispatchToUi(() =>
+        {
+            MicLevel = e.RmsLevel;
+            if (e.RmsLevel > 0.01f)
+                MicWorking = true;
+        });
     }
 
     private void RefreshMicrophones()
@@ -850,7 +853,7 @@ public partial class WelcomeViewModel : ObservableObject
 
     private static Dispatcher? CaptureActiveDispatcher()
     {
-        var dispatcher = Application.Current?.Dispatcher;
+        var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         return dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished
             ? null
             : dispatcher;
@@ -876,7 +879,7 @@ public partial class WelcomeViewModel : ObservableObject
 
         try
         {
-            dispatcher.Invoke(action);
+            _ = dispatcher.BeginInvoke(action);
         }
         catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {

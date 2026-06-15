@@ -73,6 +73,7 @@ public sealed class HotkeyServiceTests
         {
             MainDictationHotkeys = ["Ctrl+Alt+D", "Ctrl+Shift+D"],
             ToggleOnlyHotkeys = ["Ctrl+Alt+T"],
+            RecorderToggleHotkeys = ["Ctrl+Alt+R"],
             WorkflowPaletteHotkeys = ["Ctrl+Alt+W", "Ctrl+Shift+W"]
         };
 
@@ -85,6 +86,10 @@ public sealed class HotkeyServiceTests
         Assert.Equal(
             ["Ctrl+Alt+T"],
             bindings.Where(binding => binding.Action == AppHotkeyAction.ToggleOnly)
+                .Select(binding => binding.Hotkey));
+        Assert.Equal(
+            ["Ctrl+Alt+R"],
+            bindings.Where(binding => binding.Action == AppHotkeyAction.RecorderToggle)
                 .Select(binding => binding.Hotkey));
         Assert.Equal(
             ["Ctrl+Alt+W", "Ctrl+Shift+W"],
@@ -109,6 +114,45 @@ public sealed class HotkeyServiceTests
         method!.Invoke(sut, [null, EventArgs.Empty]);
 
         Assert.True(raised);
+    }
+
+    [Fact]
+    public void RecorderToggleRequested_EventIsRaised()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default with { RecorderToggleHotkey = "Ctrl+Alt+R" }),
+            new FakeWorkflowService());
+        var raised = false;
+        sut.RecorderToggleRequested += (_, _) => raised = true;
+
+        var method = typeof(HotkeyService).GetMethod(
+            "OnRecorderToggleKeyDown",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(sut, [null, EventArgs.Empty]);
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void RecorderToggleRequested_IsDebounced()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default with { RecorderToggleHotkey = "Ctrl+Alt+R" }),
+            new FakeWorkflowService());
+        var raiseCount = 0;
+        sut.RecorderToggleRequested += (_, _) => raiseCount++;
+
+        var method = typeof(HotkeyService).GetMethod(
+            "OnRecorderToggleKeyDown",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(method);
+        method!.Invoke(sut, [null, EventArgs.Empty]);
+        method.Invoke(sut, [null, EventArgs.Empty]);
+
+        Assert.Equal(1, raiseCount);
     }
 
     [Fact]

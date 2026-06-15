@@ -409,6 +409,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         if (!_sectionFactories.ContainsKey(route))
             return;
 
+        var previousRoute = CurrentRoute;
         if (!_sectionCache.TryGetValue(route, out var section))
         {
             section = _sectionFactories[route]();
@@ -418,9 +419,22 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         CurrentSection = section;
         CurrentRoute = route;
         _lastOpenedRoute = route;
+        UpdateMicrophonePreviewForRoute(Settings, previousRoute, route);
 
         if (route is SettingsRoute.Dictation or SettingsRoute.Integrations)
             ModelManager.RefreshPluginAvailability();
+    }
+
+    internal static void UpdateMicrophonePreviewForRoute(
+        SettingsViewModel settings,
+        SettingsRoute previousRoute,
+        SettingsRoute route)
+    {
+        if (previousRoute == SettingsRoute.Dictation && route != SettingsRoute.Dictation)
+            settings.StopMicrophonePreview();
+
+        if (route == SettingsRoute.Dictation)
+            settings.StartMicrophonePreview();
     }
 
     internal bool FocusInstalledPlugin(string pluginId)

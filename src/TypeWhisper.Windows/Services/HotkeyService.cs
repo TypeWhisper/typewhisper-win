@@ -52,6 +52,10 @@ public sealed class HotkeyService : IDisposable
     /// </summary>
     public event EventHandler? WorkflowPaletteRequested;
     /// <summary>
+    /// Raised when recorder toggle requested.
+    /// </summary>
+    public event EventHandler? RecorderToggleRequested;
+    /// <summary>
     /// Raised when workflow dictation requested.
     /// </summary>
     public event EventHandler<string>? WorkflowDictationRequested;
@@ -179,7 +183,8 @@ public sealed class HotkeyService : IDisposable
         .. BuildAppHotkeyBindings(AppHotkeyAction.HoldOnly, settings.GetHoldOnlyHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.RecentTranscriptions, settings.GetRecentTranscriptionsHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.CopyLastTranscription, settings.GetCopyLastTranscriptionHotkeys()),
-        .. BuildAppHotkeyBindings(AppHotkeyAction.WorkflowPalette, settings.GetWorkflowPaletteHotkeys())
+        .. BuildAppHotkeyBindings(AppHotkeyAction.WorkflowPalette, settings.GetWorkflowPaletteHotkeys()),
+        .. BuildAppHotkeyBindings(AppHotkeyAction.RecorderToggle, settings.GetRecorderToggleHotkeys())
     ];
 
     private static IEnumerable<AppHotkeyBinding> BuildAppHotkeyBindings(
@@ -212,6 +217,9 @@ public sealed class HotkeyService : IDisposable
                 break;
             case AppHotkeyAction.WorkflowPalette:
                 hook.KeyDown += OnWorkflowPaletteKeyDown;
+                break;
+            case AppHotkeyAction.RecorderToggle:
+                hook.KeyDown += OnRecorderToggleKeyDown;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(action), action, null);
@@ -267,6 +275,7 @@ public sealed class HotkeyService : IDisposable
     // --- Hybrid: short press = toggle, long hold = PTT ---
 
     private DateTime _lastActionTime;
+    private DateTime _lastRecorderToggleActionTime;
     private static readonly TimeSpan DebounceInterval = TimeSpan.FromMilliseconds(300);
 
     private void OnHybridKeyDown(object? sender, EventArgs e)
@@ -377,6 +386,15 @@ public sealed class HotkeyService : IDisposable
         WorkflowPaletteRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void OnRecorderToggleKeyDown(object? sender, EventArgs e)
+    {
+        if (!IsEnabled) return;
+        var now = DateTime.UtcNow;
+        if (now - _lastRecorderToggleActionTime < DebounceInterval) return;
+        _lastRecorderToggleActionTime = now;
+        RecorderToggleRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     // --- Common ---
 
     private void StopAllHooks()
@@ -446,7 +464,8 @@ internal enum AppHotkeyAction
     HoldOnly,
     RecentTranscriptions,
     CopyLastTranscription,
-    WorkflowPalette
+    WorkflowPalette,
+    RecorderToggle
 }
 
 internal sealed record AppHotkeyBinding(

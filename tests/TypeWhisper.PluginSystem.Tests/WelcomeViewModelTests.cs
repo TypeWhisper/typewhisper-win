@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -209,8 +210,50 @@ public sealed class WelcomeViewModelTests
         });
     }
 
+    [Fact]
+    public void MicTest_RaisesMicLevelOnWizardDispatcher()
+    {
+        RunOnStaThread(() =>
+        {
+            var uiThreadId = Environment.CurrentManagedThreadId;
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var devices = new TypeWhisper.PluginSystem.Tests.FakeAudioInputDeviceProvider("USB Microphone");
+            var captures = new TypeWhisper.PluginSystem.Tests.FakeAudioInputCaptureFactory();
+            using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+            var sut = CreateViewModel(plugin, audio: audio);
+            var changedThread = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            sut.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(WelcomeViewModel.MicLevel))
+                    changedThread.TrySetResult(Environment.CurrentManagedThreadId);
+            };
+
+            sut.NextStepCommand.Execute(null);
+            Assert.True(audio.IsRecording);
+
+            var source = new short[] { 8192, 16384, 8192, 16384 };
+            var bytes = new byte[source.Length * sizeof(short)];
+            Buffer.BlockCopy(source, 0, bytes, 0, bytes.Length);
+            ThreadPool.QueueUserWorkItem(_ => captures.Created.Single().RaiseData(bytes, bytes.Length));
+            PumpDispatcherUntil(changedThread.Task, TimeSpan.FromSeconds(2));
+
+            Assert.True(changedThread.Task.IsCompleted);
+            Assert.Equal(uiThreadId, changedThread.Task.Result);
+
+            sut.NextStepCommand.Execute(null);
+            Assert.False(audio.IsRecording);
+        });
+    }
+
     private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin) =>
         CreateViewModel(plugin, out _);
+
+    private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin, AudioRecordingService audio) =>
+        CreateViewModel(plugin, out _, out _, audio: audio);
 
     private static WelcomeViewModel CreateViewModel(
         FakeTranscriptionPlugin plugin,
@@ -223,7 +266,8 @@ public sealed class WelcomeViewModelTests
         FakeTranscriptionPlugin plugin,
         out PluginManager pluginManager,
         out FakeSettingsService settings,
-        AppSettings? initialSettings = null)
+        AppSettings? initialSettings = null,
+        AudioRecordingService? audio = null)
     {
         settings = new FakeSettingsService(initialSettings ?? AppSettings.Default);
         var workflows = new Mock<IWorkflowService>();
@@ -252,7 +296,7 @@ public sealed class WelcomeViewModelTests
         TestPluginManagerFactory.InvokeRebuildCapabilityIndices(pluginManager);
 
         var modelManager = new ModelManagerService(pluginManager, settings);
-        var audio = new AudioRecordingService(
+        audio ??= new AudioRecordingService(
             new FakeAudioInputDeviceProvider(),
             new FakeAudioInputCaptureFactory(),
             Timeout.InfiniteTimeSpan);
@@ -298,6 +342,21 @@ public sealed class WelcomeViewModelTests
 
         if (failure is not null)
             throw failure;
+    }
+
+    private static void PumpDispatcherUntil(Task task, TimeSpan timeout)
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var deadline = DateTime.UtcNow + timeout;
+        while (!task.IsCompleted && DateTime.UtcNow < deadline)
+        {
+            var frame = new DispatcherFrame();
+            dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+            Thread.Sleep(10);
+        }
     }
 
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin

@@ -84,6 +84,10 @@ public record AppSettings
     /// Gets or sets the workflow palette hotkey value.
     /// </summary>
     public string WorkflowPaletteHotkey { get; init; } = "";
+    /// <summary>
+    /// Gets or sets the recorder toggle hotkey value.
+    /// </summary>
+    public string RecorderToggleHotkey { get; init; } = "";
 
     /// <summary>
     /// Gets or sets the main dictation hotkeys in priority order.
@@ -114,6 +118,10 @@ public record AppSettings
     /// Gets or sets hotkeys that open the workflow palette.
     /// </summary>
     public IReadOnlyList<string> WorkflowPaletteHotkeys { get; init; } = [];
+    /// <summary>
+    /// Gets or sets hotkeys that toggle the audio recorder.
+    /// </summary>
+    public IReadOnlyList<string> RecorderToggleHotkeys { get; init; } = [];
 
     /// <summary>
     /// Gets or sets the transcription language selection.
@@ -163,6 +171,52 @@ public record AppSettings
     /// Gets or sets the file transcription model override value.
     /// </summary>
     public string? FileTranscriptionModelOverride { get; init; }
+
+    // Recorder
+    /// <summary>
+    /// Gets or sets whether recorder microphone capture is enabled.
+    /// </summary>
+    public bool RecorderMicEnabled { get; init; } = true;
+    /// <summary>
+    /// Gets or sets whether recorder system-audio capture is enabled.
+    /// </summary>
+    public bool RecorderSystemAudioEnabled { get; init; }
+    /// <summary>
+    /// Gets or sets the recorder system-audio output device id value.
+    /// </summary>
+    public string? RecorderSystemAudioDeviceId { get; init; }
+    /// <summary>
+    /// Gets or sets the recorder output format value.
+    /// </summary>
+    public string RecorderOutputFormat { get; init; } = "wav";
+    /// <summary>
+    /// Gets or sets the recorder track mode value.
+    /// </summary>
+    public string RecorderTrackMode { get; init; } = "mixed";
+    /// <summary>
+    /// Gets or sets the recorder microphone ducking mode value.
+    /// </summary>
+    public string RecorderMicDuckingMode { get; init; } = "aggressive";
+    /// <summary>
+    /// Gets or sets whether recorder transcription is enabled.
+    /// </summary>
+    public bool RecorderTranscriptionEnabled { get; init; } = true;
+    /// <summary>
+    /// Gets or sets the recorder transcription task value.
+    /// </summary>
+    public string RecorderTranscriptionTask { get; init; } = "transcribe";
+    /// <summary>
+    /// Gets or sets the recorder translation target language value.
+    /// </summary>
+    public string? RecorderTranslationTargetLanguage { get; init; }
+    /// <summary>
+    /// Gets or sets the recorder transcription engine override value.
+    /// </summary>
+    public string? RecorderTranscriptionEngineOverride { get; init; }
+    /// <summary>
+    /// Gets or sets the recorder transcription model override value.
+    /// </summary>
+    public string? RecorderTranscriptionModelOverride { get; init; }
 
     // Cloud Provider API Keys
     /// <summary>
@@ -477,6 +531,12 @@ public record AppSettings
         ResolveHotkeys(WorkflowPaletteHotkeys, WorkflowPaletteHotkey);
 
     /// <summary>
+    /// Returns normalized recorder-toggle hotkeys, falling back to the legacy setting.
+    /// </summary>
+    public IReadOnlyList<string> GetRecorderToggleHotkeys() =>
+        ResolveHotkeys(RecorderToggleHotkeys, RecorderToggleHotkey);
+
+    /// <summary>
     /// Returns settings with all hotkey lists normalized and legacy single-hotkey fields synchronized.
     /// </summary>
     public AppSettings NormalizeHotkeyLists()
@@ -487,6 +547,7 @@ public record AppSettings
         var recentTranscriptionsHotkeys = GetRecentTranscriptionsHotkeys();
         var copyLastTranscriptionHotkeys = GetCopyLastTranscriptionHotkeys();
         var workflowPaletteHotkeys = GetWorkflowPaletteHotkeys();
+        var recorderToggleHotkeys = GetRecorderToggleHotkeys();
 
         return this with
         {
@@ -502,7 +563,9 @@ public record AppSettings
             CopyLastTranscriptionHotkeys = copyLastTranscriptionHotkeys,
             CopyLastTranscriptionHotkey = FirstOrEmpty(copyLastTranscriptionHotkeys),
             WorkflowPaletteHotkeys = workflowPaletteHotkeys,
-            WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys)
+            WorkflowPaletteHotkey = FirstOrEmpty(workflowPaletteHotkeys),
+            RecorderToggleHotkeys = recorderToggleHotkeys,
+            RecorderToggleHotkey = FirstOrEmpty(recorderToggleHotkeys)
         };
     }
 

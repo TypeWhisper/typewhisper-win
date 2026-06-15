@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Controls.Overlay;
 
@@ -58,15 +57,16 @@ public partial class WaveformWidget : UserControl, IDisposable
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(DictationViewModel.AudioLevel) or nameof(DictationViewModel.State))
+        if (e.PropertyName is null or "" or "AudioLevel" or "State")
             Dispatcher.InvokeAsync(UpdateWaveTargets);
     }
 
     private void UpdateWaveTargets()
     {
-        if (DataContext is not DictationViewModel vm) return;
+        var state = ReadProperty("State")?.ToString();
+        var audioLevel = ReadFloatProperty("AudioLevel");
 
-        var isActive = vm.State is DictationState.Recording or DictationState.Processing;
+        var isActive = state is "Recording" or "Processing";
         if (isActive && !_isRendering)
         {
             _isRendering = true;
@@ -86,10 +86,24 @@ public partial class WaveformWidget : UserControl, IDisposable
 
         if (isActive)
         {
-            var level = Math.Min(vm.AudioLevel * 5f, 1f);
+            var level = Math.Min(audioLevel * 5f, 1f);
             for (int i = 0; i < 5; i++)
                 _barTargets[i] = 4 + level * 18 * (0.3 + _rng.NextDouble() * 0.7);
         }
+    }
+
+    private object? ReadProperty(string propertyName) =>
+        DataContext?.GetType().GetProperty(propertyName)?.GetValue(DataContext);
+
+    private float ReadFloatProperty(string propertyName)
+    {
+        var value = ReadProperty(propertyName);
+        return value switch
+        {
+            float f => f,
+            double d => (float)d,
+            _ => 0f
+        };
     }
 
     private void OnRendering(object? sender, EventArgs e)

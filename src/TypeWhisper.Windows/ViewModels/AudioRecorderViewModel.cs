@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core;
-using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
@@ -60,57 +60,183 @@ public sealed record RecordingItem(
 /// <summary>
 /// Provides audio recorder view model behavior.
 /// </summary>
-public partial class AudioRecorderViewModel : ObservableObject, IDisposable
+public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiController, IDisposable
 {
-    private readonly AudioRecordingService _audio;
+    private readonly RecorderCaptureService _capture;
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
     private readonly AudioFileService _audioFile;
     private readonly IErrorLogService _errorLog;
     private readonly IPostProcessingPipeline _pipeline;
     private readonly ITranslationService _translation;
+    private readonly StreamingHandler _streamingHandler;
+    private readonly Dictionary<Guid, RecorderApiSessionSnapshot> _apiSessions = new();
+    private readonly object _apiSessionLock = new();
     private System.Timers.Timer? _timer;
     private DateTime _recordingStart;
     private string? _statusKey;
+    private bool _isLoadingSettings;
+    private Guid? _activeApiSessionId;
+    private bool _disposed;
 
     [ObservableProperty] private bool _isRecording;
     [ObservableProperty] private string _durationText = "0:00";
+    [ObservableProperty] private double _recordingSeconds;
     [ObservableProperty] private float _audioLevel;
+    [ObservableProperty] private float _micLevel;
+    [ObservableProperty] private float _systemLevel;
     [ObservableProperty] private string _statusText = Loc.Instance["Status.Ready"];
     [ObservableProperty] private bool _isTranscribing;
+    [ObservableProperty] private bool _micEnabled = true;
+    [ObservableProperty] private bool _systemAudioEnabled;
+    [ObservableProperty] private SystemAudioOutputDevice? _selectedSystemAudioDevice;
+    [ObservableProperty] private RecorderOutputFormat _outputFormat = RecorderOutputFormat.Wav;
+    [ObservableProperty] private RecorderTrackMode _trackMode = RecorderTrackMode.Mixed;
+    [ObservableProperty] private RecorderMicDuckingMode _micDuckingMode = RecorderMicDuckingMode.Aggressive;
+    [ObservableProperty] private bool _transcriptionEnabled = true;
+    [ObservableProperty] private bool _translationModeEnabled;
+    [ObservableProperty] private string? _translationTargetLanguage;
+    [ObservableProperty] private string? _transcriptionEngineOverride;
+    [ObservableProperty] private string? _transcriptionModelOverride;
+    [ObservableProperty] private string _partialText = "";
+    [ObservableProperty] private string? _systemAudioWarningMessage;
 
     /// <summary>
     /// Gets the recordings.
     /// </summary>
     public ObservableCollection<RecordingItem> Recordings { get; } = [];
     /// <summary>
+    /// Gets available system-audio output devices.
+    /// </summary>
+    public ObservableCollection<SystemAudioOutputDevice> SystemAudioDevices { get; } = [];
+    /// <summary>
     /// Gets whether has recordings.
     /// </summary>
     public bool HasRecordings => Recordings.Count > 0;
+    /// <summary>
+    /// Gets whether the system audio warning is visible.
+    /// </summary>
+    public bool HasSystemAudioWarning => !string.IsNullOrWhiteSpace(SystemAudioWarningMessage);
+    /// <summary>
+    /// Gets output format choices.
+    /// </summary>
+    public IReadOnlyList<RecorderOutputFormat> OutputFormats { get; } =
+        [RecorderOutputFormat.Wav, RecorderOutputFormat.M4A];
+    /// <summary>
+    /// Gets track mode choices.
+    /// </summary>
+    public IReadOnlyList<RecorderTrackMode> TrackModes { get; } =
+        [RecorderTrackMode.Mixed, RecorderTrackMode.Separate];
+    /// <summary>
+    /// Gets microphone ducking choices.
+    /// </summary>
+    public IReadOnlyList<RecorderMicDuckingMode> MicDuckingModes { get; } =
+        [RecorderMicDuckingMode.Aggressive, RecorderMicDuckingMode.Medium, RecorderMicDuckingMode.Off];
+
+    partial void OnSystemAudioWarningMessageChanged(string? value) =>
+        OnPropertyChanged(nameof(HasSystemAudioWarning));
+
+    partial void OnTranslationModeEnabledChanged(bool value)
+    {
+        if (_isLoadingSettings)
+            return;
+
+        if (value)
+        {
+            if (string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+                TranslationTargetLanguage = DefaultRecorderTranslationTargetLanguage();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            TranslationTargetLanguage = null;
+    }
+
+    partial void OnTranslationTargetLanguageChanged(string? value)
+    {
+        if (_isLoadingSettings)
+            return;
+
+        var enabled = !string.IsNullOrWhiteSpace(value);
+        if (TranslationModeEnabled == enabled)
+            return;
+
+        var wasLoading = _isLoadingSettings;
+        _isLoadingSettings = true;
+        TranslationModeEnabled = enabled;
+        _isLoadingSettings = wasLoading;
+    }
 
     /// <summary>
     /// Initializes a new instance of the AudioRecorderViewModel class.
     /// </summary>
-    public AudioRecorderViewModel(
+    internal AudioRecorderViewModel(
         AudioRecordingService audio,
         ModelManagerService modelManager,
         ISettingsService settings,
         AudioFileService audioFile,
         IErrorLogService errorLog,
         IPostProcessingPipeline pipeline,
-        ITranslationService translation)
+        ITranslationService translation,
+        IDictionaryService? dictionary = null)
+        : this(
+            new RecorderCaptureService(audio, new SystemAudioCaptureService()),
+            modelManager,
+            settings,
+            audioFile,
+            errorLog,
+            pipeline,
+            translation,
+            dictionary)
     {
-        _audio = audio;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the AudioRecorderViewModel class.
+    /// </summary>
+    public AudioRecorderViewModel(
+        RecorderCaptureService capture,
+        ModelManagerService modelManager,
+        ISettingsService settings,
+        AudioFileService audioFile,
+        IErrorLogService errorLog,
+        IPostProcessingPipeline pipeline,
+        ITranslationService translation,
+        IDictionaryService? dictionary = null)
+    {
+        _capture = capture;
         _modelManager = modelManager;
         _settings = settings;
         _audioFile = audioFile;
         _errorLog = errorLog;
         _pipeline = pipeline;
         _translation = translation;
-        _audio.AudioLevelChanged += (_, e) =>
-            DispatchToUi(() => AudioLevel = e.PeakLevel);
+        _streamingHandler = new StreamingHandler(
+            modelManager,
+            capture,
+            dictionary ?? NoopDictionaryService.Instance);
+        _streamingHandler.OnPartialTextUpdate = text =>
+            DispatchToUi(() => PartialText = text);
+        _capture.AudioLevelChanged += (_, e) =>
+            DispatchToUi(() =>
+            {
+                AudioLevel = e.PeakLevel;
+                MicLevel = _capture.MicLevel;
+                SystemLevel = _capture.SystemLevel;
+                SystemAudioWarningMessage = _capture.SystemAudioWarningMessage;
+            });
         _statusKey = "Status.Ready";
         Loc.Instance.LanguageChanged += OnLanguageChanged;
+        LoadRecorderSettings(_settings.Current);
+        _settings.SettingsChanged += OnSettingsChanged;
+        PropertyChanged += (_, args) =>
+        {
+            if (_isLoadingSettings)
+                return;
+
+            if (IsRecorderSettingProperty(args.PropertyName))
+                SaveRecorderSettings();
+        };
         LoadExistingRecordings();
     }
 
@@ -123,16 +249,40 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             StartRecording();
     }
 
-    private void StartRecording()
+    private async void StartRecording() =>
+        await StartRecordingCoreAsync(MicEnabled, SystemAudioEnabled, CancellationToken.None);
+
+    private async Task<bool> StartRecordingCoreAsync(
+        bool micEnabled,
+        bool systemAudioEnabled,
+        CancellationToken ct)
     {
-        if (!_audio.WarmUp())
+        if (!micEnabled && !systemAudioEnabled)
         {
-            SetLocalizedStatus("Status.NoMicrophone");
-            return;
+            SetLocalizedStatus("Recorder.SelectAtLeastOneSource");
+            return false;
         }
 
-        _audio.StartRecording();
+        try
+        {
+            await _capture.StartAsync(
+                new RecorderCaptureOptions(
+                    micEnabled,
+                    systemAudioEnabled,
+                    SelectedSystemAudioDevice?.Id,
+                    OutputFormat,
+                    TrackMode,
+                    MicDuckingMode),
+                ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            SetErrorStatus(ex.Message);
+            return false;
+        }
+
         IsRecording = true;
+        PartialText = "";
         _recordingStart = DateTime.UtcNow;
         SetLocalizedStatus("Status.Recording");
 
@@ -141,34 +291,60 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         {
             var elapsed = DateTime.UtcNow - _recordingStart;
             DispatchToUi(() =>
-                DurationText = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}");
+            {
+                DurationText = $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:D2}";
+                RecordingSeconds = elapsed.TotalSeconds;
+                MicLevel = _capture.MicLevel;
+                SystemLevel = _capture.SystemLevel;
+                AudioLevel = Math.Max(MicLevel, SystemLevel);
+                SystemAudioWarningMessage = _capture.SystemAudioWarningMessage;
+            });
         };
         _timer.Start();
+
+        if (TranscriptionEnabled && !string.IsNullOrWhiteSpace(_settings.Current.SelectedModelId))
+        {
+            var configuredLanguage = _settings.Current.Language == "auto" ? null : _settings.Current.Language;
+            _streamingHandler.Start(configuredLanguage, CurrentRecorderTask, () => IsRecording);
+        }
+
+        return true;
     }
 
-    private async void StopRecording()
+    private async void StopRecording() =>
+        await StopRecordingCoreAsync(CancellationToken.None);
+
+    private async Task<RecordingItem?> StopRecordingCoreAsync(CancellationToken ct)
     {
         _timer?.Stop();
         _timer?.Dispose();
         _timer = null;
+        SetLocalizedStatus("Recorder.Finalizing");
+        MarkActiveApiSession(RecorderSessionStatus.Finalizing);
+        var liveTranscript = _streamingHandler.Stop();
 
-        var samples = await _audio.StopRecordingAsync();
+        var capture = await _capture.StopAsync(ct);
         IsRecording = false;
-        var duration = DateTime.UtcNow - _recordingStart;
+        RecordingSeconds = 0;
+        MicLevel = 0;
+        SystemLevel = 0;
+        AudioLevel = 0;
+        SystemAudioWarningMessage = null;
 
-        if (samples is null || samples.Length == 0)
+        if (capture is null || capture.TranscriptionSamples.Length == 0)
         {
             SetLocalizedStatus("Recorder.NoAudioCaptured");
-            return;
+            FailActiveApiSession(StatusText);
+            return null;
         }
 
-        // Save WAV
-        var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmss}.wav";
-        var filePath = Path.Combine(TypeWhisperEnvironment.AudioPath, fileName);
-        var wav = WavEncoder.Encode(samples);
-        await File.WriteAllBytesAsync(filePath, wav);
-
-        var item = new RecordingItem(fileName, filePath, DateTime.Now, duration, null, IsTranscribing: true);
+        var item = new RecordingItem(
+            capture.FileName,
+            capture.FilePath,
+            DateTime.Now,
+            capture.Duration,
+            null,
+            IsTranscribing: TranscriptionEnabled);
         DispatchToUi(() =>
         {
             Recordings.Insert(0, item);
@@ -176,31 +352,43 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             RefreshRecordingCommandState();
         });
 
-        await TranscribeRecordingAsync(
+        if (!TranscriptionEnabled)
+        {
+            SetLocalizedStatus("Status.Done");
+            CompleteActiveApiSession(null, capture.FilePath);
+            DurationText = "0:00";
+            return item;
+        }
+
+        var transcript = await TranscribeRecordingAsync(
             item,
-            _ => Task.FromResult(samples),
-            CancellationToken.None);
+            _ => Task.FromResult(capture.TranscriptionSamples),
+            ct,
+            liveTranscript);
+        CompleteActiveApiSession(transcript, capture.FilePath);
         DurationText = "0:00";
+        return item;
     }
 
     private async Task<string> PostProcessTranscriptAsync(
         TranscriptionResult result,
         TranscriptionTask task,
         string? configuredLanguage,
+        string? translationTarget,
         CancellationToken ct)
     {
         var currentSettings = _settings.Current;
-        var translationTarget = currentSettings.TranslationTargetLanguage;
+        var shouldTranslate = task == TranscriptionTask.Translate && !string.IsNullOrEmpty(translationTarget);
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,
-            TranslationHandler = !string.IsNullOrEmpty(translationTarget)
+            TranslationHandler = shouldTranslate
                 ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                 : null,
             TranslationTarget = translationTarget,
-            RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
+            RequireTranslationSuccess = shouldTranslate,
             DetectedLanguage = result.DetectedLanguage
         }, ct);
 
@@ -222,10 +410,11 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     private static bool CanTranscribeRecording(RecordingItem? item) =>
         item?.CanTranscribe == true;
 
-    private async Task TranscribeRecordingAsync(
+    private async Task<string?> TranscribeRecordingAsync(
         RecordingItem item,
         Func<CancellationToken, Task<float[]>> loadSamples,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? liveTranscript = null)
     {
         var current = ReplaceRecording(item, item with { IsTranscribing = true, ErrorMessage = null });
         SetLocalizedStatus("Recorder.SavedTranscribing");
@@ -233,11 +422,15 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
         try
         {
             var settings = _settings.Current;
-            if (string.IsNullOrWhiteSpace(settings.SelectedModelId))
+            var engineOverride = FirstNonBlank(TranscriptionEngineOverride, settings.RecorderTranscriptionEngineOverride);
+            var modelOverride = FirstNonBlank(TranscriptionModelOverride, settings.RecorderTranscriptionModelOverride);
+            if (string.IsNullOrWhiteSpace(settings.SelectedModelId)
+                && string.IsNullOrWhiteSpace(engineOverride)
+                && string.IsNullOrWhiteSpace(modelOverride))
             {
                 ReplaceRecording(current, current with { IsTranscribing = false });
                 SetLocalizedStatus("Recorder.SavedNoModel");
-                return;
+                return null;
             }
 
             var samples = await loadSamples(ct);
@@ -245,22 +438,28 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
                 throw new InvalidOperationException(Loc.Instance["Recorder.NoAudioCaptured"]);
 
             await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(
-                null,
-                null,
+                engineOverride,
+                modelOverride,
                 false,
                 ct);
 
             var configuredLanguage = settings.Language == "auto" ? null : settings.Language;
-            var task = settings.TranscriptionTask == "translate"
-                ? TranscriptionTask.Translate
-                : TranscriptionTask.Transcribe;
+            var task = CurrentRecorderTask;
+            var translationTarget = NormalizeOptional(TranslationTargetLanguage);
             var activeResult = await _modelManager.TranscribeActiveAsync(
                 samples,
                 configuredLanguage,
                 task,
                 prompt: null,
                 ct);
-            var transcript = await PostProcessTranscriptAsync(activeResult.Result, task, configuredLanguage, ct);
+            var transcript = await PostProcessTranscriptAsync(
+                activeResult.Result,
+                task,
+                configuredLanguage,
+                translationTarget,
+                ct);
+            if (string.IsNullOrWhiteSpace(transcript) && !string.IsNullOrWhiteSpace(liveTranscript))
+                transcript = liveTranscript;
 
             if (!string.IsNullOrEmpty(transcript))
             {
@@ -275,6 +474,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
                 ErrorMessage = null
             });
             SetLocalizedStatus("Status.Done");
+            return transcript;
         }
         catch (OperationCanceledException)
         {
@@ -314,6 +514,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             _modelManager.ScheduleAutoUnload();
             DispatchToUi(RefreshRecordingCommandState);
         }
+
+        return null;
     }
 
     private void HandleTranscriptionFailure(RecordingItem current, Exception ex)
@@ -340,7 +542,22 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             var txt = Path.ChangeExtension(item.FilePath, ".txt");
             if (File.Exists(txt)) File.Delete(txt);
         }
-        catch { }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
+        {
+            Debug.WriteLine($"Deleting recorder files failed: {ex.Message}");
+        }
         Recordings.Remove(item);
         OnPropertyChanged(nameof(HasRecordings));
         RefreshRecordingCommandState();
@@ -349,6 +566,95 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     private static bool CanDeleteRecording(RecordingItem? item) =>
         item is { IsTranscribing: false };
 
+    [RelayCommand]
+    private static void CopyTranscript(RecordingItem? item)
+    {
+        if (string.IsNullOrWhiteSpace(item?.Transcript))
+            return;
+
+        try
+        {
+            Clipboard.SetText(item.Transcript);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or System.Runtime.InteropServices.ExternalException)
+        {
+            Debug.WriteLine($"Copying recorder transcript failed: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private static void RevealRecording(RecordingItem? item)
+    {
+        if (item is null || !File.Exists(item.FilePath))
+            return;
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"/select,\"{item.FilePath}\"",
+            UseShellExecute = true
+        });
+    }
+
+    [RelayCommand]
+    private static void OpenRecordingsFolder()
+    {
+        Directory.CreateDirectory(TypeWhisperEnvironment.AudioPath);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = TypeWhisperEnvironment.AudioPath,
+            UseShellExecute = true
+        });
+    }
+
+    /// <summary>
+    /// Starts recording for the local API.
+    /// </summary>
+    public async Task<Guid> StartRecordingForApiAsync(
+        bool micEnabled,
+        bool systemAudioEnabled,
+        CancellationToken ct)
+    {
+        var id = Guid.NewGuid();
+        _activeApiSessionId = id;
+        StoreApiSession(new RecorderApiSessionSnapshot(
+            id,
+            RecorderSessionStatus.Recording,
+            null,
+            null,
+            null));
+
+        var started = await StartRecordingCoreAsync(micEnabled, systemAudioEnabled, ct);
+        if (!started)
+            FailActiveApiSession(StatusText);
+
+        return id;
+    }
+
+    /// <summary>
+    /// Stops recording for the local API.
+    /// </summary>
+    public async Task<Guid?> StopRecordingForApiAsync(CancellationToken ct)
+    {
+        var id = _activeApiSessionId;
+        if (id is not null)
+            MarkActiveApiSession(RecorderSessionStatus.Finalizing);
+
+        await StopRecordingCoreAsync(ct);
+        return id;
+    }
+
+    /// <summary>
+    /// Returns a recorder API session by id.
+    /// </summary>
+    public RecorderApiSessionSnapshot? GetRecorderApiSession(Guid id)
+    {
+        lock (_apiSessionLock)
+        {
+            return _apiSessions.TryGetValue(id, out var session) ? session : null;
+        }
+    }
+
     private void LoadExistingRecordings()
     {
         try
@@ -356,16 +662,243 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
             var dir = TypeWhisperEnvironment.AudioPath;
             if (!Directory.Exists(dir)) return;
 
-            foreach (var file in Directory.GetFiles(dir, "recording-*.wav").OrderByDescending(f => f))
+            foreach (var file in Directory
+                .GetFiles(dir, "recording-*.*")
+                .Where(AudioFileService.IsSupported)
+                .OrderByDescending(f => f))
             {
                 var fi = new FileInfo(file);
                 var txtFile = Path.ChangeExtension(file, ".txt");
                 var transcript = File.Exists(txtFile) ? File.ReadAllText(txtFile) : null;
-                Recordings.Add(new RecordingItem(fi.Name, file, fi.CreationTime, TimeSpan.Zero, transcript));
+                var duration = TryGetDuration(file);
+                Recordings.Add(new RecordingItem(fi.Name, file, fi.CreationTime, duration, transcript));
             }
         }
-        catch { }
+        catch (IOException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
+        catch (ArgumentException ex)
+        {
+            Debug.WriteLine($"Loading recorder files failed: {ex.Message}");
+        }
     }
+
+    private static TimeSpan TryGetDuration(string file)
+    {
+        try
+        {
+            return AudioFileService.GetDuration(file);
+        }
+        catch (IOException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (NotSupportedException)
+        {
+            return TimeSpan.Zero;
+        }
+        catch (ArgumentException)
+        {
+            return TimeSpan.Zero;
+        }
+    }
+
+    private void LoadRecorderSettings(AppSettings settings)
+    {
+        _isLoadingSettings = true;
+        try
+        {
+            MicEnabled = settings.RecorderMicEnabled;
+            SystemAudioEnabled = settings.RecorderSystemAudioEnabled;
+            RefreshSystemAudioDevices(settings.RecorderSystemAudioDeviceId);
+            OutputFormat = RecorderSettings.ParseOutputFormat(settings.RecorderOutputFormat);
+            TrackMode = RecorderSettings.ParseTrackMode(settings.RecorderTrackMode);
+            MicDuckingMode = RecorderSettings.ParseDuckingMode(settings.RecorderMicDuckingMode);
+            TranscriptionEnabled = settings.RecorderTranscriptionEnabled;
+            TranslationModeEnabled = RecorderTranslationModeFromSettings(settings);
+            TranslationTargetLanguage = settings.RecorderTranslationTargetLanguage;
+            TranscriptionEngineOverride = settings.RecorderTranscriptionEngineOverride;
+            TranscriptionModelOverride = settings.RecorderTranscriptionModelOverride;
+        }
+        finally
+        {
+            _isLoadingSettings = false;
+        }
+    }
+
+    private void SaveRecorderSettings()
+    {
+        _settings.Save(_settings.Current with
+        {
+            RecorderMicEnabled = MicEnabled,
+            RecorderSystemAudioEnabled = SystemAudioEnabled,
+            RecorderSystemAudioDeviceId = SelectedSystemAudioDevice?.Id,
+            RecorderOutputFormat = RecorderSettings.ToSettingsValue(OutputFormat),
+            RecorderTrackMode = RecorderSettings.ToSettingsValue(TrackMode),
+            RecorderMicDuckingMode = RecorderSettings.ToSettingsValue(MicDuckingMode),
+            RecorderTranscriptionEnabled = TranscriptionEnabled,
+            RecorderTranscriptionTask = TranslationModeEnabled ? "translate" : "transcribe",
+            RecorderTranslationTargetLanguage = TranslationModeEnabled ? NormalizeOptional(TranslationTargetLanguage) : null,
+            RecorderTranscriptionEngineOverride = NormalizeOptional(TranscriptionEngineOverride),
+            RecorderTranscriptionModelOverride = NormalizeOptional(TranscriptionModelOverride)
+        });
+    }
+
+    private void OnSettingsChanged(AppSettings settings)
+    {
+        if (IsRecording)
+            return;
+
+        DispatchToUi(() =>
+        {
+            if (RecorderSettingsMatch(settings))
+                return;
+
+            LoadRecorderSettings(settings);
+        });
+    }
+
+    private bool RecorderSettingsMatch(AppSettings settings) =>
+        MicEnabled == settings.RecorderMicEnabled
+        && SystemAudioEnabled == settings.RecorderSystemAudioEnabled
+        && string.Equals(SelectedSystemAudioDevice?.Id, settings.RecorderSystemAudioDeviceId, StringComparison.OrdinalIgnoreCase)
+        && OutputFormat == RecorderSettings.ParseOutputFormat(settings.RecorderOutputFormat)
+        && TrackMode == RecorderSettings.ParseTrackMode(settings.RecorderTrackMode)
+        && MicDuckingMode == RecorderSettings.ParseDuckingMode(settings.RecorderMicDuckingMode)
+        && TranscriptionEnabled == settings.RecorderTranscriptionEnabled
+        && TranslationModeEnabled == RecorderTranslationModeFromSettings(settings)
+        && string.Equals(NormalizeOptional(TranslationTargetLanguage), NormalizeOptional(settings.RecorderTranslationTargetLanguage), StringComparison.Ordinal)
+        && string.Equals(NormalizeOptional(TranscriptionEngineOverride), NormalizeOptional(settings.RecorderTranscriptionEngineOverride), StringComparison.Ordinal)
+        && string.Equals(NormalizeOptional(TranscriptionModelOverride), NormalizeOptional(settings.RecorderTranscriptionModelOverride), StringComparison.Ordinal);
+
+    private static bool IsRecorderSettingProperty(string? propertyName) =>
+        propertyName is nameof(MicEnabled)
+            or nameof(SystemAudioEnabled)
+            or nameof(SelectedSystemAudioDevice)
+            or nameof(OutputFormat)
+            or nameof(TrackMode)
+            or nameof(MicDuckingMode)
+            or nameof(TranscriptionEnabled)
+            or nameof(TranslationModeEnabled)
+            or nameof(TranslationTargetLanguage)
+            or nameof(TranscriptionEngineOverride)
+            or nameof(TranscriptionModelOverride);
+
+    private void RefreshSystemAudioDevices(string? selectedDeviceId)
+    {
+        SystemAudioDevices.Clear();
+        var defaultDevice = new SystemAudioOutputDevice(null, Loc.Instance["Recorder.SystemAudioOutputDefault"]);
+        SystemAudioDevices.Add(defaultDevice);
+
+        IReadOnlyList<SystemAudioOutputDevice> devices = [];
+        try
+        {
+            devices = _capture.GetSystemAudioOutputDevices();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.COMException)
+        {
+            Debug.WriteLine($"Failed to enumerate system-audio output devices: {ex.Message}");
+        }
+
+        foreach (var device in devices.OrderBy(device => device.Name, StringComparer.CurrentCultureIgnoreCase))
+            SystemAudioDevices.Add(device);
+
+        var selected = SystemAudioDevices.FirstOrDefault(device =>
+            string.Equals(device.Id, selectedDeviceId, StringComparison.OrdinalIgnoreCase));
+        if (selected is null && !string.IsNullOrWhiteSpace(selectedDeviceId))
+        {
+            selected = new SystemAudioOutputDevice(
+                selectedDeviceId,
+                Loc.Instance.GetString("Recorder.SystemAudioOutputMissingFormat", selectedDeviceId));
+            SystemAudioDevices.Add(selected);
+        }
+
+        SelectedSystemAudioDevice = selected ?? defaultDevice;
+    }
+
+    private void StoreApiSession(RecorderApiSessionSnapshot session)
+    {
+        lock (_apiSessionLock)
+        {
+            _apiSessions[session.Id] = session;
+        }
+    }
+
+    private void MarkActiveApiSession(RecorderSessionStatus status)
+    {
+        var id = _activeApiSessionId;
+        if (id is null)
+            return;
+
+        lock (_apiSessionLock)
+        {
+            if (_apiSessions.TryGetValue(id.Value, out var session))
+                _apiSessions[id.Value] = session with { Status = status };
+        }
+    }
+
+    private void CompleteActiveApiSession(string? text, string outputFile)
+    {
+        var id = _activeApiSessionId;
+        if (id is null)
+            return;
+
+        StoreApiSession(new RecorderApiSessionSnapshot(
+            id.Value,
+            RecorderSessionStatus.Completed,
+            text,
+            outputFile,
+            null));
+        _activeApiSessionId = null;
+    }
+
+    private void FailActiveApiSession(string error)
+    {
+        var id = _activeApiSessionId;
+        if (id is null)
+            return;
+
+        StoreApiSession(new RecorderApiSessionSnapshot(
+            id.Value,
+            RecorderSessionStatus.Failed,
+            null,
+            null,
+            error));
+        _activeApiSessionId = null;
+    }
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private TranscriptionTask CurrentRecorderTask =>
+        TranslationModeEnabled ? TranscriptionTask.Translate : TranscriptionTask.Transcribe;
+
+    private static bool RecorderTranslationModeFromSettings(AppSettings settings) =>
+        string.Equals(settings.RecorderTranscriptionTask, "translate", StringComparison.OrdinalIgnoreCase);
+
+    private string DefaultRecorderTranslationTargetLanguage() =>
+        NormalizeOptional(_settings.Current.RecorderTranslationTargetLanguage)
+        ?? NormalizeOptional(_settings.Current.LastTranslationTargetLanguage)
+        ?? NormalizeOptional(_settings.Current.TranslationTargetLanguage)
+        ?? (TranslationModelInfo.SupportedLanguages.Any(language => language.Code == "en")
+            ? "en"
+            : TranslationModelInfo.SupportedLanguages.FirstOrDefault()?.Code ?? "en");
 
     private RecordingItem ReplaceRecording(RecordingItem item, RecordingItem replacement)
     {
@@ -440,7 +973,41 @@ public partial class AudioRecorderViewModel : ObservableObject, IDisposable
     /// </summary>
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
         Loc.Instance.LanguageChanged -= OnLanguageChanged;
+        _settings.SettingsChanged -= OnSettingsChanged;
+        _streamingHandler.Dispose();
         _timer?.Dispose();
+        _capture.Dispose();
+        _disposed = true;
     }
+}
+
+internal sealed class NoopDictionaryService : IDictionaryService
+{
+    public static NoopDictionaryService Instance { get; } = new();
+
+    private NoopDictionaryService()
+    {
+    }
+
+    public IReadOnlyList<DictionaryEntry> Entries => [];
+    public event Action? EntriesChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public void AddEntry(DictionaryEntry entry) { }
+    public void AddEntries(IEnumerable<DictionaryEntry> entries) { }
+    public void UpdateEntry(DictionaryEntry entry) { }
+    public void DeleteEntry(string id) { }
+    public void DeleteEntries(IEnumerable<string> ids) { }
+    public string ApplyCorrections(string text) => text;
+    public string? GetTermsForPrompt() => null;
+    public void LearnCorrection(string original, string replacement) { }
+    public void ActivatePack(TermPack pack) { }
+    public void DeactivatePack(string packId) { }
 }

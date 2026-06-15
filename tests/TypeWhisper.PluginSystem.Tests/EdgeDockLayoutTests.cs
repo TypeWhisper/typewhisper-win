@@ -74,4 +74,39 @@ public sealed class EdgeDockLayoutTests
         Assert.DoesNotContain("<Border.RenderTransform>", dockBlock);
         Assert.DoesNotContain("ScaleTransform", dockBlock);
     }
+
+    [Fact]
+    public void EdgeDock_DoesNotRestartTextAnimationForEveryPartialTextUpdate()
+    {
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "Overlay",
+            "EdgeDockIndicatorView.xaml.cs");
+
+        var handler = TestFile.ExtractBlock(codeBehind, "private void OnDataContextPropertyChanged", 1000);
+
+        Assert.Contains("or PartialTextProperty", handler);
+        Assert.Contains("previewVisibilityChanged", handler);
+        Assert.Contains("e.PropertyName == ShowBuiltInPartialPreviewProperty", handler);
+        Assert.DoesNotContain("e.PropertyName == PartialTextProperty));", handler);
+    }
+
+    [Fact]
+    public void EdgeDock_DoesNotRestartPreviewAnimationForEveryPartialTextUpdate()
+    {
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "Overlay",
+            "EdgeDockIndicatorView.xaml.cs");
+
+        var handler = TestFile.ExtractBlock(codeBehind, "private void OnDataContextPropertyChanged", 1000);
+
+        Assert.Contains("animatePreview", handler);
+        Assert.Contains("animated: IsVisible && animatePreview", handler);
+        Assert.DoesNotContain("animated: IsVisible,", handler);
+    }
 }

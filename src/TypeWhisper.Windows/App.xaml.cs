@@ -41,6 +41,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        AudioCaptureDiagnostics.Reset();
 
         DispatcherUnhandledException += (_, args) =>
         {
@@ -151,24 +152,26 @@ public partial class App : Application
         // Setup tray icon
         _trayIcon = _serviceProvider.GetRequiredService<TrayIconService>();
         _trayIcon.Initialize();
-        _trayIcon.ShowSettingsRequested += (_, _) => ShowSettingsWindow();
-        _trayIcon.ShowFileTranscriptionRequested += (_, _) => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true);
-        _trayIcon.ShowRecentTranscriptionsRequested += (_, _) =>
-            _serviceProvider.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette();
-        _trayIcon.CopyLastTranscriptionRequested += async (_, _) =>
-            await _serviceProvider.GetRequiredService<DictationViewModel>().CopyLastTranscriptionToClipboardAsync();
-        _trayIcon.ReadBackLastTranscriptionRequested += (_, _) =>
-            _serviceProvider.GetRequiredService<DictationViewModel>().ReadBackLastTranscription();
+        _trayIcon.ShowSettingsRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow());
+        _trayIcon.ShowFileTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true));
+        _trayIcon.ShowRecentTranscriptionsRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette());
+        _trayIcon.CopyLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(async () =>
+            await _serviceProvider!.GetRequiredService<DictationViewModel>().CopyLastTranscriptionToClipboardAsync());
+        _trayIcon.ReadBackLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<DictationViewModel>().ReadBackLastTranscription());
+        _trayIcon.ToggleRecorderRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
         _trayIcon.ExitRequested += (_, _) => Shutdown();
 
         // Manual update check from tray menu
-        _trayIcon.UpdateCheckRequested += async (_, _) =>
+        _trayIcon.UpdateCheckRequested += (_, _) => RunTrayActionOnUiThread(async () =>
         {
             var update = _serviceProvider!.GetRequiredService<UpdateService>();
             await update.CheckForUpdatesAsync();
             if (!update.IsUpdateAvailable)
                 _trayIcon.ShowBalloon(Loc.Instance["Update.NoUpdate"], Loc.Instance["Update.NoUpdateMessage"]);
-        };
+        });
 
         // Create and show overlay window
         var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
@@ -177,6 +180,9 @@ public partial class App : Application
         // Initialize hotkey service (needs window handle)
         var hotkeyService = _serviceProvider.GetRequiredService<HotkeyService>();
         hotkeyService.Initialize(mainWindow);
+        hotkeyService.RecorderToggleRequested += (_, _) =>
+            Dispatcher.InvokeAsync(() =>
+                _serviceProvider.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
 
         // Warm up audio
         var audio = _serviceProvider.GetRequiredService<AudioRecordingService>();
@@ -237,6 +243,52 @@ public partial class App : Application
         updateService.Initialize();
         _ = updateService.CheckForUpdatesAsync();
     }
+
+    private void RunTrayActionOnUiThread(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(action);
+    }
+
+    private void RunTrayActionOnUiThread(Func<Task> action)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            _ = RunTrayActionAsync(action);
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            _ = RunTrayActionAsync(action);
+        });
+    }
+
+    private static async Task RunTrayActionAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex) when (IsNonFatalTrayActionException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine($"Tray action failed: {ex}");
+            LogCrash(ex);
+        }
+    }
+
+    private static bool IsNonFatalTrayActionException(Exception ex) =>
+        ex is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException
+            and not AppDomainUnloadedException
+            and not BadImageFormatException
+            and not CannotUnloadAppDomainException;
 
     private async Task ProcessProtocolArgsAsync(string[] args)
     {
@@ -366,6 +418,8 @@ public partial class App : Application
 
         // Audio
         services.AddSingleton<AudioRecordingService>();
+        services.AddSingleton<SystemAudioCaptureService>();
+        services.AddSingleton<RecorderCaptureService>();
         services.AddSingleton<AudioFileService>();
         services.AddSingleton<IAudioDuckingService, AudioDuckingService>();
         services.AddSingleton<IMediaPauseService, MediaPauseService>();
@@ -425,7 +479,9 @@ public partial class App : Application
 
         // ViewModels
         services.AddSingleton<AudioRecorderViewModel>();
+        services.AddSingleton<IRecorderApiController>(sp => sp.GetRequiredService<AudioRecorderViewModel>());
         services.AddSingleton<DictationViewModel>();
+        services.AddSingleton<RecordingOverlayViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<ModelManagerViewModel>();
         services.AddSingleton<HistoryViewModel>();

@@ -98,6 +98,86 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecorderStart_RejectsRequestsWithoutAnySource()
+    {
+        var recorder = new FakeRecorderApiController();
+        var service = CreateService(recorder: recorder);
+        var query = new NameValueCollection
+        {
+            ["mic"] = "false",
+            ["system_audio"] = "false"
+        };
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/recorder/start",
+            query,
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Empty(recorder.StartRequests);
+    }
+
+    [Fact]
+    public async Task RecorderEndpoints_UseMacCompatibleResponseShapes()
+    {
+        var sessionId = Guid.NewGuid();
+        var recorder = new FakeRecorderApiController
+        {
+            NextSessionId = sessionId,
+            Session = new RecorderApiSessionSnapshot(
+                sessionId,
+                RecorderSessionStatus.Completed,
+                "hello",
+                "C:\\recording.wav",
+                null)
+        };
+        var service = CreateService(recorder: recorder);
+        var query = new NameValueCollection
+        {
+            ["mic"] = "false",
+            ["system_audio"] = "true"
+        };
+
+        var start = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/recorder/start",
+            query,
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+        var status = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/recorder/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+        var stop = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/recorder/stop",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+        var sessionQuery = new NameValueCollection { ["id"] = sessionId.ToString() };
+        var session = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/recorder/session",
+            sessionQuery,
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.Equal(sessionId.ToString(), start["id"].GetString());
+        Assert.Equal("recording", start["status"].GetString());
+        Assert.True(status["recording"].GetBoolean());
+        Assert.Equal(sessionId.ToString(), stop["id"].GetString());
+        Assert.Equal("finalizing", stop["status"].GetString());
+        Assert.Equal("completed", session["status"].GetString());
+        Assert.Equal("hello", session["text"].GetString());
+        Assert.Equal("C:\\recording.wav", session["output_file"].GetString());
+        Assert.Equal([(false, true)], recorder.StartRequests);
+    }
+
+    [Fact]
     public async Task DictionaryTermsEndpoints_ReplaceMergeAndDeleteSingleTerm()
     {
         var service = CreateService();
@@ -590,11 +670,12 @@ public class HttpApiServiceTests : IDisposable
     }
 
     private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins) =>
-        CreateService(null, null, plugins);
+        CreateService(null, null, null, plugins);
 
     private HttpApiService CreateService(
         AppSettings? settings = null,
         Func<string>? apiTokenProvider = null,
+        IRecorderApiController? recorder = null,
         params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -605,17 +686,18 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, apiTokenProvider, plugins).Service;
+        }, apiTokenProvider, recorder, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         params ITranscriptionEnginePlugin[] plugins)
-        => CreateServiceWithModelManager(settings, null, plugins);
+        => CreateServiceWithModelManager(settings, null, null, plugins);
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         Func<string>? apiTokenProvider,
+        IRecorderApiController? recorder,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -648,7 +730,8 @@ public class HttpApiServiceTests : IDisposable
             translation.Object,
             null!,
             _workflows.Object,
-            apiTokenProvider ?? (() => "test-token"));
+            apiTokenProvider ?? (() => "test-token"),
+            recorder);
 
         return (service, modelManager);
     }
@@ -726,6 +809,33 @@ public class HttpApiServiceTests : IDisposable
     {
         if (File.Exists(_dictionaryPath))
             File.Delete(_dictionaryPath);
+    }
+
+    private sealed class FakeRecorderApiController : IRecorderApiController
+    {
+        public Guid NextSessionId { get; init; } = Guid.NewGuid();
+        public RecorderApiSessionSnapshot? Session { get; init; }
+        public List<(bool MicEnabled, bool SystemAudioEnabled)> StartRequests { get; } = [];
+        public bool IsRecording { get; private set; }
+
+        public Task<Guid> StartRecordingForApiAsync(
+            bool micEnabled,
+            bool systemAudioEnabled,
+            CancellationToken ct)
+        {
+            StartRequests.Add((micEnabled, systemAudioEnabled));
+            IsRecording = true;
+            return Task.FromResult(NextSessionId);
+        }
+
+        public Task<Guid?> StopRecordingForApiAsync(CancellationToken ct)
+        {
+            IsRecording = false;
+            return Task.FromResult<Guid?>(NextSessionId);
+        }
+
+        public RecorderApiSessionSnapshot? GetRecorderApiSession(Guid id) =>
+            Session is not null && Session.Id == id ? Session : null;
     }
 
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin
