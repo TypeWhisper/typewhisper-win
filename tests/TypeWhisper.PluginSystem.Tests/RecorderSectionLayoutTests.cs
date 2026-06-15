@@ -50,6 +50,9 @@ public sealed class RecorderSectionLayoutTests
         Assert.Contains("Recorder.TranscriptionHint", xaml);
         Assert.Contains("Recorder.ModeTitle", xaml);
         Assert.Contains("Recorder.ModeHint", xaml);
+        Assert.Contains("Recorder.TranslationModeEnabled", xaml);
+        Assert.Contains("Recorder.TranslationTargetLanguage", xaml);
+        Assert.DoesNotContain("Settings.QuickTranslationModeEnabled", xaml);
         Assert.Contains("StringFormat='{}{0:g}'", xaml);
         Assert.DoesNotContain("dd.MM.yyyy HH:mm", xaml);
         Assert.DoesNotContain("HorizontalAlignment=\"Center\" Margin=\"0,0,0,24\"", xaml);

@@ -202,6 +202,14 @@ public record AppSettings
     /// </summary>
     public bool RecorderTranscriptionEnabled { get; init; } = true;
     /// <summary>
+    /// Gets or sets the recorder transcription task value.
+    /// </summary>
+    public string RecorderTranscriptionTask { get; init; } = "transcribe";
+    /// <summary>
+    /// Gets or sets the recorder translation target language value.
+    /// </summary>
+    public string? RecorderTranslationTargetLanguage { get; init; }
+    /// <summary>
     /// Gets or sets the recorder transcription engine override value.
     /// </summary>
     public string? RecorderTranscriptionEngineOverride { get; init; }

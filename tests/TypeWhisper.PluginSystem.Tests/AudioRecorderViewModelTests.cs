@@ -17,7 +17,45 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class AudioRecorderViewModelTests
 {
     [Fact]
-    public async Task Recorder_UsesTranslationPipeline_WhenQuickTranslationTargetIsConfigured()
+    public void RecorderTranslationMode_PersistsRecorderSettingsWithoutChangingGlobalTranslation()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            TranslationTargetLanguage = "de",
+            LastTranslationTargetLanguage = "de",
+            RecorderTranscriptionTask = "translate",
+            RecorderTranslationTargetLanguage = "fr"
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        using var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        Assert.True(sut.TranslationModeEnabled);
+        Assert.Equal("fr", sut.TranslationTargetLanguage);
+
+        sut.TranslationModeEnabled = false;
+
+        Assert.Equal("de", settings.Current.TranslationTargetLanguage);
+        Assert.Equal("de", settings.Current.LastTranslationTargetLanguage);
+        Assert.Equal("transcribe", settings.Current.RecorderTranscriptionTask);
+        Assert.Null(settings.Current.RecorderTranslationTargetLanguage);
+    }
+
+    [Fact]
+    public async Task Recorder_UsesTranslationPipeline_WhenRecorderTranslationTargetIsConfigured()
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
@@ -35,7 +73,8 @@ public sealed class AudioRecorderViewModelTests
         var settings = new FakeSettingsService(AppSettings.Default with
         {
             SelectedModelId = selectedModelId,
-            TranslationTargetLanguage = "de"
+            RecorderTranscriptionTask = "translate",
+            RecorderTranslationTargetLanguage = "de"
         });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
         var plugin = new FakeRecorderTranscriptionPlugin("hello there", "en");
@@ -86,7 +125,7 @@ public sealed class AudioRecorderViewModelTests
     }
 
     [Fact]
-    public async Task Recorder_ShowsTranslationFailure_WhenQuickTranslationIsRequired()
+    public async Task Recorder_ShowsTranslationFailure_WhenRecorderTranslationIsRequired()
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
@@ -104,7 +143,8 @@ public sealed class AudioRecorderViewModelTests
         var settings = new FakeSettingsService(AppSettings.Default with
         {
             SelectedModelId = selectedModelId,
-            TranslationTargetLanguage = "de"
+            RecorderTranscriptionTask = "translate",
+            RecorderTranslationTargetLanguage = "de"
         });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
         var plugin = new FakeRecorderTranscriptionPlugin("hello there", "en");
@@ -365,7 +405,7 @@ public sealed class AudioRecorderViewModelTests
     }
 
     [Fact]
-    public async Task Recorder_RetryUsesConfiguredLanguageTaskAndQuickTranslation()
+    public async Task Recorder_RetryUsesConfiguredLanguageTaskAndRecorderTranslation()
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
@@ -391,8 +431,9 @@ public sealed class AudioRecorderViewModelTests
             {
                 SelectedModelId = selectedModelId,
                 Language = "de",
-                TranscriptionTask = "translate",
-                TranslationTargetLanguage = "fr"
+                TranslationTargetLanguage = "es",
+                RecorderTranscriptionTask = "translate",
+                RecorderTranslationTargetLanguage = "fr"
             });
             using var pluginManager = TestPluginManagerFactory.Create(settings);
             var plugin = new FakeRecorderTranscriptionPlugin((_, _, _, _, _) =>

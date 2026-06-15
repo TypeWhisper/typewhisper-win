@@ -94,6 +94,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     [ObservableProperty] private RecorderTrackMode _trackMode = RecorderTrackMode.Mixed;
     [ObservableProperty] private RecorderMicDuckingMode _micDuckingMode = RecorderMicDuckingMode.Aggressive;
     [ObservableProperty] private bool _transcriptionEnabled = true;
+    [ObservableProperty] private bool _translationModeEnabled;
+    [ObservableProperty] private string? _translationTargetLanguage;
     [ObservableProperty] private string? _transcriptionEngineOverride;
     [ObservableProperty] private string? _transcriptionModelOverride;
     [ObservableProperty] private string _partialText = "";
@@ -133,6 +135,37 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
     partial void OnSystemAudioWarningMessageChanged(string? value) =>
         OnPropertyChanged(nameof(HasSystemAudioWarning));
+
+    partial void OnTranslationModeEnabledChanged(bool value)
+    {
+        if (_isLoadingSettings)
+            return;
+
+        if (value)
+        {
+            if (string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+                TranslationTargetLanguage = DefaultRecorderTranslationTargetLanguage();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(TranslationTargetLanguage))
+            TranslationTargetLanguage = null;
+    }
+
+    partial void OnTranslationTargetLanguageChanged(string? value)
+    {
+        if (_isLoadingSettings)
+            return;
+
+        var enabled = !string.IsNullOrWhiteSpace(value);
+        if (TranslationModeEnabled == enabled)
+            return;
+
+        var wasLoading = _isLoadingSettings;
+        _isLoadingSettings = true;
+        TranslationModeEnabled = enabled;
+        _isLoadingSettings = wasLoading;
+    }
 
     /// <summary>
     /// Initializes a new instance of the AudioRecorderViewModel class.
@@ -272,10 +305,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         if (TranscriptionEnabled && !string.IsNullOrWhiteSpace(_settings.Current.SelectedModelId))
         {
             var configuredLanguage = _settings.Current.Language == "auto" ? null : _settings.Current.Language;
-            var task = _settings.Current.TranscriptionTask == "translate"
-                ? TranscriptionTask.Translate
-                : TranscriptionTask.Transcribe;
-            _streamingHandler.Start(configuredLanguage, task, () => IsRecording);
+            _streamingHandler.Start(configuredLanguage, CurrentRecorderTask, () => IsRecording);
         }
 
         return true;
@@ -344,20 +374,21 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         TranscriptionResult result,
         TranscriptionTask task,
         string? configuredLanguage,
+        string? translationTarget,
         CancellationToken ct)
     {
         var currentSettings = _settings.Current;
-        var translationTarget = currentSettings.TranslationTargetLanguage;
+        var shouldTranslate = task == TranscriptionTask.Translate && !string.IsNullOrEmpty(translationTarget);
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,
-            TranslationHandler = !string.IsNullOrEmpty(translationTarget)
+            TranslationHandler = shouldTranslate
                 ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                 : null,
             TranslationTarget = translationTarget,
-            RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
+            RequireTranslationSuccess = shouldTranslate,
             DetectedLanguage = result.DetectedLanguage
         }, ct);
 
@@ -413,16 +444,20 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 ct);
 
             var configuredLanguage = settings.Language == "auto" ? null : settings.Language;
-            var task = settings.TranscriptionTask == "translate"
-                ? TranscriptionTask.Translate
-                : TranscriptionTask.Transcribe;
+            var task = CurrentRecorderTask;
+            var translationTarget = NormalizeOptional(TranslationTargetLanguage);
             var activeResult = await _modelManager.TranscribeActiveAsync(
                 samples,
                 configuredLanguage,
                 task,
                 prompt: null,
                 ct);
-            var transcript = await PostProcessTranscriptAsync(activeResult.Result, task, configuredLanguage, ct);
+            var transcript = await PostProcessTranscriptAsync(
+                activeResult.Result,
+                task,
+                configuredLanguage,
+                translationTarget,
+                ct);
             if (string.IsNullOrWhiteSpace(transcript) && !string.IsNullOrWhiteSpace(liveTranscript))
                 transcript = liveTranscript;
 
@@ -693,6 +728,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             TrackMode = RecorderSettings.ParseTrackMode(settings.RecorderTrackMode);
             MicDuckingMode = RecorderSettings.ParseDuckingMode(settings.RecorderMicDuckingMode);
             TranscriptionEnabled = settings.RecorderTranscriptionEnabled;
+            TranslationModeEnabled = RecorderTranslationModeFromSettings(settings);
+            TranslationTargetLanguage = settings.RecorderTranslationTargetLanguage;
             TranscriptionEngineOverride = settings.RecorderTranscriptionEngineOverride;
             TranscriptionModelOverride = settings.RecorderTranscriptionModelOverride;
         }
@@ -713,6 +750,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             RecorderTrackMode = RecorderSettings.ToSettingsValue(TrackMode),
             RecorderMicDuckingMode = RecorderSettings.ToSettingsValue(MicDuckingMode),
             RecorderTranscriptionEnabled = TranscriptionEnabled,
+            RecorderTranscriptionTask = TranslationModeEnabled ? "translate" : "transcribe",
+            RecorderTranslationTargetLanguage = TranslationModeEnabled ? NormalizeOptional(TranslationTargetLanguage) : null,
             RecorderTranscriptionEngineOverride = NormalizeOptional(TranscriptionEngineOverride),
             RecorderTranscriptionModelOverride = NormalizeOptional(TranscriptionModelOverride)
         });
@@ -740,6 +779,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         && TrackMode == RecorderSettings.ParseTrackMode(settings.RecorderTrackMode)
         && MicDuckingMode == RecorderSettings.ParseDuckingMode(settings.RecorderMicDuckingMode)
         && TranscriptionEnabled == settings.RecorderTranscriptionEnabled
+        && TranslationModeEnabled == RecorderTranslationModeFromSettings(settings)
+        && string.Equals(NormalizeOptional(TranslationTargetLanguage), NormalizeOptional(settings.RecorderTranslationTargetLanguage), StringComparison.Ordinal)
         && string.Equals(NormalizeOptional(TranscriptionEngineOverride), NormalizeOptional(settings.RecorderTranscriptionEngineOverride), StringComparison.Ordinal)
         && string.Equals(NormalizeOptional(TranscriptionModelOverride), NormalizeOptional(settings.RecorderTranscriptionModelOverride), StringComparison.Ordinal);
 
@@ -751,6 +792,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             or nameof(TrackMode)
             or nameof(MicDuckingMode)
             or nameof(TranscriptionEnabled)
+            or nameof(TranslationModeEnabled)
+            or nameof(TranslationTargetLanguage)
             or nameof(TranscriptionEngineOverride)
             or nameof(TranscriptionModelOverride);
 
@@ -842,6 +885,20 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private TranscriptionTask CurrentRecorderTask =>
+        TranslationModeEnabled ? TranscriptionTask.Translate : TranscriptionTask.Transcribe;
+
+    private static bool RecorderTranslationModeFromSettings(AppSettings settings) =>
+        string.Equals(settings.RecorderTranscriptionTask, "translate", StringComparison.OrdinalIgnoreCase);
+
+    private string DefaultRecorderTranslationTargetLanguage() =>
+        NormalizeOptional(_settings.Current.RecorderTranslationTargetLanguage)
+        ?? NormalizeOptional(_settings.Current.LastTranslationTargetLanguage)
+        ?? NormalizeOptional(_settings.Current.TranslationTargetLanguage)
+        ?? (TranslationModelInfo.SupportedLanguages.Any(language => language.Code == "en")
+            ? "en"
+            : TranslationModelInfo.SupportedLanguages.FirstOrDefault()?.Code ?? "en");
 
     private RecordingItem ReplaceRecording(RecordingItem item, RecordingItem replacement)
     {

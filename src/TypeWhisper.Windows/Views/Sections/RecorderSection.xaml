@@ -292,7 +292,7 @@
                                             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                                             <Setter Property="FontWeight" Value="SemiBold"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                                <DataTrigger Binding="{Binding Recorder.TranslationModeEnabled}" Value="True">
                                                     <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
                                                     <Setter Property="FontWeight" Value="Normal"/>
                                                 </DataTrigger>
@@ -301,7 +301,7 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <ui:ToggleSwitch Grid.Column="1"
-                                                 IsChecked="{Binding Settings.QuickTranslationModeEnabled}"
+                                                 IsChecked="{Binding Recorder.TranslationModeEnabled}"
                                                  OnContent=""
                                                  OffContent=""
                                                  VerticalAlignment="Center"/>
@@ -315,7 +315,7 @@
                                             <Setter Property="Foreground" Value="{StaticResource HintBrush}"/>
                                             <Setter Property="FontWeight" Value="Normal"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Settings.QuickTranslationModeEnabled}" Value="True">
+                                                <DataTrigger Binding="{Binding Recorder.TranslationModeEnabled}" Value="True">
                                                     <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
                                                 </DataTrigger>
@@ -325,6 +325,18 @@
                                 </TextBlock>
                             </Grid>
                         </Grid>
+
+                        <StackPanel Margin="0,14,0,0"
+                                    Visibility="{Binding Recorder.TranslationModeEnabled, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{loc:Str General.TargetLanguage}"
+                                       Style="{StaticResource LabelStyle}"
+                                       Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding Settings.TranslationTargetOptions}"
+                                      SelectedValue="{Binding Recorder.TranslationTargetLanguage}"
+                                      SelectedValuePath="Code"
+                                      DisplayMemberPath="DisplayName"
+                                      MinWidth="220"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>

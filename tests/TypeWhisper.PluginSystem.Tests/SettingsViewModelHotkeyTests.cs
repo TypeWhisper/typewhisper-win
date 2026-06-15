@@ -27,6 +27,8 @@ public sealed class SettingsViewModelHotkeyTests
         Assert.Equal("mixed", settings.RecorderTrackMode);
         Assert.Equal("aggressive", settings.RecorderMicDuckingMode);
         Assert.True(settings.RecorderTranscriptionEnabled);
+        Assert.Equal("transcribe", settings.RecorderTranscriptionTask);
+        Assert.Null(settings.RecorderTranslationTargetLanguage);
         Assert.Equal("", settings.RecorderToggleHotkey);
         Assert.Empty(settings.RecorderToggleHotkeys);
     }
