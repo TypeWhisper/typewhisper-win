@@ -77,7 +77,7 @@ jobs:
           echo "PROJECT_NAME=$projectName" >> $env:GITHUB_ENV
           echo "Project: $projectName"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v5
         with:
