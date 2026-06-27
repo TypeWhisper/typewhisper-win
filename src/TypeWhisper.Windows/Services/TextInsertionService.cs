@@ -194,20 +194,20 @@ public sealed class TextInsertionService
             return true;
         }
 
-        var focusRequested = _platform.SetForegroundWindow(targetHwnd);
+        _platform.SetForegroundWindow(targetHwnd);
         await _platform.DelayAsync(FocusDelay);
-        if (focusRequested || IsTargetForeground(targetHwnd))
+        if (IsTargetForeground(targetHwnd))
             return true;
 
         var activationInputCount = _platform.SendForegroundActivationInput();
         if (activationInputCount > 0)
         {
             await _platform.DelayAsync(ModifierPollInterval);
-            focusRequested = _platform.SetForegroundWindow(targetHwnd);
+            _platform.SetForegroundWindow(targetHwnd);
             await _platform.DelayAsync(FocusDelay);
         }
 
-        return focusRequested || IsTargetForeground(targetHwnd);
+        return IsTargetForeground(targetHwnd);
     }
 
     private bool IsTargetForeground(IntPtr targetHwnd)

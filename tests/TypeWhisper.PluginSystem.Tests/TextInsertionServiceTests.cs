@@ -122,6 +122,27 @@ public sealed class TextInsertionServiceTests
     }
 
     [Fact]
+    public async Task FocusFailure_FallsBackWhenSetForegroundWindowReportsSuccessWithoutForeground()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = new IntPtr(100),
+            SetForegroundWindowResult = true,
+            MoveForegroundOnSetForegroundWindowSuccess = false,
+            ForegroundActivationInputResult = 0
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated", targetHwnd: new IntPtr(200));
+
+        Assert.Equal(InsertionResult.CopiedToClipboard, result);
+        Assert.Equal("dictated", platform.ClipboardText);
+        Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Equal(1, platform.SetForegroundWindowCalls);
+    }
+
+    [Fact]
     public async Task FocusFailure_FallsBackWhenForegroundWindowMovedWithinSameProcess()
     {
         var targetHwnd = new IntPtr(200);
@@ -274,6 +295,7 @@ public sealed class TextInsertionServiceTests
         public IntPtr ForegroundWindow { get; set; }
         public bool SetForegroundWindowResult { get; set; } = true;
         public Queue<bool> SetForegroundWindowResults { get; set; } = [];
+        public bool MoveForegroundOnSetForegroundWindowSuccess { get; set; } = true;
         public Dictionary<IntPtr, uint> WindowProcessIds { get; set; } = [];
         public IntPtr LastSetForegroundWindow { get; private set; }
         public uint PasteInputResult { get; set; } = 4;
@@ -360,7 +382,7 @@ public sealed class TextInsertionServiceTests
             var result = SetForegroundWindowResults.Count > 0
                 ? SetForegroundWindowResults.Dequeue()
                 : SetForegroundWindowResult;
-            if (result)
+            if (result && MoveForegroundOnSetForegroundWindowSuccess)
                 ForegroundWindow = hwnd;
 
             return result;

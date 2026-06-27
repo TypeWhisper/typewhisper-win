@@ -230,4 +230,28 @@ public class DictationTargetAppCorrectionLearningGateTests
         Assert.Null(result.Baseline);
         Assert.Equal("inserted_text_not_observed", result.SkipReason);
     }
+
+    [Fact]
+    public void TargetAppCorrectionLearningTask_DisposesLinkedCancellationSource()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var taskBlock = TestFile.ExtractBlock(
+            source,
+            "var trackingTask = Task.Run",
+            3200);
+
+        Assert.Contains("finally", taskBlock);
+        Assert.Contains("ReferenceEquals(_targetAppCorrectionLearningCts, cts)", taskBlock);
+        Assert.Contains("_targetAppCorrectionLearningCts = null;", taskBlock);
+        Assert.Contains("_targetAppCorrectionLearningTask = trackingTask;", taskBlock);
+        Assert.Contains("ContinueWith", taskBlock);
+        Assert.Contains("_targetAppCorrectionLearningTask = null;", taskBlock);
+        Assert.Contains("TaskContinuationOptions.ExecuteSynchronously", taskBlock);
+        Assert.Contains("TaskScheduler.Default", taskBlock);
+        Assert.Contains("cts.Dispose();", taskBlock);
+    }
 }

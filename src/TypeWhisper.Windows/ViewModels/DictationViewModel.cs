@@ -1775,7 +1775,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         CancelTargetAppCorrectionLearning();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
         _targetAppCorrectionLearningCts = cts;
-        _targetAppCorrectionLearningTask = Task.Run(async () =>
+        var trackingTask = Task.Run(async () =>
         {
             try
             {
@@ -1816,7 +1816,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             {
                 LogTargetAppCorrectionLearningFailure(ex);
             }
+            finally
+            {
+                if (ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                    _targetAppCorrectionLearningCts = null;
+
+                cts.Dispose();
+            }
         });
+        _targetAppCorrectionLearningTask = trackingTask;
+        _ = trackingTask.ContinueWith(
+            _ =>
+            {
+                if (ReferenceEquals(_targetAppCorrectionLearningTask, trackingTask))
+                    _targetAppCorrectionLearningTask = null;
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
         return new TargetAppCorrectionLearningStartResult(true, null);
     }
