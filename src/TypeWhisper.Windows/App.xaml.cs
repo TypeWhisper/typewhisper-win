@@ -280,12 +280,7 @@ public partial class App : Application
     }
 
     private static bool IsNonFatalTrayActionException(Exception ex) =>
-        ex is not OutOfMemoryException
-            and not StackOverflowException
-            and not AccessViolationException
-            and not AppDomainUnloadedException
-            and not BadImageFormatException
-            and not CannotUnloadAppDomainException;
+        NonFatalExceptionFilter.IsNonFatal(ex);
 
     internal static Task StartAudioWarmUpInBackground(
         AudioRecordingService audio,
@@ -307,12 +302,7 @@ public partial class App : Application
         });
 
     private static bool IsNonFatalStartupException(Exception ex) =>
-        ex is not OutOfMemoryException
-            and not StackOverflowException
-            and not AccessViolationException
-            and not AppDomainUnloadedException
-            and not BadImageFormatException
-            and not CannotUnloadAppDomainException;
+        NonFatalExceptionFilter.IsNonFatal(ex);
 
     private async Task ProcessProtocolArgsAsync(string[] args)
     {

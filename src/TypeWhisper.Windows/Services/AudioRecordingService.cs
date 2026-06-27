@@ -680,12 +680,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     }
 
     private static bool IsNonFatalAudioException(Exception ex) =>
-        ex is not OutOfMemoryException
-            and not StackOverflowException
-            and not AccessViolationException
-            and not AppDomainUnloadedException
-            and not BadImageFormatException
-            and not CannotUnloadAppDomainException;
+        NonFatalExceptionFilter.IsNonFatal(ex);
 
     private int SafeDeviceCount()
     {

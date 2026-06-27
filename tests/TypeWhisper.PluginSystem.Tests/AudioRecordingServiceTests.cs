@@ -605,10 +605,16 @@ public sealed class RecorderAudioPipelineTests
             "TypeWhisper.Windows",
             "Services",
             "AudioRecordingService.cs");
+        var filterSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "NonFatalExceptionFilter.cs");
 
         Assert.Contains("catch (Exception ex) when (IsNonFatalAudioException(ex))", source);
-        Assert.Contains("ex is not OutOfMemoryException", source);
-        Assert.Contains("and not AccessViolationException", source);
+        Assert.Contains("NonFatalExceptionFilter.IsNonFatal", source);
+        Assert.Contains("ex is not OutOfMemoryException", filterSource);
+        Assert.Contains("and not AccessViolationException", filterSource);
         Assert.DoesNotContain("catch\r\n        {\r\n            return -1;", source);
         Assert.DoesNotContain("catch { }", source);
     }
