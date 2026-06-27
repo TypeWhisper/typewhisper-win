@@ -45,6 +45,7 @@ public class PluginHostServicesTests : IDisposable
         var settings = new Mock<ISettingsService>();
         settings.Setup(s => s.Current).Returns(new AppSettings
         {
+            LiveTranscriptionEnabled = false,
             LiveTranscriptionFontSize = 99,
             PreviewBubbleAutoHideMilliseconds = 9999
         });
@@ -52,6 +53,7 @@ public class PluginHostServicesTests : IDisposable
 
         var provider = Assert.IsAssignableFrom<ILivePreviewAppearanceProvider>(services);
 
+        Assert.False(provider.LiveTranscriptionPreviewEnabled);
         Assert.Equal(AppSettings.MaxLiveTranscriptionFontSize, provider.LiveTranscriptionFontSize);
         Assert.Equal(AppSettings.MaxPreviewBubbleAutoHideMilliseconds, provider.PreviewBubbleAutoHideMilliseconds);
     }

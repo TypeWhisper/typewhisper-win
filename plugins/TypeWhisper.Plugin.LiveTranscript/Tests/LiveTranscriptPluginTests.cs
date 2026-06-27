@@ -662,6 +662,94 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
+    public void HostDisabledLivePreview_DoesNotShowWindowForRecordingOrPartialText()
+    {
+        RunOnStaThread(() =>
+        {
+            var eventBus = new TestPluginEventBus();
+            var host = new AppearanceWpfTestHostServices(eventBus)
+            {
+                LiveTranscriptionPreviewEnabled = false,
+                LiveTranscriptionFontSize = 15,
+                PreviewBubbleAutoHideMilliseconds = 25
+            };
+            var plugin = new LiveTranscriptPlugin();
+
+            try
+            {
+                plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var recordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = recordingId });
+                PumpDispatcher();
+
+                Assert.False(
+                    GetWindow(plugin)?.IsVisible == true,
+                    "Disabled host live preview should suppress the recording-start window.");
+
+                eventBus.Publish(new PartialTranscriptionUpdateEvent
+                {
+                    RecordingId = recordingId,
+                    PartialText = "ignored"
+                });
+                PumpDispatcher();
+
+                Assert.False(
+                    GetWindow(plugin)?.IsVisible == true,
+                    "Disabled host live preview should suppress partial text windows.");
+            }
+            finally
+            {
+                plugin.DeactivateAsync().GetAwaiter().GetResult();
+                PumpDispatcher();
+            }
+        });
+    }
+
+    [Fact]
+    public void TranscriptionFailedEvent_WithCancelledMessage_HidesActiveWindow()
+    {
+        RunOnStaThread(() =>
+        {
+            var eventBus = new TestPluginEventBus();
+            var host = new AppearanceWpfTestHostServices(eventBus)
+            {
+                LiveTranscriptionPreviewEnabled = true,
+                LiveTranscriptionFontSize = 15,
+                PreviewBubbleAutoHideMilliseconds = 1500
+            };
+            var plugin = new LiveTranscriptPlugin();
+
+            try
+            {
+                plugin.ActivateAsync(host).GetAwaiter().GetResult();
+
+                var recordingId = Guid.NewGuid();
+                eventBus.Publish(new RecordingStartedEvent { RecordingId = recordingId });
+                PumpDispatcher();
+
+                var window = GetWindow(plugin);
+                Assert.NotNull(window);
+                Assert.True(window.IsVisible, "Window should be visible after a fresh recording starts.");
+
+                eventBus.Publish(new TranscriptionFailedEvent
+                {
+                    RecordingId = recordingId,
+                    ErrorMessage = "Cancelled"
+                });
+                PumpDispatcher();
+
+                Assert.False(window.IsVisible);
+            }
+            finally
+            {
+                plugin.DeactivateAsync().GetAwaiter().GetResult();
+                PumpDispatcher();
+            }
+        });
+    }
+
+    [Fact]
     public void SettingsView_HidesDuplicateAppearanceControls_WhenHostProvidesAppearance()
     {
         RunOnStaThread(() =>
@@ -796,6 +884,7 @@ public sealed class LiveTranscriptPluginTests
 
     private sealed class AppearanceTestPluginHostServices : TestPluginHostServices, ILivePreviewAppearanceProvider
     {
+        public bool LiveTranscriptionPreviewEnabled { get; init; } = true;
         public double LiveTranscriptionFontSize { get; init; }
         public int PreviewBubbleAutoHideMilliseconds { get; init; }
     }
@@ -829,6 +918,7 @@ public sealed class LiveTranscriptPluginTests
     private sealed class AppearanceWpfTestHostServices(IPluginEventBus eventBus)
         : WpfTestHostServices(eventBus), ILivePreviewAppearanceProvider
     {
+        public bool LiveTranscriptionPreviewEnabled { get; init; } = true;
         public double LiveTranscriptionFontSize { get; init; }
         public int PreviewBubbleAutoHideMilliseconds { get; init; }
     }

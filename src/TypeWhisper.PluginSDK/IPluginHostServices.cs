@@ -69,6 +69,11 @@ public interface IPluginHostServices
 public interface ILivePreviewAppearanceProvider
 {
     /// <summary>
+    /// Gets whether live transcription preview windows should be shown.
+    /// </summary>
+    bool LiveTranscriptionPreviewEnabled => true;
+
+    /// <summary>
     /// Gets the live transcription font size in device-independent pixels.
     /// </summary>
     double LiveTranscriptionFontSize { get; }
