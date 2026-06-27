@@ -66,7 +66,7 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
-    public void MainWindow_RepositionsToCursorMonitorWhenOverlayBecomesVisible()
+    public void MainWindow_RepositionsToCursorMonitorWhenOverlayContentBecomesVisible()
     {
         var code = TestFile.ReadProjectFile(
             "src",
@@ -75,8 +75,9 @@ public sealed class MainWindowLayoutTests
             "MainWindow.xaml.cs");
 
         Assert.Contains("PropertyChangedEventManager.AddHandler", code);
-        Assert.Contains("nameof(RecordingOverlayViewModel.IsOverlayVisible)", code);
+        Assert.Contains("nameof(RecordingOverlayViewModel.HasOverlayContentVisible)", code);
         Assert.Contains("OnViewModelPropertyChanged", code);
+        Assert.Contains("if (!_viewModel.HasOverlayContentVisible)", code);
         Assert.Contains("PositionOverlay(OverlayPlacementTarget.CursorMonitor)", code);
     }
 

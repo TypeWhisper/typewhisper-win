@@ -445,6 +445,10 @@ public record AppSettings
 
     // Premium Cloud Folder Sync
     /// <summary>
+    /// Gets or sets whether Premium target-app correction learning is enabled.
+    /// </summary>
+    public bool TargetAppCorrectionLearningEnabled { get; init; }
+    /// <summary>
     /// Gets or sets the cloud folder sync folder path value.
     /// </summary>
     public string? CloudFolderSyncFolderPath { get; init; }
@@ -468,7 +472,10 @@ public record AppSettings
     /// <summary>
     /// Creates a new value using the supplied arguments.
     /// </summary>
-    public static AppSettings Default => new();
+    public static AppSettings Default => new()
+    {
+        TargetAppCorrectionLearningEnabled = true
+    };
 
     /// <summary>
     /// Performs normalize preview bubble auto hide milliseconds.

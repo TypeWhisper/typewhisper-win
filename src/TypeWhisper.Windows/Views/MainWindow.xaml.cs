@@ -72,7 +72,7 @@ public partial class MainWindow : Window
         PropertyChangedEventManager.AddHandler(
             _viewModel,
             OnViewModelPropertyChanged,
-            nameof(RecordingOverlayViewModel.IsOverlayVisible));
+            nameof(RecordingOverlayViewModel.HasOverlayContentVisible));
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
@@ -92,7 +92,7 @@ public partial class MainWindow : Window
         PropertyChangedEventManager.RemoveHandler(
             _viewModel,
             OnViewModelPropertyChanged,
-            nameof(RecordingOverlayViewModel.IsOverlayVisible));
+            nameof(RecordingOverlayViewModel.HasOverlayContentVisible));
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
@@ -107,7 +107,7 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (!_viewModel.IsOverlayVisible)
+        if (!_viewModel.HasOverlayContentVisible)
             return;
 
         PositionOverlay(OverlayPlacementTarget.CursorMonitor);

@@ -1,29 +1,53 @@
 <UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.DetachedFeedbackView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
     <Border CornerRadius="18"
             Padding="14,7"
             HorizontalAlignment="Center"
+            MaxWidth="520"
             Background="#F0181818"
             BorderBrush="#25FFFFFF"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
         </Border.Effect>
-        <TextBlock Text="{Binding FeedbackText}"
-                   FontSize="11"
-                   HorizontalAlignment="Center"
-                   TextTrimming="CharacterEllipsis">
-            <TextBlock.Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="Foreground" Value="#FF6666"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
-                            <Setter Property="Foreground" Value="#66E3A2"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </TextBlock.Style>
-        </TextBlock>
+        <Grid HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="{Binding FeedbackText}"
+                       FontSize="11"
+                       MinWidth="0"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="#FF6666"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
+                                <Setter Property="Foreground" Value="#66E3A2"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <Button Grid.Column="1"
+                    Content="{Binding FeedbackActionText}"
+                    Command="{Binding FeedbackActionCommand}"
+                    Visibility="{Binding ShowFeedbackAction, Converter={StaticResource BoolToVis}}"
+                    FontSize="11"
+                    Padding="8,1"
+                    Margin="8,0,0,0"
+                    MinWidth="0"
+                    VerticalAlignment="Center"
+                    Foreground="#FFFFFFFF"
+                    Background="#22FFFFFF"
+                    BorderBrush="#33FFFFFF"/>
+        </Grid>
     </Border>
 </UserControl>

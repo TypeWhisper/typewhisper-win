@@ -384,6 +384,12 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
             return SetForegroundWindowResult;
         }
 
+        public uint GetWindowProcessId(IntPtr hwnd) => 0;
+
+        public uint SendModifierKeyUpInputs() => 0;
+
+        public uint SendForegroundActivationInput() => 0;
+
         public uint SendCopyInput()
         {
             CopyInputCalls++;

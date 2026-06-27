@@ -17,6 +17,7 @@ public sealed class TextInsertionService
     private static readonly TimeSpan ClipboardRestoreDelay = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan ClipboardCapturePollInterval = TimeSpan.FromMilliseconds(50);
     private const int MaxModifierReleaseChecks = 32;
+    private const int MaxModifierReleaseChecksAfterNormalization = 8;
     private const int MaxClipboardCaptureReadAttempts = 12;
     private const uint ExpectedCopyInputCount = 4;
     private const uint ExpectedPasteInputCount = 4;
@@ -152,7 +153,23 @@ public sealed class TextInsertionService
 
     private async Task<bool> WaitForModifierKeysReleasedAsync()
     {
-        for (var attempt = 0; attempt < MaxModifierReleaseChecks; attempt++)
+        if (await WaitForModifierKeysReleasedAsync(MaxModifierReleaseChecks))
+            return true;
+
+        var releaseInputCount = _platform.SendModifierKeyUpInputs();
+        if (releaseInputCount > 0)
+        {
+            await _platform.DelayAsync(ModifierPollInterval);
+            if (await WaitForModifierKeysReleasedAsync(MaxModifierReleaseChecksAfterNormalization))
+                return true;
+        }
+
+        return !_platform.IsAnyModifierKeyDown();
+    }
+
+    private async Task<bool> WaitForModifierKeysReleasedAsync(int maxChecks)
+    {
+        for (var attempt = 0; attempt < maxChecks; attempt++)
         {
             if (!_platform.IsAnyModifierKeyDown())
                 return true;
@@ -160,7 +177,7 @@ public sealed class TextInsertionService
             await _platform.DelayAsync(ModifierPollInterval);
         }
 
-        return !_platform.IsAnyModifierKeyDown();
+        return false;
     }
 
     private async Task<bool> FocusTargetWindowAsync(IntPtr targetHwnd)
@@ -171,15 +188,32 @@ public sealed class TextInsertionService
             return true;
         }
 
-        if (_platform.GetForegroundWindow() == targetHwnd)
+        if (IsTargetForeground(targetHwnd))
         {
             await _platform.DelayAsync(FocusDelay);
             return true;
         }
 
-        var focusRequested = _platform.SetForegroundWindow(targetHwnd);
+        _platform.SetForegroundWindow(targetHwnd);
         await _platform.DelayAsync(FocusDelay);
-        return focusRequested || _platform.GetForegroundWindow() == targetHwnd;
+        if (IsTargetForeground(targetHwnd))
+            return true;
+
+        var activationInputCount = _platform.SendForegroundActivationInput();
+        if (activationInputCount > 0)
+        {
+            await _platform.DelayAsync(ModifierPollInterval);
+            _platform.SetForegroundWindow(targetHwnd);
+            await _platform.DelayAsync(FocusDelay);
+        }
+
+        return IsTargetForeground(targetHwnd);
+    }
+
+    private bool IsTargetForeground(IntPtr targetHwnd)
+    {
+        var foregroundHwnd = _platform.GetForegroundWindow();
+        return foregroundHwnd == targetHwnd;
     }
 
     private async Task<string?> WaitForClipboardTextChangeAsync(string marker)
@@ -254,6 +288,9 @@ internal interface ITextInsertionPlatform
     bool IsAnyModifierKeyDown();
     IntPtr GetForegroundWindow();
     bool SetForegroundWindow(IntPtr hwnd);
+    uint GetWindowProcessId(IntPtr hwnd);
+    uint SendModifierKeyUpInputs();
+    uint SendForegroundActivationInput();
     uint SendCopyInput();
     uint SendPasteInput();
     uint SendEnterInput();
@@ -264,6 +301,7 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
     private const uint ExpectedCopyInputCount = 4;
     private const uint ExpectedPasteInputCount = 4;
     private const uint ExpectedEnterInputCount = 2;
+    private const uint ExpectedForegroundActivationInputCount = 2;
 
     private static readonly int[] ModifierKeys =
     [
@@ -276,6 +314,21 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
         NativeMethods.VK_MENU,
         NativeMethods.VK_LMENU,
         NativeMethods.VK_RMENU,
+        NativeMethods.VK_LWIN,
+        NativeMethods.VK_RWIN
+    ];
+
+    private static readonly int[] ModifierReleaseKeys =
+    [
+        NativeMethods.VK_LSHIFT,
+        NativeMethods.VK_RSHIFT,
+        NativeMethods.VK_SHIFT,
+        NativeMethods.VK_LCONTROL,
+        NativeMethods.VK_RCONTROL,
+        NativeMethods.VK_CONTROL,
+        NativeMethods.VK_LMENU,
+        NativeMethods.VK_RMENU,
+        NativeMethods.VK_MENU,
         NativeMethods.VK_LWIN,
         NativeMethods.VK_RWIN
     ];
@@ -358,6 +411,45 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
     public bool SetForegroundWindow(IntPtr hwnd) => NativeMethods.SetForegroundWindow(hwnd);
 
     /// <summary>
+    /// Returns the process id that owns the supplied window handle.
+    /// </summary>
+    public uint GetWindowProcessId(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return 0;
+
+        NativeMethods.GetWindowThreadProcessId(hwnd, out var processId);
+        return processId;
+    }
+
+    /// <summary>
+    /// Sends key-up events for modifier keys that Windows still reports as pressed.
+    /// </summary>
+    public uint SendModifierKeyUpInputs()
+    {
+        var inputs = ModifierReleaseKeys
+            .Where(IsKeyDown)
+            .Select(key => KeyInput(key, keyUp: true))
+            .ToArray();
+
+        return inputs.Length == 0
+            ? 0
+            : NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
+    /// <summary>
+    /// Sends a neutral Alt tap so Windows allows a foreground retry.
+    /// </summary>
+    public uint SendForegroundActivationInput() =>
+        NativeMethods.SendInput(
+            ExpectedForegroundActivationInputCount,
+            [
+                KeyInput(NativeMethods.VK_MENU, keyUp: false),
+                KeyInput(NativeMethods.VK_MENU, keyUp: true)
+            ],
+            Marshal.SizeOf<NativeMethods.INPUT>());
+
+    /// <summary>
     /// Sends copy input.
     /// </summary>
     public uint SendCopyInput() =>
@@ -396,6 +488,9 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
                 KeyInput(NativeMethods.VK_RETURN, keyUp: true)
             ],
             Marshal.SizeOf<NativeMethods.INPUT>());
+
+    private static bool IsKeyDown(int virtualKey) =>
+        (NativeMethods.GetAsyncKeyState(virtualKey) & unchecked((short)0x8000)) != 0;
 
     internal static NativeMethods.INPUT KeyInput(int virtualKey, bool keyUp) =>
         new()

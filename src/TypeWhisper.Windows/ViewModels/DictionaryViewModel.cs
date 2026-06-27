@@ -472,6 +472,13 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
 
     private void RefreshEntries()
     {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(RefreshEntries);
+            return;
+        }
+
         Entries.Clear();
         foreach (var e in _dictionary.Entries)
             Entries.Add(e);

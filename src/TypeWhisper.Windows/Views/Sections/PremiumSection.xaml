@@ -72,6 +72,57 @@
                 </Border>
             </StackPanel>
 
+            <StackPanel Style="{StaticResource SettingsSectionStyle}">
+                <TextBlock Text="{loc:Str Premium.AutomaticCorrectionLearningTitle}"
+                           Style="{StaticResource SettingsGroupTitleStyle}"/>
+
+                <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Premium.LearnCorrectionsFromEdits}"
+                                               Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{Binding TargetAppCorrectionLearningStatus}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,4,0,0"/>
+                                </StackPanel>
+
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 IsChecked="{Binding TargetAppCorrectionLearningEnabled, Mode=TwoWay}"
+                                                 IsEnabled="{Binding CanUseTargetAppCorrectionLearning}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="1" Background="#18FFFFFF"/>
+
+                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str Premium.AutomaticCorrectionLearningDescription}"
+                                           Style="{StaticResource HintStyle}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="{loc:Str Premium.CorrectionExamples}"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,8,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
             <StackPanel Style="{StaticResource SettingsSectionStyle}"
                         Visibility="{Binding CloudFolderSync.ShowSyncControls, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="{loc:Str Premium.CloudFolderSyncTitle}"

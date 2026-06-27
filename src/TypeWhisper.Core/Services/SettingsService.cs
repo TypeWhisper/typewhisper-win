@@ -132,6 +132,9 @@ public sealed class SettingsService : ISettingsService
         if (root is not JsonObject obj)
             return NormalizeSettings(settings);
 
+        if (!obj.ContainsKey("targetAppCorrectionLearningEnabled"))
+            settings = settings with { TargetAppCorrectionLearningEnabled = false };
+
         if (!obj.ContainsKey("historyRetentionMode") && obj.TryGetPropertyValue("historyRetentionDays", out var legacyNode))
         {
             var legacyDays = legacyNode?.GetValue<int?>();
