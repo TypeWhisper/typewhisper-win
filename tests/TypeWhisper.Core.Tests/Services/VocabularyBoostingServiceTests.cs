@@ -224,6 +224,8 @@ public class VocabularyBoostingServiceTests
         public string ApplyCorrections(string text) => text;
         public string? GetTermsForPrompt() => null;
         public void LearnCorrection(string original, string replacement) => throw new NotSupportedException();
+        public IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions) => throw new NotSupportedException();
+        public void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections) => throw new NotSupportedException();
         public void ActivatePack(TermPack pack) => throw new NotSupportedException();
         public void DeactivatePack(string packId) => throw new NotSupportedException();
 

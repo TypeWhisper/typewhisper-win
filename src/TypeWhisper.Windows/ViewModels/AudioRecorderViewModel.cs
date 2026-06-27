@@ -1008,6 +1008,8 @@ internal sealed class NoopDictionaryService : IDictionaryService
     public string ApplyCorrections(string text) => text;
     public string? GetTermsForPrompt() => null;
     public void LearnCorrection(string original, string replacement) { }
+    public IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions) => [];
+    public void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections) { }
     public void ActivatePack(TermPack pack) { }
     public void DeactivatePack(string packId) { }
 }

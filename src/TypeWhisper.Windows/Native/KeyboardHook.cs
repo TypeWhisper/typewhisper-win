@@ -78,6 +78,8 @@ public sealed class KeyboardHook : IDisposable
         _stateMachine.Reset();
     }
 
+    internal void ResetRuntimeState() => _stateMachine.ResetRuntimeState();
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && _stateMachine.HasHotkey)
@@ -317,6 +319,7 @@ internal sealed class HotkeyMatchStateMachine
         }
         else if (isKeyUp)
         {
+            var suppressedKeyDown = _suppressedKeyDowns.Contains(vkCode);
             if (!_isPressed && _pendingSuppressedWinKey == vkCode)
             {
                 _pendingSuppressedWinKey = 0;
@@ -330,7 +333,7 @@ internal sealed class HotkeyMatchStateMachine
                 _isPressed = false;
                 raiseKeyUp = true;
 
-                if (_targetVk == vkCode || HotkeyKeyClassifier.IsWinKey(vkCode))
+                if (_targetVk == vkCode || HotkeyKeyClassifier.IsWinKey(vkCode) || suppressedKeyDown)
                     swallow = true;
             }
 
@@ -351,7 +354,7 @@ internal sealed class HotkeyMatchStateMachine
             SyntheticKeyUpVk: syntheticKeyUpVk);
     }
 
-    private void ResetRuntimeState()
+    internal void ResetRuntimeState()
     {
         _pressedKeys.Clear();
         _pendingSuppressedKeyUps.Clear();

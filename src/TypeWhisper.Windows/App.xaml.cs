@@ -184,7 +184,7 @@ public partial class App : Application
             Dispatcher.InvokeAsync(() =>
                 _serviceProvider.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
 
-        // Warm up audio
+        // Warm up audio in the background so startup stays responsive.
         var audio = _serviceProvider.GetRequiredService<AudioRecordingService>();
         _ = StartAudioWarmUpInBackground(audio, settings.Current.SelectedMicrophoneDevice);
 
@@ -470,6 +470,9 @@ public partial class App : Application
         services.AddSingleton<HistoryRetentionCoordinator>();
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
+        services.AddSingleton<ITargetAppTextObserver, TargetAppTextObservationService>();
+        services.AddSingleton<ITargetAppCorrectionCommitObserver, TargetAppCorrectionCommitObserver>();
+        services.AddSingleton<TargetAppCorrectionLearningService>();
         services.AddSingleton<RecentTranscriptionsService>();
         services.AddSingleton<WorkflowPaletteService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();

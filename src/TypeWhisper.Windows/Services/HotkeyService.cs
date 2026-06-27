@@ -420,6 +420,12 @@ public sealed class HotkeyService : IDisposable
             _isActive = false;
             CurrentMode = null;
         }
+
+        _cancelHook.ResetRuntimeState();
+        foreach (var hook in _appHotkeyHooks)
+            hook.ResetRuntimeState();
+        foreach (var (hook, _) in _workflowHooks)
+            hook.ResetRuntimeState();
     }
 
     /// <summary>

@@ -35,6 +35,18 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultTargetAppCorrectionLearningEnabled_IsTrueForCommercialGate()
+    {
+        Assert.True(AppSettings.Default.TargetAppCorrectionLearningEnabled);
+    }
+
+    [Fact]
+    public void RawTargetAppCorrectionLearningEnabled_DefaultsFalseForDeserialization()
+    {
+        Assert.False(new AppSettings().TargetAppCorrectionLearningEnabled);
+    }
+
+    [Fact]
     public void DefaultLocalModelAcceleration_IsAuto()
     {
         Assert.Equal(AppSettings.LocalModelAccelerationAuto, AppSettings.Default.LocalModelAcceleration);

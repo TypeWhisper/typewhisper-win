@@ -65,7 +65,7 @@ public class HotkeyInputTests
     }
 
     [Fact]
-    public void ModifierOnly_WinAlt_PressWinThenAlt_DoesNotSwallowAltKeyUp()
+    public void ModifierOnly_WinAlt_PressWinThenAlt_SwallowsActivationKeyUp()
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_ALT);
 
@@ -78,7 +78,7 @@ public class HotkeyInputTests
 
         var altUp = sut.ProcessKeyEvent(NativeMethods.VK_LMENU, isKeyDown: false, isKeyUp: true);
         Assert.True(altUp.RaiseKeyUp);
-        Assert.False(altUp.Swallow);
+        Assert.True(altUp.Swallow);
 
         var winUp = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true);
         Assert.False(winUp.RaiseKeyUp);
@@ -116,7 +116,7 @@ public class HotkeyInputTests
 
         var altUp = sut.ProcessKeyEvent(NativeMethods.VK_LMENU, isKeyDown: false, isKeyUp: true);
         Assert.True(altUp.RaiseKeyUp);
-        Assert.False(altUp.Swallow);
+        Assert.True(altUp.Swallow);
 
         var ctrlUp = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: false, isKeyUp: true);
         Assert.Equal(default, ctrlUp);
@@ -141,6 +141,26 @@ public class HotkeyInputTests
         var winUp = sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true);
         Assert.True(winUp.Swallow);
         Assert.True(winUp.RaiseKeyUp);
+    }
+
+    [Fact]
+    public void ModifierOnly_CtrlShift_SwallowsActivationKeyUpWhenActivationKeyDownWasSwallowed()
+    {
+        var sut = CreateStateMachine(NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT);
+
+        var ctrlDown = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        Assert.False(ctrlDown.Swallow);
+
+        var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.True(shiftDown.RaiseKeyDown);
+        Assert.True(shiftDown.Swallow);
+
+        var shiftUp = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true);
+        Assert.True(shiftUp.RaiseKeyUp);
+        Assert.True(shiftUp.Swallow);
+
+        var ctrlUp = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: false, isKeyUp: true);
+        Assert.Equal(default, ctrlUp);
     }
 
     [Fact]
@@ -220,6 +240,22 @@ public class HotkeyInputTests
         Assert.Equal(default, sut.ProcessKeyEvent((uint)'S', isKeyDown: false, isKeyUp: true));
         Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true));
         Assert.Equal(default, sut.ProcessKeyEvent(NativeMethods.VK_LWIN, isKeyDown: false, isKeyUp: true));
+    }
+
+    [Fact]
+    public void ResetRuntimeState_AllowsModifierOnlyHotkeyAfterMissedRelease()
+    {
+        var sut = CreateStateMachine(NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT);
+
+        _ = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        var firstShiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.True(firstShiftDown.RaiseKeyDown);
+
+        sut.ResetRuntimeState();
+
+        _ = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        var secondShiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.True(secondShiftDown.RaiseKeyDown);
     }
 
     [Fact]

@@ -251,6 +251,35 @@ public class SettingsServiceTests : IDisposable
         Assert.False(sut.Current.OnlineAsrBatchLiveTranscriptionEnabled);
     }
 
+    [Fact]
+    public void Load_LegacySettings_DisablesTargetAppCorrectionLearningByDefault()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.False(sut.Current.TargetAppCorrectionLearningEnabled);
+    }
+
+    [Fact]
+    public void Load_SettingsWithTargetAppCorrectionLearningEnabled_PreservesOptIn()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "en",
+          "targetAppCorrectionLearningEnabled": true
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.True(sut.Current.TargetAppCorrectionLearningEnabled);
+    }
+
     [Theory]
     [InlineData(2.0, 10.0)]
     [InlineData(44.0, 18.0)]
