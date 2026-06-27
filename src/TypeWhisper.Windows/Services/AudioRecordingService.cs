@@ -60,7 +60,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Initializes a new instance of the AudioRecordingService class.
     /// </summary>
     public AudioRecordingService()
-        : this(new WasapiAudioInputDeviceProvider(), new WasapiAudioInputCaptureFactory(), DefaultDevicePollInterval)
+        : this(new WaveInAudioInputDeviceProvider(), new WaveInAudioInputCaptureFactory(), DefaultDevicePollInterval)
     {
     }
 
@@ -229,7 +229,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Returns available devices.
     /// </summary>
     public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices() =>
-        GetAvailableDevices(new WasapiAudioInputDeviceProvider());
+        GetAvailableDevices(new WaveInAudioInputDeviceProvider());
 
     /// <summary>
     /// Returns available input devices.
