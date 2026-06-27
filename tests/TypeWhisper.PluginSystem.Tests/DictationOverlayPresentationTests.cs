@@ -46,6 +46,26 @@ public class DictationOverlayPresentationTests
     }
 
     [Fact]
+    public void ClearFeedbackAction_ResetsLearnedFeedbackAutoHideDuration()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var clearBlock = TestFile.ExtractBlock(source, "private void ClearFeedbackAction()", 600);
+
+        var resetIndex = clearBlock.IndexOf("_feedbackAutoHideMilliseconds = 2000;", StringComparison.Ordinal);
+        var earlyReturnIndex = clearBlock.IndexOf(
+            "if (_pendingLearnedCorrections.Count == 0 && FeedbackActionText is null)",
+            StringComparison.Ordinal);
+
+        Assert.True(resetIndex >= 0, "Expected ClearFeedbackAction to restore the transient feedback timeout.");
+        Assert.True(earlyReturnIndex >= 0, "Expected ClearFeedbackAction to keep the empty-state guard.");
+        Assert.True(resetIndex < earlyReturnIndex, "Expected the timeout reset to run even when no action is pending.");
+    }
+
+    [Fact]
     public void BuiltInPartialPreview_ShowsWhenExternalPreviewIsInactive()
     {
         Assert.True(DictationOverlayPresentation.ShowBuiltInPartialPreview(

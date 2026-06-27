@@ -232,6 +232,23 @@ public class DictationTargetAppCorrectionLearningGateTests
     }
 
     [Fact]
+    public void TargetAppCorrectionBaselineCapture_TreatsUnauthorizedAccessAsCaptureError()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var captureBlock = TestFile.ExtractBlock(
+            source,
+            "baselineResult = await CaptureTargetAppCorrectionBaselineAsync",
+            1700);
+
+        Assert.Contains("catch (UnauthorizedAccessException)", captureBlock);
+        Assert.Contains("return new TargetAppCorrectionLearningStartResult(false, \"capture_error\");", captureBlock);
+    }
+
+    [Fact]
     public void TargetAppCorrectionLearningTask_DisposesLinkedCancellationSource()
     {
         var source = TestFile.ReadProjectFile(
@@ -242,9 +259,15 @@ public class DictationTargetAppCorrectionLearningGateTests
         var taskBlock = TestFile.ExtractBlock(
             source,
             "var trackingTask = Task.Run",
-            3200);
+            4200);
+        var cancelBlock = TestFile.ExtractBlock(
+            source,
+            "private void CancelTargetAppCorrectionLearning()",
+            900);
 
+        Assert.Contains("private readonly object _targetAppCorrectionLearningSync = new();", source);
         Assert.Contains("finally", taskBlock);
+        Assert.Contains("lock (_targetAppCorrectionLearningSync)", taskBlock);
         Assert.Contains("ReferenceEquals(_targetAppCorrectionLearningCts, cts)", taskBlock);
         Assert.Contains("_targetAppCorrectionLearningCts = null;", taskBlock);
         Assert.Contains("_targetAppCorrectionLearningTask = trackingTask;", taskBlock);
@@ -253,5 +276,7 @@ public class DictationTargetAppCorrectionLearningGateTests
         Assert.Contains("TaskContinuationOptions.ExecuteSynchronously", taskBlock);
         Assert.Contains("TaskScheduler.Default", taskBlock);
         Assert.Contains("cts.Dispose();", taskBlock);
+        Assert.Contains("lock (_targetAppCorrectionLearningSync)", cancelBlock);
+        Assert.Contains("_targetAppCorrectionLearningCts?.Cancel();", cancelBlock);
     }
 }

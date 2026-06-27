@@ -112,6 +112,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly LicenseService? _licenseService;
     private readonly ITargetAppTextObserver? _targetAppTextObserver;
     private readonly TargetAppCorrectionLearningService? _targetAppCorrectionLearning;
+    private readonly object _targetAppCorrectionLearningSync = new();
 
     private CancellationTokenSource _consumerCts = new();
     private Task? _consumerTask;
@@ -785,6 +786,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
     private void ClearFeedbackAction()
     {
+        _feedbackAutoHideMilliseconds = 2000;
+
         if (_pendingLearnedCorrections.Count == 0 && FeedbackActionText is null)
             return;
 
@@ -1764,6 +1767,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
+        catch (UnauthorizedAccessException)
+        {
+            return new TargetAppCorrectionLearningStartResult(false, "capture_error");
+        }
         catch (System.Runtime.InteropServices.COMException)
         {
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
@@ -1774,7 +1781,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         CancelTargetAppCorrectionLearning();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
-        _targetAppCorrectionLearningCts = cts;
+        lock (_targetAppCorrectionLearningSync)
+        {
+            _targetAppCorrectionLearningCts = cts;
+        }
+
         var trackingTask = Task.Run(async () =>
         {
             try
@@ -1818,18 +1829,29 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             }
             finally
             {
-                if (ReferenceEquals(_targetAppCorrectionLearningCts, cts))
-                    _targetAppCorrectionLearningCts = null;
+                lock (_targetAppCorrectionLearningSync)
+                {
+                    if (ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                        _targetAppCorrectionLearningCts = null;
+                }
 
                 cts.Dispose();
             }
         });
-        _targetAppCorrectionLearningTask = trackingTask;
+        lock (_targetAppCorrectionLearningSync)
+        {
+            if (ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                _targetAppCorrectionLearningTask = trackingTask;
+        }
+
         _ = trackingTask.ContinueWith(
             _ =>
             {
-                if (ReferenceEquals(_targetAppCorrectionLearningTask, trackingTask))
-                    _targetAppCorrectionLearningTask = null;
+                lock (_targetAppCorrectionLearningSync)
+                {
+                    if (ReferenceEquals(_targetAppCorrectionLearningTask, trackingTask))
+                        _targetAppCorrectionLearningTask = null;
+                }
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
@@ -1943,9 +1965,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
     private void CancelTargetAppCorrectionLearning()
     {
-        _targetAppCorrectionLearningCts?.Cancel();
-        _targetAppCorrectionLearningCts = null;
-        _targetAppCorrectionLearningTask = null;
+        lock (_targetAppCorrectionLearningSync)
+        {
+            _targetAppCorrectionLearningCts?.Cancel();
+            _targetAppCorrectionLearningCts = null;
+            _targetAppCorrectionLearningTask = null;
+        }
     }
 
     private static void DispatchToUi(Action action)
