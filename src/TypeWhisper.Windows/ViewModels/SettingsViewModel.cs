@@ -306,12 +306,11 @@ public partial class SettingsViewModel : ObservableObject
         RegisterShortcutHotkeyCollections();
 
         _isLoading = true;
-        RefreshLocalizedCollections();
+        RefreshLocalizedCollections(refreshMicrophones: false);
         LoadFromSettings(_settings.Current);
         RefreshSpokenFeedbackProviders();
         AutostartEnabled = StartupService.IsEnabled;
         RefreshMicrophones();
-        _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         RefreshApiServerStatus();
         RefreshCliState();
         RefreshApiExamples();
@@ -883,12 +882,13 @@ public partial class SettingsViewModel : ObservableObject
         });
     }
 
-    private void RefreshLocalizedCollections()
+    private void RefreshLocalizedCollections(bool refreshMicrophones = true)
     {
         ReplaceCollection(TranslationTargetOptions, LocalizeTranslationOptions(TranslationModelInfo.GlobalTargetOptions));
         ReplaceCollection(HistoryRetentionOptions, BuildHistoryRetentionOptions());
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
-        RefreshMicrophones();
+        if (refreshMicrophones)
+            RefreshMicrophones();
     }
 
     private string? ResolveLastTranslationTarget()

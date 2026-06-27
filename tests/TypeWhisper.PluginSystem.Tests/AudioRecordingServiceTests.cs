@@ -13,6 +13,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class AudioRecordingServiceDeviceChangeTests
 {
     [Fact]
+    public void DefaultMicrophoneCapture_UsesWaveInInsteadOfWasapi()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "AudioRecordingService.cs");
+        var defaultConstructor = TestFile.ExtractBlock(source, "public AudioRecordingService()", 260);
+        var staticDeviceList = TestFile.ExtractBlock(source, "public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices()", 180);
+
+        Assert.Contains("new WaveInAudioInputDeviceProvider()", defaultConstructor);
+        Assert.Contains("new WaveInAudioInputCaptureFactory()", defaultConstructor);
+        Assert.DoesNotContain("WasapiAudioInput", defaultConstructor);
+        Assert.Contains("new WaveInAudioInputDeviceProvider()", staticDeviceList);
+    }
+
+    [Fact]
     public void CheckForDeviceChanges_RaisesDevicesChanged_WhenDeviceNamesChangeWithSameCount()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
@@ -259,6 +276,26 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
 public sealed class SettingsViewModelMicrophoneDeviceTests
 {
+    [Fact]
+    public void Constructor_EnumeratesMicrophoneNamesOnlyOnce()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 0 });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        Assert.Equal(0, sut.SelectedMicrophoneDevice);
+        Assert.Equal("USB Microphone", sut.SelectedMicrophoneItem?.Name);
+        Assert.Equal(1, devices.DeviceNameRequestCount);
+    }
+
     [Fact]
     public void Constructor_SelectsDefaultMicrophoneItem_WhenNoDeviceIsConfigured()
     {
@@ -568,10 +605,16 @@ public sealed class RecorderAudioPipelineTests
             "TypeWhisper.Windows",
             "Services",
             "AudioRecordingService.cs");
+        var filterSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "NonFatalExceptionFilter.cs");
 
         Assert.Contains("catch (Exception ex) when (IsNonFatalAudioException(ex))", source);
-        Assert.Contains("ex is not OutOfMemoryException", source);
-        Assert.Contains("and not AccessViolationException", source);
+        Assert.Contains("NonFatalExceptionFilter.IsNonFatal", source);
+        Assert.Contains("ex is not OutOfMemoryException", filterSource);
+        Assert.Contains("and not AccessViolationException", filterSource);
         Assert.DoesNotContain("catch\r\n        {\r\n            return -1;", source);
         Assert.DoesNotContain("catch { }", source);
     }
@@ -679,7 +722,13 @@ internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
 
     public int DeviceCount => _deviceNames.Count;
 
-    public string GetDeviceName(int deviceNumber) => _deviceNames[deviceNumber];
+    public int DeviceNameRequestCount { get; private set; }
+
+    public string GetDeviceName(int deviceNumber)
+    {
+        DeviceNameRequestCount++;
+        return _deviceNames[deviceNumber];
+    }
 
     public void SetDevices(params string[] deviceNames)
     {
