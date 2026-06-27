@@ -23,7 +23,7 @@ jobs:
       scan_mode: ${{ steps.discover.outputs.scan_mode }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Validate plugin manifests and localization files
         shell: pwsh
@@ -154,7 +154,7 @@ jobs:
         plugin: ${{ fromJson(needs.discover-plugins.outputs.projects) }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Ensure NuGet global packages folder
         shell: pwsh

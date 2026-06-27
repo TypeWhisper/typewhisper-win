@@ -27,7 +27,7 @@ jobs:
       should_run: ${{ steps.resolve.outputs.should_run }}
       release_target: ${{ steps.resolve.outputs.release_target }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -131,7 +131,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       VELOPACK_CHANNEL: ${{ matrix.rid }}${{ needs.prepare.outputs.channel_suffix }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -212,7 +212,7 @@ jobs:
     if: needs.prepare.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
