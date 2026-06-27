@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using TypeWhisper.Core.Interfaces;
@@ -431,9 +432,10 @@ public sealed class DictionaryService : IDictionaryService
             {
                 ((Action)handler).Invoke();
             }
-            catch (Exception)
+            catch (Exception ex) when (IsNonFatalException(ex))
             {
                 // Subscriber failures must not break dictionary persistence or automatic learning.
+                LogDictionaryFailure("Dictionary entries changed subscriber failed", ex);
             }
         }
     }
@@ -651,9 +653,29 @@ public sealed class DictionaryService : IDictionaryService
                 _cache = _cache.Select(BackfillTimestamps).ToList();
             }
         }
-        catch (Exception)
+        catch (IOException ex)
         {
-            _cache = [];
+            ResetCacheAfterLoadFailure(ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            ResetCacheAfterLoadFailure(ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            ResetCacheAfterLoadFailure(ex);
+        }
+        catch (JsonException ex)
+        {
+            ResetCacheAfterLoadFailure(ex);
+        }
+        catch (ArgumentException ex)
+        {
+            ResetCacheAfterLoadFailure(ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            ResetCacheAfterLoadFailure(ex);
         }
 
         _cacheLoaded = true;
@@ -670,8 +692,48 @@ public sealed class DictionaryService : IDictionaryService
             var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, json);
         }
-        catch (Exception) { }
+        catch (IOException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
+        catch (JsonException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
+        catch (ArgumentException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            LogDictionaryFailure("Saving dictionary failed", ex);
+        }
     }
+
+    private void ResetCacheAfterLoadFailure(Exception ex)
+    {
+        LogDictionaryFailure("Loading dictionary failed", ex);
+        _cache = [];
+    }
+
+    private static bool IsNonFatalException(Exception ex) =>
+        ex is not OutOfMemoryException
+            and not AccessViolationException
+            and not AppDomainUnloadedException
+            and not BadImageFormatException
+            and not CannotUnloadAppDomainException
+            and not InvalidProgramException;
+
+    private static void LogDictionaryFailure(string message, Exception ex) =>
+        Debug.WriteLine($"[DictionaryService] {message}: {ex.Message}");
 
     private void ReorderTerms(IReadOnlyList<DictionaryEntry> orderedTerms)
     {

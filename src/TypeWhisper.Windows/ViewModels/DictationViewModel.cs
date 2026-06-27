@@ -1752,7 +1752,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             return new TargetAppCorrectionLearningStartResult(false, "cancelled");
         }
-        catch
+        catch (System.Windows.Automation.ElementNotAvailableException)
+        {
+            return new TargetAppCorrectionLearningStartResult(false, "capture_error");
+        }
+        catch (InvalidOperationException)
+        {
+            return new TargetAppCorrectionLearningStartResult(false, "capture_error");
+        }
+        catch (IOException)
+        {
+            return new TargetAppCorrectionLearningStartResult(false, "capture_error");
+        }
+        catch (System.Runtime.InteropServices.COMException)
         {
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
@@ -1780,14 +1792,37 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             {
                 // Expected when a new recording starts or processing is cancelled.
             }
-            catch (Exception ex)
+            catch (System.Windows.Automation.ElementNotAvailableException ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Target-app correction learning failed: {ex.Message}");
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (IOException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
             }
         });
 
         return new TargetAppCorrectionLearningStartResult(true, null);
     }
+
+    private static void LogTargetAppCorrectionLearningFailure(Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"Target-app correction learning failed: {ex.Message}");
 
     private bool ShouldTrackTargetAppCorrectionLearning(Workflow? activeWorkflow, string insertedText)
         => ShouldTrackTargetAppCorrectionLearning(
