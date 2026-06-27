@@ -7,15 +7,22 @@
     <Border CornerRadius="18"
             Padding="14,7"
             HorizontalAlignment="Center"
+            MaxWidth="520"
             Background="#F0181818"
             BorderBrush="#25FFFFFF"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
         </Border.Effect>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-            <TextBlock Text="{Binding FeedbackText}"
+        <Grid HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="{Binding FeedbackText}"
                        FontSize="11"
+                       MinWidth="0"
                        VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis">
                 <TextBlock.Style>
@@ -29,7 +36,8 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <Button Content="{Binding FeedbackActionText}"
+            <Button Grid.Column="1"
+                    Content="{Binding FeedbackActionText}"
                     Command="{Binding FeedbackActionCommand}"
                     Visibility="{Binding ShowFeedbackAction, Converter={StaticResource BoolToVis}}"
                     FontSize="11"
@@ -40,6 +48,6 @@
                     Foreground="#FFFFFFFF"
                     Background="#22FFFFFF"
                     BorderBrush="#33FFFFFF"/>
-        </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

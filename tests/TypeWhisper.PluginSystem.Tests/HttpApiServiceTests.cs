@@ -186,7 +186,7 @@ public class HttpApiServiceTests : IDisposable
         };
         var service = CreateService(automationEnabled: true, automationController: automation);
 
-        var response = await service.HandleRequestAsync(JsonRequest(
+        var response = await service.HandleRequestAsync(JsonRequestWithToken(
             "POST",
             "/v1/automation/insert-text",
             """{"text":"premium teh test","auto_enter":true}"""), CancellationToken.None);
@@ -210,7 +210,7 @@ public class HttpApiServiceTests : IDisposable
         };
         var service = CreateService(automationEnabled: true, automationController: automation);
 
-        var response = await service.HandleRequestAsync(JsonRequest(
+        var response = await service.HandleRequestAsync(JsonRequestWithToken(
             "POST",
             "/v1/automation/insert-text",
             """{"text":"premium teh test"}"""), CancellationToken.None);
@@ -235,12 +235,9 @@ public class HttpApiServiceTests : IDisposable
         var automation = new FakeDictationAutomationController();
         var service = CreateService(automationEnabled: true, automationController: automation);
 
-        var response = await service.HandleRequestAsync(new HttpApiRequest(
+        var response = await service.HandleRequestAsync(RequestWithToken(
             "POST",
-            "/v1/automation/commit-correction-learning",
-            new NameValueCollection(),
-            new Dictionary<string, string>(),
-            []), CancellationToken.None);
+            "/v1/automation/commit-correction-learning"), CancellationToken.None);
         var json = JsonObject(response);
 
         Assert.Equal(200, response.StatusCode);
@@ -325,6 +322,37 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AutomationRoutes_RequireApiTokenWhenGlobalAuthenticationIsDisabled()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                ApiServerRequiresAuthentication = false,
+                SaveToHistoryEnabled = true
+            },
+            automationEnabled: true,
+            automationController: automation);
+
+        var missingToken = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test"}"""), CancellationToken.None);
+        var goodToken = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/commit-correction-learning",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []), CancellationToken.None);
+
+        Assert.Equal(401, missingToken.StatusCode);
+        Assert.Equal("Bearer", missingToken.Headers["WWW-Authenticate"]);
+        Assert.Equal(200, goodToken.StatusCode);
+        Assert.Empty(automation.InsertRequests);
+        Assert.Equal(1, automation.CommitCalls);
+    }
+
+    [Fact]
     public async Task AutomationInsertText_RejectsInvalidPayloads()
     {
         var automation = new FakeDictationAutomationController();
@@ -334,17 +362,17 @@ public class HttpApiServiceTests : IDisposable
             "POST",
             "/v1/automation/insert-text",
             new NameValueCollection(),
-            new Dictionary<string, string>(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
             []), CancellationToken.None);
-        var invalidJson = await service.HandleRequestAsync(JsonRequest(
+        var invalidJson = await service.HandleRequestAsync(JsonRequestWithToken(
             "POST",
             "/v1/automation/insert-text",
             "{"), CancellationToken.None);
-        var emptyText = await service.HandleRequestAsync(JsonRequest(
+        var emptyText = await service.HandleRequestAsync(JsonRequestWithToken(
             "POST",
             "/v1/automation/insert-text",
             """{"text":"   "}"""), CancellationToken.None);
-        var tooLong = await service.HandleRequestAsync(JsonRequest(
+        var tooLong = await service.HandleRequestAsync(JsonRequestWithToken(
             "POST",
             "/v1/automation/insert-text",
             JsonSerializer.Serialize(new
@@ -941,6 +969,26 @@ public class HttpApiServiceTests : IDisposable
             new NameValueCollection(),
             new Dictionary<string, string> { ["content-type"] = "application/json" },
             Encoding.UTF8.GetBytes(json));
+
+    private static HttpApiRequest JsonRequestWithToken(string method, string path, string json) =>
+        new(
+            method,
+            path,
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "application/json",
+                ["authorization"] = "Bearer test-token"
+            },
+            Encoding.UTF8.GetBytes(json));
+
+    private static HttpApiRequest RequestWithToken(string method, string path) =>
+        new(
+            method,
+            path,
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []);
 
     private static HttpApiRequest MultipartTranscribeRequest(
         params (string Name, string? FileName, string? ContentType, byte[] Data)[] parts)

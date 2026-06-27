@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows.Automation;
 using TypeWhisper.Windows.Native;
 
@@ -58,7 +59,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
 
             return CaptureElement(element, baseline.WindowHandle, baseline.MaxValueLength);
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
         {
             return null;
         }
@@ -84,7 +93,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                 ? TargetAppTextElementMatch.Same
                 : TargetAppTextElementMatch.Different;
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return TargetAppTextElementMatch.Unavailable;
+        }
+        catch (InvalidOperationException)
+        {
+            return TargetAppTextElementMatch.Unavailable;
+        }
+        catch (COMException)
         {
             return TargetAppTextElementMatch.Unavailable;
         }
@@ -122,7 +139,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                 ? CaptureElement(element, targetHwnd, maxTextLength)
                 : null;
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
         {
             return null;
         }
@@ -148,8 +173,11 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
             foreach (AutomationElement element in elements)
             {
                 var observation = CaptureElement(element, targetHwnd, maxTextLength);
-                if (observation?.Value.Contains(preferredText, StringComparison.Ordinal) != true)
+                if (observation is null ||
+                    !observation.Value.Contains(preferredText, StringComparison.Ordinal))
+                {
                     continue;
+                }
 
                 if (match is not null &&
                     !string.Equals(match.ElementKey, observation.ElementKey, StringComparison.Ordinal))
@@ -162,7 +190,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
 
             return match;
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
         {
             return null;
         }
@@ -195,7 +231,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
             if (runtimeId is { Length: > 0 })
                 return string.Join(".", runtimeId);
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            // Fall back to current properties below.
+        }
+        catch (InvalidOperationException)
+        {
+            // Fall back to current properties below.
+        }
+        catch (COMException)
         {
             // Fall back to current properties below.
         }
@@ -211,7 +255,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                 current.Name,
                 current.NativeWindowHandle);
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
         {
             return null;
         }
@@ -234,7 +286,15 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                 current = walker.GetParent(current);
             }
         }
-        catch
+        catch (ElementNotAvailableException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (COMException)
         {
             return false;
         }

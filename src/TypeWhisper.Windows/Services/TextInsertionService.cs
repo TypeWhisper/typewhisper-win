@@ -188,8 +188,7 @@ public sealed class TextInsertionService
             return true;
         }
 
-        var targetProcessId = _platform.GetWindowProcessId(targetHwnd);
-        if (IsTargetForeground(targetHwnd, targetProcessId))
+        if (IsTargetForeground(targetHwnd))
         {
             await _platform.DelayAsync(FocusDelay);
             return true;
@@ -197,7 +196,7 @@ public sealed class TextInsertionService
 
         var focusRequested = _platform.SetForegroundWindow(targetHwnd);
         await _platform.DelayAsync(FocusDelay);
-        if (focusRequested || IsTargetForeground(targetHwnd, targetProcessId))
+        if (focusRequested || IsTargetForeground(targetHwnd))
             return true;
 
         var activationInputCount = _platform.SendForegroundActivationInput();
@@ -208,18 +207,13 @@ public sealed class TextInsertionService
             await _platform.DelayAsync(FocusDelay);
         }
 
-        return focusRequested || IsTargetForeground(targetHwnd, targetProcessId);
+        return focusRequested || IsTargetForeground(targetHwnd);
     }
 
-    private bool IsTargetForeground(IntPtr targetHwnd, uint targetProcessId)
+    private bool IsTargetForeground(IntPtr targetHwnd)
     {
         var foregroundHwnd = _platform.GetForegroundWindow();
-        if (foregroundHwnd == targetHwnd)
-            return true;
-
-        return foregroundHwnd != IntPtr.Zero
-            && targetProcessId != 0
-            && _platform.GetWindowProcessId(foregroundHwnd) == targetProcessId;
+        return foregroundHwnd == targetHwnd;
     }
 
     private async Task<string?> WaitForClipboardTextChangeAsync(string marker)

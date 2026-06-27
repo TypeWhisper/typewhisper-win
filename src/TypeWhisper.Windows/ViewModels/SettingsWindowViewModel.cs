@@ -560,10 +560,13 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
     private void RaiseTargetAppCorrectionLearningProperties()
     {
-        OnPropertyChanged(nameof(CanUseTargetAppCorrectionLearning));
-        OnPropertyChanged(nameof(ShowTargetAppCorrectionLearningLocked));
-        OnPropertyChanged(nameof(TargetAppCorrectionLearningEnabled));
-        OnPropertyChanged(nameof(TargetAppCorrectionLearningStatus));
+        DispatchToUi(() =>
+        {
+            OnPropertyChanged(nameof(CanUseTargetAppCorrectionLearning));
+            OnPropertyChanged(nameof(ShowTargetAppCorrectionLearningLocked));
+            OnPropertyChanged(nameof(TargetAppCorrectionLearningEnabled));
+            OnPropertyChanged(nameof(TargetAppCorrectionLearningStatus));
+        });
     }
 
     private void OnPluginsPropertyChanged(object? sender, PropertyChangedEventArgs e)

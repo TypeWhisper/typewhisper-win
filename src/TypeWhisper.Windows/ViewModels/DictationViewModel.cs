@@ -411,7 +411,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 Application.Current?.Dispatcher.InvokeAsync(() => ShowFeedback = false);
             };
             _feedbackTimer.Start();
+            return;
         }
+
+        ClearFeedbackAction();
     }
 
     partial void OnLastTranscribedTextChanged(string? value) =>

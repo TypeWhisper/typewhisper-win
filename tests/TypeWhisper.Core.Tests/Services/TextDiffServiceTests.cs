@@ -90,12 +90,24 @@ public class TextDiffServiceTests
     public void HighConfidenceCorrections_AllowsInternalHyphenatedWords()
     {
         var result = TextDiffService.ExtractHighConfidenceCorrections(
-            "Premium-Funktionalität",
-            "Premiun-Funktionalität");
+            "Premiun-Funktionalität",
+            "Premium-Funktionalität");
 
         var suggestion = Assert.Single(result);
-        Assert.Equal("Premium-Funktionalität", suggestion.Original);
-        Assert.Equal("Premiun-Funktionalität", suggestion.Replacement);
+        Assert.Equal("Premiun-Funktionalität", suggestion.Original);
+        Assert.Equal("Premium-Funktionalität", suggestion.Replacement);
+    }
+
+    [Fact]
+    public void HighConfidenceCorrections_TokenizesAllWhitespace()
+    {
+        var result = TextDiffService.ExtractHighConfidenceCorrections(
+            "alpha\tteh\r\nworld",
+            "alpha\tthe\r\nworld");
+
+        var suggestion = Assert.Single(result);
+        Assert.Equal("teh", suggestion.Original);
+        Assert.Equal("the", suggestion.Replacement);
     }
 
     [Theory]

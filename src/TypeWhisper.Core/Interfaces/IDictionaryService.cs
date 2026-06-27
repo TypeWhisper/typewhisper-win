@@ -97,14 +97,12 @@ public interface IDictionaryService
     /// <summary>
     /// Learns new corrections without overwriting existing dictionary entries.
     /// </summary>
-    IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions) =>
-        throw new NotSupportedException();
+    IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions);
 
     /// <summary>
     /// Removes corrections that were created by automatic learning.
     /// </summary>
-    void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections) =>
-        throw new NotSupportedException();
+    void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections);
 
     /// <summary>
     /// Activates pack.

@@ -323,6 +323,20 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void LearnCorrections_SkipsCaseOnlySuggestions()
+    {
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("hello", "Hello"),
+            new CorrectionSuggestion("teh", "the")
+        ]);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        var entry = Assert.Single(_sut.Entries);
+        Assert.Equal("teh", entry.Original);
+    }
+
+    [Fact]
     public void LearnCorrections_SkipsUnsafeReplacementExpansion()
     {
         var learned = _sut.LearnCorrections([

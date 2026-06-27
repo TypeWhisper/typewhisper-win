@@ -79,6 +79,7 @@
             <Border CornerRadius="0,0,22,22"
                     Padding="16,6,16,2"
                     Margin="0,6,0,-4"
+                    HorizontalAlignment="Stretch"
                     DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
                     Visibility="{Binding ShowInlineFeedback, Converter={StaticResource BoolToVis}}">
                 <Border.Style>
@@ -91,9 +92,15 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="{Binding FeedbackText}"
+                <Grid HorizontalAlignment="Stretch">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding FeedbackText}"
                                FontSize="11"
+                               MinWidth="0"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis">
                         <TextBlock.Style>
@@ -107,7 +114,8 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <Button Content="{Binding FeedbackActionText}"
+                    <Button Grid.Column="1"
+                            Content="{Binding FeedbackActionText}"
                             Command="{Binding FeedbackActionCommand}"
                             Visibility="{Binding ShowFeedbackAction, Converter={StaticResource BoolToVis}}"
                             FontSize="11"
@@ -118,7 +126,7 @@
                             Foreground="#FFFFFFFF"
                             Background="#22FFFFFF"
                             BorderBrush="#33FFFFFF"/>
-                </StackPanel>
+                </Grid>
             </Border>
         </DockPanel>
     </Border>

@@ -386,7 +386,7 @@ public sealed class DictionaryService : IDictionaryService
             var replacement = suggestion.Replacement.Trim();
             if (original.Length == 0 ||
                 replacement.Length == 0 ||
-                string.Equals(original, replacement, StringComparison.Ordinal) ||
+                string.Equals(original, replacement, StringComparison.OrdinalIgnoreCase) ||
                 !IsSafeAutomaticallyLearnedToken(original) ||
                 !IsSafeAutomaticallyLearnedToken(replacement) ||
                 existingOriginals.Contains(original) ||
@@ -431,7 +431,7 @@ public sealed class DictionaryService : IDictionaryService
             {
                 ((Action)handler).Invoke();
             }
-            catch
+            catch (Exception)
             {
                 // Subscriber failures must not break dictionary persistence or automatic learning.
             }
@@ -651,7 +651,7 @@ public sealed class DictionaryService : IDictionaryService
                 _cache = _cache.Select(BackfillTimestamps).ToList();
             }
         }
-        catch
+        catch (Exception)
         {
             _cache = [];
         }
@@ -670,7 +670,7 @@ public sealed class DictionaryService : IDictionaryService
             var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, json);
         }
-        catch { }
+        catch (Exception) { }
     }
 
     private void ReorderTerms(IReadOnlyList<DictionaryEntry> orderedTerms)

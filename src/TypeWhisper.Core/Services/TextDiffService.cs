@@ -21,8 +21,8 @@ public static class TextDiffService
         if (!HasChanges(original, edited))
             return [];
 
-        var origWords = original.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var editWords = edited.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var origWords = SplitWords(original);
+        var editWords = SplitWords(edited);
 
         // If more than 50% changed, it's a rewrite — no suggestions
         var lcsLen = LcsLength(origWords, editWords);
@@ -107,8 +107,8 @@ public static class TextDiffService
         if (maxSuggestions <= 0 || !HasChanges(original, edited))
             return [];
 
-        var originalTokens = original.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var editedTokens = edited.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var originalTokens = SplitWords(original);
+        var editedTokens = SplitWords(edited);
         if (originalTokens.Length == 0 || originalTokens.Length != editedTokens.Length)
             return [];
 
@@ -139,11 +139,11 @@ public static class TextDiffService
                 return [];
             }
 
-            if (string.Equals(strippedOriginal, originalToken, StringComparison.Ordinal) == false ||
-                string.Equals(strippedEdited, editedToken, StringComparison.Ordinal) == false)
+            if ((!string.Equals(strippedOriginal, originalToken, StringComparison.Ordinal) ||
+                 !string.Equals(strippedEdited, editedToken, StringComparison.Ordinal)) &&
+                string.Equals(strippedOriginal, strippedEdited, StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(strippedOriginal, strippedEdited, StringComparison.OrdinalIgnoreCase))
-                    return [];
+                return [];
             }
 
             if (!seenOriginals.Add(strippedOriginal))
@@ -157,6 +157,9 @@ public static class TextDiffService
 
     private static bool IsPunctuationOnly(string word) =>
         word.All(c => char.IsPunctuation(c) || char.IsSymbol(c));
+
+    private static string[] SplitWords(string value) =>
+        value.Split(null as char[], StringSplitOptions.RemoveEmptyEntries);
 
     private static string StripBoundaryPunctuation(string token)
         => token.Trim(

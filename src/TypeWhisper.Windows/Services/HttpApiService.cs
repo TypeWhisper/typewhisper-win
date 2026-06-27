@@ -942,8 +942,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         };
 
     private bool RequiresAuthentication(HttpApiRequest request) =>
-        _settings.Current.ApiServerRequiresAuthentication &&
-        !string.Equals(request.Path, "/v1/status", StringComparison.Ordinal);
+        request.Path.StartsWith("/v1/automation/", StringComparison.Ordinal) ||
+        (_settings.Current.ApiServerRequiresAuthentication &&
+         !string.Equals(request.Path, "/v1/status", StringComparison.Ordinal));
 
     private bool HasValidApiToken(HttpApiRequest request)
     {
