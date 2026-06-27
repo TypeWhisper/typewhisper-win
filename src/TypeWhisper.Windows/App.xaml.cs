@@ -186,10 +186,7 @@ public partial class App : Application
 
         // Warm up audio
         var audio = _serviceProvider.GetRequiredService<AudioRecordingService>();
-        var mic = settings.Current.SelectedMicrophoneDevice;
-        if (mic.HasValue) audio.SetMicrophoneDevice(mic);
-        if (!audio.WarmUp())
-            System.Diagnostics.Debug.WriteLine("No audio input device available at startup. Polling for device...");
+        _ = StartAudioWarmUpInBackground(audio, settings.Current.SelectedMicrophoneDevice);
 
         // Start and keep the API server aligned with settings.
         var apiServer = _serviceProvider.GetRequiredService<ApiServerController>();
@@ -283,12 +280,29 @@ public partial class App : Application
     }
 
     private static bool IsNonFatalTrayActionException(Exception ex) =>
-        ex is not OutOfMemoryException
-            and not StackOverflowException
-            and not AccessViolationException
-            and not AppDomainUnloadedException
-            and not BadImageFormatException
-            and not CannotUnloadAppDomainException;
+        NonFatalExceptionFilter.IsNonFatal(ex);
+
+    internal static Task StartAudioWarmUpInBackground(
+        AudioRecordingService audio,
+        int? selectedMicrophoneDevice) =>
+        Task.Run(() =>
+        {
+            try
+            {
+                if (selectedMicrophoneDevice.HasValue)
+                    audio.SetMicrophoneDevice(selectedMicrophoneDevice);
+
+                if (!audio.WarmUp())
+                    System.Diagnostics.Debug.WriteLine("No audio input device available at startup. Polling for device...");
+            }
+            catch (Exception ex) when (IsNonFatalStartupException(ex))
+            {
+                System.Diagnostics.Debug.WriteLine($"Audio warm-up failed: {ex.Message}");
+            }
+        });
+
+    private static bool IsNonFatalStartupException(Exception ex) =>
+        NonFatalExceptionFilter.IsNonFatal(ex);
 
     private async Task ProcessProtocolArgsAsync(string[] args)
     {
