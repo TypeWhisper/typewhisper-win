@@ -107,6 +107,12 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _workflows.Workflows.Select(w => w.Name).ToList();
 
     /// <summary>
+    /// Gets whether live transcription preview windows should be shown.
+    /// </summary>
+    public bool LiveTranscriptionPreviewEnabled =>
+        (_settings?.Current ?? AppSettings.Default).LiveTranscriptionEnabled;
+
+    /// <summary>
     /// Gets the live transcription font size in device-independent pixels.
     /// </summary>
     public double LiveTranscriptionFontSize =>

@@ -55,6 +55,9 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     /// </summary>
     public bool UsesHostAppearance => _host is ILivePreviewAppearanceProvider;
 
+    private bool LivePreviewEnabled =>
+        (_host as ILivePreviewAppearanceProvider)?.LiveTranscriptionPreviewEnabled ?? true;
+
     /// <summary>
     /// Gets the font size.
     /// </summary>
@@ -184,6 +187,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private Task OnRecordingStarted(RecordingStartedEvent evt)
     {
         if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
 
         CancelAutoHide();
         _activeRecordingEnded = false;
@@ -206,6 +210,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private Task OnRecordingStopped(RecordingStoppedEvent evt)
     {
         if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
         if (_activeRecordingEnded) return Task.CompletedTask;
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
         _pendingTerminalRecordingId = evt.RecordingId;
@@ -226,6 +231,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
     private Task OnPartialTranscriptionUpdate(PartialTranscriptionUpdateEvent evt)
     {
         if (IsTerminalRecording(evt.RecordingId)) return Task.CompletedTask;
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
         if (_activeRecordingEnded) return Task.CompletedTask;
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
         DispatchToUi(() =>
@@ -244,6 +250,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionCompleted(TranscriptionCompletedEvent evt)
     {
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
+
         MarkTerminalRecording(evt.RecordingId);
         ClearPendingTerminalRecording(evt.RecordingId);
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
@@ -263,6 +271,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTextInserted(TextInsertedEvent evt)
     {
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
+
         if (evt.RecordingId != _activeRecordingId) return Task.CompletedTask;
 
         _autoHideCts?.Cancel();
@@ -316,6 +326,8 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
 
     private Task OnTranscriptionFailed(TranscriptionFailedEvent evt)
     {
+        if (SuppressLivePreviewIfDisabled(evt.RecordingId)) return Task.CompletedTask;
+
         var terminalRecordingId = evt.RecordingId ?? _pendingTerminalRecordingId;
         MarkTerminalRecording(terminalRecordingId);
         ClearPendingTerminalRecording(terminalRecordingId);
@@ -339,6 +351,23 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
             _window?.Hide();
         });
         return Task.CompletedTask;
+    }
+
+    private bool SuppressLivePreviewIfDisabled(Guid? recordingId)
+    {
+        if (LivePreviewEnabled)
+            return false;
+
+        CancelAutoHide();
+        MarkTerminalRecording(recordingId);
+        ClearPendingTerminalRecording(recordingId);
+        _activeRecordingEnded = true;
+
+        if (recordingId == _activeRecordingId || _activeRecordingId is null)
+            _activeRecordingId = null;
+
+        DispatchToUi(() => _window?.Hide());
+        return true;
     }
 
     private void EnsureWindow()

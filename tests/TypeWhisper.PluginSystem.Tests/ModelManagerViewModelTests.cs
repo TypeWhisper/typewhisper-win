@@ -534,6 +534,132 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public async Task DictationAbortActiveOperation_WhileRecording_PublishesTerminalPluginEvents()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new FakeSettingsService(new AppSettings
+        {
+            SelectedModelId = fullModelId,
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var errorLog = new Mock<IErrorLogService>();
+        using var audio = new AudioRecordingService(
+            new FakeAudioInputDeviceProvider("USB Microphone"),
+            new FakeAudioInputCaptureFactory(),
+            Timeout.InfiniteTimeSpan);
+        using var speechFeedback = new SpeechFeedbackService(
+            settings,
+            pluginManager,
+            new FakeTtsProvider("windows-sapi", "System Voice"));
+        var textInsertion = new TextInsertionService(errorLog.Object);
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.Records).Returns([]);
+        var workflowTextProcessor = new Mock<IWorkflowTextProcessor>();
+        var recentTranscriptions = new RecentTranscriptionsService(
+            history.Object,
+            new RecentTranscriptionStore(),
+            textInsertion,
+            settings);
+        var workflowPalette = new WorkflowPaletteService(
+            _workflows.Object,
+            _activeWindow.Object,
+            textInsertion,
+            settings,
+            workflowTextProcessor.Object,
+            pluginManager,
+            new NoOpWorkflowPalettePresenter());
+        var sound = new SoundService { IsEnabled = false };
+        using var hotkey = new HotkeyService(settings, _workflows.Object);
+        var startedEvents = new List<RecordingStartedEvent>();
+        var stoppedEvents = new List<RecordingStoppedEvent>();
+        var failedEvents = new List<TranscriptionFailedEvent>();
+        using var startCapture = _eventBus.Subscribe<RecordingStartedEvent>(evt =>
+        {
+            lock (startedEvents)
+                startedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+        using var stopCapture = _eventBus.Subscribe<RecordingStoppedEvent>(evt =>
+        {
+            lock (stoppedEvents)
+                stoppedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+        using var failureCapture = _eventBus.Subscribe<TranscriptionFailedEvent>(evt =>
+        {
+            lock (failedEvents)
+                failedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+
+        using var sut = new DictationViewModel(
+            settings,
+            modelManager,
+            audio,
+            hotkey,
+            textInsertion,
+            _activeWindow.Object,
+            sound,
+            history.Object,
+            Mock.Of<IDictionaryService>(),
+            Mock.Of<IVocabularyBoostingService>(),
+            Mock.Of<ISnippetService>(),
+            _workflows.Object,
+            Mock.Of<ITranslationService>(),
+            Mock.Of<IAudioDuckingService>(),
+            Mock.Of<IMediaPauseService>(),
+            workflowTextProcessor.Object,
+            new PostProcessingPipeline(),
+            errorLog.Object,
+            speechFeedback,
+            recentTranscriptions,
+            workflowPalette);
+
+        await sut.StartRecordingAsync();
+
+        Assert.True(await WaitForConditionAsync(
+            () =>
+            {
+                lock (startedEvents)
+                    return startedEvents.Count == 1;
+            },
+            TimeSpan.FromSeconds(2)));
+        Guid? recordingId;
+        lock (startedEvents)
+            recordingId = Assert.Single(startedEvents).RecordingId;
+
+        await InvokeAbortActiveOperationAsync(sut);
+
+        Assert.True(await WaitForConditionAsync(
+            () =>
+            {
+                lock (stoppedEvents)
+                    return stoppedEvents.Any(evt => evt.RecordingId == recordingId);
+            },
+            TimeSpan.FromSeconds(2)));
+        Assert.True(await WaitForConditionAsync(
+            () =>
+            {
+                lock (failedEvents)
+                    return failedEvents.Any(evt =>
+                        evt.RecordingId == recordingId
+                        && evt.ErrorMessage == Loc.Instance["Status.Cancelled"]);
+            },
+            TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
     public void Constructor_HidesAccelerationControls_ForCloudPluginWithDefaultCpuStatus()
     {
         const string pluginId = "com.typewhisper.openrouter";
@@ -798,6 +924,16 @@ public class ModelManagerViewModelTests
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
         field.SetValue(target, value);
+    }
+
+    private static Task InvokeAbortActiveOperationAsync(DictationViewModel target)
+    {
+        var method = typeof(DictationViewModel).GetMethod(
+            "AbortActiveOperation",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(nameof(DictationViewModel), "AbortActiveOperation");
+
+        return (Task)method.Invoke(target, null)!;
     }
 
     private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)

@@ -667,6 +667,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         });
     }
 
+    private void PublishCancelledFailure(string? modelId, string? appName, Guid? recordingId)
+    {
+        _eventBus.Publish(new TranscriptionFailedEvent
+        {
+            ErrorMessage = Loc.Instance["Status.Cancelled"],
+            ModelId = modelId,
+            AppName = appName,
+            RecordingId = recordingId
+        });
+    }
+
     private void ShowTransientFeedback(string text, bool isError)
     {
         FeedbackText = text;
@@ -1061,10 +1072,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable
 
         if (_isRecording)
         {
+            var recordingId = _currentRecordingId;
+            var durationSeconds = _audio.RecordingDuration.TotalSeconds;
             _isRecording = false;
             _audio.StopRecording();
             StopActiveRecordingInfrastructure();
             FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.Cancelled"]);
+            _eventBus.Publish(new RecordingStoppedEvent
+            {
+                DurationSeconds = durationSeconds,
+                RecordingId = recordingId
+            });
+            PublishCancelledFailure(_modelManager.ActiveModelId, _capturedWindowTitle, recordingId);
             ApplyTransientIdleFeedback(Loc.Instance["Status.Cancelled"]);
             return Task.CompletedTask;
         }
@@ -1535,6 +1554,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException)
         {
             FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.Cancelled"]);
+            PublishCancelledFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
             await Application.Current.Dispatcher.InvokeAsync(() =>
                 ApplyTransientIdleFeedback(Loc.Instance["Status.Cancelled"]));
         }
@@ -1666,6 +1686,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable
         while (_jobChannel.Reader.TryRead(out var pendingJob))
         {
             FailApiDictationSession(pendingJob.ApiSessionId, Loc.Instance["Status.Cancelled"]);
+            PublishCancelledFailure(
+                pendingJob.ActiveModelIdAtCapture,
+                pendingJob.CapturedWindowTitle,
+                pendingJob.RecordingId);
             DecrementPendingJobCount();
         }
 
