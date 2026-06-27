@@ -265,6 +265,108 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Fact]
+    public void LearnCorrections_AddsOnlyNewCorrectionsAndReturnsLearned()
+    {
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("teh", "the"),
+            new CorrectionSuggestion("recieve", "receive")
+        ]);
+
+        Assert.Equal(2, learned.Count);
+        Assert.Equal(["teh", "recieve"], learned.Select(c => c.Original).ToArray());
+        Assert.Equal(["the", "receive"], learned.Select(c => c.Replacement).ToArray());
+        Assert.Equal(2, _sut.Entries.Count);
+        Assert.All(_sut.Entries, entry => Assert.Equal(DictionaryEntryType.Correction, entry.EntryType));
+    }
+
+    [Fact]
+    public void LearnCorrections_AllowsInternalHyphenatedWords()
+    {
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("Premium-Funktionalität", "Premiun-Funktionalität")
+        ]);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("Premium-Funktionalität", correction.Original);
+        Assert.Equal("Premiun-Funktionalität", correction.Replacement);
+        var entry = Assert.Single(_sut.Entries);
+        Assert.Equal("Premium-Funktionalität", entry.Original);
+        Assert.Equal("Premiun-Funktionalität", entry.Replacement);
+    }
+
+    [Fact]
+    public void LearnCorrections_SkipsExistingAndDoesNotOverwrite()
+    {
+        _sut.LearnCorrection("teh", "THE");
+
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("TEH", "the"),
+            new CorrectionSuggestion("kubernets", "Kubernetes")
+        ]);
+
+        Assert.Single(learned);
+        Assert.Equal("kubernets", learned[0].Original);
+        Assert.Equal(2, _sut.Entries.Count);
+        Assert.Equal("THE", _sut.Entries.First(e => e.Original == "teh").Replacement);
+    }
+
+    [Fact]
+    public void LearnCorrections_SkipsDuplicateSuggestions()
+    {
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("teh", "the"),
+            new CorrectionSuggestion("TEH", "the")
+        ]);
+
+        Assert.Single(learned);
+        Assert.Single(_sut.Entries);
+    }
+
+    [Fact]
+    public void LearnCorrections_SkipsUnsafeReplacementExpansion()
+    {
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("Premium", "Premium.\rhjk"),
+            new CorrectionSuggestion("teh", "the")
+        ]);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+        var entry = Assert.Single(_sut.Entries);
+        Assert.Equal("teh", entry.Original);
+    }
+
+    [Fact]
+    public void LearnCorrections_ReturnsLearnedWhenEntriesChangedSubscriberThrows()
+    {
+        _sut.EntriesChanged += () => throw new InvalidOperationException("UI thread mismatch");
+
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("teh", "the")
+        ]);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+    }
+
+    [Fact]
+    public void UndoLearnedCorrections_RemovesOnlyLearnedEntries()
+    {
+        _sut.LearnCorrection("existing", "Existing");
+        var learned = _sut.LearnCorrections([
+            new CorrectionSuggestion("teh", "the"),
+            new CorrectionSuggestion("recieve", "receive")
+        ]);
+
+        _sut.UndoLearnedCorrections([learned[0], learned[1] with { Replacement = "different" }]);
+
+        var remaining = Assert.Single(_sut.Entries);
+        Assert.Equal("existing", remaining.Original);
+    }
+
+    [Fact]
     public void UpdateEntry_ModifiesEntry()
     {
         _sut.AddEntry(new DictionaryEntry

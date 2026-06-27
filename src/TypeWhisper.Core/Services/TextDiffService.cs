@@ -96,8 +96,99 @@ public static class TextDiffService
         return suggestions;
     }
 
+    /// <summary>
+    /// Extracts conservative one-token corrections suitable for automatic learning.
+    /// </summary>
+    public static List<CorrectionSuggestion> ExtractHighConfidenceCorrections(
+        string original,
+        string edited,
+        int maxSuggestions = 3)
+    {
+        if (maxSuggestions <= 0 || !HasChanges(original, edited))
+            return [];
+
+        var originalTokens = original.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var editedTokens = edited.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (originalTokens.Length == 0 || originalTokens.Length != editedTokens.Length)
+            return [];
+
+        var suggestions = new List<CorrectionSuggestion>();
+        var seenOriginals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < originalTokens.Length; i++)
+        {
+            var originalToken = originalTokens[i];
+            var editedToken = editedTokens[i];
+            if (string.Equals(originalToken, editedToken, StringComparison.Ordinal))
+                continue;
+
+            if (suggestions.Count >= maxSuggestions)
+                break;
+
+            var strippedOriginal = StripBoundaryPunctuation(originalToken);
+            var strippedEdited = StripBoundaryPunctuation(editedToken);
+            if (strippedOriginal.Length == 0 || strippedEdited.Length == 0)
+                return [];
+
+            if (string.Equals(strippedOriginal, strippedEdited, StringComparison.OrdinalIgnoreCase))
+                return [];
+
+            if (!IsHighConfidenceWordToken(strippedOriginal) ||
+                !IsHighConfidenceWordToken(strippedEdited))
+            {
+                return [];
+            }
+
+            if (string.Equals(strippedOriginal, originalToken, StringComparison.Ordinal) == false ||
+                string.Equals(strippedEdited, editedToken, StringComparison.Ordinal) == false)
+            {
+                if (string.Equals(strippedOriginal, strippedEdited, StringComparison.OrdinalIgnoreCase))
+                    return [];
+            }
+
+            if (!seenOriginals.Add(strippedOriginal))
+                return [];
+
+            suggestions.Add(new CorrectionSuggestion(strippedOriginal, strippedEdited));
+        }
+
+        return suggestions.Count > maxSuggestions ? suggestions[..maxSuggestions] : suggestions;
+    }
+
     private static bool IsPunctuationOnly(string word) =>
         word.All(c => char.IsPunctuation(c) || char.IsSymbol(c));
+
+    private static string StripBoundaryPunctuation(string token)
+        => token.Trim(
+            '.',
+            ',',
+            '!',
+            '?',
+            ':',
+            ';',
+            '"',
+            '\'',
+            '(',
+            ')',
+            '[',
+            ']',
+            '{',
+            '}');
+
+    private static bool IsHighConfidenceWordToken(string token)
+    {
+        if (token.Length == 0 ||
+            !char.IsLetterOrDigit(token[0]) ||
+            !char.IsLetterOrDigit(token[^1]))
+        {
+            return false;
+        }
+
+        return token.All(static c =>
+            char.IsLetterOrDigit(c) ||
+            c == '-' ||
+            c == '\'');
+    }
 
     private static int LcsLength(string[] a, string[] b)
     {

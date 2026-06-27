@@ -178,6 +178,188 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AutomationInsertText_InsertsThroughControllerWhenExplicitlyEnabled()
+    {
+        var automation = new FakeDictationAutomationController
+        {
+            NextInsertResult = new DictationAutomationTextInsertionResult(InsertionResult.Pasted, true)
+        };
+        var service = CreateService(automationEnabled: true, automationController: automation);
+
+        var response = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test","auto_enter":true}"""), CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("pasted", json["insertion_result"].GetString());
+        Assert.True(json["target_app_correction_learning_tracking"].GetBoolean());
+        Assert.Equal([("premium teh test", true)], automation.InsertRequests);
+    }
+
+    [Fact]
+    public async Task AutomationInsertText_ReturnsCorrectionLearningSkipReason()
+    {
+        var automation = new FakeDictationAutomationController
+        {
+            NextInsertResult = new DictationAutomationTextInsertionResult(
+                InsertionResult.Pasted,
+                false,
+                "capture_unavailable")
+        };
+        var service = CreateService(automationEnabled: true, automationController: automation);
+
+        var response = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test"}"""), CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.False(json["target_app_correction_learning_tracking"].GetBoolean());
+        Assert.Equal("capture_unavailable", json["target_app_correction_learning_skip_reason"].GetString());
+        Assert.False(json["target_app_correction_learning_diagnostics"]
+            .GetProperty("tracking_started")
+            .GetBoolean());
+        Assert.Equal(
+            "capture_unavailable",
+            json["target_app_correction_learning_diagnostics"]
+                .GetProperty("skip_reason")
+                .GetString());
+    }
+
+    [Fact]
+    public async Task AutomationCommitCorrectionLearning_SignalsControllerWhenExplicitlyEnabled()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(automationEnabled: true, automationController: automation);
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/commit-correction-learning",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.True(json["signaled"].GetBoolean());
+        Assert.Equal(1, automation.CommitCalls);
+    }
+
+    [Fact]
+    public async Task AutomationRoutes_ReturnNotFoundWhenDisabled()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(automationEnabled: false, automationController: automation);
+
+        var insert = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test"}"""), CancellationToken.None);
+        var commit = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/commit-correction-learning",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+
+        Assert.Equal(404, insert.StatusCode);
+        Assert.Equal(404, commit.StatusCode);
+        Assert.Empty(automation.InsertRequests);
+        Assert.Equal(0, automation.CommitCalls);
+    }
+
+    [Fact]
+    public async Task AutomationRoutes_ReturnNotFoundBeforeAuthenticationWhenDisabled()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                ApiServerRequiresAuthentication = true,
+                SaveToHistoryEnabled = true
+            },
+            automationEnabled: false,
+            automationController: automation);
+
+        var response = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test"}"""), CancellationToken.None);
+
+        Assert.Equal(404, response.StatusCode);
+        Assert.Empty(automation.InsertRequests);
+    }
+
+    [Fact]
+    public async Task AutomationRoutes_RequireApiTokenWhenAuthenticationEnabled()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                ApiServerRequiresAuthentication = true,
+                SaveToHistoryEnabled = true
+            },
+            automationEnabled: true,
+            automationController: automation);
+
+        var missingToken = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"premium teh test"}"""), CancellationToken.None);
+        var goodToken = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/commit-correction-learning",
+            new NameValueCollection(),
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []), CancellationToken.None);
+
+        Assert.Equal(401, missingToken.StatusCode);
+        Assert.Equal("Bearer", missingToken.Headers["WWW-Authenticate"]);
+        Assert.Equal(200, goodToken.StatusCode);
+        Assert.Empty(automation.InsertRequests);
+        Assert.Equal(1, automation.CommitCalls);
+    }
+
+    [Fact]
+    public async Task AutomationInsertText_RejectsInvalidPayloads()
+    {
+        var automation = new FakeDictationAutomationController();
+        var service = CreateService(automationEnabled: true, automationController: automation);
+
+        var missingBody = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var invalidJson = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            "{"), CancellationToken.None);
+        var emptyText = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            """{"text":"   "}"""), CancellationToken.None);
+        var tooLong = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/automation/insert-text",
+            JsonSerializer.Serialize(new
+            {
+                text = new string('a', TargetAppCorrectionLearningService.MaxInsertedTextLength + 1)
+            })), CancellationToken.None);
+
+        Assert.Equal(400, missingBody.StatusCode);
+        Assert.Equal(400, invalidJson.StatusCode);
+        Assert.Equal(400, emptyText.StatusCode);
+        Assert.Equal(413, tooLong.StatusCode);
+        Assert.Empty(automation.InsertRequests);
+    }
+
+    [Fact]
     public async Task DictionaryTermsEndpoints_ReplaceMergeAndDeleteSingleTerm()
     {
         var service = CreateService();
@@ -669,13 +851,25 @@ public class HttpApiServiceTests : IDisposable
         }
     }
 
-    private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins) =>
-        CreateService(null, null, null, plugins);
+    private HttpApiService CreateService(params ITranscriptionEnginePlugin[] plugins)
+    {
+        var selectedModel = plugins.Length > 0
+            ? ModelManagerService.GetPluginModelId(plugins[0].PluginId, plugins[0].TranscriptionModels[0].Id)
+            : null;
+
+        return CreateServiceWithModelManager(new AppSettings
+        {
+            SelectedModelId = selectedModel,
+            SaveToHistoryEnabled = true
+        }, null, null, false, null, plugins).Service;
+    }
 
     private HttpApiService CreateService(
         AppSettings? settings = null,
         Func<string>? apiTokenProvider = null,
         IRecorderApiController? recorder = null,
+        bool automationEnabled = false,
+        IDictationAutomationController? automationController = null,
         params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -686,18 +880,20 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, apiTokenProvider, recorder, plugins).Service;
+        }, apiTokenProvider, recorder, automationEnabled, automationController, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         params ITranscriptionEnginePlugin[] plugins)
-        => CreateServiceWithModelManager(settings, null, null, plugins);
+        => CreateServiceWithModelManager(settings, null, null, false, null, plugins);
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         Func<string>? apiTokenProvider,
         IRecorderApiController? recorder,
+        bool automationEnabled,
+        IDictationAutomationController? automationController,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -731,7 +927,9 @@ public class HttpApiServiceTests : IDisposable
             null!,
             _workflows.Object,
             apiTokenProvider ?? (() => "test-token"),
-            recorder);
+            recorder,
+            automationController,
+            () => automationEnabled);
 
         return (service, modelManager);
     }
@@ -836,6 +1034,28 @@ public class HttpApiServiceTests : IDisposable
 
         public RecorderApiSessionSnapshot? GetRecorderApiSession(Guid id) =>
             Session is not null && Session.Id == id ? Session : null;
+    }
+
+    private sealed class FakeDictationAutomationController : IDictationAutomationController
+    {
+        public DictationAutomationTextInsertionResult NextInsertResult { get; init; } =
+            new(InsertionResult.Pasted, false);
+        public List<(string Text, bool AutoEnter)> InsertRequests { get; } = [];
+        public int CommitCalls { get; private set; }
+
+        public Task<DictationAutomationTextInsertionResult> InsertTextForAutomationAsync(
+            string text,
+            bool autoEnter,
+            CancellationToken ct)
+        {
+            InsertRequests.Add((text, autoEnter));
+            return Task.FromResult(NextInsertResult);
+        }
+
+        public void CommitTargetAppCorrectionLearningForAutomation()
+        {
+            CommitCalls++;
+        }
     }
 
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin

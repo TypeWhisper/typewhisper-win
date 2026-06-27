@@ -445,6 +445,10 @@ public record AppSettings
 
     // Premium Cloud Folder Sync
     /// <summary>
+    /// Gets or sets whether Premium target-app correction learning is enabled.
+    /// </summary>
+    public bool TargetAppCorrectionLearningEnabled { get; init; } = true;
+    /// <summary>
     /// Gets or sets the cloud folder sync folder path value.
     /// </summary>
     public string? CloudFolderSyncFolderPath { get; init; }

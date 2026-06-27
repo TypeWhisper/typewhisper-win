@@ -36,9 +36,29 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(InsertionResult.CopiedToClipboard, result);
         Assert.Equal("dictated", platform.ClipboardText);
         Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Equal(1, platform.ModifierKeyUpInputCalls);
         Assert.Contains(errorLog.Entries, entry =>
             entry.Category == ErrorCategory.Insertion
             && entry.Message.Contains("modifier keys", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ModifierTimeout_NormalizesStuckModifiersBeforeFallingBack()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ModifierDefaultState = true,
+            ModifierKeyUpInputClearsState = true
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated");
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(1, platform.ModifierKeyUpInputCalls);
+        Assert.Equal(1, platform.PasteInputCalls);
     }
 
     [Fact]
@@ -79,6 +99,51 @@ public sealed class TextInsertionServiceTests
         Assert.Contains(errorLog.Entries, entry =>
             entry.Category == ErrorCategory.Insertion
             && entry.Message.Contains("target window", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FocusFailure_UsesForegroundActivationRetryBeforeFallingBack()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = new IntPtr(100),
+            SetForegroundWindowResults = new Queue<bool>([false, true])
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated", targetHwnd: new IntPtr(200));
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(2, platform.SetForegroundWindowCalls);
+        Assert.Equal(1, platform.ForegroundActivationInputCalls);
+        Assert.Equal(1, platform.PasteInputCalls);
+    }
+
+    [Fact]
+    public async Task FocusFailure_AllowsPasteWhenForegroundWindowMovedWithinSameProcess()
+    {
+        var targetHwnd = new IntPtr(200);
+        var currentForegroundHwnd = new IntPtr(300);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = currentForegroundHwnd,
+            SetForegroundWindowResult = false,
+            WindowProcessIds =
+            {
+                [targetHwnd] = 42,
+                [currentForegroundHwnd] = 42
+            }
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated", targetHwnd: targetHwnd);
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(1, platform.PasteInputCalls);
     }
 
     [Fact]
@@ -205,17 +270,25 @@ public sealed class TextInsertionServiceTests
         public List<string> ClipboardWrites { get; } = [];
         public Queue<bool> ModifierStates { get; } = [];
         public bool ModifierDefaultState { get; set; }
+        public bool ModifierKeyUpInputClearsState { get; set; }
         public IntPtr ForegroundWindow { get; set; }
         public bool SetForegroundWindowResult { get; set; } = true;
+        public Queue<bool> SetForegroundWindowResults { get; set; } = [];
+        public Dictionary<IntPtr, uint> WindowProcessIds { get; set; } = [];
         public IntPtr LastSetForegroundWindow { get; private set; }
         public uint PasteInputResult { get; set; } = 4;
         public uint EnterInputResult { get; set; } = 2;
         public uint CopyInputResult { get; set; } = 4;
+        public uint ModifierKeyUpInputResult { get; set; } = 1;
+        public uint ForegroundActivationInputResult { get; set; } = 2;
         public string? CapturedSelectionText { get; set; }
         public int MarkerReadsBeforeSelection { get; set; }
         public int PasteInputCalls { get; private set; }
         public int EnterInputCalls { get; private set; }
         public int CopyInputCalls { get; private set; }
+        public int ModifierKeyUpInputCalls { get; private set; }
+        public int ForegroundActivationInputCalls { get; private set; }
+        public int SetForegroundWindowCalls { get; private set; }
         public int ClearClipboardCalls { get; private set; }
         public int DelayCalls { get; private set; }
         private string? SelectionMarker { get; set; }
@@ -282,11 +355,33 @@ public sealed class TextInsertionServiceTests
 
         public bool SetForegroundWindow(IntPtr hwnd)
         {
+            SetForegroundWindowCalls++;
             LastSetForegroundWindow = hwnd;
-            if (SetForegroundWindowResult)
+            var result = SetForegroundWindowResults.Count > 0
+                ? SetForegroundWindowResults.Dequeue()
+                : SetForegroundWindowResult;
+            if (result)
                 ForegroundWindow = hwnd;
 
-            return SetForegroundWindowResult;
+            return result;
+        }
+
+        public uint GetWindowProcessId(IntPtr hwnd) =>
+            WindowProcessIds.GetValueOrDefault(hwnd);
+
+        public uint SendModifierKeyUpInputs()
+        {
+            ModifierKeyUpInputCalls++;
+            if (ModifierKeyUpInputClearsState)
+                ModifierDefaultState = false;
+
+            return ModifierKeyUpInputResult;
+        }
+
+        public uint SendForegroundActivationInput()
+        {
+            ForegroundActivationInputCalls++;
+            return ForegroundActivationInputResult;
         }
 
         public uint SendPasteInput()

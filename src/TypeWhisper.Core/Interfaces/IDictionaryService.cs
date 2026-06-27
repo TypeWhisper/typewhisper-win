@@ -95,6 +95,18 @@ public interface IDictionaryService
     void LearnCorrection(string original, string replacement);
 
     /// <summary>
+    /// Learns new corrections without overwriting existing dictionary entries.
+    /// </summary>
+    IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions) =>
+        throw new NotSupportedException();
+
+    /// <summary>
+    /// Removes corrections that were created by automatic learning.
+    /// </summary>
+    void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections) =>
+        throw new NotSupportedException();
+
+    /// <summary>
     /// Activates pack.
     /// </summary>
     void ActivatePack(TermPack pack);

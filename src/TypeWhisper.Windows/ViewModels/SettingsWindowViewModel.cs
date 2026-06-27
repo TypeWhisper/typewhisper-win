@@ -199,6 +199,43 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Gets whether show supporter premium notice.
     /// </summary>
     public bool ShowSupporterPremiumNotice => License.IsSupporter && License.CommercialStatus != LicenseStatus.Active;
+    /// <summary>
+    /// Gets whether target-app correction learning is available for the current license.
+    /// </summary>
+    public bool CanUseTargetAppCorrectionLearning => License.HasCommercialLicense;
+    /// <summary>
+    /// Gets whether target-app correction learning is locked by the current license.
+    /// </summary>
+    public bool ShowTargetAppCorrectionLearningLocked => !CanUseTargetAppCorrectionLearning;
+    /// <summary>
+    /// Gets or sets whether target-app correction learning is enabled for Premium users.
+    /// </summary>
+    public bool TargetAppCorrectionLearningEnabled
+    {
+        get => CanUseTargetAppCorrectionLearning && _settingsService.Current.TargetAppCorrectionLearningEnabled;
+        set
+        {
+            if (!CanUseTargetAppCorrectionLearning ||
+                _settingsService.Current.TargetAppCorrectionLearningEnabled == value)
+            {
+                return;
+            }
+
+            _settingsService.Save(_settingsService.Current with
+            {
+                TargetAppCorrectionLearningEnabled = value
+            });
+            RaiseTargetAppCorrectionLearningProperties();
+        }
+    }
+    /// <summary>
+    /// Gets the target-app correction learning status text.
+    /// </summary>
+    public string TargetAppCorrectionLearningStatus => CanUseTargetAppCorrectionLearning
+        ? TargetAppCorrectionLearningEnabled
+            ? Loc.Instance["Premium.LearningOn"]
+            : Loc.Instance["Premium.LearningOff"]
+        : Loc.Instance["Premium.LearningRequiresCommercial"];
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
@@ -264,12 +301,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         _errorLog.EntriesChanged += RefreshErrorLog;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
         License.PropertyChanged += OnLicensePropertyChanged;
-        _settingsService.SettingsChanged += SyncSelectedUpdateChannel;
+        _settingsService.SettingsChanged += OnSettingsServiceChanged;
         _indicatorPreviewTimer.Interval = TimeSpan.FromMilliseconds(140);
         _indicatorPreviewTimer.Tick += (_, _) => TickIndicatorPreview();
-        _indicatorPreviewTimer.Start();
         SyncRouteMetadata(CurrentRoute);
         SyncNavigationSelection();
+        SyncIndicatorPreviewTimer(CurrentRoute);
     }
 
     /// <summary>
@@ -462,6 +499,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     {
         SyncNavigationSelection();
         SyncRouteMetadata(value);
+        SyncIndicatorPreviewTimer(value);
         OnPropertyChanged(nameof(CurrentSectionName));
     }
 
@@ -510,7 +548,22 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             or nameof(LicenseService.CommercialStatus))
         {
             OnPropertyChanged(nameof(ShowSupporterPremiumNotice));
+            RaiseTargetAppCorrectionLearningProperties();
         }
+    }
+
+    private void OnSettingsServiceChanged(AppSettings settings)
+    {
+        SyncSelectedUpdateChannel(settings);
+        RaiseTargetAppCorrectionLearningProperties();
+    }
+
+    private void RaiseTargetAppCorrectionLearningProperties()
+    {
+        OnPropertyChanged(nameof(CanUseTargetAppCorrectionLearning));
+        OnPropertyChanged(nameof(ShowTargetAppCorrectionLearningLocked));
+        OnPropertyChanged(nameof(TargetAppCorrectionLearningEnabled));
+        OnPropertyChanged(nameof(TargetAppCorrectionLearningStatus));
     }
 
     private void OnPluginsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -524,6 +577,20 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         _indicatorPreviewPhase += 0.42;
         AudioLevel = 0.16f + (float)((Math.Sin(_indicatorPreviewPhase) + 1.0) * 0.18);
         RecordingSeconds = (DateTime.UtcNow - _indicatorPreviewStartedAt).TotalSeconds;
+    }
+
+    private void SyncIndicatorPreviewTimer(SettingsRoute route)
+    {
+        if (route == SettingsRoute.Appearance)
+        {
+            if (!_indicatorPreviewTimer.IsEnabled)
+                _indicatorPreviewTimer.Start();
+
+            return;
+        }
+
+        if (_indicatorPreviewTimer.IsEnabled)
+            _indicatorPreviewTimer.Stop();
     }
 
     private void RefreshIndicatorPreviewText()

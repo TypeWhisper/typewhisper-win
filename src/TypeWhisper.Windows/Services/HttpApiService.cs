@@ -33,7 +33,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly DictationViewModel _dictation;
     private readonly IWorkflowService _workflows;
     private readonly IRecorderApiController? _recorder;
+    private readonly IDictationAutomationController? _automation;
     private readonly Func<string> _apiTokenProvider;
+    private readonly Func<bool> _automationEnabledProvider;
     private readonly Dispatcher? _dispatcher;
 
     private HttpListener? _listener;
@@ -69,7 +71,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         DictationViewModel dictation,
         IWorkflowService workflows,
         Func<string>? apiTokenProvider = null,
-        IRecorderApiController? recorder = null)
+        IRecorderApiController? recorder = null,
+        IDictationAutomationController? automationController = null,
+        Func<bool>? automationEnabledProvider = null)
     {
         _modelManager = modelManager;
         _settings = settings;
@@ -82,7 +86,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _dictation = dictation;
         _workflows = workflows;
         _recorder = recorder;
+        _automation = automationController ?? (dictation as IDictationAutomationController);
         _apiTokenProvider = apiTokenProvider ?? LoadOrCreateApiToken;
+        _automationEnabledProvider = automationEnabledProvider ?? IsAutomationEnvironmentEnabled;
         _dispatcher = CaptureActiveDispatcher();
     }
 
@@ -223,7 +229,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         if (request.Method == "OPTIONS")
             return new HttpApiResponse(204, "", "text/plain");
 
-        if (!IsKnownRoute(request.Path, request.Method))
+        if (!IsKnownRoute(request.Path, request.Method, IsAutomationEnabled()))
             return Error(404, "Not found");
 
         if (RequiresAuthentication(request) && !HasValidApiToken(request))
@@ -246,6 +252,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
                 ("/v1/dictation/transcription", "GET") => HandleDictationTranscription(request),
+                ("/v1/automation/insert-text", "POST") => await HandleAutomationInsertText(request, ct),
+                ("/v1/automation/commit-correction-learning", "POST") =>
+                    await HandleAutomationCommitCorrectionLearning(),
                 ("/v1/recorder/start", "POST") => await HandleRecorderStart(request, ct),
                 ("/v1/recorder/stop", "POST") => await HandleRecorderStop(ct),
                 ("/v1/recorder/status", "GET") => HandleRecorderStatus(),
@@ -606,6 +615,68 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         });
     }
 
+    private async Task<HttpApiResponse> HandleAutomationInsertText(HttpApiRequest request, CancellationToken ct)
+    {
+        if (!IsAutomationEnabled())
+            return Error(404, "Not found");
+
+        if (_automation is null)
+            return Error(503, "Automation controller is unavailable");
+
+        if (request.Body.Length == 0)
+            return Error(400, "Missing JSON body");
+
+        AutomationInsertTextRequest? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<AutomationInsertTextRequest>(request.Body, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return Error(400, "Invalid JSON body");
+        }
+
+        if (payload is null || string.IsNullOrWhiteSpace(payload.Text))
+            return Error(400, "Missing or empty 'text'");
+
+        if (payload.Text.Length > TargetAppCorrectionLearningService.MaxInsertedTextLength)
+            return Error(413, "'text' is too long");
+
+        var result = await InvokeOnDispatcherAsync(() =>
+            _automation.InsertTextForAutomationAsync(payload.Text, payload.AutoEnter, ct));
+
+        return Json(new
+        {
+            insertion_result = FormatInsertionResult(result.InsertionResult),
+            target_app_correction_learning_tracking =
+                result.TargetAppCorrectionLearningTrackingStarted,
+            target_app_correction_learning_skip_reason =
+                result.TargetAppCorrectionLearningSkipReason,
+            target_app_correction_learning_diagnostics = new
+            {
+                tracking_started = result.TargetAppCorrectionLearningTrackingStarted,
+                skip_reason = result.TargetAppCorrectionLearningSkipReason
+            }
+        });
+    }
+
+    private async Task<HttpApiResponse> HandleAutomationCommitCorrectionLearning()
+    {
+        if (!IsAutomationEnabled())
+            return Error(404, "Not found");
+
+        if (_automation is null)
+            return Error(503, "Automation controller is unavailable");
+
+        await InvokeOnDispatcherAsync(() =>
+        {
+            _automation.CommitTargetAppCorrectionLearningForAutomation();
+            return Task.FromResult(true);
+        });
+
+        return Json(new { signaled = true });
+    }
+
     private async Task<HttpApiResponse> HandleRecorderStart(HttpApiRequest request, CancellationToken ct)
     {
         if (_recorder is null)
@@ -836,7 +907,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private Func<string, string>? GetVocabularyBooster() =>
         _settings.Current.VocabularyBoostingEnabled ? _vocabularyBoosting.Apply : null;
 
-    private static bool IsKnownRoute(string path, string method) =>
+    private bool IsAutomationEnabled() => _automationEnabledProvider();
+
+    private static bool IsKnownRoute(string path, string method, bool automationEnabled) =>
         (path, method) switch
         {
             ("/v1/status", "GET") => true,
@@ -849,6 +922,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             ("/v1/dictation/stop", "POST") => true,
             ("/v1/dictation/status", "GET") => true,
             ("/v1/dictation/transcription", "GET") => true,
+            ("/v1/automation/insert-text", "POST") => automationEnabled,
+            ("/v1/automation/commit-correction-learning", "POST") => automationEnabled,
             ("/v1/recorder/start", "POST") => true,
             ("/v1/recorder/stop", "POST") => true,
             ("/v1/recorder/status", "GET") => true,
@@ -907,6 +982,24 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
     private static string? Header(IReadOnlyDictionary<string, string> headers, string name) =>
         headers.TryGetValue(name, out var value) ? value : null;
+
+    private static bool IsAutomationEnvironmentEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("TYPEWHISPER_AUTOMATION");
+        return string.Equals(value, "1", StringComparison.Ordinal) ||
+               string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatInsertionResult(InsertionResult result) =>
+        result switch
+        {
+            InsertionResult.Pasted => "pasted",
+            InsertionResult.CopiedToClipboard => "copied_to_clipboard",
+            InsertionResult.NoText => "no_text",
+            InsertionResult.ActionHandled => "action_handled",
+            _ => result.ToString().ToLowerInvariant()
+        };
 
     private static IReadOnlyList<DictionaryCorrectionDto> CorrectionDtos(IReadOnlyList<DictionaryEntry> entries) =>
         entries
@@ -1138,6 +1231,19 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         [property: JsonPropertyName("original")] string Original,
         [property: JsonPropertyName("replacement")] string Replacement,
         [property: JsonPropertyName("caseSensitive")] bool CaseSensitive);
+
+    private sealed record AutomationInsertTextRequest
+    {
+        /// <summary>
+        /// Gets or sets the text value.
+        /// </summary>
+        public string? Text { get; init; }
+
+        /// <summary>
+        /// Gets or sets whether Enter should be sent after insertion.
+        /// </summary>
+        public bool AutoEnter { get; init; }
+    }
 
     private sealed record DictionaryCorrectionMutationRequest
     {

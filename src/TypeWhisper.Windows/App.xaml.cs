@@ -184,12 +184,13 @@ public partial class App : Application
             Dispatcher.InvokeAsync(() =>
                 _serviceProvider.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
 
-        // Warm up audio
+        // Remember the selected microphone without keeping a capture session open
+        // while the app is idle. Recording and visible microphone previews warm up
+        // capture on demand.
         var audio = _serviceProvider.GetRequiredService<AudioRecordingService>();
         var mic = settings.Current.SelectedMicrophoneDevice;
-        if (mic.HasValue) audio.SetMicrophoneDevice(mic);
-        if (!audio.WarmUp())
-            System.Diagnostics.Debug.WriteLine("No audio input device available at startup. Polling for device...");
+        if (mic.HasValue)
+            audio.SetMicrophoneDevice(mic);
 
         // Start and keep the API server aligned with settings.
         var apiServer = _serviceProvider.GetRequiredService<ApiServerController>();
@@ -456,6 +457,9 @@ public partial class App : Application
         services.AddSingleton<HistoryRetentionCoordinator>();
         services.AddSingleton<HotkeyService>();
         services.AddSingleton<TextInsertionService>();
+        services.AddSingleton<ITargetAppTextObserver, TargetAppTextObservationService>();
+        services.AddSingleton<ITargetAppCorrectionCommitObserver, TargetAppCorrectionCommitObserver>();
+        services.AddSingleton<TargetAppCorrectionLearningService>();
         services.AddSingleton<RecentTranscriptionsService>();
         services.AddSingleton<WorkflowPaletteService>();
         services.AddSingleton<IActiveWindowService, ActiveWindowService>();

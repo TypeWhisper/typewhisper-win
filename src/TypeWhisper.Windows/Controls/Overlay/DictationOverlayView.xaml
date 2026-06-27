@@ -91,21 +91,34 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <TextBlock Text="{Binding FeedbackText}"
-                           FontSize="11"
-                           HorizontalAlignment="Center"
-                           TextTrimming="CharacterEllipsis">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#FF6666"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
-                                    <Setter Property="Foreground" Value="#66E3A2"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding FeedbackText}"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#FF6666"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FeedbackIsError}" Value="False">
+                                        <Setter Property="Foreground" Value="#66E3A2"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button Content="{Binding FeedbackActionText}"
+                            Command="{Binding FeedbackActionCommand}"
+                            Visibility="{Binding ShowFeedbackAction, Converter={StaticResource BoolToVis}}"
+                            FontSize="11"
+                            Padding="8,1"
+                            Margin="8,0,0,0"
+                            MinWidth="0"
+                            VerticalAlignment="Center"
+                            Foreground="#FFFFFFFF"
+                            Background="#22FFFFFF"
+                            BorderBrush="#33FFFFFF"/>
+                </StackPanel>
             </Border>
         </DockPanel>
     </Border>

@@ -53,7 +53,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
         _cache.Add(BackfillTimestamps(entry));
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -64,7 +64,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
         _cache.AddRange(entries.Select(BackfillTimestamps));
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public sealed class DictionaryService : IDictionaryService
             _cache[idx] = BackfillTimestamps(entry) with { UpdatedAt = NextUpdatedAt(existing.UpdatedAt) };
         }
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
         _cache.RemoveAll(e => e.Id == id);
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ public sealed class DictionaryService : IDictionaryService
         var idSet = ids.ToHashSet();
         _cache.RemoveAll(e => idSet.Contains(e.Id));
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -241,7 +241,7 @@ public sealed class DictionaryService : IDictionaryService
         }
 
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -252,7 +252,7 @@ public sealed class DictionaryService : IDictionaryService
         EnsureCacheLoaded();
         _cache.RemoveAll(e => e.EntryType == DictionaryEntryType.Term);
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -270,7 +270,7 @@ public sealed class DictionaryService : IDictionaryService
             return false;
 
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
         return true;
     }
 
@@ -315,7 +315,7 @@ public sealed class DictionaryService : IDictionaryService
         }
 
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     /// <summary>
@@ -332,7 +332,7 @@ public sealed class DictionaryService : IDictionaryService
             return false;
 
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
         return true;
     }
 
@@ -363,6 +363,117 @@ public sealed class DictionaryService : IDictionaryService
                 CreatedAt = now,
                 UpdatedAt = now
             });
+        }
+    }
+
+    /// <summary>
+    /// Learns new corrections without overwriting existing dictionary entries.
+    /// </summary>
+    public IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions)
+    {
+        EnsureCacheLoaded();
+
+        var learned = new List<LearnedDictionaryCorrection>();
+        var existingOriginals = _cache
+            .Where(e => e.EntryType == DictionaryEntryType.Correction)
+            .Select(e => e.Original)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seenOriginals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var suggestion in suggestions)
+        {
+            var original = suggestion.Original.Trim();
+            var replacement = suggestion.Replacement.Trim();
+            if (original.Length == 0 ||
+                replacement.Length == 0 ||
+                string.Equals(original, replacement, StringComparison.Ordinal) ||
+                !IsSafeAutomaticallyLearnedToken(original) ||
+                !IsSafeAutomaticallyLearnedToken(replacement) ||
+                existingOriginals.Contains(original) ||
+                !seenOriginals.Add(original))
+            {
+                continue;
+            }
+
+            var now = DateTime.UtcNow;
+            var entry = new DictionaryEntry
+            {
+                Id = Guid.NewGuid().ToString(),
+                EntryType = DictionaryEntryType.Correction,
+                Original = original,
+                Replacement = replacement,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _cache.Add(entry);
+            existingOriginals.Add(original);
+            learned.Add(new LearnedDictionaryCorrection(entry.Id, entry.Original, entry.Replacement!));
+        }
+
+        if (learned.Count > 0)
+        {
+            SaveToDisk();
+            NotifyEntriesChanged();
+        }
+
+        return learned;
+    }
+
+    private void NotifyEntriesChanged()
+    {
+        var handlers = EntriesChanged;
+        if (handlers is null)
+            return;
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action)handler).Invoke();
+            }
+            catch
+            {
+                // Subscriber failures must not break dictionary persistence or automatic learning.
+            }
+        }
+    }
+
+    private static bool IsSafeAutomaticallyLearnedToken(string token)
+    {
+        if (token.Length == 0 ||
+            !char.IsLetterOrDigit(token[0]) ||
+            !char.IsLetterOrDigit(token[^1]))
+        {
+            return false;
+        }
+
+        return token.All(static c =>
+            char.IsLetterOrDigit(c) ||
+            c == '-' ||
+            c == '\'');
+    }
+
+    /// <summary>
+    /// Removes corrections that were created by automatic learning.
+    /// </summary>
+    public void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections)
+    {
+        EnsureCacheLoaded();
+
+        var learnedIds = learnedCorrections
+            .Select(c => c.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (learnedIds.Count == 0)
+            return;
+
+        var removed = _cache.RemoveAll(entry =>
+            entry.EntryType == DictionaryEntryType.Correction &&
+            learnedIds.Contains(entry.Id));
+
+        if (removed > 0)
+        {
+            SaveToDisk();
+            NotifyEntriesChanged();
         }
     }
 
@@ -398,7 +509,7 @@ public sealed class DictionaryService : IDictionaryService
         {
             _cache.AddRange(newEntries);
             SaveToDisk();
-            EntriesChanged?.Invoke();
+            NotifyEntriesChanged();
         }
     }
 
@@ -415,7 +526,7 @@ public sealed class DictionaryService : IDictionaryService
         if (removed > 0)
         {
             SaveToDisk();
-            EntriesChanged?.Invoke();
+            NotifyEntriesChanged();
         }
     }
 
@@ -475,7 +586,7 @@ public sealed class DictionaryService : IDictionaryService
             return;
 
         SaveToDisk();
-        EntriesChanged?.Invoke();
+        NotifyEntriesChanged();
     }
 
     private bool UpsertSyncedDictionaryEntry(UserDataSyncDictionaryEntry synced)

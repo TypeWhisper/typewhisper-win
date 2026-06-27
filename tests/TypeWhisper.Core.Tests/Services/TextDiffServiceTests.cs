@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Core.Tests.Services;
@@ -70,5 +71,53 @@ public class TextDiffServiceTests
             "the React Native app");
 
         Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void HighConfidenceCorrections_FindsUpToThreeSingleTokenReplacements()
+    {
+        var result = TextDiffService.ExtractHighConfidenceCorrections(
+            "teh kubernets recieve seperate",
+            "the Kubernetes receive separate");
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(new CorrectionSuggestion("teh", "the"), result[0]);
+        Assert.Equal(new CorrectionSuggestion("kubernets", "Kubernetes"), result[1]);
+        Assert.Equal(new CorrectionSuggestion("recieve", "receive"), result[2]);
+    }
+
+    [Fact]
+    public void HighConfidenceCorrections_AllowsInternalHyphenatedWords()
+    {
+        var result = TextDiffService.ExtractHighConfidenceCorrections(
+            "Premium-Funktionalität",
+            "Premiun-Funktionalität");
+
+        var suggestion = Assert.Single(result);
+        Assert.Equal("Premium-Funktionalität", suggestion.Original);
+        Assert.Equal("Premiun-Funktionalität", suggestion.Replacement);
+    }
+
+    [Theory]
+    [InlineData("hello world", "hello brave world")]
+    [InlineData("hello brave world", "hello world")]
+    [InlineData("hello world", "HELLO WORLD")]
+    [InlineData("hello, world", "hello world")]
+    [InlineData("foo foo", "bar baz")]
+    public void HighConfidenceCorrections_SkipsAmbiguousAndLowSignalEdits(string original, string edited)
+    {
+        var result = TextDiffService.ExtractHighConfidenceCorrections(original, edited);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void HighConfidenceCorrections_SkipsControlCharacterExpansion()
+    {
+        var result = TextDiffService.ExtractHighConfidenceCorrections(
+            "Premium.",
+            "Premium.\rhjk.");
+
+        Assert.Empty(result);
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -126,6 +127,18 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     /// Gets whether feedback is an error.
     /// </summary>
     public bool FeedbackIsError => UseDictation && _dictation.FeedbackIsError;
+    /// <summary>
+    /// Gets optional feedback action text.
+    /// </summary>
+    public string? FeedbackActionText => UseDictation ? _dictation.FeedbackActionText : null;
+    /// <summary>
+    /// Gets optional feedback action command.
+    /// </summary>
+    public ICommand? FeedbackActionCommand => UseDictation ? _dictation.FeedbackActionCommand : null;
+    /// <summary>
+    /// Gets whether optional feedback action is visible.
+    /// </summary>
+    public bool ShowFeedbackAction => UseDictation && _dictation.ShowFeedbackAction;
 
     private bool UseDictation =>
         _dictation.IsOverlayVisible
@@ -157,6 +170,9 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         PublishIfChanged(nameof(ActiveWorkflowName), ActiveWorkflowName);
         PublishIfChanged(nameof(FeedbackText), FeedbackText);
         PublishIfChanged(nameof(FeedbackIsError), FeedbackIsError);
+        PublishIfChanged(nameof(FeedbackActionText), FeedbackActionText);
+        PublishIfChanged(nameof(FeedbackActionCommand), FeedbackActionCommand);
+        PublishIfChanged(nameof(ShowFeedbackAction), ShowFeedbackAction);
     }
 
     private void PublishIfChanged<T>(string propertyName, T value)
