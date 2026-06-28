@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
@@ -39,7 +40,13 @@ public sealed class PluginManager : IDisposable
         IActiveWindowService activeWindow,
         IWorkflowService workflows,
         ISettingsService settings)
-        : this(loader, eventBus, activeWindow, workflows, settings, [TypeWhisperEnvironment.PluginsPath])
+        : this(
+            loader,
+            eventBus,
+            activeWindow,
+            workflows,
+            settings,
+            BuildDefaultSearchDirectories(AppContext.BaseDirectory, TypeWhisperEnvironment.PluginsPath))
     {
     }
 
@@ -111,13 +118,38 @@ public sealed class PluginManager : IDisposable
     /// <summary>The shared event bus for plugin communication.</summary>
     public PluginEventBus EventBus => _eventBus;
 
+    internal static string[] BuildDefaultSearchDirectories(string appBaseDirectory, string userPluginsPath) =>
+    [
+        ..new[]
+        {
+            Path.GetFullPath(Path.Combine(appBaseDirectory, "Plugins")),
+            Path.GetFullPath(userPluginsPath)
+        }.Distinct(StringComparer.OrdinalIgnoreCase)
+    ];
+
+    internal static IReadOnlyList<LoadedPlugin> PreferLaterSearchDirectoryPlugins(IEnumerable<LoadedPlugin> plugins)
+    {
+        var selectedById = new Dictionary<string, LoadedPlugin>(StringComparer.OrdinalIgnoreCase);
+        var orderedIds = new List<string>();
+
+        foreach (var plugin in plugins)
+        {
+            if (!selectedById.ContainsKey(plugin.Manifest.Id))
+                orderedIds.Add(plugin.Manifest.Id);
+
+            selectedById[plugin.Manifest.Id] = plugin;
+        }
+
+        return orderedIds.Select(id => selectedById[id]).ToList();
+    }
+
     /// <summary>
     /// Discovers plugins from the configured search directories, restores enabled
     /// state from settings, and activates all enabled plugins.
     /// </summary>
     public async Task InitializeAsync()
     {
-        var discovered = _loader.DiscoverAndLoad(_searchDirectories);
+        var discovered = PreferLaterSearchDirectoryPlugins(_loader.DiscoverAndLoad(_searchDirectories));
 
         lock (_lock)
         {

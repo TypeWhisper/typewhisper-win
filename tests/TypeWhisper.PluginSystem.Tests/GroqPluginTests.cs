@@ -182,10 +182,24 @@ public class GroqPluginTests
     }
 
     [Fact]
-    public async Task TranscribeAsync_EncoderFailureThrowsClearExceptionBeforeUpload()
+    public async Task TranscribeAsync_EncoderFailureFallsBackToWavUpload()
     {
-        var handler = new CapturingHandler((_, _) =>
-            throw new InvalidOperationException("Upload should not be attempted."));
+        string? transcriptionBody = null;
+        var handler = new CapturingHandler((request, body) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.groq.com/openai/v1/audio/transcriptions", request.RequestUri?.ToString());
+            Assert.Equal("Bearer groq-key", request.Headers.Authorization?.ToString());
+
+            transcriptionBody = body;
+            Assert.NotNull(body);
+            AssertMultipartToken(body, "filename", "audio.wav");
+            Assert.Contains("Content-Type: audio/wav", body);
+            Assert.DoesNotContain("filename=\"audio.m4a\"", body);
+            Assert.DoesNotContain("filename=audio.m4a", body);
+
+            return JsonResponse("""{"text":"fallback","language":"en","duration":1.0}""");
+        });
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "groq-key";
 
@@ -197,11 +211,10 @@ public class GroqPluginTests
             _ => throw new InvalidOperationException("codec unavailable"));
         await sut.ActivateAsync(host);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.TranscribeAsync([1, 2, 3], null, false, null, CancellationToken.None));
+        var result = await sut.TranscribeAsync([1, 2, 3], null, false, null, CancellationToken.None);
 
-        Assert.Contains("Groq audio upload could not be compressed", ex.Message);
-        Assert.Contains("codec unavailable", ex.Message);
+        Assert.NotNull(transcriptionBody);
+        Assert.Equal("fallback", result.Text);
     }
 
     [Fact]

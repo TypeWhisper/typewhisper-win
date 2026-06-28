@@ -152,6 +152,35 @@ public class PluginManagerTests : IDisposable
     }
 
     [Fact]
+    public void BuildDefaultSearchDirectories_IncludesBundledPluginsBeforeUserPlugins()
+    {
+        var appBaseDirectory = Path.Combine(Path.GetTempPath(), "typewhisper-app");
+        var userPluginsPath = Path.Combine(Path.GetTempPath(), "typewhisper-user", "Plugins");
+
+        var result = PluginManager.BuildDefaultSearchDirectories(appBaseDirectory, userPluginsPath);
+
+        Assert.Equal(
+            [
+                Path.Combine(appBaseDirectory, "Plugins"),
+                userPluginsPath
+            ],
+            result);
+    }
+
+    [Fact]
+    public void PreferLaterSearchDirectoryPlugins_LocalPluginOverridesBundledPluginWithSameId()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.groq", "1.0.2", @"C:\App\Plugins\com.typewhisper.groq");
+        var local = CreateLoadedPlugin("com.typewhisper.groq", "1.0.3", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.groq");
+
+        var result = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+
+        var plugin = Assert.Single(result);
+        Assert.Equal("1.0.3", plugin.Manifest.Version);
+        Assert.Same(local, plugin);
+    }
+
+    [Fact]
     public void CapabilityIndices_IncludeAdditionalRolesWithoutDuplicatingAllPlugins()
     {
         var manager = CreateManager();
@@ -199,6 +228,25 @@ public class PluginManagerTests : IDisposable
         Assert.True(eventFired);
     }
 
+    private static LoadedPlugin CreateLoadedPlugin(string id, string version, string pluginDirectory)
+    {
+        var plugin = new MultiRolePlugin(id, version);
+        var manifest = new PluginManifest
+        {
+            Id = plugin.PluginId,
+            Name = plugin.PluginName,
+            Version = plugin.PluginVersion,
+            AssemblyName = "Fake.dll",
+            PluginClass = plugin.GetType().FullName!
+        };
+
+        return new LoadedPlugin(
+            manifest,
+            plugin,
+            new PluginAssemblyLoadContext(typeof(PluginManagerTests).Assembly.Location),
+            pluginDirectory);
+    }
+
     public void Dispose()
     {
         _manager?.Dispose();
@@ -221,11 +269,24 @@ public class PluginManagerTests : IDisposable
     {
         private readonly ProfileRole _profileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A");
         private readonly ProfileRole _duplicateProfileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A Duplicate");
+        private readonly string _pluginId;
+        private readonly string _pluginVersion;
         private bool _includeAdditionalRoles = true;
 
-        public string PluginId => "com.test.multi";
+        public MultiRolePlugin()
+            : this("com.test.multi", "1.0.0")
+        {
+        }
+
+        public MultiRolePlugin(string pluginId, string pluginVersion)
+        {
+            _pluginId = pluginId;
+            _pluginVersion = pluginVersion;
+        }
+
+        public string PluginId => _pluginId;
         public string PluginName => "Multi";
-        public string PluginVersion => "1.0.0";
+        public string PluginVersion => _pluginVersion;
         public string ProviderId => "multi";
         public string ProviderDisplayName => "Multi";
         public bool IsConfigured => true;
