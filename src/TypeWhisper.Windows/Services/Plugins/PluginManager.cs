@@ -122,7 +122,7 @@ public sealed class PluginManager : IDisposable
     [
         ..new[]
         {
-            Path.GetFullPath(Path.Combine(appBaseDirectory, "Plugins")),
+            Path.GetFullPath(Path.Join(appBaseDirectory, "Plugins")),
             Path.GetFullPath(userPluginsPath)
         }.Distinct(StringComparer.OrdinalIgnoreCase)
     ];
@@ -143,13 +143,44 @@ public sealed class PluginManager : IDisposable
         return orderedIds.Select(id => selectedById[id]).ToList();
     }
 
+    internal static void UnloadDiscardedSearchDirectoryPlugins(
+        IReadOnlyList<LoadedPlugin> loadedPlugins,
+        IReadOnlyCollection<LoadedPlugin> retainedPlugins)
+    {
+        foreach (var discarded in loadedPlugins)
+        {
+            if (retainedPlugins.Any(retained => ReferenceEquals(retained, discarded)))
+                continue;
+
+            try
+            {
+                discarded.Instance.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PluginManager] Failed to dispose overridden plugin {discarded.Manifest.Id}: {ex.Message}");
+            }
+
+            try
+            {
+                discarded.LoadContext.Unload();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PluginManager] Failed to unload overridden plugin {discarded.Manifest.Id}: {ex.Message}");
+            }
+        }
+    }
+
     /// <summary>
     /// Discovers plugins from the configured search directories, restores enabled
     /// state from settings, and activates all enabled plugins.
     /// </summary>
     public async Task InitializeAsync()
     {
-        var discovered = PreferLaterSearchDirectoryPlugins(_loader.DiscoverAndLoad(_searchDirectories));
+        var loadedPlugins = _loader.DiscoverAndLoad(_searchDirectories);
+        var discovered = PreferLaterSearchDirectoryPlugins(loadedPlugins);
+        UnloadDiscardedSearchDirectoryPlugins(loadedPlugins, discovered);
 
         lock (_lock)
         {

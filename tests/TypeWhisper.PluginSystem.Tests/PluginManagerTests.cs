@@ -154,14 +154,14 @@ public class PluginManagerTests : IDisposable
     [Fact]
     public void BuildDefaultSearchDirectories_IncludesBundledPluginsBeforeUserPlugins()
     {
-        var appBaseDirectory = Path.Combine(Path.GetTempPath(), "typewhisper-app");
-        var userPluginsPath = Path.Combine(Path.GetTempPath(), "typewhisper-user", "Plugins");
+        var appBaseDirectory = Path.Join(Path.GetTempPath(), "typewhisper-app");
+        var userPluginsPath = Path.Join(Path.GetTempPath(), "typewhisper-user", "Plugins");
 
         var result = PluginManager.BuildDefaultSearchDirectories(appBaseDirectory, userPluginsPath);
 
         Assert.Equal(
             [
-                Path.Combine(appBaseDirectory, "Plugins"),
+                Path.Join(appBaseDirectory, "Plugins"),
                 userPluginsPath
             ],
             result);
@@ -178,6 +178,21 @@ public class PluginManagerTests : IDisposable
         var plugin = Assert.Single(result);
         Assert.Equal("1.0.3", plugin.Manifest.Version);
         Assert.Same(local, plugin);
+    }
+
+    [Fact]
+    public void UnloadDiscardedSearchDirectoryPlugins_DisposesPluginDroppedByOverride()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.groq", "1.0.2", @"C:\App\Plugins\com.typewhisper.groq");
+        var local = CreateLoadedPlugin("com.typewhisper.groq", "1.0.3", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.groq");
+        var bundledInstance = Assert.IsType<MultiRolePlugin>(bundled.Instance);
+        var localInstance = Assert.IsType<MultiRolePlugin>(local.Instance);
+
+        var preferred = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+        PluginManager.UnloadDiscardedSearchDirectoryPlugins([bundled, local], preferred);
+
+        Assert.Equal(1, bundledInstance.DisposeCount);
+        Assert.Equal(0, localInstance.DisposeCount);
     }
 
     [Fact]
@@ -300,6 +315,7 @@ public class PluginManagerTests : IDisposable
             _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
         public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders =>
             _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
+        public int DisposeCount { get; private set; }
 
         public void ClearAdditionalRoles() => _includeAdditionalRoles = false;
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
@@ -315,7 +331,7 @@ public class PluginManagerTests : IDisposable
             Task.FromResult(new PluginTranscriptionResult("", language ?? "", 0));
         public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct) =>
             Task.FromResult(userText);
-        public void Dispose() { }
+        public void Dispose() => DisposeCount++;
     }
 
     private sealed class ProfileRole :
