@@ -282,8 +282,8 @@ public class PluginManagerTests : IDisposable
         IAdditionalTranscriptionEnginesProvider,
         IAdditionalLlmProvidersProvider
     {
-        private readonly ProfileRole _profileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A");
-        private readonly ProfileRole _duplicateProfileRole = new("com.test.multi", "openai-compatible-profile-a", "Profile A Duplicate");
+        private readonly ProfileRole _profileRole;
+        private readonly ProfileRole _duplicateProfileRole;
         private readonly string _pluginId;
         private readonly string _pluginVersion;
         private bool _includeAdditionalRoles = true;
@@ -297,6 +297,8 @@ public class PluginManagerTests : IDisposable
         {
             _pluginId = pluginId;
             _pluginVersion = pluginVersion;
+            _profileRole = new ProfileRole(pluginId, "openai-compatible-profile-a", "Profile A");
+            _duplicateProfileRole = new ProfileRole(pluginId, "openai-compatible-profile-a", "Profile A Duplicate");
         }
 
         public string PluginId => _pluginId;
