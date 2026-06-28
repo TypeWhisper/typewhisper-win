@@ -147,30 +147,51 @@ public sealed class PluginManager : IDisposable
         IReadOnlyList<LoadedPlugin> loadedPlugins,
         IReadOnlyCollection<LoadedPlugin> retainedPlugins)
     {
-        foreach (var discarded in loadedPlugins)
+        foreach (var discarded in loadedPlugins.Where(discarded =>
+            !retainedPlugins.Any(retained => ReferenceEquals(retained, discarded))))
         {
-            if (retainedPlugins.Any(retained => ReferenceEquals(retained, discarded)))
-                continue;
-
             try
             {
                 discarded.Instance.Dispose();
             }
-            catch (Exception ex)
+            catch (ObjectDisposedException ex)
             {
-                Debug.WriteLine($"[PluginManager] Failed to dispose overridden plugin {discarded.Manifest.Id}: {ex.Message}");
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (IOException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (NotSupportedException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
             }
 
             try
             {
                 discarded.LoadContext.Unload();
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                Debug.WriteLine($"[PluginManager] Failed to unload overridden plugin {discarded.Manifest.Id}: {ex.Message}");
+                LogDiscardedPluginCleanupFailure("unload", discarded, ex);
+            }
+            catch (CannotUnloadAppDomainException ex)
+            {
+                LogDiscardedPluginCleanupFailure("unload", discarded, ex);
             }
         }
     }
+
+    private static void LogDiscardedPluginCleanupFailure(string action, LoadedPlugin plugin, Exception exception) =>
+        Debug.WriteLine($"[PluginManager] Failed to {action} overridden plugin {plugin.Manifest.Id}: {exception}");
 
     /// <summary>
     /// Discovers plugins from the configured search directories, restores enabled
