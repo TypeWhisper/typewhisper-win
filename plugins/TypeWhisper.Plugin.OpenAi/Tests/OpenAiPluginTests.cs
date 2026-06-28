@@ -12,7 +12,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class OpenAiPluginTests
 {
     [Fact]
-    public void PluginVersionAndManifest_TargetTypeWhisper14AndAdvertiseTts()
+    public void PluginVersionAndManifest_TargetTypeWhisper10AndAdvertiseTts()
     {
         var manifestPath = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -26,7 +26,7 @@ public class OpenAiPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal(manifest.Version, sut.PluginVersion);
-        Assert.Equal("1.4.0", manifest.MinHostVersion);
+        Assert.Equal("1.0.0", manifest.MinHostVersion);
         Assert.Contains("text-to-speech", manifest.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(["transcription", "llm", "tts"], manifest.Categories);
     }

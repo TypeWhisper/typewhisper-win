@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.Plugin.Groq;
@@ -181,27 +182,47 @@ public class GroqPluginTests
         Assert.Equal("ok", result.Text);
     }
 
-    [Fact]
-    public async Task TranscribeAsync_EncoderFailureThrowsClearExceptionBeforeUpload()
+    [Theory]
+    [InlineData(typeof(IOException))]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(COMException))]
+    public async Task TranscribeAsync_EncoderFailureFallsBackToWavUpload(Type compressionExceptionType)
     {
-        var handler = new CapturingHandler((_, _) =>
-            throw new InvalidOperationException("Upload should not be attempted."));
+        string? transcriptionBody = null;
+        var normalHandler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Normal HTTP client should not be used for transcription."));
+        var transcriptionHandler = new CapturingHandler((request, body) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.groq.com/openai/v1/audio/transcriptions", request.RequestUri?.ToString());
+            Assert.Equal("Bearer groq-key", request.Headers.Authorization?.ToString());
+
+            transcriptionBody = body;
+            Assert.NotNull(body);
+            AssertMultipartToken(body, "filename", "audio.wav");
+            Assert.Contains("Content-Type: audio/wav", body);
+            Assert.DoesNotContain("filename=\"audio.m4a\"", body);
+            Assert.DoesNotContain("filename=audio.m4a", body);
+
+            return JsonResponse("""{"text":"fallback","language":"en","duration":1.0}""");
+        });
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "groq-key";
 
-        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(handler);
+        using var httpClient = new HttpClient(normalHandler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(transcriptionHandler);
+        var compressionException = CreateCompressionFailure(compressionExceptionType);
         var sut = new GroqPlugin(
             httpClient,
             transcriptionHttpClient,
-            _ => throw new InvalidOperationException("codec unavailable"));
+            _ => throw compressionException);
         await sut.ActivateAsync(host);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.TranscribeAsync([1, 2, 3], null, false, null, CancellationToken.None));
+        var result = await sut.TranscribeAsync([1, 2, 3], null, false, null, CancellationToken.None);
 
-        Assert.Contains("Groq audio upload could not be compressed", ex.Message);
-        Assert.Contains("codec unavailable", ex.Message);
+        Assert.Equal(TimeSpan.FromMinutes(10), transcriptionHttpClient.Timeout);
+        Assert.NotNull(transcriptionBody);
+        Assert.Equal("fallback", result.Text);
     }
 
     [Fact]
@@ -332,6 +353,23 @@ public class GroqPluginTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+
+    private static Exception CreateCompressionFailure(Type exceptionType)
+    {
+        if (exceptionType == typeof(IOException))
+            return new IOException("codec unavailable");
+
+        if (exceptionType == typeof(InvalidOperationException))
+            return new InvalidOperationException("codec unavailable");
+
+        if (exceptionType == typeof(COMException))
+            return new COMException("codec unavailable");
+
+        throw new ArgumentOutOfRangeException(
+            nameof(exceptionType),
+            exceptionType,
+            "Unsupported compression exception type.");
+    }
 
     private sealed class CapturingHandler(
         Func<HttpRequestMessage, string?, HttpResponseMessage> responder) : HttpMessageHandler

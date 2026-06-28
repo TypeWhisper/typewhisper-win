@@ -192,17 +192,17 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         {
             throw CreateCompressionException(ex);
         }
-        catch (IOException ex)
+        catch (IOException)
         {
-            throw CreateCompressionException(ex);
+            upload = CreateWavUpload(wavAudio);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            throw CreateCompressionException(ex);
+            upload = CreateWavUpload(wavAudio);
         }
-        catch (COMException ex)
+        catch (COMException)
         {
-            throw CreateCompressionException(ex);
+            upload = CreateWavUpload(wavAudio);
         }
 
         return await TranscribeUploadAsync(
@@ -404,6 +404,14 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
             throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
 
         return new GroqTranscriptionUpload(bytes, "audio.m4a", "audio/mp4");
+    }
+
+    private static GroqTranscriptionUpload CreateWavUpload(byte[] wavAudio)
+    {
+        if (wavAudio.Length == 0)
+            throw new InvalidOperationException("No WAV audio bytes were provided.");
+
+        return new GroqTranscriptionUpload(wavAudio, "audio.wav", "audio/wav");
     }
 
     private static async Task<PluginTranscriptionResult> TranscribeUploadAsync(

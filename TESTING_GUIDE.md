@@ -16,6 +16,32 @@
 
 ---
 
+## 1.0 RC Release-Gates
+
+Vor einem `v1.0.0-rc1` Tag müssen diese Checks abgeschlossen sein:
+
+- [ ] `dotnet restore TypeWhisper.slnx`
+- [ ] `dotnet build TypeWhisper.slnx -c Release --no-restore`
+- [ ] `dotnet test tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj -c Release --no-build`
+- [ ] `dotnet test tests/TypeWhisper.PluginSystem.Tests/TypeWhisper.PluginSystem.Tests.csproj -c Release --no-build`
+- [ ] Alle Plugin-Projekte unter `plugins/` in `Release` bauen.
+- [ ] GitHub `Package Dry Run` mit Channel `rc` für `win-x64` und `win-arm64` prüfen.
+- [ ] Release-Artefakte enthalten `Setup.exe`, `Portable.zip`, `.nupkg`, `RELEASES-*`, `assets.*.json` und `releases.*.json` für beide Architekturen.
+- [ ] Signatur/Publisher der `Setup.exe` prüfen; nicht signierte Installer sind ein Release-Blocker.
+
+### 1.0 RC Manuelle Smoke-Tests
+
+- [ ] Frischer Portable-Start auf Windows 11 x64: App startet, Tray reagiert, Settings öffnen.
+- [ ] Windows 10 22H2 mit virtuellen Audiogeräten, z.B. Voicemeeter: Startup hängt nicht, Settings öffnen, Aufnahme funktioniert.
+- [ ] Upgrade von `v0.8.4` auf `v1.0.0-rc1`: Einstellungen, History, Plugins und Hotkeys bleiben erhalten.
+- [ ] Update-Channel in Settings auf Release Candidate stellen und Update-Check ausführen.
+- [ ] Gebundelte Plugins sind sichtbar, Marketplace-/User-Plugin mit gleicher ID überschreibt die gebundelte Kopie.
+- [ ] OpenAI und Supertonic TTS erscheinen auf einem `1.0.0-rc1` Host als kompatible Marketplace-Plugins.
+- [ ] Groq Recorder transkribiert auch auf Systemen ohne Media-Foundation-AAC-Encoder per WAV-Fallback.
+- [ ] AMD-Pfad dokumentiert prüfen: `whisper.cpp` + Vulkan ist der empfohlene AMD-Weg; Parakeet/ONNX ist CPU/NVIDIA CUDA; ROCm ist manuell über `TYPEWHISPER_WHISPERCPP_ROCM_LIBRARY_PATH`; ZLUDA ist experimentell.
+
+---
+
 ## Phase 1: PostProcessingPipeline + DB Migration v6
 
 ### 1.1 DB Migration

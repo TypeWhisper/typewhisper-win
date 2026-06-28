@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
@@ -39,7 +40,13 @@ public sealed class PluginManager : IDisposable
         IActiveWindowService activeWindow,
         IWorkflowService workflows,
         ISettingsService settings)
-        : this(loader, eventBus, activeWindow, workflows, settings, [TypeWhisperEnvironment.PluginsPath])
+        : this(
+            loader,
+            eventBus,
+            activeWindow,
+            workflows,
+            settings,
+            BuildDefaultSearchDirectories(AppContext.BaseDirectory, TypeWhisperEnvironment.PluginsPath))
     {
     }
 
@@ -111,13 +118,90 @@ public sealed class PluginManager : IDisposable
     /// <summary>The shared event bus for plugin communication.</summary>
     public PluginEventBus EventBus => _eventBus;
 
+    internal static string[] BuildDefaultSearchDirectories(string appBaseDirectory, string userPluginsPath) =>
+    [
+        ..new[]
+        {
+            Path.GetFullPath(Path.Join(appBaseDirectory, "Plugins")),
+            Path.GetFullPath(userPluginsPath)
+        }.Distinct(StringComparer.OrdinalIgnoreCase)
+    ];
+
+    internal static IReadOnlyList<LoadedPlugin> PreferLaterSearchDirectoryPlugins(IEnumerable<LoadedPlugin> plugins)
+    {
+        var selectedById = new Dictionary<string, LoadedPlugin>(StringComparer.OrdinalIgnoreCase);
+        var orderedIds = new List<string>();
+
+        foreach (var plugin in plugins)
+        {
+            if (!selectedById.ContainsKey(plugin.Manifest.Id))
+                orderedIds.Add(plugin.Manifest.Id);
+
+            selectedById[plugin.Manifest.Id] = plugin;
+        }
+
+        return orderedIds.Select(id => selectedById[id]).ToList();
+    }
+
+    internal static void UnloadDiscardedSearchDirectoryPlugins(
+        IReadOnlyList<LoadedPlugin> loadedPlugins,
+        IReadOnlyCollection<LoadedPlugin> retainedPlugins)
+    {
+        foreach (var discarded in loadedPlugins.Where(discarded =>
+            !retainedPlugins.Any(retained => ReferenceEquals(retained, discarded))))
+        {
+            try
+            {
+                discarded.Instance.Dispose();
+            }
+            catch (ObjectDisposedException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (IOException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+            catch (NotSupportedException ex)
+            {
+                LogDiscardedPluginCleanupFailure("dispose", discarded, ex);
+            }
+
+            try
+            {
+                discarded.LoadContext.Unload();
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogDiscardedPluginCleanupFailure("unload", discarded, ex);
+            }
+            catch (CannotUnloadAppDomainException ex)
+            {
+                LogDiscardedPluginCleanupFailure("unload", discarded, ex);
+            }
+        }
+    }
+
+    private static void LogDiscardedPluginCleanupFailure(string action, LoadedPlugin plugin, Exception exception) =>
+        Debug.WriteLine($"[PluginManager] Failed to {action} overridden plugin {plugin.Manifest.Id}: {exception}");
+
     /// <summary>
     /// Discovers plugins from the configured search directories, restores enabled
     /// state from settings, and activates all enabled plugins.
     /// </summary>
     public async Task InitializeAsync()
     {
-        var discovered = _loader.DiscoverAndLoad(_searchDirectories);
+        var loadedPlugins = _loader.DiscoverAndLoad(_searchDirectories);
+        var discovered = PreferLaterSearchDirectoryPlugins(loadedPlugins);
+        UnloadDiscardedSearchDirectoryPlugins(loadedPlugins, discovered);
 
         lock (_lock)
         {

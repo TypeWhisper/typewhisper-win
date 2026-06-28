@@ -20,6 +20,7 @@ public class SupertonicTtsPluginTests
 
         Assert.Equal("com.typewhisper.supertonic-tts", root.GetProperty("id").GetString());
         Assert.Equal("Supertonic TTS", root.GetProperty("name").GetString());
+        Assert.Equal("1.0.0", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("tts", root.GetProperty("category").GetString());
         Assert.Contains("tts", root.GetProperty("categories").EnumerateArray().Select(x => x.GetString()));
         Assert.True(root.GetProperty("isLocal").GetBoolean());
