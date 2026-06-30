@@ -218,6 +218,24 @@ public class DictationTargetAppCorrectionLearningGateTests
     }
 
     [Fact]
+    public async Task CaptureTargetAppCorrectionBaselineAsync_ThrowsWhenCancelledAfterSlowCapture()
+    {
+        using var cts = new CancellationTokenSource();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            DictationViewModel.CaptureTargetAppCorrectionBaselineAsync(
+                insertedText: "alpha watre beta",
+                capture: _ =>
+                {
+                    cts.Cancel();
+                    return new TargetAppTextObservation("editable", "alpha watre beta", new IntPtr(42));
+                },
+                retryDelays: [],
+                delayAsync: (_, _) => Task.CompletedTask,
+                cts.Token));
+    }
+
+    [Fact]
     public async Task CaptureTargetAppCorrectionBaselineAsync_ReturnsReasonWhenInsertedTextNeverAppears()
     {
         var result = await DictationViewModel.CaptureTargetAppCorrectionBaselineAsync(
@@ -241,11 +259,70 @@ public class DictationTargetAppCorrectionLearningGateTests
             "DictationViewModel.cs");
         var captureBlock = TestFile.ExtractBlock(
             source,
-            "baselineResult = await CaptureTargetAppCorrectionBaselineAsync",
-            1700);
+            "private async Task<TargetAppCorrectionLearningStartResult> TryStartTargetAppCorrectionLearningAsync",
+            3200);
 
         Assert.Contains("catch (UnauthorizedAccessException)", captureBlock);
         Assert.Contains("return new TargetAppCorrectionLearningStartResult(false, \"capture_error\");", captureBlock);
+    }
+
+    [Fact]
+    public void ProcessSingleJob_StartsTargetAppCorrectionLearningInBackground()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var processBlock = TestFile.ExtractBlock(
+            source,
+            "private async Task ProcessSingleJobAsync",
+            30000);
+
+        Assert.Contains("StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);", processBlock);
+        Assert.DoesNotContain("await StartTargetAppCorrectionLearningIfEligibleAsync(job, insertionText, insertResult, ct);", processBlock);
+    }
+
+    [Fact]
+    public void BackgroundTargetAppCorrectionLearning_UsesTimeoutAndDeepCapture()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var backgroundBlock = TestFile.ExtractBlock(
+            source,
+            "private void StartTargetAppCorrectionLearningInBackground",
+            4200);
+
+        Assert.Contains("TargetAppCorrectionBackgroundStartTimeout", source);
+        Assert.Contains("cts.CancelAfter(TargetAppCorrectionBackgroundStartTimeout);", backgroundBlock);
+        Assert.Contains("_targetAppCorrectionLearningCts = cts;", backgroundBlock);
+        Assert.Contains(".CaptureDeep(", backgroundBlock);
+        Assert.Contains("allowDescendantScan: true", backgroundBlock);
+        Assert.Contains("Task.Run", backgroundBlock);
+    }
+
+    [Fact]
+    public void AutomationTargetAppCorrectionLearning_DoesNotUseSlowDescendantScan()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var startBlock = TestFile.ExtractBlock(
+            source,
+            "private async Task<TargetAppCorrectionLearningStartResult> TryStartTargetAppCorrectionLearningAsync",
+            3200);
+
+        Assert.Contains(".CaptureDeep(", startBlock);
+        Assert.Contains("allowDescendantScan: false", startBlock);
+        Assert.DoesNotContain("allowDescendantScan: true", startBlock);
+        Assert.Contains("TargetAppCorrectionAutomationStartTimeout", source);
+        Assert.Contains("CaptureTargetAppCorrectionBaselineWithTimeoutAsync", startBlock);
+        Assert.Contains("catch (TimeoutException)", startBlock);
     }
 
     [Fact]

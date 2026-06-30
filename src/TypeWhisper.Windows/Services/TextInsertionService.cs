@@ -213,7 +213,14 @@ public sealed class TextInsertionService
     private bool IsTargetForeground(IntPtr targetHwnd)
     {
         var foregroundHwnd = _platform.GetForegroundWindow();
-        return foregroundHwnd == targetHwnd;
+        if (foregroundHwnd == targetHwnd)
+            return true;
+
+        if (foregroundHwnd == IntPtr.Zero || targetHwnd == IntPtr.Zero)
+            return false;
+
+        var targetProcessId = _platform.GetWindowProcessId(targetHwnd);
+        return targetProcessId != 0 && targetProcessId == _platform.GetWindowProcessId(foregroundHwnd);
     }
 
     private async Task<string?> WaitForClipboardTextChangeAsync(string marker)

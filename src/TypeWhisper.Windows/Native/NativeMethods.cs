@@ -241,6 +241,13 @@ internal static partial class NativeMethods
     public static partial IntPtr GetForegroundWindow();
 
     /// <summary>
+    /// Returns cursor position.
+    /// </summary>
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetCursorPos(out POINT lpPoint);
+
+    /// <summary>
     /// Sets foreground window.
     /// </summary>
     [LibraryImport("user32.dll")]
@@ -264,6 +271,23 @@ internal static partial class NativeMethods
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial int GetWindowTextLengthW(IntPtr hWnd);
+
+    /// <summary>
+    /// Represents a Win32 point.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        /// <summary>
+        /// Gets or sets the x coordinate.
+        /// </summary>
+        public int X;
+
+        /// <summary>
+        /// Gets or sets the y coordinate.
+        /// </summary>
+        public int Y;
+    }
 
     // Navigation / editing keys
     /// <summary>

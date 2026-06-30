@@ -143,7 +143,7 @@ public sealed class TextInsertionServiceTests
     }
 
     [Fact]
-    public async Task FocusFailure_FallsBackWhenForegroundWindowMovedWithinSameProcess()
+    public async Task FocusRetry_AcceptsForegroundWindowMovedWithinSameProcess()
     {
         var targetHwnd = new IntPtr(200);
         var currentForegroundHwnd = new IntPtr(300);
@@ -162,9 +162,9 @@ public sealed class TextInsertionServiceTests
 
         var result = await sut.InsertTextAsync("dictated", targetHwnd: targetHwnd);
 
-        Assert.Equal(InsertionResult.CopiedToClipboard, result);
-        Assert.Equal("dictated", platform.ClipboardText);
-        Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(1, platform.PasteInputCalls);
     }
 
     [Fact]

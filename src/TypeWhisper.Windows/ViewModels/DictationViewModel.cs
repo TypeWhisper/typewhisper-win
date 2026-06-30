@@ -128,6 +128,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
     private static readonly IReadOnlyList<TimeSpan> TargetAppCorrectionBaselineRetryDelays =
         Enumerable.Repeat(TimeSpan.FromMilliseconds(50), 10).ToArray();
+    private static readonly TimeSpan TargetAppCorrectionBackgroundStartTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan TargetAppCorrectionAutomationStartTimeout = TimeSpan.FromSeconds(2);
     private readonly object _apiSessionLock = new();
     private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _apiDictationSessions = [];
     private readonly List<Guid> _apiDictationSessionOrder = [];
@@ -1618,7 +1620,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         job.ActiveWorkflow?.Output.AutoEnter == true,
                         job.CapturedWindowHandle);
                     textInsertedEventText = insertionText;
-                    await StartTargetAppCorrectionLearningIfEligibleAsync(job, insertionText, insertResult, ct);
+                    StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
                 }
             }
             else
@@ -1636,7 +1638,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     job.ActiveWorkflow?.Output.AutoEnter == true,
                     job.CapturedWindowHandle);
                 textInsertedEventText = insertionText;
-                await StartTargetAppCorrectionLearningIfEligibleAsync(job, insertionText, insertResult, ct);
+                StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
             }
 
             _eventBus.Publish(new TextInsertedEvent
@@ -1740,6 +1742,134 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         return result.Started;
     }
 
+    private void StartTargetAppCorrectionLearningInBackground(
+        TranscriptionJob job,
+        string insertedText,
+        InsertionResult insertResult)
+        => StartTargetAppCorrectionLearningInBackground(
+            job.ActiveWorkflow,
+            job.CapturedWindowHandle,
+            insertedText,
+            insertResult);
+
+    private void StartTargetAppCorrectionLearningInBackground(
+        Workflow? activeWorkflow,
+        IntPtr targetWindowHandle,
+        string insertedText,
+        InsertionResult insertResult)
+    {
+        if (GetTargetAppCorrectionLearningSkipReason(activeWorkflow, insertedText) is not null ||
+            insertResult != InsertionResult.Pasted ||
+            _targetAppTextObserver is null ||
+            _targetAppCorrectionLearning is null)
+        {
+            return;
+        }
+
+        var observer = _targetAppTextObserver;
+        var learning = _targetAppCorrectionLearning;
+        CancelTargetAppCorrectionLearning();
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
+        cts.CancelAfter(TargetAppCorrectionBackgroundStartTimeout);
+        lock (_targetAppCorrectionLearningSync)
+        {
+            _targetAppCorrectionLearningCts = cts;
+        }
+
+        CancellationTokenSource? trackingCts = null;
+        Task? backgroundTask = null;
+        backgroundTask = Task.Run(async () =>
+        {
+            try
+            {
+                var maxObservedTextLength = TargetAppCorrectionLearningService.GetMaxObservedTextLength(insertedText);
+                var baselineResult = await CaptureTargetAppCorrectionBaselineAsync(
+                    insertedText,
+                    preferredText => observer.CaptureDeep(
+                        targetWindowHandle,
+                        maxObservedTextLength,
+                        preferredText,
+                        allowDescendantScan: true),
+                    TargetAppCorrectionBaselineRetryDelays,
+                    Task.Delay,
+                    cts.Token).ConfigureAwait(false);
+
+                if (baselineResult.Baseline is null)
+                    return;
+
+                trackingCts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
+                lock (_targetAppCorrectionLearningSync)
+                {
+                    if (!ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                        return;
+
+                    _targetAppCorrectionLearningCts = trackingCts;
+                }
+
+                var learned = await learning
+                    .TrackInsertionAsync(insertedText, baselineResult.Baseline, trackingCts.Token)
+                    .ConfigureAwait(false);
+
+                if (learned.Count == 0 || trackingCts.IsCancellationRequested)
+                    return;
+
+                DispatchToUi(() => ShowLearnedCorrectionsFeedback(learned));
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the background capture times out or a newer recording starts.
+            }
+            catch (System.Windows.Automation.ElementNotAvailableException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (IOException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                LogTargetAppCorrectionLearningFailure(ex);
+            }
+            finally
+            {
+                lock (_targetAppCorrectionLearningSync)
+                {
+                    if (ReferenceEquals(_targetAppCorrectionLearningCts, trackingCts) ||
+                        ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                    {
+                        _targetAppCorrectionLearningCts = null;
+                    }
+
+                    if (ReferenceEquals(_targetAppCorrectionLearningTask, backgroundTask))
+                        _targetAppCorrectionLearningTask = null;
+                }
+
+                trackingCts?.Dispose();
+                cts.Dispose();
+            }
+        });
+
+        lock (_targetAppCorrectionLearningSync)
+        {
+            if (ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                _targetAppCorrectionLearningTask = backgroundTask;
+        }
+    }
+
     private async Task<TargetAppCorrectionLearningStartResult> TryStartTargetAppCorrectionLearningAsync(
         Workflow? activeWorkflow,
         IntPtr targetWindowHandle,
@@ -1764,12 +1894,21 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         try
         {
             var maxObservedTextLength = TargetAppCorrectionLearningService.GetMaxObservedTextLength(insertedText);
-            baselineResult = await CaptureTargetAppCorrectionBaselineAsync(
+            baselineResult = await CaptureTargetAppCorrectionBaselineWithTimeoutAsync(
                 insertedText,
-                preferredText => _targetAppTextObserver.Capture(targetWindowHandle, maxObservedTextLength, preferredText),
+                preferredText => _targetAppTextObserver.CaptureDeep(
+                    targetWindowHandle,
+                    maxObservedTextLength,
+                    preferredText,
+                    allowDescendantScan: false),
                 TargetAppCorrectionBaselineRetryDelays,
                 Task.Delay,
+                TargetAppCorrectionAutomationStartTimeout,
                 cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            return new TargetAppCorrectionLearningStartResult(false, "capture_timeout");
         }
         catch (OperationCanceledException)
         {
@@ -1952,6 +2091,25 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             delayAsync,
             cancellationToken);
 
+    internal static async Task<TargetAppCorrectionBaselineResult> CaptureTargetAppCorrectionBaselineWithTimeoutAsync(
+        string insertedText,
+        Func<string, TargetAppTextObservation?> capture,
+        IReadOnlyList<TimeSpan> retryDelays,
+        Func<TimeSpan, CancellationToken, Task> delayAsync,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+        => await Task.Run(
+                async () => await CaptureTargetAppCorrectionBaselineAsync(
+                        insertedText,
+                        capture,
+                        retryDelays,
+                        delayAsync,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                CancellationToken.None)
+            .WaitAsync(timeout, cancellationToken)
+            .ConfigureAwait(false);
+
     internal static async Task<TargetAppCorrectionBaselineResult> CaptureTargetAppCorrectionBaselineAsync(
         string insertedText,
         Func<string, TargetAppTextObservation?> capture,
@@ -1965,6 +2123,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             cancellationToken.ThrowIfCancellationRequested();
             lastObservation = capture(insertedText);
+            cancellationToken.ThrowIfCancellationRequested();
             if (lastObservation?.Value.Contains(insertedText, StringComparison.Ordinal) == true)
                 return new TargetAppCorrectionBaselineResult(lastObservation, null);
 
