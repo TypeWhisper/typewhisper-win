@@ -46,7 +46,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.3";
 
     // ITranscriptionEnginePlugin
     /// <summary>
