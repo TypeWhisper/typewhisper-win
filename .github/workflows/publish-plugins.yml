@@ -124,6 +124,13 @@ jobs:
             Copy-Item -Path $locDir -Destination "$stagingDir/Localization" -Recurse
           }
 
+          # Copy plugin scripts if present. Some local model plugins need these
+          # Python files at runtime after the ZIP is installed from the registry.
+          $scriptsDir = "plugins/$env:PROJECT_NAME/Scripts"
+          if (Test-Path $scriptsDir) {
+            Copy-Item -Path $scriptsDir -Destination "$stagingDir/Scripts" -Recurse
+          }
+
           # Copy NuGet dependency DLLs (excluding SDK/framework assemblies)
           $excludeAssemblies = @('TypeWhisper.PluginSDK.dll')
           Get-ChildItem -Path $outputDir -Filter '*.dll' | Where-Object {
@@ -159,6 +166,10 @@ jobs:
             if (-not (Test-Path $vulkanRuntime)) {
               throw "Missing required whisper.cpp Vulkan runtime: $vulkanRuntime"
             }
+          }
+
+          if ((Test-Path $scriptsDir) -and -not (Test-Path (Join-Path $stagingDir 'Scripts'))) {
+            throw "Plugin scripts were not copied to staging: $scriptsDir"
           }
 
           # Create ZIP
