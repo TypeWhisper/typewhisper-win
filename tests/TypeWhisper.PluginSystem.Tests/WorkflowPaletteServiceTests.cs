@@ -386,6 +386,8 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
 
         public uint GetWindowProcessId(IntPtr hwnd) => 0;
 
+        public IntPtr GetRootWindow(IntPtr hwnd) => hwnd;
+
         public uint SendModifierKeyUpInputs() => 0;
 
         public uint SendForegroundActivationInput() => 0;

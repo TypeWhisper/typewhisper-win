@@ -229,10 +229,38 @@ public class DictationTargetAppCorrectionLearningGateTests
                 {
                     cts.Cancel();
                     return new TargetAppTextObservation("editable", "alpha watre beta", new IntPtr(42));
+            },
+            retryDelays: [],
+            delayAsync: (_, _) => Task.CompletedTask,
+            cts.Token));
+    }
+
+    [Fact]
+    public async Task CaptureTargetAppCorrectionBaselineWithTimeoutAsync_CancelsInnerCaptureWhenTimeoutElapses()
+    {
+        using var cts = new CancellationTokenSource();
+        var delayStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delayCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken retryToken = default;
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            DictationViewModel.CaptureTargetAppCorrectionBaselineWithTimeoutAsync(
+                insertedText: "alpha watre beta",
+                capture: _ => null,
+                retryDelays: [TimeSpan.FromMinutes(1)],
+                delayAsync: (_, token) =>
+                {
+                    retryToken = token;
+                    delayStarted.SetResult();
+                    token.Register(() => delayCancelled.SetResult());
+                    return delayCancelled.Task;
                 },
-                retryDelays: [],
-                delayAsync: (_, _) => Task.CompletedTask,
+                timeout: TimeSpan.FromMilliseconds(10),
                 cts.Token));
+
+        await delayStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.True(retryToken.IsCancellationRequested);
+        await delayCancelled.Task.WaitAsync(TimeSpan.FromSeconds(1));
     }
 
     [Fact]

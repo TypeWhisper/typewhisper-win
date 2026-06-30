@@ -147,6 +147,7 @@ public sealed class TextInsertionServiceTests
     {
         var targetHwnd = new IntPtr(200);
         var currentForegroundHwnd = new IntPtr(300);
+        var rootHwnd = new IntPtr(100);
         var platform = new FakeTextInsertionPlatform
         {
             ClipboardText = "previous",
@@ -156,6 +157,11 @@ public sealed class TextInsertionServiceTests
             {
                 [targetHwnd] = 42,
                 [currentForegroundHwnd] = 42
+            },
+            RootWindows =
+            {
+                [targetHwnd] = rootHwnd,
+                [currentForegroundHwnd] = rootHwnd
             }
         };
         var sut = new TextInsertionService(platform);
@@ -165,6 +171,31 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(InsertionResult.Pasted, result);
         Assert.Equal("previous", platform.ClipboardText);
         Assert.Equal(1, platform.PasteInputCalls);
+    }
+
+    [Fact]
+    public async Task FocusRetry_DoesNotAcceptDifferentForegroundWindowFromSameProcess()
+    {
+        var targetHwnd = new IntPtr(200);
+        var otherWindowHwnd = new IntPtr(300);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = otherWindowHwnd,
+            SetForegroundWindowResult = false,
+            WindowProcessIds =
+            {
+                [targetHwnd] = 42,
+                [otherWindowHwnd] = 42
+            }
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated", targetHwnd: targetHwnd);
+
+        Assert.Equal(InsertionResult.CopiedToClipboard, result);
+        Assert.Equal("dictated", platform.ClipboardText);
+        Assert.Equal(0, platform.PasteInputCalls);
     }
 
     [Fact]
@@ -297,6 +328,7 @@ public sealed class TextInsertionServiceTests
         public Queue<bool> SetForegroundWindowResults { get; set; } = [];
         public bool MoveForegroundOnSetForegroundWindowSuccess { get; set; } = true;
         public Dictionary<IntPtr, uint> WindowProcessIds { get; set; } = [];
+        public Dictionary<IntPtr, IntPtr> RootWindows { get; set; } = [];
         public IntPtr LastSetForegroundWindow { get; private set; }
         public uint PasteInputResult { get; set; } = 4;
         public uint EnterInputResult { get; set; } = 2;
@@ -390,6 +422,9 @@ public sealed class TextInsertionServiceTests
 
         public uint GetWindowProcessId(IntPtr hwnd) =>
             WindowProcessIds.GetValueOrDefault(hwnd);
+
+        public IntPtr GetRootWindow(IntPtr hwnd) =>
+            RootWindows.GetValueOrDefault(hwnd, hwnd);
 
         public uint SendModifierKeyUpInputs()
         {

@@ -235,6 +235,11 @@ internal static partial class NativeMethods
 
     // Active window APIs
     /// <summary>
+    /// Defines the get ancestor root flag.
+    /// </summary>
+    public const uint GA_ROOT = 2;
+
+    /// <summary>
     /// Returns foreground window.
     /// </summary>
     [LibraryImport("user32.dll")]
@@ -253,6 +258,12 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// Returns an ancestor window for the supplied window handle.
+    /// </summary>
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     /// <summary>
     /// Returns window thread process id.

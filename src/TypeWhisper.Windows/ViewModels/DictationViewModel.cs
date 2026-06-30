@@ -1781,85 +1781,88 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Task? backgroundTask = null;
         backgroundTask = Task.Run(async () =>
         {
-            try
+            using (cts)
             {
-                var maxObservedTextLength = TargetAppCorrectionLearningService.GetMaxObservedTextLength(insertedText);
-                var baselineResult = await CaptureTargetAppCorrectionBaselineAsync(
-                    insertedText,
-                    preferredText => observer.CaptureDeep(
-                        targetWindowHandle,
-                        maxObservedTextLength,
-                        preferredText,
-                        allowDescendantScan: true),
-                    TargetAppCorrectionBaselineRetryDelays,
-                    Task.Delay,
-                    cts.Token).ConfigureAwait(false);
-
-                if (baselineResult.Baseline is null)
-                    return;
-
-                trackingCts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
-                lock (_targetAppCorrectionLearningSync)
+                try
                 {
-                    if (!ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                    var maxObservedTextLength = TargetAppCorrectionLearningService.GetMaxObservedTextLength(insertedText);
+                    var baselineResult = await CaptureTargetAppCorrectionBaselineAsync(
+                        insertedText,
+                        preferredText => observer.CaptureDeep(
+                            targetWindowHandle,
+                            maxObservedTextLength,
+                            preferredText,
+                            allowDescendantScan: true),
+                        TargetAppCorrectionBaselineRetryDelays,
+                        Task.Delay,
+                        cts.Token).ConfigureAwait(false);
+
+                    if (baselineResult.Baseline is null)
                         return;
 
-                    _targetAppCorrectionLearningCts = trackingCts;
-                }
-
-                var learned = await learning
-                    .TrackInsertionAsync(insertedText, baselineResult.Baseline, trackingCts.Token)
-                    .ConfigureAwait(false);
-
-                if (learned.Count == 0 || trackingCts.IsCancellationRequested)
-                    return;
-
-                DispatchToUi(() => ShowLearnedCorrectionsFeedback(learned));
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the background capture times out or a newer recording starts.
-            }
-            catch (System.Windows.Automation.ElementNotAvailableException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            catch (ObjectDisposedException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            catch (InvalidOperationException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            catch (IOException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            catch (System.Runtime.InteropServices.COMException ex)
-            {
-                LogTargetAppCorrectionLearningFailure(ex);
-            }
-            finally
-            {
-                lock (_targetAppCorrectionLearningSync)
-                {
-                    if (ReferenceEquals(_targetAppCorrectionLearningCts, trackingCts) ||
-                        ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                    trackingCts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
+                    using (trackingCts)
                     {
-                        _targetAppCorrectionLearningCts = null;
+                        lock (_targetAppCorrectionLearningSync)
+                        {
+                            if (!ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                                return;
+
+                            _targetAppCorrectionLearningCts = trackingCts;
+                        }
+
+                        var learned = await learning
+                            .TrackInsertionAsync(insertedText, baselineResult.Baseline, trackingCts.Token)
+                            .ConfigureAwait(false);
+
+                        if (learned.Count == 0 || trackingCts.IsCancellationRequested)
+                            return;
+
+                        DispatchToUi(() => ShowLearnedCorrectionsFeedback(learned));
                     }
-
-                    if (ReferenceEquals(_targetAppCorrectionLearningTask, backgroundTask))
-                        _targetAppCorrectionLearningTask = null;
                 }
+                catch (OperationCanceledException)
+                {
+                    // Expected when the background capture times out or a newer recording starts.
+                }
+                catch (System.Windows.Automation.ElementNotAvailableException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                catch (IOException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                catch (System.Runtime.InteropServices.COMException ex)
+                {
+                    LogTargetAppCorrectionLearningFailure(ex);
+                }
+                finally
+                {
+                    lock (_targetAppCorrectionLearningSync)
+                    {
+                        if (ReferenceEquals(_targetAppCorrectionLearningCts, trackingCts) ||
+                            ReferenceEquals(_targetAppCorrectionLearningCts, cts))
+                        {
+                            _targetAppCorrectionLearningCts = null;
+                        }
 
-                trackingCts?.Dispose();
-                cts.Dispose();
+                        if (ReferenceEquals(_targetAppCorrectionLearningTask, backgroundTask))
+                            _targetAppCorrectionLearningTask = null;
+                    }
+                }
             }
         });
 
@@ -2098,17 +2101,35 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Func<TimeSpan, CancellationToken, Task> delayAsync,
         TimeSpan timeout,
         CancellationToken cancellationToken)
-        => await Task.Run(
-                async () => await CaptureTargetAppCorrectionBaselineAsync(
-                        insertedText,
-                        capture,
-                        retryDelays,
-                        delayAsync,
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                CancellationToken.None)
-            .WaitAsync(timeout, cancellationToken)
-            .ConfigureAwait(false);
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var captureTask = Task.Run(
+            async () => await CaptureTargetAppCorrectionBaselineAsync(
+                    insertedText,
+                    capture,
+                    retryDelays,
+                    delayAsync,
+                    timeoutCts.Token)
+                .ConfigureAwait(false),
+            CancellationToken.None);
+
+        try
+        {
+            return await captureTask
+                .WaitAsync(timeout, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            timeoutCts.Cancel();
+            _ = captureTask.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            throw;
+        }
+    }
 
     internal static async Task<TargetAppCorrectionBaselineResult> CaptureTargetAppCorrectionBaselineAsync(
         string insertedText,

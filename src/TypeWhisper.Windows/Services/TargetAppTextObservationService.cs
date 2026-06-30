@@ -406,13 +406,16 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                     continue;
                 }
 
-                var observation = CaptureElement(
+                var observationCandidate = CaptureElement(
                     candidate,
                     targetHwnd,
                     maxTextLength,
                     allowElementKeyChangeOnCommit: true);
-                if (observation?.Value.Contains(preferredText, StringComparison.Ordinal) != true)
+                if (observationCandidate is not { } observation ||
+                    !observation.Value.Contains(preferredText, StringComparison.Ordinal))
+                {
                     continue;
+                }
 
                 if (match is not null &&
                     !string.Equals(match.ElementKey, observation.ElementKey, StringComparison.Ordinal))

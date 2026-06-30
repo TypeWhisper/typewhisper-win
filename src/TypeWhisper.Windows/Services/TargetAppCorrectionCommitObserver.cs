@@ -130,6 +130,9 @@ public sealed class TargetAppCorrectionCommitObserver : ITargetAppCorrectionComm
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        if (nCode < 0)
+            return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+
         try
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
