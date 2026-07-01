@@ -38,11 +38,12 @@ jobs:
         id: resolve
         env:
           INPUT_BASE_VERSION: ${{ inputs.base_version || '' }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           bash .github/scripts/resolve-release-metadata.sh \
             --event "${{ github.event_name }}" \
-            --ref-name "${{ github.ref_name }}" \
+            --ref-name "$RELEASE_REF_NAME" \
             --sha "${{ github.sha }}" \
             --base-version "$INPUT_BASE_VERSION" >> "$GITHUB_OUTPUT"
 

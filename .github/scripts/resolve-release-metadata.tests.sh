@@ -109,6 +109,22 @@ test_existing_daily_tag_skips_build() {
   assert_eq "should_run" "false" "$(metadata_value "$output" should_run)"
 }
 
+test_push_stable_release_uses_plain_channel() {
+  local output
+  output="$(TYPEWHISPER_RELEASE_DATE=20260701 bash "$RESOLVER" \
+    --event push \
+    --ref-name v1.0.0 \
+    --sha "$(git rev-parse HEAD)" \
+    --base-version "")"
+
+  assert_eq "tag" "v1.0.0" "$(metadata_value "$output" tag)"
+  assert_eq "version" "1.0.0" "$(metadata_value "$output" version)"
+  assert_eq "channel_suffix" "" "$(metadata_value "$output" channel_suffix)"
+  assert_eq "is_prerelease" "false" "$(metadata_value "$output" is_prerelease)"
+  assert_eq "is_stable" "true" "$(metadata_value "$output" is_stable)"
+  assert_eq "should_run" "true" "$(metadata_value "$output" should_run)"
+}
+
 test_push_release_candidate_uses_rc_channel() {
   local output
   output="$(TYPEWHISPER_RELEASE_DATE=20260701 bash "$RESOLVER" \
@@ -125,11 +141,23 @@ test_push_release_candidate_uses_rc_channel() {
   assert_eq "should_run" "true" "$(metadata_value "$output" should_run)"
 }
 
+test_unsupported_prerelease_version_fails() {
+  if TYPEWHISPER_RELEASE_DATE=20260701 bash "$RESOLVER" \
+    --event push \
+    --ref-name v1.0.0-beta1 \
+    --sha "$(git rev-parse HEAD)" \
+    --base-version "" >/dev/null 2>&1; then
+    fail "expected resolver to reject unsupported prerelease version"
+  fi
+}
+
 with_repo test_daily_uses_release_candidate_base_when_it_is_newer_than_stable
 with_repo test_daily_uses_next_stable_patch_without_release_candidate
 with_repo test_daily_uses_next_patch_after_stable_catches_up_to_release_candidate
 with_repo test_explicit_base_version_wins
 with_repo test_existing_daily_tag_skips_build
+with_repo test_push_stable_release_uses_plain_channel
 with_repo test_push_release_candidate_uses_rc_channel
+with_repo test_unsupported_prerelease_version_fails
 
 echo "release metadata resolver tests passed"
