@@ -188,19 +188,20 @@ public sealed class PluginRegistryService
                 CollectUnloadedPluginContexts();
             }
 
+            await ClearPendingUninstallAsync(registryPlugin.Id, ct);
+
             try
             {
                 await _replaceActiveDirectoryAsync(stagingDir, pluginDir, ct);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                QueuePendingUpdate(registryPlugin.Id, stagingDir);
+                await QueuePendingUpdateAsync(registryPlugin.Id, stagingDir, ct);
                 Debug.WriteLine($"[PluginRegistry] Queued plugin update pending restart: {registryPlugin.Id} ({ex.Message})");
                 return PluginInstallResult.PendingRestart;
             }
 
             DeleteDirectoryIfExists(GetValidatedPendingDirectory(registryPlugin.Id));
-            ClearPendingUninstall(registryPlugin.Id);
 
             await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: true);
             if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
@@ -424,13 +425,14 @@ public sealed class PluginRegistryService
             throw new InvalidOperationException("The downloaded plugin package version does not match the registry entry.");
     }
 
-    private void QueuePendingUpdate(string pluginId, string stagingDir)
+    private async Task QueuePendingUpdateAsync(string pluginId, string stagingDir, CancellationToken ct)
     {
+        await ClearPendingUninstallAsync(pluginId, ct);
+
         var pendingDir = GetValidatedPendingDirectory(pluginId);
         DeleteDirectoryIfExists(pendingDir);
         Directory.CreateDirectory(_pendingUpdatesPath);
         Directory.Move(stagingDir, pendingDir);
-        ClearPendingUninstall(pluginId);
     }
 
     private void QueuePendingUninstall(string pluginId)
@@ -449,9 +451,15 @@ public sealed class PluginRegistryService
         await _deleteActiveDirectoryAsync(pendingDir, ct);
     }
 
-    private void ClearPendingUninstall(string pluginId)
+    private async Task ClearPendingUninstallAsync(string pluginId, CancellationToken ct)
     {
-        DeleteDirectoryIfExists(GetValidatedPendingUninstallDirectory(pluginId));
+        var pendingDir = GetValidatedPendingUninstallDirectory(pluginId);
+        if (!Directory.Exists(pendingDir))
+            return;
+
+        await _deleteActiveDirectoryAsync(pendingDir, ct);
+        if (Directory.Exists(pendingDir))
+            throw new IOException($"Failed to clear pending uninstall marker for {pluginId}.");
     }
 
     private static Task DeleteActiveDirectoryAsync(string targetDirectory, CancellationToken ct)

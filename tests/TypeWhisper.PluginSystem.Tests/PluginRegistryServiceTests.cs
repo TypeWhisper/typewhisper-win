@@ -556,6 +556,47 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallPluginAsync_PendingUninstallDeleteFailure_FailsBeforeReplacingOrQueueing()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.pending-uninstall-locked", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        Directory.CreateDirectory(pendingUninstallDir);
+        var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
+        var replaceCallCount = 0;
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) =>
+            {
+                replaceCallCount++;
+                return Task.CompletedTask;
+            },
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await Assert.ThrowsAsync<IOException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Equal(0, replaceCallCount);
+        Assert.False(Directory.Exists(activeDir));
+        Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+    }
+
+    [Fact]
     public async Task UninstallPluginAsync_DeleteSuccess_ReturnsUninstalledAndRemovesDirectory()
     {
         var manager = CreateManager();
