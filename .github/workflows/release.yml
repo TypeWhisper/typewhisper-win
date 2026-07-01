@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       base_version:
-        description: 'Base version for daily builds, without v or prerelease suffix. Defaults to latest stable patch + 1.'
+        description: 'Base version for daily builds, without v or prerelease suffix. Defaults to the active release line.'
         required: false
         type: string
 
@@ -31,93 +31,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test release metadata resolver
+        run: bash .github/scripts/resolve-release-metadata.tests.sh
+
       - name: Resolve release metadata
         id: resolve
         env:
           INPUT_BASE_VERSION: ${{ inputs.base_version || '' }}
         run: |
           set -euo pipefail
-
-          EVENT="${{ github.event_name }}"
-          RELEASE_TARGET=""
-
-          if [ "$EVENT" = "push" ]; then
-            TAG="${{ github.ref_name }}"
-            VERSION="${TAG#v}"
-          else
-            BASE_VERSION="${INPUT_BASE_VERSION#v}"
-
-            if [ -z "$BASE_VERSION" ]; then
-              LATEST_STABLE=$(git tag --list 'v[0-9]*' --sort=-v:refname \
-                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-                | head -1 || true)
-
-              if [ -n "$LATEST_STABLE" ]; then
-                STABLE_VERSION="${LATEST_STABLE#v}"
-              else
-                STABLE_VERSION="0.0.0"
-              fi
-
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$STABLE_VERSION"
-              PATCH=$((PATCH + 1))
-              BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-            fi
-
-            if ! echo "$BASE_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "base_version must look like 0.7.1, got: $BASE_VERSION" >&2
-              exit 1
-            fi
-
-            DATE=$(date -u +%Y%m%d)
-            TAG="v${BASE_VERSION}-daily.${DATE}"
-            VERSION="${BASE_VERSION}-daily.${DATE}"
-            RELEASE_TARGET="${{ github.sha }}"
-
-            if git rev-parse "$TAG" >/dev/null 2>&1; then
-              echo "Daily tag $TAG already exists; skipping."
-              {
-                echo "tag=$TAG"
-                echo "version=$VERSION"
-                echo "channel_suffix=-daily"
-                echo "is_prerelease=true"
-                echo "is_stable=false"
-                echo "should_run=false"
-                echo "release_target=$RELEASE_TARGET"
-              } >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-
-          CHANNEL_SUFFIX=""
-          IS_PRERELEASE="false"
-          IS_STABLE="true"
-
-          if [[ "$VERSION" == *"-daily."* ]]; then
-            CHANNEL_SUFFIX="-daily"
-            IS_PRERELEASE="true"
-            IS_STABLE="false"
-          elif [[ "$VERSION" == *"-rc"* ]]; then
-            CHANNEL_SUFFIX="-rc"
-            IS_PRERELEASE="true"
-            IS_STABLE="false"
-          elif [[ "$VERSION" == *"-"* ]]; then
-            echo "Unsupported prerelease version for Windows app release channels: $VERSION" >&2
-            exit 1
-          fi
-
-          {
-            echo "tag=$TAG"
-            echo "version=$VERSION"
-            echo "channel_suffix=$CHANNEL_SUFFIX"
-            echo "is_prerelease=$IS_PRERELEASE"
-            echo "is_stable=$IS_STABLE"
-            echo "should_run=true"
-            echo "release_target=$RELEASE_TARGET"
-          } >> "$GITHUB_OUTPUT"
-
-          echo "Release tag: $TAG"
-          echo "Package version: $VERSION"
-          echo "Velopack channel suffix: ${CHANNEL_SUFFIX:-<stable>}"
+          bash .github/scripts/resolve-release-metadata.sh \
+            --event "${{ github.event_name }}" \
+            --ref-name "${{ github.ref_name }}" \
+            --sha "${{ github.sha }}" \
+            --base-version "$INPUT_BASE_VERSION" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
