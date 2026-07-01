@@ -199,12 +199,13 @@ public sealed class PluginRegistryService
                 return PluginInstallResult.PendingRestart;
             }
 
+            DeleteDirectoryIfExists(GetValidatedPendingDirectory(registryPlugin.Id));
+            ClearPendingUninstall(registryPlugin.Id);
+
             await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: true);
             if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
                 return PluginInstallResult.PendingRestart;
 
-            DeleteDirectoryIfExists(GetValidatedPendingDirectory(registryPlugin.Id));
-            DeleteDirectoryIfExists(GetValidatedPendingUninstallDirectory(registryPlugin.Id));
             Debug.WriteLine($"[PluginRegistry] Installed plugin: {registryPlugin.Id} v{registryPlugin.Version}");
             return PluginInstallResult.Installed;
         }
@@ -414,6 +415,7 @@ public sealed class PluginRegistryService
         DeleteDirectoryIfExists(pendingDir);
         Directory.CreateDirectory(_pendingUpdatesPath);
         Directory.Move(stagingDir, pendingDir);
+        ClearPendingUninstall(pluginId);
     }
 
     private void QueuePendingUninstall(string pluginId)
@@ -421,6 +423,11 @@ public sealed class PluginRegistryService
         var pendingDir = GetValidatedPendingUninstallDirectory(pluginId);
         Directory.CreateDirectory(_pendingUninstallsPath);
         Directory.CreateDirectory(pendingDir);
+    }
+
+    private void ClearPendingUninstall(string pluginId)
+    {
+        DeleteDirectoryIfExists(GetValidatedPendingUninstallDirectory(pluginId));
     }
 
     private static Task DeleteActiveDirectoryAsync(string targetDirectory, CancellationToken ct)
