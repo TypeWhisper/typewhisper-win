@@ -339,6 +339,7 @@
   "Plugins.Installing": "インストール中...",
   "Plugins.InstallFailedFormat": "インストールに失敗しました: {0}",
   "Plugins.UpdateFailedFormat": "アップデートに失敗しました: {0}",
+  "Plugins.UninstallFailedFormat": "アンインストールに失敗しました: {0}",
   "Plugins.InstalledBadge": "インストール済み",
   "Plugins.UpdateAvailablePrefix": "アップデート v",
   "Plugins.RestartRequiredBadge": "再起動が必要です",

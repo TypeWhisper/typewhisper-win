@@ -339,6 +339,7 @@
   "Plugins.Installing": "Установка...",
   "Plugins.InstallFailedFormat": "Не удалось установить: {0}",
   "Plugins.UpdateFailedFormat": "Не удалось обновить: {0}",
+  "Plugins.UninstallFailedFormat": "Не удалось удалить: {0}",
   "Plugins.InstalledBadge": "Установлено",
   "Plugins.UpdateAvailablePrefix": "Обновление v",
   "Plugins.RestartRequiredBadge": "Требуется перезапуск",

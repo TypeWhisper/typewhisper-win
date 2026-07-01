@@ -589,6 +589,8 @@ public partial class PluginItemViewModel : ObservableObject
             return;
 
         await _registryService.UninstallPluginAsync(Id);
+        RegistryPlugin?.RefreshInstallState();
+        NotifyUpdateStateChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanUpdateRegistryPlugin))]
