@@ -1,6 +1,7 @@
 using System.Windows.Input;
 using TypeWhisper.Windows.Controls;
 using TypeWhisper.Windows.Native;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -361,6 +362,57 @@ public class HotkeyInputTests
         Assert.True(KeyboardHook.ShouldIgnoreInjectedInput(selfInjected));
         Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(externalInjected));
         Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(hardwareInput));
+    }
+
+    [Theory]
+    [InlineData(NativeMethods.VK_RETURN)]
+    [InlineData(NativeMethods.VK_TAB)]
+    public void TargetAppCorrectionCommitObserver_SignalsHardwareEnterAndTab(int virtualKey)
+    {
+        var input = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            vkCode = (uint)virtualKey
+        };
+
+        var result = TargetAppCorrectionCommitObserver.ShouldSignalCommitKey(
+            0,
+            NativeMethods.WM_KEYDOWN,
+            input);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void TargetAppCorrectionCommitObserver_IgnoresInjectedEnter()
+    {
+        var input = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            vkCode = NativeMethods.VK_RETURN,
+            flags = NativeMethods.LLKHF_INJECTED
+        };
+
+        var result = TargetAppCorrectionCommitObserver.ShouldSignalCommitKey(
+            0,
+            NativeMethods.WM_KEYDOWN,
+            input);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void TargetAppCorrectionCommitObserver_IgnoresNonCommitKeys()
+    {
+        var input = new NativeMethods.KBDLLHOOKSTRUCT
+        {
+            vkCode = (uint)'A'
+        };
+
+        var result = TargetAppCorrectionCommitObserver.ShouldSignalCommitKey(
+            0,
+            NativeMethods.WM_KEYDOWN,
+            input);
+
+        Assert.False(result);
     }
 
     [Fact]

@@ -198,6 +198,74 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TrackInsertionAsync_DoesNotStopEarlyWhenElectronFocusReportsDocumentBeforeEdit()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = new TargetAppTextObservation(
+            "compose",
+            "hello teh world",
+            new IntPtr(42),
+            AllowElementKeyChangeOnCommit: true);
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello teh world", new IntPtr(42)));
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello the world", new IntPtr(42)));
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello the world", new IntPtr(42)));
+        observer.Matches.Enqueue(TargetAppTextElementMatch.Different);
+        observer.Matches.Enqueue(TargetAppTextElementMatch.Different);
+        var service = CreateService(observer, new FakeCommitObserver([false, false, true]), polls: 3);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+        Assert.Equal(3, observer.RecaptureCalls);
+        Assert.Equal(2, observer.FocusedElementMatchCalls);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_DoesNotLearnElectronSameWindowEditBeforeCommit()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = new TargetAppTextObservation(
+            "compose",
+            "hello teh world",
+            new IntPtr(42),
+            AllowElementKeyChangeOnCommit: true);
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello the world", new IntPtr(42)));
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello the world", new IntPtr(42)));
+        observer.Matches.Enqueue(TargetAppTextElementMatch.Different);
+        observer.Matches.Enqueue(TargetAppTextElementMatch.Different);
+        var service = CreateService(observer, new FakeCommitObserver([false, false]), polls: 2);
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+        Assert.Equal(2, observer.RecaptureCalls);
+        Assert.Equal(2, observer.FocusedElementMatchCalls);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_LearnsElectronEditAfterWindowFocusChange()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = new TargetAppTextObservation(
+            "compose",
+            "hello teh world",
+            new IntPtr(42),
+            AllowElementKeyChangeOnCommit: true);
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("document", "hello the world", new IntPtr(42)));
+        observer.Matches.Enqueue(TargetAppTextElementMatch.DifferentWindow);
+        var service = CreateService(observer, new FakeCommitObserver([false]));
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+    }
+
+    [Fact]
     public async Task TrackInsertionAsync_DoesNotLearnWhenFocusChangeRecaptureIsUnsupported()
     {
         var observer = new FakeTargetTextObserver();
@@ -219,6 +287,43 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
         var observer = new FakeTargetTextObserver();
         var baseline = Observation("hello teh world");
         observer.Recaptures.Enqueue(new TargetAppTextObservation("other", "hello the world", new IntPtr(42)));
+        var service = CreateService(observer, new FakeCommitObserver([true]));
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Empty(learned);
+        Assert.Empty(_dictionary.Entries);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_LearnsCommittedSameWindowRecaptureWhenBaselineAllowsElementKeyChange()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = new TargetAppTextObservation(
+            "editable",
+            "hello teh world",
+            new IntPtr(42),
+            AllowElementKeyChangeOnCommit: true);
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("other", "hello the world", new IntPtr(42)));
+        var service = CreateService(observer, new FakeCommitObserver([true]));
+
+        var learned = await service.TrackInsertionAsync("teh", baseline);
+
+        var correction = Assert.Single(learned);
+        Assert.Equal("teh", correction.Original);
+        Assert.Equal("the", correction.Replacement);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_DoesNotUseElementKeyChangeFallbackAcrossWindows()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = new TargetAppTextObservation(
+            "editable",
+            "hello teh world",
+            new IntPtr(42),
+            AllowElementKeyChangeOnCommit: true);
+        observer.Recaptures.Enqueue(new TargetAppTextObservation("other", "hello the world", new IntPtr(99)));
         var service = CreateService(observer, new FakeCommitObserver([true]));
 
         var learned = await service.TrackInsertionAsync("teh", baseline);

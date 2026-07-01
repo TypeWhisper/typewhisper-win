@@ -13,12 +13,14 @@ namespace TypeWhisper.Windows.Services;
 /// <param name="WindowHandle">Owning top-level window handle.</param>
 /// <param name="MaxValueLength">Maximum text length this observation may read on recapture.</param>
 /// <param name="Element">Captured UI Automation element used for bounded recapture after focus leaves.</param>
+/// <param name="AllowElementKeyChangeOnCommit">Whether an explicit commit may accept a same-window recapture with a changed element key.</param>
 public sealed record TargetAppTextObservation(
     string ElementKey,
     string Value,
     IntPtr WindowHandle,
     int MaxValueLength = 4096,
-    AutomationElement? Element = null);
+    AutomationElement? Element = null,
+    bool AllowElementKeyChangeOnCommit = false);
 
 /// <summary>
 /// Lists possible focus relationships for a previously observed text element.
@@ -34,6 +36,11 @@ public enum TargetAppTextElementMatch
     /// Focus moved to a different element or window.
     /// </summary>
     Different,
+
+    /// <summary>
+    /// Focus moved to another top-level window or process.
+    /// </summary>
+    DifferentWindow,
 
     /// <summary>
     /// The current focus state could not be observed safely.
@@ -56,6 +63,16 @@ public interface ITargetAppTextObserver
     /// </summary>
     TargetAppTextObservation? Capture(IntPtr targetHwnd, int maxTextLength, string preferredText)
         => Capture(targetHwnd, maxTextLength);
+
+    /// <summary>
+    /// Best-effort capture that may inspect descendant text elements when focus alone is insufficient.
+    /// </summary>
+    TargetAppTextObservation? CaptureDeep(
+        IntPtr targetHwnd,
+        int maxTextLength,
+        string preferredText,
+        bool allowDescendantScan = false)
+        => Capture(targetHwnd, maxTextLength, preferredText);
 
     /// <summary>
     /// Recaptures the same text element if it is still observable.
@@ -212,7 +229,26 @@ public sealed class TargetAppCorrectionLearningService
                 if (focusMatch == TargetAppTextElementMatch.Unavailable)
                     continue;
 
-                return LearnFromCurrentObservation(insertedText, baseline, lastObserved);
+                if (focusMatch == TargetAppTextElementMatch.Different)
+                {
+                    if (baseline.AllowElementKeyChangeOnCommit)
+                    {
+                        if (TryRecaptureCommittedElement(baseline) is { } current)
+                            lastObserved = current;
+
+                        continue;
+                    }
+
+                    return LearnFromCurrentObservation(insertedText, baseline, lastObserved);
+                }
+
+                var learned = LearnFromCurrentObservation(insertedText, baseline, lastObserved);
+                if (learned.Count > 0 ||
+                    !baseline.AllowElementKeyChangeOnCommit ||
+                    focusMatch == TargetAppTextElementMatch.DifferentWindow)
+                {
+                    return learned;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -243,7 +279,7 @@ public sealed class TargetAppCorrectionLearningService
         TargetAppTextObservation baseline,
         TargetAppTextObservation fallbackObservation)
     {
-        var current = TryRecaptureSameElement(baseline);
+        var current = TryRecaptureCommittedElement(baseline);
         if (current is null ||
             (string.Equals(current.Value, baseline.Value, StringComparison.Ordinal) &&
              !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal)))
@@ -257,6 +293,21 @@ public sealed class TargetAppCorrectionLearningService
         var current = _textObserver.Recapture(baseline);
         return current is not null &&
             string.Equals(current.ElementKey, baseline.ElementKey, StringComparison.Ordinal)
+            ? current
+            : null;
+    }
+
+    private TargetAppTextObservation? TryRecaptureCommittedElement(TargetAppTextObservation baseline)
+    {
+        var current = _textObserver.Recapture(baseline);
+        if (current is null)
+            return null;
+
+        if (string.Equals(current.ElementKey, baseline.ElementKey, StringComparison.Ordinal))
+            return current;
+
+        return baseline.AllowElementKeyChangeOnCommit &&
+            current.WindowHandle == baseline.WindowHandle
                 ? current
                 : null;
     }

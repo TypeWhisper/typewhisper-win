@@ -235,10 +235,22 @@ internal static partial class NativeMethods
 
     // Active window APIs
     /// <summary>
+    /// Defines the get ancestor root flag.
+    /// </summary>
+    public const uint GA_ROOT = 2;
+
+    /// <summary>
     /// Returns foreground window.
     /// </summary>
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetForegroundWindow();
+
+    /// <summary>
+    /// Returns cursor position.
+    /// </summary>
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetCursorPos(out POINT lpPoint);
 
     /// <summary>
     /// Sets foreground window.
@@ -246,6 +258,12 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(IntPtr hWnd);
+
+    /// <summary>
+    /// Returns an ancestor window for the supplied window handle.
+    /// </summary>
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     /// <summary>
     /// Returns window thread process id.
@@ -264,6 +282,23 @@ internal static partial class NativeMethods
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial int GetWindowTextLengthW(IntPtr hWnd);
+
+    /// <summary>
+    /// Represents a Win32 point.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        /// <summary>
+        /// Gets or sets the x coordinate.
+        /// </summary>
+        public int X;
+
+        /// <summary>
+        /// Gets or sets the y coordinate.
+        /// </summary>
+        public int Y;
+    }
 
     // Navigation / editing keys
     /// <summary>

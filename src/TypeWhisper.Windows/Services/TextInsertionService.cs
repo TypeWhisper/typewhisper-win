@@ -213,7 +213,14 @@ public sealed class TextInsertionService
     private bool IsTargetForeground(IntPtr targetHwnd)
     {
         var foregroundHwnd = _platform.GetForegroundWindow();
-        return foregroundHwnd == targetHwnd;
+        if (foregroundHwnd == targetHwnd)
+            return true;
+
+        if (foregroundHwnd == IntPtr.Zero || targetHwnd == IntPtr.Zero)
+            return false;
+
+        var targetRoot = _platform.GetRootWindow(targetHwnd);
+        return targetRoot != IntPtr.Zero && targetRoot == _platform.GetRootWindow(foregroundHwnd);
     }
 
     private async Task<string?> WaitForClipboardTextChangeAsync(string marker)
@@ -289,6 +296,7 @@ internal interface ITextInsertionPlatform
     IntPtr GetForegroundWindow();
     bool SetForegroundWindow(IntPtr hwnd);
     uint GetWindowProcessId(IntPtr hwnd);
+    IntPtr GetRootWindow(IntPtr hwnd);
     uint SendModifierKeyUpInputs();
     uint SendForegroundActivationInput();
     uint SendCopyInput();
@@ -420,6 +428,18 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
 
         NativeMethods.GetWindowThreadProcessId(hwnd, out var processId);
         return processId;
+    }
+
+    /// <summary>
+    /// Returns the root ancestor for the supplied window handle.
+    /// </summary>
+    public IntPtr GetRootWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return IntPtr.Zero;
+
+        var root = NativeMethods.GetAncestor(hwnd, NativeMethods.GA_ROOT);
+        return root == IntPtr.Zero ? hwnd : root;
     }
 
     /// <summary>
