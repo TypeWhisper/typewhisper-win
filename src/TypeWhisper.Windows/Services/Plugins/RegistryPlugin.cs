@@ -160,3 +160,18 @@ public enum PluginInstallResult
     /// </summary>
     PendingRestart
 }
+
+/// <summary>
+/// Lists the supported plugin uninstall result values.
+/// </summary>
+public enum PluginUninstallResult
+{
+    /// <summary>
+    /// Represents a plugin removed from disk in the current process.
+    /// </summary>
+    Uninstalled,
+    /// <summary>
+    /// Represents a plugin removal queued for the next app restart.
+    /// </summary>
+    PendingRestart
+}

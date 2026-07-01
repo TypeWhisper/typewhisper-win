@@ -162,11 +162,19 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         if (IsWorking) return;
 
         IsWorking = true;
+        InstallErrorMessage = "";
 
         try
         {
-            await _registryService.UninstallPluginAsync(_registryPlugin.Id);
-            InstallState = PluginInstallState.NotInstalled;
+            var result = await _registryService.UninstallPluginAsync(_registryPlugin.Id);
+            InstallState = result == PluginUninstallResult.PendingRestart
+                ? PluginInstallState.PendingRestart
+                : PluginInstallState.NotInstalled;
+        }
+        catch (Exception ex)
+        {
+            RefreshInstallState();
+            InstallErrorMessage = Loc.Instance.GetString("Plugins.UninstallFailedFormat", ex.Message);
         }
         finally
         {

@@ -313,6 +313,18 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
     }
 
+    [Fact]
+    public void GetInstallState_PendingRestart_WhenPendingUninstallExists()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var registryPlugin = CreateRegistryPlugin("com.test.pending-uninstall", "1.0.0");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.0");
+        Directory.CreateDirectory(Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id));
+
+        Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -348,6 +360,104 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.False(File.Exists(Path.Combine(activeDir, "active.txt")));
         Assert.True(File.Exists(Path.Combine(activeDir, "pending.txt")));
         Assert.Equal("1.0.2", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task ApplyPendingUpdatesAsync_DeletesPendingUninstallBeforeLoad()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-uninstall";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", pluginId);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        File.WriteAllText(Path.Combine(activeDir, "active.txt"), "old");
+        Directory.CreateDirectory(pendingUninstallDir);
+        WritePluginManifest(pendingUpdateDir, pluginId, "1.0.2");
+        var replaceCallCount = 0;
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) =>
+            {
+                replaceCallCount++;
+                return Task.CompletedTask;
+            });
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.False(Directory.Exists(activeDir));
+        Assert.False(Directory.Exists(pendingUninstallDir));
+        Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.Equal(0, replaceCallCount);
+    }
+
+    [Fact]
+    public async Task ApplyPendingUpdatesAsync_PendingUninstallKeepsMarkerWhenPendingUpdateDeleteFails()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-uninstall-delete-fails";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", pluginId);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        WritePluginManifest(pendingUpdateDir, pluginId, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) => throw new InvalidOperationException("Pending update should be skipped."),
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUpdateDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.True(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+        Assert.True(Directory.Exists(pendingUpdateDir));
+    }
+
+    [Fact]
+    public async Task ApplyPendingUpdatesAsync_PendingUninstallMarkerDeleteFailure_KeepsMarker()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-uninstall-marker-delete-fails";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.False(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
     }
 
     [Fact]
@@ -447,6 +557,196 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal(PluginInstallResult.PendingRestart, result);
         Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
         Assert.Equal("1.0.2", ReadManifest(pendingDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_ReplacementLockFailure_ClearsStalePendingUninstall()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.locked-reinstall", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) => throw new IOException("locked"));
+
+        var result = await service.InstallPluginAsync(registryPlugin);
+
+        Assert.Equal(PluginInstallResult.PendingRestart, result);
+        Assert.True(Directory.Exists(pendingUpdateDir));
+        Assert.False(Directory.Exists(pendingUninstallDir));
+        Assert.Equal("1.0.2", ReadManifest(pendingUpdateDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_PendingUninstallDeleteFailure_FailsBeforeReplacingOrQueueing()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.pending-uninstall-locked", "1.0.2");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
+        var replaceCallCount = 0;
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            replaceActiveDirectoryAsync: (_, _, _) =>
+            {
+                replaceCallCount++;
+                return Task.CompletedTask;
+            },
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await Assert.ThrowsAsync<IOException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Equal(0, replaceCallCount);
+        Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
+        Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_DeleteSuccess_ReturnsUninstalledAndRemovesDirectory()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall", "1.0.0");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        WritePluginManifest(pendingUpdateDir, registryPlugin.Id, "1.0.2");
+        File.WriteAllText(Path.Combine(activeDir, "active.txt"), "old");
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var result = await service.UninstallPluginAsync(registryPlugin.Id);
+
+        Assert.Equal(PluginUninstallResult.Uninstalled, result);
+        Assert.False(Directory.Exists(activeDir));
+        Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_DeleteLockFailure_QueuesPendingRestartAndClearsPendingUpdate()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-locked", "1.0.0");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        WritePluginManifest(pendingUpdateDir, registryPlugin.Id, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, activeDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        var result = await service.UninstallPluginAsync(registryPlugin.Id);
+
+        Assert.Equal(PluginUninstallResult.PendingRestart, result);
+        Assert.True(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+        Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_PendingUninstallMarkerDeleteFailure_DoesNotReturnUninstalled()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-marker-locked", "1.0.0");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await Assert.ThrowsAsync<IOException>(() => service.UninstallPluginAsync(registryPlugin.Id));
+
+        Assert.False(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_PendingUpdateDeleteLockFailure_QueuesPendingRestart()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-pending-update-locked", "1.0.0");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        WritePluginManifest(pendingUpdateDir, registryPlugin.Id, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUpdateDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        var result = await service.UninstallPluginAsync(registryPlugin.Id);
+
+        Assert.Equal(PluginUninstallResult.PendingRestart, result);
+        Assert.True(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUpdateDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+        Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
     }
 
     [Fact]
@@ -555,6 +855,59 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RegistryPluginItem_UninstallPendingRestart_ExposesPendingState()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-pending-vm", "1.0.0");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.0");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (_, _) => throw new IOException("locked"));
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+        await item.UninstallCommand.ExecuteAsync(null);
+
+        Assert.Equal(PluginInstallState.PendingRestart, item.InstallState);
+        Assert.False(item.HasInstallError);
+    }
+
+    [Fact]
+    public async Task RegistryPluginItem_UninstallFailure_ExposesErrorMessage()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+        Loc.Instance.CurrentLanguage = "en";
+
+        try
+        {
+            var manager = CreateManager();
+            var registryPlugin = CreateRegistryPlugin("com.test.uninstall-fails", "1.0.0");
+            WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.0");
+            var service = new PluginRegistryService(
+                manager,
+                _loader,
+                _settings.Object,
+                pluginsPath: _pluginsRoot,
+                deleteActiveDirectoryAsync: (_, _) => throw new InvalidOperationException("boom"));
+            var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+            await item.UninstallCommand.ExecuteAsync(null);
+
+            Assert.Equal(PluginInstallState.Installed, item.InstallState);
+            Assert.False(item.IsWorking);
+            Assert.True(item.HasInstallError);
+            Assert.Contains("Uninstall failed", item.InstallErrorMessage);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
     public async Task FirstRunAutoInstallAsync_SetsFlag()
     {
         AppSettings? savedSettings = null;
@@ -641,6 +994,9 @@ public class PluginRegistryServiceTests : IDisposable
         var json = File.ReadAllText(Path.Combine(pluginDir, "manifest.json"));
         return JsonSerializer.Deserialize<PluginManifest>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
     }
+
+    private static bool PathsEqual(string first, string second) =>
+        string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
 
     private static byte[] CreatePluginPackage(string id, string version)
     {

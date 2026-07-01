@@ -346,6 +346,7 @@
   "Plugins.Installing": "Installing...",
   "Plugins.InstallFailedFormat": "Install failed: {0}",
   "Plugins.UpdateFailedFormat": "Update failed: {0}",
+  "Plugins.UninstallFailedFormat": "Uninstall failed: {0}",
   "Plugins.InstalledBadge": "Installed",
   "Plugins.UpdateAvailablePrefix": "Update v",
   "Plugins.RestartRequiredBadge": "Restart required",
