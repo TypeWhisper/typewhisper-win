@@ -260,7 +260,7 @@ public sealed class PluginRegistryService
             }
         }
 
-        DeleteDirectoryIfExists(GetValidatedPendingUninstallDirectory(pluginId));
+        await ClearPendingUninstallAsync(pluginId, ct);
         return PluginUninstallResult.Uninstalled;
     }
 
@@ -331,7 +331,7 @@ public sealed class PluginRegistryService
                 if (Directory.Exists(pluginDir))
                     await _deleteActiveDirectoryAsync(pluginDir, ct);
 
-                DeleteDirectoryIfExists(pendingDir);
+                await ClearPendingUninstallAsync(pluginId, ct);
                 Debug.WriteLine($"[PluginRegistry] Applied pending plugin uninstall: {pluginId}");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

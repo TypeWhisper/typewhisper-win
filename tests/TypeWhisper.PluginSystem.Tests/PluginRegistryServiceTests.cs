@@ -430,6 +430,37 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ApplyPendingUpdatesAsync_PendingUninstallMarkerDeleteFailure_KeepsMarker()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-uninstall-marker-delete-fails";
+        var activeDir = Path.Combine(_pluginsRoot, pluginId);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", pluginId);
+        WritePluginManifest(activeDir, pluginId, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.False(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
+    }
+
+    [Fact]
     public async Task ApplyPendingUpdatesAsync_UsesInjectedReplacementDelegate()
     {
         var manager = CreateManager();
@@ -563,6 +594,7 @@ public class PluginRegistryServiceTests : IDisposable
         var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
         var pendingUpdateDir = Path.Combine(_pluginsRoot, ".pending-updates", registryPlugin.Id);
         var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
         Directory.CreateDirectory(pendingUninstallDir);
         var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
         var replaceCallCount = 0;
@@ -591,7 +623,7 @@ public class PluginRegistryServiceTests : IDisposable
         await Assert.ThrowsAsync<IOException>(() => service.InstallPluginAsync(registryPlugin));
 
         Assert.Equal(0, replaceCallCount);
-        Assert.False(Directory.Exists(activeDir));
+        Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
         Assert.False(Directory.Exists(pendingUpdateDir));
         Assert.True(Directory.Exists(pendingUninstallDir));
     }
@@ -649,6 +681,37 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.True(Directory.Exists(pendingUninstallDir));
         Assert.False(Directory.Exists(pendingUpdateDir));
         Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_PendingUninstallMarkerDeleteFailure_DoesNotReturnUninstalled()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-marker-locked", "1.0.0");
+        var activeDir = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id);
+        WritePluginManifest(activeDir, registryPlugin.Id, "1.0.0");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            deleteActiveDirectoryAsync: (path, _) =>
+            {
+                if (PathsEqual(path, pendingUninstallDir))
+                    throw new IOException("locked");
+
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+
+                return Task.CompletedTask;
+            });
+
+        await Assert.ThrowsAsync<IOException>(() => service.UninstallPluginAsync(registryPlugin.Id));
+
+        Assert.False(Directory.Exists(activeDir));
+        Assert.True(Directory.Exists(pendingUninstallDir));
     }
 
     [Fact]
