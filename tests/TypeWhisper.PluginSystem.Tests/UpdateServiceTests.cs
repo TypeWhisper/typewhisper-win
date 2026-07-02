@@ -34,6 +34,21 @@ public class UpdateServiceTests
     }
 
     [Theory]
+    [InlineData(ReleaseChannel.Stable, "win-x64", false)]
+    [InlineData(ReleaseChannel.ReleaseCandidate, "win-x64-rc", true)]
+    [InlineData(ReleaseChannel.Daily, "win-x64-daily", true)]
+    public void CreateUpdateOptions_AllowsDowngradeForExplicitPreviewChannelSwitches(
+        ReleaseChannel channel,
+        string expectedChannel,
+        bool expectedAllowDowngrade)
+    {
+        var options = UpdateService.CreateUpdateOptions(Architecture.X64, channel);
+
+        Assert.Equal(expectedChannel, options.ExplicitChannel);
+        Assert.Equal(expectedAllowDowngrade, options.AllowVersionDowngrade);
+    }
+
+    [Theory]
     [InlineData("stable", "0.7.0-rc1", ReleaseChannel.Stable)]
     [InlineData("release-candidate", "0.7.0", ReleaseChannel.ReleaseCandidate)]
     [InlineData("rc", "0.7.0", ReleaseChannel.ReleaseCandidate)]
