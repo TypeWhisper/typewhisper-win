@@ -87,7 +87,7 @@ public sealed class UpdateService
         {
             _updateManager = new UpdateManager(
                 new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, resolvedChannel != ReleaseChannel.Stable),
-                new UpdateOptions { ExplicitChannel = GetVelopackChannel(RuntimeInformation.OSArchitecture, resolvedChannel) });
+                CreateUpdateOptions(RuntimeInformation.OSArchitecture, resolvedChannel));
         }
         catch
         {
@@ -194,6 +194,15 @@ public sealed class UpdateService
             ReleaseChannel.ReleaseCandidate => $"{arch}-rc",
             ReleaseChannel.Daily => $"{arch}-daily",
             _ => arch
+        };
+    }
+
+    internal static UpdateOptions CreateUpdateOptions(Architecture architecture, ReleaseChannel channel)
+    {
+        return new UpdateOptions
+        {
+            ExplicitChannel = GetVelopackChannel(architecture, channel),
+            AllowVersionDowngrade = channel is ReleaseChannel.ReleaseCandidate or ReleaseChannel.Daily
         };
     }
 }
