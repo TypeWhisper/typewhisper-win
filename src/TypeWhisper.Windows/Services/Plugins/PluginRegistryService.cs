@@ -33,6 +33,7 @@ public sealed class PluginRegistryService
     private readonly ISettingsService _settings;
     private readonly HttpClient _httpClient;
     private readonly string _pluginsPath;
+    private readonly string _bundledPluginsPath;
     private readonly string _pendingUpdatesPath;
     private readonly string _pendingUninstallsPath;
     private readonly Func<string, string, CancellationToken, Task> _replaceActiveDirectoryAsync;
@@ -52,13 +53,15 @@ public sealed class PluginRegistryService
         HttpClient? httpClient = null,
         string? pluginsPath = null,
         Func<string, string, CancellationToken, Task>? replaceActiveDirectoryAsync = null,
-        Func<string, CancellationToken, Task>? deleteActiveDirectoryAsync = null)
+        Func<string, CancellationToken, Task>? deleteActiveDirectoryAsync = null,
+        string? bundledPluginsPath = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
         _settings = settings;
         _httpClient = httpClient ?? new HttpClient();
         _pluginsPath = Path.GetFullPath(pluginsPath ?? TypeWhisperEnvironment.PluginsPath);
+        _bundledPluginsPath = Path.GetFullPath(bundledPluginsPath ?? Path.Join(AppContext.BaseDirectory, "Plugins"));
         _pendingUpdatesPath = GetValidatedChildDirectory(_pluginsPath, PendingUpdatesDirectoryName, "pending updates directory");
         _pendingUninstallsPath = GetValidatedChildDirectory(_pluginsPath, PendingUninstallsDirectoryName, "pending uninstalls directory");
         _replaceActiveDirectoryAsync = replaceActiveDirectoryAsync ?? ReplaceActiveDirectoryAsync;
@@ -244,20 +247,16 @@ public sealed class PluginRegistryService
             return PluginUninstallResult.PendingRestart;
         }
 
-        var pluginDir = GetValidatedPluginDirectory(pluginId);
-        if (Directory.Exists(pluginDir))
+        try
         {
-            try
-            {
-                await _deleteActiveDirectoryAsync(pluginDir, ct);
-                Debug.WriteLine($"[PluginRegistry] Uninstalled plugin: {pluginId}");
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                QueuePendingUninstall(pluginId);
-                Debug.WriteLine($"[PluginRegistry] Queued plugin uninstall pending restart: {pluginId} ({ex.Message})");
-                return PluginUninstallResult.PendingRestart;
-            }
+            await DeleteInstalledPluginDirectoriesAsync(pluginId, ct);
+            Debug.WriteLine($"[PluginRegistry] Uninstalled plugin: {pluginId}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            QueuePendingUninstall(pluginId);
+            Debug.WriteLine($"[PluginRegistry] Queued plugin uninstall pending restart: {pluginId} ({ex.Message})");
+            return PluginUninstallResult.PendingRestart;
         }
 
         await ClearPendingUninstallAsync(pluginId, ct);
@@ -323,13 +322,10 @@ public sealed class PluginRegistryService
                 continue;
             }
 
-            var pluginDir = GetValidatedPluginDirectory(pluginId);
             try
             {
                 await DeletePendingUpdateDirectoryAsync(pluginId, ct);
-
-                if (Directory.Exists(pluginDir))
-                    await _deleteActiveDirectoryAsync(pluginDir, ct);
+                await DeleteInstalledPluginDirectoriesAsync(pluginId, ct);
 
                 await ClearPendingUninstallAsync(pluginId, ct);
                 Debug.WriteLine($"[PluginRegistry] Applied pending plugin uninstall: {pluginId}");
@@ -451,6 +447,15 @@ public sealed class PluginRegistryService
         await _deleteActiveDirectoryAsync(pendingDir, ct);
     }
 
+    private async Task DeleteInstalledPluginDirectoriesAsync(string pluginId, CancellationToken ct)
+    {
+        foreach (var pluginDir in GetInstalledPluginDirectories(pluginId))
+        {
+            if (Directory.Exists(pluginDir))
+                await _deleteActiveDirectoryAsync(pluginDir, ct);
+        }
+    }
+
     private async Task ClearPendingUninstallAsync(string pluginId, CancellationToken ct)
     {
         var pendingDir = GetValidatedPendingUninstallDirectory(pluginId);
@@ -540,13 +545,35 @@ public sealed class PluginRegistryService
 
     private static void CollectUnloadedPluginContexts()
     {
+        GC.Collect();
         GC.WaitForPendingFinalizers();
+        GC.Collect();
     }
 
     private string GetValidatedPluginDirectory(string pluginId)
     {
         ValidatePluginId(pluginId);
         return GetValidatedChildDirectory(_pluginsPath, pluginId, "plugin directory");
+    }
+
+    private IReadOnlyList<string> GetInstalledPluginDirectories(string pluginId)
+    {
+        var directories = new List<string>();
+        AddDistinctDirectory(GetValidatedPluginDirectory(pluginId));
+        AddDistinctDirectory(GetValidatedBundledPluginDirectory(pluginId));
+        return directories;
+
+        void AddDistinctDirectory(string path)
+        {
+            if (!directories.Any(existing => PathsEqual(existing, path)))
+                directories.Add(path);
+        }
+    }
+
+    private string GetValidatedBundledPluginDirectory(string pluginId)
+    {
+        ValidatePluginId(pluginId);
+        return GetValidatedChildDirectory(_bundledPluginsPath, pluginId, "bundled plugin directory");
     }
 
     private string GetValidatedPendingDirectory(string pluginId)
@@ -599,6 +626,9 @@ public sealed class PluginRegistryService
         path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
             ? path
             : path + Path.DirectorySeparatorChar;
+
+    private static bool PathsEqual(string first, string second) =>
+        string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
 
     private static void DeleteDirectoryIfExists(string path)
     {

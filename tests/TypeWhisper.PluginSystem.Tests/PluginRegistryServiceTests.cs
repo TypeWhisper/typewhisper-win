@@ -395,6 +395,30 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ApplyPendingUpdatesAsync_DeletesPendingBundledUninstallBeforeLoad()
+    {
+        var manager = CreateManager();
+        var pluginId = "com.test.apply-pending-bundled-uninstall";
+        var bundledPluginsRoot = Path.Combine(_pluginsRoot, "bundled");
+        var bundledDir = Path.Combine(bundledPluginsRoot, pluginId);
+        var pendingUninstallDir = Path.Combine(_pluginsRoot, ".pending-uninstalls", pluginId);
+        WritePluginManifest(bundledDir, pluginId, "1.0.0");
+        File.WriteAllText(Path.Combine(bundledDir, "bundled.txt"), "old");
+        Directory.CreateDirectory(pendingUninstallDir);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            bundledPluginsPath: bundledPluginsRoot);
+
+        await service.ApplyPendingUpdatesAsync();
+
+        Assert.False(Directory.Exists(bundledDir));
+        Assert.False(Directory.Exists(pendingUninstallDir));
+    }
+
+    [Fact]
     public async Task ApplyPendingUpdatesAsync_PendingUninstallKeepsMarkerWhenPendingUpdateDeleteFails()
     {
         var manager = CreateManager();
@@ -645,6 +669,34 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal(PluginUninstallResult.Uninstalled, result);
         Assert.False(Directory.Exists(activeDir));
         Assert.False(Directory.Exists(pendingUpdateDir));
+        Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public async Task UninstallPluginAsync_DeleteSuccess_RemovesBundledDirectory()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.uninstall-bundled", "1.0.0");
+        var bundledPluginsRoot = Path.Combine(_pluginsRoot, "bundled");
+        var bundledDir = Path.Combine(bundledPluginsRoot, registryPlugin.Id);
+        WritePluginManifest(bundledDir, registryPlugin.Id, "1.0.0");
+        File.WriteAllText(Path.Combine(bundledDir, "bundled.txt"), "old");
+        TestPluginManagerFactory.SetPrivateField(
+            manager,
+            "_allPlugins",
+            new List<LoadedPlugin> { CreateLoadedPlugin(registryPlugin.Id, registryPlugin.Version, bundledDir) });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            bundledPluginsPath: bundledPluginsRoot);
+
+        var result = await service.UninstallPluginAsync(registryPlugin.Id);
+
+        Assert.Equal(PluginUninstallResult.Uninstalled, result);
+        Assert.Null(manager.GetPlugin(registryPlugin.Id));
+        Assert.False(Directory.Exists(bundledDir));
         Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
     }
 
@@ -987,6 +1039,29 @@ public class PluginRegistryServiceTests : IDisposable
             PluginClass = "TestPlugin"
         };
         File.WriteAllText(Path.Combine(pluginDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+    }
+
+    private static LoadedPlugin CreateLoadedPlugin(string id, string version, string pluginDirectory)
+    {
+        var plugin = new Mock<ITypeWhisperPlugin>();
+        plugin.Setup(p => p.PluginId).Returns(id);
+        plugin.Setup(p => p.PluginName).Returns("Test Plugin");
+        plugin.Setup(p => p.PluginVersion).Returns(version);
+
+        var manifest = new PluginManifest
+        {
+            Id = id,
+            Name = "Test Plugin",
+            Version = version,
+            AssemblyName = "TestPlugin.dll",
+            PluginClass = "TestPlugin"
+        };
+
+        return new LoadedPlugin(
+            manifest,
+            plugin.Object,
+            new PluginAssemblyLoadContext(typeof(PluginRegistryServiceTests).Assembly.Location),
+            pluginDirectory);
     }
 
     private static PluginManifest ReadManifest(string pluginDir)
