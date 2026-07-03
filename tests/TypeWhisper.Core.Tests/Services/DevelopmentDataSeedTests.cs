@@ -10,13 +10,22 @@ public sealed class DevelopmentDataSeedTests : IDisposable
 
     public DevelopmentDataSeedTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"tw_dev_seed_test_{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"tw_dev_seed_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+        if (!Directory.Exists(_tempDir))
+            return;
+
+        try
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+        catch (DirectoryNotFoundException) { }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     [Fact]
@@ -59,14 +68,13 @@ public sealed class DevelopmentDataSeedTests : IDisposable
     [Fact]
     public void ClearAndSeed_ReplacesCoreDataAndPreservesOnlySafePreferences()
     {
-        Assert.True(TypeWhisperEnvironment.IsDevelopmentBuild);
-
-        var settings = new SettingsService(Path.Combine(_tempDir, "settings.json"));
-        var dictionary = new DictionaryService(Path.Combine(_tempDir, "Data", "dictionary.json"));
-        var snippets = new SnippetService(Path.Combine(_tempDir, "Data", "snippets.json"));
-        var workflows = new WorkflowService(Path.Combine(_tempDir, "Data", "workflows.json"));
-        var history = new HistoryService(Path.Combine(_tempDir, "Data", "history.json"));
-        var sut = new DevelopmentDataSeeder(settings, history, dictionary, snippets, workflows);
+        var dataDir = Path.Join(_tempDir, "Data");
+        var settings = new SettingsService(Path.Join(_tempDir, "settings.json"));
+        var dictionary = new DictionaryService(Path.Join(dataDir, "dictionary.json"));
+        var snippets = new SnippetService(Path.Join(dataDir, "snippets.json"));
+        var workflows = new WorkflowService(Path.Join(dataDir, "workflows.json"));
+        var history = new HistoryService(Path.Join(dataDir, "history.json"));
+        var sut = new DevelopmentDataSeeder(settings, history, dictionary, snippets, workflows, isDevelopmentBuild: () => true);
 
         settings.Save(AppSettings.Default with
         {
@@ -124,5 +132,21 @@ public sealed class DevelopmentDataSeedTests : IDisposable
         Assert.Contains(snippets.Snippets, snippet => snippet.Id == "dev-snippet-standup");
         Assert.Contains(workflows.Workflows, workflow => workflow.Id == "dev-workflow-meeting-notes");
         Assert.Contains(history.Records, record => record.Id == "dev-history-001");
+    }
+
+    [Fact]
+    public void ClearAndSeed_ReturnsUnavailableWhenBuildGateIsFalse()
+    {
+        var settings = new SettingsService(Path.Join(_tempDir, "settings.json"));
+        var dictionary = new DictionaryService(Path.Join(_tempDir, "dictionary.json"));
+        var snippets = new SnippetService(Path.Join(_tempDir, "snippets.json"));
+        var workflows = new WorkflowService(Path.Join(_tempDir, "workflows.json"));
+        var history = new HistoryService(Path.Join(_tempDir, "history.json"));
+        var sut = new DevelopmentDataSeeder(settings, history, dictionary, snippets, workflows, isDevelopmentBuild: () => false);
+
+        var result = sut.ClearAndSeed();
+
+        Assert.Equal(DevelopmentDataSeedResult.NotDevelopmentBuild, result);
+        Assert.Empty(history.Records);
     }
 }

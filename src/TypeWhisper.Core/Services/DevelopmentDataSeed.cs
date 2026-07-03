@@ -323,6 +323,7 @@ public sealed class DevelopmentDataSeeder
     private readonly IDictionaryService _dictionary;
     private readonly ISnippetService _snippets;
     private readonly IWorkflowService _workflows;
+    private readonly Func<bool> _isDevelopmentBuild;
 
     /// <summary>
     /// Initializes a new instance of the DevelopmentDataSeeder class.
@@ -332,18 +333,21 @@ public sealed class DevelopmentDataSeeder
     /// <param name="dictionary">The dictionary service to reset.</param>
     /// <param name="snippets">The snippet service to reset.</param>
     /// <param name="workflows">The workflow service to reset.</param>
+    /// <param name="isDevelopmentBuild">Optional build gate override.</param>
     public DevelopmentDataSeeder(
         ISettingsService settings,
         IHistoryService history,
         IDictionaryService dictionary,
         ISnippetService snippets,
-        IWorkflowService workflows)
+        IWorkflowService workflows,
+        Func<bool>? isDevelopmentBuild = null)
     {
         _settings = settings;
         _history = history;
         _dictionary = dictionary;
         _snippets = snippets;
         _workflows = workflows;
+        _isDevelopmentBuild = isDevelopmentBuild ?? (() => TypeWhisperEnvironment.IsDevelopmentBuild);
     }
 
     /// <summary>
@@ -351,7 +355,7 @@ public sealed class DevelopmentDataSeeder
     /// </summary>
     public DevelopmentDataSeedResult ClearAndSeed()
     {
-        if (!TypeWhisperEnvironment.IsDevelopmentBuild)
+        if (!_isDevelopmentBuild())
             return DevelopmentDataSeedResult.NotDevelopmentBuild;
 
         var seed = DevelopmentDataSeedFactory.CreateDefault();
