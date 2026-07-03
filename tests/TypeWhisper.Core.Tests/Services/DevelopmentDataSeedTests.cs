@@ -23,9 +23,12 @@ public sealed class DevelopmentDataSeedTests : IDisposable
         {
             Directory.Delete(_tempDir, recursive: true);
         }
-        catch (DirectoryNotFoundException) { }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (Exception ex) when (
+            ex is DirectoryNotFoundException or IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Ignoring development seed test cleanup failure for '{_tempDir}': {ex}");
+        }
     }
 
     [Fact]
