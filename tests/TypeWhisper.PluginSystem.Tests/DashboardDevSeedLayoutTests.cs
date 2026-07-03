@@ -33,7 +33,7 @@ public sealed class DashboardDevSeedLayoutTests
             "SettingsWindowViewModel.cs");
 
         Assert.Contains("private async Task ClearAndSeedDevelopmentData()", viewModel);
-        Assert.Contains("await Task.Yield();", viewModel);
+        Assert.Contains("await Dispatcher.Yield(DispatcherPriority.Background);", viewModel);
         Assert.Contains("IsDevelopmentSeedFailure", viewModel);
     }
 }

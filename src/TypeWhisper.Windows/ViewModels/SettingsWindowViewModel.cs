@@ -455,7 +455,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         try
         {
-            await Task.Yield();
+            await Dispatcher.Yield(DispatcherPriority.Background);
             var seedResult = _developmentDataSeeder.ClearAndSeed();
             DevelopmentSeedStatusText = seedResult == DevelopmentDataSeedResult.Seeded
                 ? Loc.Instance["Dashboard.DevSeedSuccess"]
