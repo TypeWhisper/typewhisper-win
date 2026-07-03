@@ -8,6 +8,22 @@ Speech-to-text and AI text processing for Windows. Dictate anywhere, transcribe 
 
 TypeWhisper for Windows includes system-wide dictation, file transcription, workflows, history, dictionary, snippets, local and cloud transcription engines, and bundled integrations. Advanced surfaces like the HTTP API, CLI, plugin SDK, marketplace, and action plugins remain available for power users and automation.
 
+## Screenshots
+
+The full 1.0 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
+
+| Dashboard | Dictation |
+|-----------|-----------|
+| <img src="docs/screenshots/windows/dashboard.png" alt="TypeWhisper Windows dashboard" width="420"> | <img src="docs/screenshots/windows/dictation.png" alt="TypeWhisper Windows dictation settings" width="420"> |
+
+| Workflows | Integrations |
+|-----------|--------------|
+| <img src="docs/screenshots/windows/workflows.png" alt="TypeWhisper Windows workflows" width="420"> | <img src="docs/screenshots/windows/integrations-installed.png" alt="TypeWhisper Windows integrations" width="420"> |
+
+| File Transcription | Premium |
+|--------------------|---------|
+| <img src="docs/screenshots/windows/file-transcription.png" alt="TypeWhisper Windows file transcription" width="420"> | <img src="docs/screenshots/windows/premium-active.png" alt="TypeWhisper Windows premium settings" width="420"> |
+
 ## What's New
 
 - **Workflows:** Prompt actions and matching rules live in one workflow surface with templates for cleanup, translation, email replies, meeting notes, checklists, JSON extraction, summaries, and custom prompts.
