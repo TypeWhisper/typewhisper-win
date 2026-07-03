@@ -284,8 +284,19 @@
                                    Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,2,0,0"
                                    TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding DevelopmentSeedStatusText}"
-                                   Foreground="{StaticResource SuccessBrush}" FontSize="12" Margin="0,8,0,0"
-                                   Visibility="{Binding DevelopmentSeedStatusText, Converter={StaticResource NonEmptyToVisibility}}"/>
+                                   FontSize="12" Margin="0,8,0,0"
+                                   Visibility="{Binding DevelopmentSeedStatusText, Converter={StaticResource NonEmptyToVisibility}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDevelopmentSeedFailure}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </DockPanel>
             </Border>

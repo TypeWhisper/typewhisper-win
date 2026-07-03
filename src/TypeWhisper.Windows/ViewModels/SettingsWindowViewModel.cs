@@ -91,6 +91,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private bool _isUpdateAvailable;
     [ObservableProperty] private bool _isDevelopmentSeeding;
     [ObservableProperty] private string _developmentSeedStatusText = "";
+    [ObservableProperty] private bool _isDevelopmentSeedFailure;
     [ObservableProperty] private int _pendingFileImporterRequestId;
     [ObservableProperty] private ReleaseChannel _selectedUpdateChannel;
     [ObservableProperty] private float _audioLevel = 0.18f;
@@ -435,7 +436,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanClearAndSeedDevelopmentData))]
-    private void ClearAndSeedDevelopmentData()
+    private async Task ClearAndSeedDevelopmentData()
     {
         if (!IsDevelopmentBuild)
             return;
@@ -450,17 +451,21 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         IsDevelopmentSeeding = true;
         DevelopmentSeedStatusText = "";
+        IsDevelopmentSeedFailure = false;
 
         try
         {
+            await Task.Yield();
             var seedResult = _developmentDataSeeder.ClearAndSeed();
             DevelopmentSeedStatusText = seedResult == DevelopmentDataSeedResult.Seeded
                 ? Loc.Instance["Dashboard.DevSeedSuccess"]
                 : Loc.Instance["Dashboard.DevSeedUnavailable"];
+            IsDevelopmentSeedFailure = false;
             Dashboard.Refresh();
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
+            IsDevelopmentSeedFailure = true;
             DevelopmentSeedStatusText = Loc.Instance.GetString("Dashboard.DevSeedFailedFormat", ex.Message);
         }
         finally
