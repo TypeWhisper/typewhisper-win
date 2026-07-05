@@ -17,7 +17,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private const string BaseUrl = "https://api.soniox.com";
     private const string ApiKeySecretName = "api-key";
-    private const string SonioxAsyncModelId = "stt-async-v4";
+    private const string SonioxAsyncModelId = "stt-async-v5";
     private const int DefaultMaxPollAttempts = 3600;
     private const int MaxSubtitleSegmentCharacters = 84;
     private const int MinSentenceSegmentCharacters = 20;
