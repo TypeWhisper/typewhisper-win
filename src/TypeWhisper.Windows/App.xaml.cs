@@ -455,6 +455,7 @@ public partial class App : Application
             sp.GetRequiredService<ISnippetService>()));
         services.AddSingleton<IWorkflowService>(
             new WorkflowService(Path.Combine(dataPath, "workflows.json")));
+        services.AddSingleton<DevelopmentDataSeeder>();
 
         // Post-processing pipeline
         services.AddSingleton<IPostProcessingPipeline, PostProcessingPipeline>();

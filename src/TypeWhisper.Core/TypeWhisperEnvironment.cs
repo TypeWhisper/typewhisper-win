@@ -10,9 +10,19 @@ public static class TypeWhisperEnvironment
     /// </summary>
     public const string GithubRepoUrl = "https://github.com/TypeWhisper/typewhisper-win";
 
+    /// <summary>
+    /// Gets whether the current binary is a development build.
+    /// </summary>
+    public static bool IsDevelopmentBuild =>
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+
     private static readonly string _basePath = Path.Join(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper");
+        IsDevelopmentBuild ? "TypeWhisper-Dev" : "TypeWhisper");
 
     /// <summary>
     /// Gets the base path.

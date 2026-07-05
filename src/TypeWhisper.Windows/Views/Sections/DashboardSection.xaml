@@ -11,6 +11,9 @@
             <conv:BarHeightConverter x:Key="BarHeightConverter"/>
             <conv:DayLabelConverter x:Key="DayLabelConverter"/>
             <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
+            <conv:InvertBoolConverter x:Key="InvertBoolConverter"/>
+            <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -256,6 +259,44 @@
                                    Foreground="{StaticResource TextBrush}"/>
                         <TextBlock Text="{loc:Str Dashboard.WizardDesc}"
                                    Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Development seed tools -->
+            <Border Style="{StaticResource SettingsCardStyle}"
+                    Margin="0,16,0,0"
+                    Visibility="{Binding IsDevelopmentBuild, Converter={StaticResource BoolToVis}}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="{loc:Str Dashboard.ClearAndSeed}"
+                                Command="{Binding ClearAndSeedDevelopmentDataCommand}"
+                                IsEnabled="{Binding IsDevelopmentSeeding, Converter={StaticResource InvertBoolConverter}}"
+                                Style="{StaticResource DangerButtonStyle}"
+                                Padding="12,6"/>
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str Dashboard.DevSeedTitle}" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock Text="{loc:Str Dashboard.DevSeedDescription}"
+                                   Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,2,0,0"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding DevelopmentSeedStatusText}"
+                                   FontSize="12" Margin="0,8,0,0"
+                                   Visibility="{Binding DevelopmentSeedStatusText, Converter={StaticResource NonEmptyToVisibility}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDevelopmentSeedFailure}" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </DockPanel>
             </Border>
