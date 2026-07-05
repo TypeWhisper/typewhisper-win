@@ -195,6 +195,7 @@ public class SonioxPluginTests
         await sut.ActivateAsync(host);
 
         var result = await sut.TranscribeAsync([1, 2, 3], "de", translate: false, prompt: null, CancellationToken.None);
+        await sut.LastCleanupTask;
 
         Assert.Equal("Hallo Welt", result.Text);
         Assert.Equal("de", result.DetectedLanguage);
@@ -330,6 +331,7 @@ public class SonioxPluginTests
         await sut.ActivateAsync(host);
 
         var result = await sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None);
+        await sut.LastCleanupTask;
 
         Assert.Equal("Hello", result.Text);
         Assert.False(sut.IsConfigured);

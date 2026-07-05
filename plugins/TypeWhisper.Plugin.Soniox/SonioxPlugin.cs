@@ -49,6 +49,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
+    private Task _lastCleanupTask = Task.CompletedTask;
 
     /// <summary>
     /// Initializes a new instance of the SonioxPlugin class.
@@ -181,11 +182,18 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             transcriptionId = await CreateTranscriptionAsync(fileId, language, apiKey, ct);
             var completedDetails = await WaitUntilCompletedAsync(transcriptionId, apiKey, ct);
             var transcriptJson = await FetchTranscriptAsync(transcriptionId, apiKey, ct);
-            return ParseTranscript(transcriptJson, completedDetails, NormalizeLanguage(language));
+            var result = ParseTranscript(transcriptJson, completedDetails, NormalizeLanguage(language));
+
+            // Deleting the uploaded file and the transcription is best-effort housekeeping the
+            // caller does not need to wait for. Run it off the critical path so the two extra
+            // round-trips do not add to perceived dictation latency.
+            _lastCleanupTask = CleanupInBackgroundAsync(transcriptionId, fileId, apiKey);
+            return result;
         }
-        finally
+        catch
         {
             await CleanupAsync(transcriptionId, fileId, apiKey);
+            throw;
         }
     }
 
@@ -193,6 +201,12 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     internal string? ApiKey => _apiKey;
     internal IPluginLocalization? Loc => _host?.Localization;
+
+    /// <summary>
+    /// Best-effort cleanup task from the most recent successful transcription.
+    /// Exposed so tests can await background cleanup deterministically.
+    /// </summary>
+    internal Task LastCleanupTask => _lastCleanupTask;
 
     internal async Task SetApiKeyAsync(string apiKey)
     {
@@ -369,6 +383,21 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
         if (fileId is not null)
             await DeleteBestEffortAsync($"{BaseUrl}/v1/files/{fileId}", "file", apiKey);
+    }
+
+    private async Task CleanupInBackgroundAsync(string? transcriptionId, string? fileId, string apiKey)
+    {
+        // Yield so the transcript is returned to the caller before cleanup round-trips run.
+        await Task.Yield();
+
+        try
+        {
+            await CleanupAsync(transcriptionId, fileId, apiKey);
+        }
+        catch (Exception ex)
+        {
+            _host?.Log(PluginLogLevel.Warning, $"Soniox background cleanup failed: {ex.Message}");
+        }
     }
 
     private async Task DeleteBestEffortAsync(string uri, string resourceName, string apiKey)
