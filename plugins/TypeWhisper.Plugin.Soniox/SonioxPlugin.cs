@@ -24,7 +24,13 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private const double MaxSubtitleSegmentDurationSeconds = 6.0;
     private const double SubtitleSegmentPauseSplitSeconds = 0.75;
 
-    private static readonly TimeSpan DefaultPollDelay = TimeSpan.FromSeconds(1);
+    private const double PollBackoffFactor = 1.5;
+
+    // Async transcription completion is polled. Start with a short delay so brief dictation
+    // clips (which finish in well under a second) are picked up quickly, then exponentially
+    // back off toward a cap so long recordings do not hammer the API.
+    private static readonly TimeSpan DefaultInitialPollDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan DefaultMaxPollDelay = TimeSpan.FromSeconds(2);
 
     private static readonly IReadOnlyList<PluginModelInfo> Models =
     [
@@ -35,7 +41,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     ];
 
     private readonly HttpClient _httpClient;
-    private readonly TimeSpan _pollDelay;
+    private readonly TimeSpan _initialPollDelay;
+    private readonly TimeSpan _maxPollDelay;
     private readonly int _maxPollAttempts;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
 
@@ -60,7 +67,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             throw new ArgumentOutOfRangeException(nameof(maxPollAttempts), "Poll attempts must be positive.");
 
         _httpClient = httpClient;
-        _pollDelay = pollDelay ?? DefaultPollDelay;
+        // A caller-supplied pollDelay (used by tests for determinism) pins both bounds to a
+        // fixed interval; otherwise poll with an adaptive initial delay that backs off to a cap.
+        _initialPollDelay = pollDelay ?? DefaultInitialPollDelay;
+        _maxPollDelay = pollDelay ?? DefaultMaxPollDelay;
         _maxPollAttempts = maxPollAttempts;
     }
 
@@ -296,6 +306,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private async Task<JsonElement> WaitUntilCompletedAsync(string transcriptionId, string apiKey, CancellationToken ct)
     {
+        var delay = _initialPollDelay;
         for (var attempt = 0; attempt < _maxPollAttempts; attempt++)
         {
             ct.ThrowIfCancellationRequested();
@@ -314,8 +325,13 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Soniox transcription failed: {ExtractApiError(root)}");
 
-            if (attempt < _maxPollAttempts - 1 && _pollDelay > TimeSpan.Zero)
-                await Task.Delay(_pollDelay, ct);
+            if (attempt < _maxPollAttempts - 1 && delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, ct);
+                delay = TimeSpan.FromTicks(Math.Min(
+                    (long)(delay.Ticks * PollBackoffFactor),
+                    _maxPollDelay.Ticks));
+            }
         }
 
         throw new TimeoutException(
