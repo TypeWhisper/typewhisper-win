@@ -44,6 +44,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         new("jp", "Japan", "https://api.jp.soniox.com"),
     ];
 
+    // Each auto-detect probe is bounded so an unreachable region fails fast rather than
+    // blocking the settings Test flow for the full HttpClient timeout.
+    private static readonly TimeSpan RegionProbeTimeout = TimeSpan.FromSeconds(10);
+
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _pollDelay;
     private readonly int _maxPollAttempts;
@@ -227,8 +231,21 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
         foreach (var region in Regions)
         {
-            if (await ProbeModelsAsync(region.BaseUrl, normalized, ct))
-                return region.Id;
+            // Bound the probe so an unreachable region fails fast instead of blocking on the
+            // full HttpClient timeout; a probe timeout skips to the next region, while a real
+            // caller cancellation still propagates.
+            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            probeCts.CancelAfter(RegionProbeTimeout);
+
+            try
+            {
+                if (await ProbeModelsAsync(region.BaseUrl, normalized, probeCts.Token))
+                    return region.Id;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // This region's probe timed out; try the next region.
+            }
         }
 
         return null;

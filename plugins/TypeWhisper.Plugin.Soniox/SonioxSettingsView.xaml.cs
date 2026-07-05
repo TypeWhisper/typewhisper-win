@@ -110,6 +110,7 @@ public partial class SonioxSettingsView : UserControl
         }
 
         TestButton.IsEnabled = false;
+        RegionBox.IsEnabled = false;
         StatusText.Text = L("Settings.Testing");
         StatusText.Foreground = Brushes.Gray;
 
@@ -149,6 +150,7 @@ public partial class SonioxSettingsView : UserControl
         finally
         {
             TestButton.IsEnabled = true;
+            RegionBox.IsEnabled = true;
         }
     }
 
