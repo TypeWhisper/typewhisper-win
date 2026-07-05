@@ -26,8 +26,8 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.0.3", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.0.3", sut.PluginVersion);
+        Assert.Equal("1.0.4", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.0.4", sut.PluginVersion);
     }
 
     [Fact]
@@ -128,6 +128,87 @@ public class SonioxPluginTests
         var sut = new SonioxPlugin(httpClient);
 
         Assert.True(await sut.ValidateApiKeyAsync(" probe-key "));
+    }
+
+    [Fact]
+    public async Task ActivateAsync_UsesPersistedRegionEndpoint()
+    {
+        var handler = new CapturingHandler((request, _) =>
+        {
+            Assert.Equal("https://api.jp.soniox.com/v1/models", request.RequestUri?.ToString());
+            return JsonResponse("""{ "models": [] }""");
+        });
+
+        var host = new TestPluginHostServices();
+        host.SetSetting("region", "jp");
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        Assert.Equal("jp", sut.RegionId);
+        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
+    }
+
+    [Fact]
+    public async Task ActivateAsync_FallsBackToUsForUnknownRegion()
+    {
+        var host = new TestPluginHostServices();
+        host.SetSetting("region", "mars");
+        var sut = new SonioxPlugin();
+        await sut.ActivateAsync(host);
+
+        Assert.Equal("us", sut.RegionId);
+    }
+
+    [Fact]
+    public async Task SetRegion_PersistsRegionAndSwitchesEndpoint()
+    {
+        var handler = new CapturingHandler((request, _) =>
+        {
+            Assert.Equal("https://api.eu.soniox.com/v1/models", request.RequestUri?.ToString());
+            return JsonResponse("""{ "models": [] }""");
+        });
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        sut.SetRegion("eu");
+
+        Assert.Equal("eu", sut.RegionId);
+        Assert.Equal("eu", host.GetSetting<string>("region"));
+        Assert.True(await sut.ValidateApiKeyAsync("probe-key"));
+    }
+
+    [Fact]
+    public async Task DetectRegionAsync_ReturnsRegionWhereKeyAuthenticates()
+    {
+        var handler = new CapturingHandler((request, _) =>
+            request.RequestUri?.ToString() == "https://api.jp.soniox.com/v1/models"
+                ? JsonResponse("""{ "models": [] }""")
+                : JsonResponse("""{ "error": "unauthorized" }""", HttpStatusCode.Unauthorized));
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        Assert.Equal("jp", await sut.DetectRegionAsync("probe-key"));
+    }
+
+    [Fact]
+    public async Task DetectRegionAsync_ReturnsNullWhenNoRegionAccepts()
+    {
+        var handler = new CapturingHandler((_, _) =>
+            JsonResponse("""{ "error": "unauthorized" }""", HttpStatusCode.Unauthorized));
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        Assert.Null(await sut.DetectRegionAsync("probe-key"));
     }
 
     [Fact]
