@@ -417,6 +417,7 @@ public sealed class WelcomeViewModelTests
     {
         public int DeviceCount => 0;
         public string GetDeviceName(int deviceNumber) => throw new ArgumentOutOfRangeException(nameof(deviceNumber));
+        public string? GetDefaultDeviceName() => null;
     }
 
     private sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory

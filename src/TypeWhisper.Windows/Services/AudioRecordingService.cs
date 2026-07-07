@@ -51,6 +51,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private bool _lastKnownPreferredDeviceAvailable;
     private bool _lastKnownSnapshotInitialized;
     private bool _deviceLossReported;
+    private bool _preferredDeviceMigrationPending;
     private const int TailDiagnosticChunkLimit = 8;
     private readonly Queue<AudioChunkTelemetry> _recentChunks = new();
     private DateTime? _lastSamplesAvailableUtc;
@@ -483,6 +484,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         var deviceCount = _deviceProvider.DeviceCount;
 
+        var defaultDeviceNumber = FindSystemDefaultDevice();
+        if (defaultDeviceNumber >= 0)
+            return defaultDeviceNumber;
+
         for (var i = 0; i < deviceCount; i++)
         {
             var name = TryGetDeviceName(i);
@@ -529,6 +534,35 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
 
         return FindBestMicrophoneDevice();
+    }
+
+    private int FindSystemDefaultDevice()
+    {
+        string? defaultDeviceName;
+        try
+        {
+            defaultDeviceName = _deviceProvider.GetDefaultDeviceName();
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log($"Default device lookup failed {ex.GetType().Name}: {ex.Message}");
+            return -1;
+        }
+
+        if (string.IsNullOrWhiteSpace(defaultDeviceName))
+            return -1;
+
+        for (var i = 0; i < _deviceProvider.DeviceCount; i++)
+        {
+            var currentName = TryGetDeviceName(i);
+            if (currentName is not null
+                && WasapiAudioInputDeviceOrdering.DeviceNamesMatch(currentName, defaultDeviceName))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private int FindDeviceByName(string? deviceName)
@@ -592,7 +626,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             var snapshot = GetDeviceSnapshot();
             var signature = BuildDeviceSignature(snapshot);
             if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
+            {
+                TryCompletePendingPreferredDeviceMigration(snapshot);
                 return;
+            }
 
             var previousHadDevices = _lastKnownHasDevices;
             var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
@@ -627,8 +664,19 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
             if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
             {
-                DisposeWaveIn();
-                WarmUp();
+                if (_isRecording)
+                {
+                    // Never tear down an in-flight recording just to migrate to
+                    // a preferred device; complete the migration on a later
+                    // check once recording has stopped.
+                    _preferredDeviceMigrationPending = true;
+                }
+                else
+                {
+                    _preferredDeviceMigrationPending = false;
+                    DisposeWaveIn();
+                    WarmUp();
+                }
             }
             else if (!_isWarmedUp)
             {
@@ -645,6 +693,22 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         {
             AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    private void TryCompletePendingPreferredDeviceMigration(IReadOnlyList<AudioInputDeviceSnapshot> snapshot)
+    {
+        if (!_preferredDeviceMigrationPending || _isRecording || !_isWarmedUp)
+            return;
+
+        if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
+        {
+            _preferredDeviceMigrationPending = false;
+            return;
+        }
+
+        _preferredDeviceMigrationPending = false;
+        DisposeWaveIn();
+        WarmUp();
     }
 
     private void RaiseAudioLevelChanged(float peak, float rms) =>
@@ -775,7 +839,25 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private bool IsActiveDevicePreferred()
     {
         if (_configuredDeviceNumber is not int configuredDeviceNumber)
-            return _activeDeviceNumber >= 0;
+        {
+            if (_activeDeviceNumber < 0)
+                return false;
+
+            // In automatic mode the preferred device can change while we hold a
+            // fallback capture (e.g. the user's default microphone reconnects
+            // after a KVM or dock switch). Compare against the current best pick
+            // by name so the service migrates back instead of staying on the
+            // fallback forever.
+            var bestDeviceNumber = FindBestMicrophoneDevice();
+            if (bestDeviceNumber < 0)
+                return true;
+
+            var bestDeviceName = TryGetDeviceName(bestDeviceNumber);
+            if (bestDeviceName is null)
+                return true;
+
+            return string.Equals(_activeDeviceName, bestDeviceName, StringComparison.OrdinalIgnoreCase);
+        }
 
         if (!string.IsNullOrWhiteSpace(_configuredDeviceName))
         {
@@ -970,6 +1052,12 @@ internal interface IAudioInputDeviceProvider
 {
     int DeviceCount { get; }
     string GetDeviceName(int deviceNumber);
+
+    /// <summary>
+    /// Returns the friendly name of the system default capture device, or null
+    /// when it cannot be determined.
+    /// </summary>
+    string? GetDefaultDeviceName();
 }
 
 internal interface IAudioInputCaptureFactory
@@ -1018,6 +1106,13 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
     /// </summary>
     public string GetDeviceName(int deviceNumber) =>
         WaveInEvent.GetCapabilities(deviceNumber).ProductName;
+
+    /// <summary>
+    /// Returns the system default capture device name via WASAPI, or null when
+    /// no default endpoint is available.
+    /// </summary>
+    public string? GetDefaultDeviceName() =>
+        WasapiAudioInputDeviceResolver.TryGetDefaultCaptureDeviceName();
 }
 
 internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
@@ -1113,6 +1208,9 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
             WasapiAudioInputDeviceResolver.DisposeDevices(devices);
         }
     }
+
+    public string? GetDefaultDeviceName() =>
+        WasapiAudioInputDeviceResolver.TryGetDefaultCaptureDeviceName();
 }
 
 internal sealed class WasapiAudioInputCaptureFactory : IAudioInputCaptureFactory
@@ -1139,6 +1237,25 @@ internal sealed class WasapiAudioInputCaptureFactory : IAudioInputCaptureFactory
 
 internal static class WasapiAudioInputDeviceResolver
 {
+    public static string? TryGetDefaultCaptureDeviceName()
+    {
+        try
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            if (!enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Console))
+                return null;
+
+            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            return device.FriendlyName;
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Default capture endpoint lookup failed {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
     public static List<MMDevice> GetCaptureDevicesInWaveInOrder()
     {
         using var enumerator = new MMDeviceEnumerator();
@@ -1191,7 +1308,7 @@ internal static class WasapiAudioInputDeviceOrdering
         return orderedIndexes;
     }
 
-    private static bool DeviceNamesMatch(string wasapiDeviceName, string waveInDeviceName)
+    internal static bool DeviceNamesMatch(string wasapiDeviceName, string waveInDeviceName)
     {
         if (string.Equals(wasapiDeviceName, waveInDeviceName, StringComparison.OrdinalIgnoreCase))
             return true;

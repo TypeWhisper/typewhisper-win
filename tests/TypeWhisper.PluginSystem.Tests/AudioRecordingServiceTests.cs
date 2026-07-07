@@ -268,6 +268,79 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         Assert.False(sut.IsRecording);
     }
 
+    [Fact]
+    public void WarmUp_PrefersSystemDefaultDevice_WhenNoDeviceConfigured()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone Array (Built-in)",
+            "Microphone (USB Audio Device)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+
+        Assert.True(sut.WarmUp());
+
+        Assert.Equal(1, captures.Created.Single().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_ReturnsToDefaultDevice_WhenItReconnectsInAutoMode()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        Assert.Equal(0, captures.Created.Single().DeviceNumber);
+
+        // Device disappears (e.g. KVM or dock switch); system default falls back.
+        devices.SetDevices("Microphone Array (Built-in)");
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+
+        // Device returns at a different index and becomes the default again.
+        devices.SetDevices("Microphone Array (Built-in)", "Microphone (USB Audio Device)");
+        devices.DefaultDeviceName = "Microphone (USB Audio Device)";
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_DoesNotMigrateToPreferredDevice_WhileRecording()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        devices.SetDevices("Microphone Array (Built-in)");
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+        var capturesBeforeRecording = captures.Created.Count;
+
+        sut.StartRecording();
+        devices.SetDevices("Microphone Array (Built-in)", "Microphone (USB Audio Device)");
+        devices.DefaultDeviceName = "Microphone (USB Audio Device)";
+        sut.CheckForDeviceChanges();
+        Assert.Equal(capturesBeforeRecording, captures.Created.Count);
+
+        sut.StopRecording();
+        sut.CheckForDeviceChanges();
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
     private static AudioRecordingService CreateService(
         FakeAudioInputDeviceProvider devices,
         FakeAudioInputCaptureFactory captures) =>
@@ -724,11 +797,15 @@ internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
 
     public int DeviceNameRequestCount { get; private set; }
 
+    public string? DefaultDeviceName { get; set; }
+
     public string GetDeviceName(int deviceNumber)
     {
         DeviceNameRequestCount++;
         return _deviceNames[deviceNumber];
     }
+
+    public string? GetDefaultDeviceName() => DefaultDeviceName;
 
     public void SetDevices(params string[] deviceNames)
     {
