@@ -341,6 +341,46 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         Assert.Equal(1, captures.Created.Last().DeviceNumber);
     }
 
+    [Fact]
+    public void CheckForDeviceChanges_FollowsNewSystemDefault_WhenDeviceListIsUnchanged()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        sut.CheckForDeviceChanges();
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+
+        // The user changes the Windows default mic; no device is added/removed.
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void StartPreview_UsesExplicitlyRequestedDevice_OverConfiguredSelection()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+
+        sut.StartPreview(1);
+
+        Assert.True(sut.IsPreviewing);
+        Assert.Equal(1, captures.Created.Single().DeviceNumber);
+    }
+
     private static AudioRecordingService CreateService(
         FakeAudioInputDeviceProvider devices,
         FakeAudioInputCaptureFactory captures) =>

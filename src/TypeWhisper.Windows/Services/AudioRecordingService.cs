@@ -627,7 +627,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             var signature = BuildDeviceSignature(snapshot);
             if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
             {
-                TryCompletePendingPreferredDeviceMigration(snapshot);
+                // The device list is unchanged, but the system default endpoint
+                // may have moved (or a migration was deferred while recording).
+                EnsureActiveDeviceIsPreferred(snapshot);
                 return;
             }
 
@@ -664,19 +666,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
             if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
             {
-                if (_isRecording)
-                {
-                    // Never tear down an in-flight recording just to migrate to
-                    // a preferred device; complete the migration on a later
-                    // check once recording has stopped.
-                    _preferredDeviceMigrationPending = true;
-                }
-                else
-                {
-                    _preferredDeviceMigrationPending = false;
-                    DisposeWaveIn();
-                    WarmUp();
-                }
+                EnsureActiveDeviceIsPreferred(snapshot);
             }
             else if (!_isWarmedUp)
             {
@@ -695,14 +685,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
-    private void TryCompletePendingPreferredDeviceMigration(IReadOnlyList<AudioInputDeviceSnapshot> snapshot)
+    private void EnsureActiveDeviceIsPreferred(IReadOnlyList<AudioInputDeviceSnapshot> snapshot)
     {
-        if (!_preferredDeviceMigrationPending || _isRecording || !_isWarmedUp)
+        if (!_isWarmedUp)
             return;
 
         if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
         {
             _preferredDeviceMigrationPending = false;
+            return;
+        }
+
+        if (_isRecording)
+        {
+            // Never tear down an in-flight recording just to migrate to a
+            // preferred device; complete the migration on a later check once
+            // recording has stopped.
+            _preferredDeviceMigrationPending = true;
             return;
         }
 
@@ -879,7 +878,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         if (_disposed || _deviceProvider.DeviceCount == 0) return;
 
         var deviceIndex = deviceNumber.HasValue
-            ? ResolvePreferredDeviceNumber(allowFallback: true)
+            ? TryGetDeviceName(deviceNumber.Value) is not null
+                ? deviceNumber.Value
+                : ResolvePreferredDeviceNumber(allowFallback: true)
             : FindBestMicrophoneDevice();
         if (deviceIndex < 0) return;
 
