@@ -127,7 +127,7 @@ public partial class App : Application
         _ = ProcessProtocolArgsAsync(e.Args);
         StartProtocolCallbackWatcher();
 
-        // Plugin registry: first-run auto-install + update check (non-blocking)
+        // Plugin registry: mark first-run plugin setup complete without installing marketplace plugins.
         _ = pluginRegistry.FirstRunAutoInstallAsync()
             .ContinueWith(_ => pluginRegistry.CheckForUpdatesAsync(), TaskScheduler.Default)
             .ContinueWith(t =>

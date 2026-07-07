@@ -359,40 +359,16 @@ public sealed class PluginRegistryService
     }
 
     /// <summary>
-    /// On first run, auto-installs all compatible registry plugins.
-    /// Sets the PluginFirstRunCompleted flag to prevent re-running.
+    /// Marks first-run plugin setup as complete without installing marketplace plugins by default.
     /// </summary>
-    public async Task FirstRunAutoInstallAsync(CancellationToken ct = default)
+    public Task FirstRunAutoInstallAsync(CancellationToken ct = default)
     {
         if (_settings.Current.PluginFirstRunCompleted)
-            return;
+            return Task.CompletedTask;
 
-        Debug.WriteLine("[PluginRegistry] First run detected, auto-installing registry plugins...");
-
-        try
-        {
-            var registry = await FetchRegistryAsync(ct);
-            foreach (var plugin in registry)
-            {
-                if (GetInstallState(plugin) == PluginInstallState.NotInstalled)
-                {
-                    try
-                    {
-                        await InstallPluginAsync(plugin, ct: ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[PluginRegistry] Auto-install failed for {plugin.Id}: {ex.Message}");
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[PluginRegistry] First run auto-install failed: {ex.Message}");
-        }
-
+        Debug.WriteLine("[PluginRegistry] First run detected; marketplace plugin auto-install is disabled.");
         _settings.Save(_settings.Current with { PluginFirstRunCompleted = true });
+        return Task.CompletedTask;
     }
 
     private static Version GetHostVersion()
