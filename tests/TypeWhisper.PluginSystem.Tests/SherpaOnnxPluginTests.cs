@@ -243,7 +243,7 @@ public class SherpaOnnxPluginTests
         var message = SherpaOnnxNativeRuntime.CreateMissingRuntimeMessage(runtimeDirectory);
 
         Assert.Contains("sherpa-onnx-c-api.dll", message);
-        Assert.Contains("onnxruntime.dll", message);
+        Assert.Contains("sherpaort.dll", message);
         Assert.Contains(runtimeDirectory, message);
         Assert.DoesNotContain("AppContext.BaseDirectory", message, StringComparison.OrdinalIgnoreCase);
     }
@@ -274,8 +274,15 @@ public class SherpaOnnxPluginTests
         Assert.DoesNotContain("<ExcludeAssets>runtime</ExcludeAssets>", project, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(@"$(TargetDir)runtimes\win-x64\**\*.*", project);
         Assert.Contains(@"$(TargetDir)runtimes\win-arm64\**\*.*", project);
+        Assert.Contains(@"$(TargetDir)runtimes\win-x86\**\*.*", project);
+        Assert.Contains("PatchSherpaOnnxRuntimeImport", project);
+        Assert.Contains("sherpaort.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x64\native\sherpa-onnx-c-api.dll", project);
         Assert.Contains(@"$(PluginOutputDir)runtimes\win-x64\native\onnxruntime.dll", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x64\native\sherpaort.dll", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpa-onnx-c-api.dll", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\onnxruntime.dll", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x86\native\sherpaort.dll", project);
     }
 
     [Fact]
@@ -287,6 +294,7 @@ public class SherpaOnnxPluginTests
         var workflow = File.ReadAllText(workflowPath);
 
         Assert.Contains("sherpa-onnx-c-api.dll", workflow);
+        Assert.Contains("sherpaort.dll", workflow);
         Assert.Contains("Missing required sherpa-onnx runtime", workflow);
     }
 

@@ -12,6 +12,7 @@ internal sealed class SimpleVoiceActivityDetector : IDisposable
     private readonly int _maxSegmentSamples;
     private int _speechSamples;
     private int _trailingSilenceSamples;
+    private int _discardedShortSegmentCount;
     private bool _hasSpeech;
     private bool _disposed;
 
@@ -76,6 +77,15 @@ internal sealed class SimpleVoiceActivityDetector : IDisposable
         return _segments.Peek();
     }
 
+    public int DiscardedShortSegmentCount
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _discardedShortSegmentCount;
+        }
+    }
+
     public void Pop()
     {
         ThrowIfDisposed();
@@ -92,7 +102,13 @@ internal sealed class SimpleVoiceActivityDetector : IDisposable
     private void CompleteCurrentSegment()
     {
         if (_hasSpeech && _speechSamples >= _minSpeechSamples)
+        {
             _segments.Enqueue(new SimpleVoiceSegment([.. _currentSamples]));
+        }
+        else if (_hasSpeech)
+        {
+            _discardedShortSegmentCount++;
+        }
 
         _currentSamples.Clear();
         _speechSamples = 0;

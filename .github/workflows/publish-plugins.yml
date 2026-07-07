@@ -172,10 +172,13 @@ jobs:
             foreach ($runtime in @(
               'runtimes/win-x64/native/sherpa-onnx-c-api.dll',
               'runtimes/win-x64/native/onnxruntime.dll',
+              'runtimes/win-x64/native/sherpaort.dll',
               'runtimes/win-arm64/native/sherpa-onnx-c-api.dll',
               'runtimes/win-arm64/native/onnxruntime.dll',
+              'runtimes/win-arm64/native/sherpaort.dll',
               'runtimes/win-x86/native/sherpa-onnx-c-api.dll',
-              'runtimes/win-x86/native/onnxruntime.dll'
+              'runtimes/win-x86/native/onnxruntime.dll',
+              'runtimes/win-x86/native/sherpaort.dll'
             )) {
               $runtimePath = Join-Path $stagingDir $runtime
               if (-not (Test-Path $runtimePath)) {

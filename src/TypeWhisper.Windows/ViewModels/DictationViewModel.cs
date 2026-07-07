@@ -2229,17 +2229,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (_vad is null) return;
 
+        _lastVadDiscardedShortSegmentCount = _vad.DiscardedShortSegmentCount;
         while (!_vad.IsEmpty())
         {
             var segment = _vad.Front();
             _vad.Pop();
             _lastVadSegmentLength = segment.Samples.Length;
-
-            if (segment.Samples.Length < 1600)
-            {
-                _lastVadDiscardedShortSegmentCount++;
-                continue; // Skip very short segments
-            }
 
             try
             {
