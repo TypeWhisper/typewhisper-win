@@ -146,7 +146,7 @@ jobs:
           $runtimesDir = Join-Path $outputDir 'runtimes'
           if (Test-Path $runtimesDir) {
             New-Item -ItemType Directory -Path "$stagingDir/runtimes" -Force | Out-Null
-            foreach ($runtimeName in @('win-x64', 'win-arm64', 'cuda/win-x64', 'vulkan/win-x64')) {
+            foreach ($runtimeName in @('win-x64', 'win-arm64', 'win-x86', 'cuda/win-x64', 'vulkan/win-x64')) {
               $runtimeDir = Join-Path $runtimesDir $runtimeName
               if (Test-Path $runtimeDir) {
                 $runtimeDestination = Join-Path "$stagingDir/runtimes" $runtimeName
@@ -165,6 +165,22 @@ jobs:
             $vulkanRuntime = Join-Path $stagingDir 'runtimes/vulkan/win-x64/ggml-vulkan-whisper.dll'
             if (-not (Test-Path $vulkanRuntime)) {
               throw "Missing required whisper.cpp Vulkan runtime: $vulkanRuntime"
+            }
+          }
+
+          if ($env:PLUGIN_NAME -eq 'sherpa-onnx') {
+            foreach ($runtime in @(
+              'runtimes/win-x64/native/sherpa-onnx-c-api.dll',
+              'runtimes/win-x64/native/onnxruntime.dll',
+              'runtimes/win-arm64/native/sherpa-onnx-c-api.dll',
+              'runtimes/win-arm64/native/onnxruntime.dll',
+              'runtimes/win-x86/native/sherpa-onnx-c-api.dll',
+              'runtimes/win-x86/native/onnxruntime.dll'
+            )) {
+              $runtimePath = Join-Path $stagingDir $runtime
+              if (-not (Test-Path $runtimePath)) {
+                throw "Missing required sherpa-onnx runtime: $runtimePath"
+              }
             }
           }
 

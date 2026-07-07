@@ -13,9 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <PackageReference Include="SharpCompress" Version="0.48.0" />
   </ItemGroup>
   <ItemGroup>
@@ -32,10 +30,33 @@
     <ItemGroup>
       <_DependencyDlls Include="$(TargetDir)*.dll"
                        Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
+      <_RuntimeFiles Include="$(TargetDir)runtimes\win-x64\**\*.*">
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+      </_RuntimeFiles>
+      <_RuntimeFiles Include="$(TargetDir)runtimes\win-arm64\**\*.*">
+        <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+      </_RuntimeFiles>
+      <_RuntimeFiles Include="$(TargetDir)runtimes\win-x86\**\*.*">
+        <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+      </_RuntimeFiles>
     </ItemGroup>
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
     <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="@(_DependencyDlls)" DestinationFolder="$(PluginOutputDir)" SkipUnchangedFiles="true" Condition="'@(_DependencyDlls)' != ''" />
+    <Copy SourceFiles="@(_RuntimeFiles)"
+          DestinationFiles="@(_RuntimeFiles->'$(PluginOutputDir)runtimes\%(RuntimeIdentifier)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(_RuntimeFiles)' != ''" />
+    <ItemGroup>
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\native\sherpa-onnx-c-api.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x64\native\onnxruntime.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\native\sherpa-onnx-c-api.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-arm64\native\onnxruntime.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x86\native\sherpa-onnx-c-api.dll" />
+      <_RequiredRuntimeFiles Include="$(PluginOutputDir)runtimes\win-x86\native\onnxruntime.dll" />
+    </ItemGroup>
+    <Error Condition="'$(Configuration)' == 'Release' and !Exists('%(_RequiredRuntimeFiles.Identity)')"
+           Text="Missing required sherpa-onnx runtime file: %(_RequiredRuntimeFiles.Identity)" />
   </Target>
 </Project>

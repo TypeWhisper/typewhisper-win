@@ -8,8 +8,15 @@ namespace TypeWhisper.Plugin.SherpaOnnx;
 
 internal static class SherpaOnnxNativeRuntime
 {
+    private const string SherpaNativeLibraryBaseName = "sherpa-onnx-c-api";
+    private const string SherpaNativeLibraryFileName = "sherpa-onnx-c-api.dll";
+    private const string OnnxRuntimeFileName = "onnxruntime.dll";
+    private const uint LoadLibrarySearchDllLoadDir = 0x00000100;
+    private const uint LoadLibrarySearchDefaultDirs = 0x00001000;
+
     private static readonly object Sync = new();
     private static bool _resolverRegistered;
+    private static string? _bundledRuntimeDirectory;
     private static string? _cudaRuntimeDirectory;
 
     /// <summary>
@@ -36,6 +43,10 @@ internal static class SherpaOnnxNativeRuntime
 
     private static void RegisterResolverUnsafe()
     {
+        _bundledRuntimeDirectory ??= ResolveBundledRuntimeDirectory(
+            typeof(SherpaOnnxNativeRuntime).Assembly.Location,
+            RuntimeInformation.ProcessArchitecture);
+
         if (_resolverRegistered)
             return;
 
@@ -48,19 +59,60 @@ internal static class SherpaOnnxNativeRuntime
         Assembly assembly,
         DllImportSearchPath? searchPath)
     {
-        var runtimeDirectory = _cudaRuntimeDirectory;
-        if (string.IsNullOrWhiteSpace(runtimeDirectory))
+        if (!IsSherpaNativeLibrary(libraryName))
             return IntPtr.Zero;
 
-        var libraryFileName = Path.GetFileName(libraryName);
-        var fileName = libraryFileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            ? libraryFileName
-            : libraryFileName + ".dll";
-        var candidate = Path.Join(runtimeDirectory, fileName);
+        var runtimeDirectory = _cudaRuntimeDirectory ?? _bundledRuntimeDirectory;
+        if (string.IsNullOrWhiteSpace(runtimeDirectory))
+            throw new DllNotFoundException("Unable to determine the sherpa-onnx native runtime directory.");
 
-        return File.Exists(candidate)
-            ? NativeLibrary.Load(candidate)
-            : IntPtr.Zero;
+        var candidate = Path.Join(runtimeDirectory, SherpaNativeLibraryFileName);
+        var onnxRuntime = Path.Join(runtimeDirectory, OnnxRuntimeFileName);
+        if (!File.Exists(candidate) || !File.Exists(onnxRuntime))
+            throw new DllNotFoundException(CreateMissingRuntimeMessage(runtimeDirectory));
+
+        var handle = LoadLibraryEx(
+            candidate,
+            IntPtr.Zero,
+            LoadLibrarySearchDllLoadDir | LoadLibrarySearchDefaultDirs);
+        if (handle == IntPtr.Zero)
+        {
+            var error = Marshal.GetLastWin32Error();
+            throw new DllNotFoundException(
+                $"{CreateMissingRuntimeMessage(runtimeDirectory)} Windows loader error: {error}.");
+        }
+
+        return handle;
+    }
+
+    internal static string? ResolveBundledRuntimeDirectory(string assemblyLocation, Architecture architecture)
+    {
+        var runtimeIdentifier = architecture switch
+        {
+            Architecture.X64 => "win-x64",
+            Architecture.Arm64 => "win-arm64",
+            Architecture.X86 => "win-x86",
+            _ => null
+        };
+
+        if (runtimeIdentifier is null || string.IsNullOrWhiteSpace(assemblyLocation))
+            return null;
+
+        var pluginDirectory = Path.GetDirectoryName(assemblyLocation);
+        return string.IsNullOrWhiteSpace(pluginDirectory)
+            ? null
+            : Path.Join(pluginDirectory, "runtimes", runtimeIdentifier, "native");
+    }
+
+    internal static string CreateMissingRuntimeMessage(string runtimeDirectory) =>
+        "Unable to load the sherpa-onnx native runtime. Expected "
+        + $"{SherpaNativeLibraryFileName} and {OnnxRuntimeFileName} under '{runtimeDirectory}'. "
+        + "Reinstall the sherpa-onnx plugin or update it from the plugin marketplace.";
+
+    private static bool IsSherpaNativeLibrary(string libraryName)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(libraryName);
+        return string.Equals(fileName, SherpaNativeLibraryBaseName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void PrependToPath(string runtimeDirectory)
@@ -72,4 +124,7 @@ internal static class SherpaOnnxNativeRuntime
 
         Environment.SetEnvironmentVariable("PATH", runtimeDirectory + Path.PathSeparator + current);
     }
+
+    [DllImport("kernel32.dll", EntryPoint = "LoadLibraryExW", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr LoadLibraryEx(string lpLibFileName, IntPtr hFile, uint dwFlags);
 }

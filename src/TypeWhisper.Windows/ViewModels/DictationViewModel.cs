@@ -6,7 +6,6 @@ using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SherpaOnnx;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -152,7 +151,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     // Live transcription
     private readonly StreamingHandler _streamingHandler;
     // VAD for live transcription (fallback for non-plugin models)
-    private VoiceActivityDetector? _vad;
+    private SimpleVoiceActivityDetector? _vad;
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
     private bool _disposed;
@@ -2259,21 +2258,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
     }
 
-    private static VoiceActivityDetector CreateVoiceActivityDetector()
-    {
-        var config = new VadModelConfig
-        {
-            SileroVad = new SileroVadModelConfig
-            {
-                Model = Path.Combine(AppContext.BaseDirectory, "Resources", "silero_vad.onnx"),
-                Threshold = 0.5f,
-                MinSilenceDuration = 0.5f,
-                MinSpeechDuration = 0.25f,
-            },
-            SampleRate = 16000,
-        };
-        return new VoiceActivityDetector(config, 60);
-    }
+    private static SimpleVoiceActivityDetector CreateVoiceActivityDetector() => new();
 
     [RelayCommand]
     private void CancelProcessing()

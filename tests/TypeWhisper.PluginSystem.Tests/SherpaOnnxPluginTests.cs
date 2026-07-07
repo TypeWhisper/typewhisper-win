@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.SherpaOnnx;
@@ -220,6 +221,75 @@ public class SherpaOnnxPluginTests
         }
     }
 
+    [Fact]
+    public void NativeRuntime_ResolvesCpuRuntimeFromPluginAssemblyDirectory()
+    {
+        var pluginAssembly = Path.Join("C:", "TypeWhisper", "Plugins", "com.typewhisper.sherpa-onnx", "TypeWhisper.Plugin.SherpaOnnx.dll");
+
+        var runtimeDirectory = SherpaOnnxNativeRuntime.ResolveBundledRuntimeDirectory(
+            pluginAssembly,
+            Architecture.X64);
+
+        Assert.Equal(
+            Path.Join("C:", "TypeWhisper", "Plugins", "com.typewhisper.sherpa-onnx", "runtimes", "win-x64", "native"),
+            runtimeDirectory);
+    }
+
+    [Fact]
+    public void NativeRuntime_MissingRuntimeMessageNamesExpectedPluginDirectory()
+    {
+        var runtimeDirectory = Path.Join("C:", "TypeWhisper", "Plugins", "com.typewhisper.sherpa-onnx", "runtimes", "win-x64", "native");
+
+        var message = SherpaOnnxNativeRuntime.CreateMissingRuntimeMessage(runtimeDirectory);
+
+        Assert.Contains("sherpa-onnx-c-api.dll", message);
+        Assert.Contains("onnxruntime.dll", message);
+        Assert.Contains(runtimeDirectory, message);
+        Assert.DoesNotContain("AppContext.BaseDirectory", message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WindowsAppProject_DoesNotReferenceSherpaOnnxPackage()
+    {
+        var repoRoot = GetRepoRoot();
+        var projectPath = Path.Join(repoRoot, "src", "TypeWhisper.Windows", "TypeWhisper.Windows.csproj");
+
+        var project = File.ReadAllText(projectPath);
+
+        Assert.DoesNotContain("org.k2fsa.sherpa.onnx", project, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SherpaPluginProject_CopiesWindowsNativeRuntimeDirectoriesToBundledPluginOutput()
+    {
+        var repoRoot = GetRepoRoot();
+        var projectPath = Path.Join(
+            repoRoot,
+            "plugins",
+            "TypeWhisper.Plugin.SherpaOnnx",
+            "TypeWhisper.Plugin.SherpaOnnx.csproj");
+
+        var project = File.ReadAllText(projectPath);
+
+        Assert.DoesNotContain("<ExcludeAssets>runtime</ExcludeAssets>", project, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(@"$(TargetDir)runtimes\win-x64\**\*.*", project);
+        Assert.Contains(@"$(TargetDir)runtimes\win-arm64\**\*.*", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x64\native\sherpa-onnx-c-api.dll", project);
+        Assert.Contains(@"$(PluginOutputDir)runtimes\win-x64\native\onnxruntime.dll", project);
+    }
+
+    [Fact]
+    public void PublishPluginsWorkflow_RequiresSherpaNativeRuntimeInReleaseZip()
+    {
+        var repoRoot = GetRepoRoot();
+        var workflowPath = Path.Join(repoRoot, ".github", "workflows", "publish-plugins.yml");
+
+        var workflow = File.ReadAllText(workflowPath);
+
+        Assert.Contains("sherpa-onnx-c-api.dll", workflow);
+        Assert.Contains("Missing required sherpa-onnx runtime", workflow);
+    }
+
     private static void CreateParakeetModelFiles(string pluginDataDirectory)
     {
         var modelDir = Path.Join(pluginDataDirectory, "Models", "parakeet-tdt-0.6b");
@@ -227,6 +297,9 @@ public class SherpaOnnxPluginTests
         foreach (var fileName in new[] { "encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt" })
             File.WriteAllText(Path.Join(modelDir, fileName), "test");
     }
+
+    private static string GetRepoRoot() =>
+        Path.GetFullPath(Path.Join(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     private sealed class FakeCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     {
