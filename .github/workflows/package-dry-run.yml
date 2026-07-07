@@ -84,35 +84,8 @@ jobs:
       - name: Build solution
         run: dotnet build TypeWhisper.slnx -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }} -bl:artifacts/logs/typewhisper-package.binlog
 
-      - name: Build bundled plugins
-        shell: pwsh
-        run: |
-          foreach ($project in Get-ChildItem plugins -Recurse -Filter *.csproj | Sort-Object FullName) {
-            dotnet restore $project.FullName
-            if ($LASTEXITCODE -ne 0) {
-              throw "Restore failed: $($project.FullName)"
-            }
-
-            dotnet build $project.FullName -c Release --no-restore -p:Version=${{ steps.meta.outputs.version }}
-            if ($LASTEXITCODE -ne 0) {
-              throw "Build failed: $($project.FullName)"
-            }
-          }
-
       - name: Publish app
         run: dotnet publish src/TypeWhisper.Windows/TypeWhisper.Windows.csproj -c Release -r ${{ matrix.rid }} -p:Version=${{ steps.meta.outputs.version }} -o publish/${{ matrix.rid }}
-
-      - name: Copy bundled plugins into publish output
-        shell: pwsh
-        run: |
-          $pluginsSrc = Resolve-Path "src/TypeWhisper.Windows/bin/Release/net10.0-windows/Plugins"
-          $pluginDirs = Get-ChildItem $pluginsSrc -Directory
-
-          if (-not $pluginDirs) {
-            throw "No bundled plugins found in $pluginsSrc."
-          }
-
-          Copy-Item -Path $pluginsSrc -Destination "publish/${{ matrix.rid }}/Plugins" -Recurse -Force
 
       - name: Install Velopack CLI
         run: dotnet tool install -g vpk

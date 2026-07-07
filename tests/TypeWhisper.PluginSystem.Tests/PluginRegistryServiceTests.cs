@@ -978,6 +978,54 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FirstRunAutoInstallAsync_DoesNotFetchOrInstallMarketplacePlugins()
+    {
+        AppSettings? savedSettings = null;
+        _settings.Setup(s => s.Save(It.IsAny<AppSettings>()))
+            .Callback<AppSettings>(s => savedSettings = s);
+        _settings.Setup(s => s.Current).Returns(new AppSettings { PluginFirstRunCompleted = false });
+
+        var registryJson = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                Id = "com.test.auto-install",
+                Name = "Auto Install",
+                Version = "1.0.0",
+                Author = "Tester",
+                Description = "Should not be installed automatically",
+                Size = 1024L,
+                DownloadUrl = "https://example.com/auto-install.zip",
+                RequiresApiKey = false
+            }
+        });
+        var requestCount = 0;
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(() =>
+            {
+                requestCount++;
+                return TrackDisposable(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(registryJson)
+                });
+            });
+        var httpClient = TrackDisposable(new HttpClient(handler.Object));
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient, pluginsPath: _pluginsRoot);
+
+        await service.FirstRunAutoInstallAsync();
+
+        Assert.Equal(0, requestCount);
+        Assert.NotNull(savedSettings);
+        Assert.True(savedSettings!.PluginFirstRunCompleted);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_pluginsRoot));
+    }
+
+    [Fact]
     public async Task FirstRunAutoInstallAsync_SkipsWhenAlreadyCompleted()
     {
         _settings.Setup(s => s.Current).Returns(new AppSettings { PluginFirstRunCompleted = true });
