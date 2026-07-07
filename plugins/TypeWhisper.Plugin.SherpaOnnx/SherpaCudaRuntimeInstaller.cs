@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using SharpCompress.Archives;
@@ -23,12 +24,22 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     internal const string AssetFileName = "sherpa-onnx-v1.13.0-cuda-12.x-cudnn-9.x-win-x64-cuda.tar.bz2";
     internal const string DownloadUrl =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.0/" + AssetFileName;
+    private const string SherpaNativeLibraryFileName = "sherpa-onnx-c-api.dll";
+    private const string OnnxRuntimeFileName = "onnxruntime.dll";
+    private const string SherpaOnnxRuntimeDependencyFileName = "sherpaort.dll";
+    private const string OnnxRuntimeCudaProviderFileName = "onnxruntime_providers_cuda.dll";
+
+    private static readonly string[] DownloadedRuntimeFiles =
+    [
+        SherpaNativeLibraryFileName,
+        OnnxRuntimeFileName,
+        OnnxRuntimeCudaProviderFileName
+    ];
 
     private static readonly string[] CoreRuntimeFiles =
     [
-        "sherpa-onnx-c-api.dll",
-        "onnxruntime.dll",
-        "onnxruntime_providers_cuda.dll"
+        .. DownloadedRuntimeFiles,
+        SherpaOnnxRuntimeDependencyFileName
     ];
 
     private static readonly CudaDependencyPackage[] CudaDependencyPackages =
@@ -85,7 +96,9 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
     /// <summary>
     /// Returns whether installed.
     /// </summary>
-    public bool IsInstalled => RequiredFiles.All(file => File.Exists(GetRuntimeFilePath(file)));
+    public bool IsInstalled =>
+        RequiredFiles.All(file => File.Exists(GetRuntimeFilePath(file)))
+        && IsRuntimeImportPatched(GetRuntimeFilePath(SherpaNativeLibraryFileName));
 
     /// <summary>
     /// Ensures installed asynchronously..
@@ -104,9 +117,10 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
             Directory.CreateDirectory(_runtimeRoot);
             Directory.CreateDirectory(RuntimeDirectory);
 
-            if (!HasRequiredFiles(CoreRuntimeFiles))
+            if (!HasRequiredFiles(DownloadedRuntimeFiles))
                 await InstallSherpaRuntimeAsync(cancellationToken);
 
+            EnsureSherpaRuntimeImportAlias(RuntimeDirectory);
             await InstallCudaProviderDependenciesAsync(cancellationToken);
             ValidateInstalledRuntime();
         }
@@ -263,9 +277,95 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
 
     private static string? FindNativeRuntimeDirectory(string rootDirectory) =>
         Directory
-            .EnumerateFiles(rootDirectory, "sherpa-onnx-c-api.dll", SearchOption.AllDirectories)
+            .EnumerateFiles(rootDirectory, SherpaNativeLibraryFileName, SearchOption.AllDirectories)
             .Select(Path.GetDirectoryName)
             .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path));
+
+    internal static void EnsureSherpaRuntimeImportAlias(string runtimeDirectory)
+    {
+        var onnxRuntimePath = Path.Join(runtimeDirectory, OnnxRuntimeFileName);
+        var sherpaRuntimePath = Path.Join(runtimeDirectory, SherpaOnnxRuntimeDependencyFileName);
+        if (!File.Exists(onnxRuntimePath))
+            throw new InvalidOperationException($"The sherpa-onnx CUDA runtime is missing {OnnxRuntimeFileName}.");
+
+        File.Copy(onnxRuntimePath, sherpaRuntimePath, overwrite: true);
+
+        PatchRuntimeImport(Path.Join(runtimeDirectory, SherpaNativeLibraryFileName), requireImport: true);
+        PatchRuntimeImport(Path.Join(runtimeDirectory, OnnxRuntimeCudaProviderFileName), requireImport: false);
+    }
+
+    private static void PatchRuntimeImport(string libraryPath, bool requireImport)
+    {
+        if (!File.Exists(libraryPath))
+        {
+            if (requireImport)
+                throw new InvalidOperationException($"The sherpa-onnx CUDA runtime is missing {Path.GetFileName(libraryPath)}.");
+
+            return;
+        }
+
+        var original = Encoding.ASCII.GetBytes(OnnxRuntimeFileName + '\0');
+        var patchedBytes = Encoding.ASCII.GetBytes(SherpaOnnxRuntimeDependencyFileName + '\0');
+        var patched = new byte[original.Length];
+        Array.Copy(patchedBytes, patched, patchedBytes.Length);
+
+        var bytes = File.ReadAllBytes(libraryPath);
+        var originalOffsets = FindNeedleOffsets(bytes, original).ToList();
+        var patchedOffsets = FindNeedleOffsets(bytes, patched).ToList();
+
+        if (originalOffsets.Count == 0 && patchedOffsets.Count > 0)
+            return;
+
+        if (originalOffsets.Count == 0)
+        {
+            if (requireImport)
+            {
+                throw new InvalidOperationException(
+                    $"Expected {Path.GetFileName(libraryPath)} to import {OnnxRuntimeFileName}.");
+            }
+
+            return;
+        }
+
+        foreach (var offset in originalOffsets)
+            Array.Copy(patched, 0, bytes, offset, patched.Length);
+
+        File.WriteAllBytes(libraryPath, bytes);
+    }
+
+    private static bool IsRuntimeImportPatched(string libraryPath)
+    {
+        if (!File.Exists(libraryPath))
+            return false;
+
+        var bytes = File.ReadAllBytes(libraryPath);
+        var original = Encoding.ASCII.GetBytes(OnnxRuntimeFileName + '\0');
+        var patchedBytes = Encoding.ASCII.GetBytes(SherpaOnnxRuntimeDependencyFileName + '\0');
+        var patched = new byte[original.Length];
+        Array.Copy(patchedBytes, patched, patchedBytes.Length);
+
+        return !FindNeedleOffsets(bytes, original).Any()
+               && FindNeedleOffsets(bytes, patched).Any();
+    }
+
+    private static IEnumerable<int> FindNeedleOffsets(byte[] bytes, byte[] needle)
+    {
+        for (var offset = 0; offset <= bytes.Length - needle.Length; offset++)
+        {
+            var matches = true;
+            for (var index = 0; index < needle.Length; index++)
+            {
+                if (bytes[offset + index] == needle[index])
+                    continue;
+
+                matches = false;
+                break;
+            }
+
+            if (matches)
+                yield return offset;
+        }
+    }
 
     private bool HasRequiredFiles(IEnumerable<string> files) =>
         files.All(file => File.Exists(GetRuntimeFilePath(file)));
