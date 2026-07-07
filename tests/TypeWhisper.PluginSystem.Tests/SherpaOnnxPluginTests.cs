@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.Plugin.SherpaOnnx;
@@ -208,11 +209,39 @@ public class SherpaOnnxPluginTests
             Directory.CreateDirectory(nativeDir);
             File.WriteAllText(Path.Join(nativeDir, "sherpa-onnx-c-api.dll"), "");
             File.WriteAllText(Path.Join(nativeDir, "onnxruntime.dll"), "");
+            File.WriteAllText(Path.Join(nativeDir, "sherpaort.dll"), "");
             File.WriteAllText(Path.Join(nativeDir, "onnxruntime_providers_cuda.dll"), "");
 
             var installer = new SherpaCudaRuntimeInstaller(tempDir, new HttpClient());
 
             Assert.False(installer.IsInstalled);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CudaRuntimeInstaller_CopiesAndPatchesSherpaRuntimeAlias()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cuda-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var sherpaNative = Path.Join(tempDir, "sherpa-onnx-c-api.dll");
+            File.WriteAllBytes(
+                sherpaNative,
+                Encoding.ASCII.GetBytes("prefix onnxruntime.dll\0 suffix"));
+            File.WriteAllText(Path.Join(tempDir, "onnxruntime.dll"), "runtime");
+
+            SherpaCudaRuntimeInstaller.EnsureSherpaRuntimeImportAlias(tempDir);
+
+            var patchedNative = Encoding.ASCII.GetString(File.ReadAllBytes(sherpaNative));
+            Assert.True(File.Exists(Path.Join(tempDir, "sherpaort.dll")));
+            Assert.DoesNotContain("onnxruntime.dll", patchedNative);
+            Assert.Contains("sherpaort.dll", patchedNative);
         }
         finally
         {
