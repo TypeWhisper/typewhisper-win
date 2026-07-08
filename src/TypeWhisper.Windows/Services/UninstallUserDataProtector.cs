@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO;
-using Microsoft.VisualBasic.FileIO;
+using System.Runtime.InteropServices;
 using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows.Services;
@@ -38,7 +38,7 @@ internal sealed class UninstallUserDataProtector
             if (_recycleBin.TryMoveDirectoryToRecycleBin(legacyAudioPath))
                 return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ExternalException)
         {
             Trace.TraceWarning("Could not move legacy audio directory to the Recycle Bin: {0}", ex.Message);
         }
@@ -95,26 +95,51 @@ internal sealed class UninstallUserDataProtector
 
 internal sealed class ShellRecycleBinOperation : IRecycleBinOperation
 {
+    // The uninstall fast callback must remain non-interactive; FileSystem.DeleteDirectory can show error dialogs.
+    private const uint FileOperationDelete = 0x0003;
+    private const ushort FileOperationFlags =
+        0x0040 | // FOF_ALLOWUNDO
+        0x0010 | // FOF_NOCONFIRMATION
+        0x0400 | // FOF_NOERRORUI
+        0x0004;  // FOF_SILENT
+
     public bool TryMoveDirectoryToRecycleBin(string path)
     {
         var fullPath = Path.GetFullPath(path);
         if (!Directory.Exists(fullPath))
             return true;
 
-        try
+        var operation = new ShFileOpStruct
         {
-            FileSystem.DeleteDirectory(
-                fullPath,
-                UIOption.OnlyErrorDialogs,
-                RecycleOption.SendToRecycleBin,
-                UICancelOption.DoNothing);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException)
-        {
-            Trace.TraceWarning("Could not move directory to the Recycle Bin: {0}", ex.Message);
-            return false;
-        }
+            WFunc = FileOperationDelete,
+            PFrom = $"{fullPath}\0\0",
+            FFlags = FileOperationFlags
+        };
 
-        return !Directory.Exists(fullPath);
+        var result = SHFileOperation(ref operation);
+        if (result != 0 || operation.FAnyOperationsAborted || Directory.Exists(fullPath))
+            Trace.TraceWarning("Could not move directory to the Recycle Bin. Result: {0}, Aborted: {1}", result, operation.FAnyOperationsAborted);
+
+        return result == 0 && !operation.FAnyOperationsAborted && !Directory.Exists(fullPath);
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperation(ref ShFileOpStruct fileOperation);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShFileOpStruct
+    {
+        public IntPtr HWnd;
+        public uint WFunc;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string PFrom;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? PTo;
+        public ushort FFlags;
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool FAnyOperationsAborted;
+        public IntPtr HNameMappings;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? LpszProgressTitle;
     }
 }
