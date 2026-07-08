@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
+using Microsoft.VisualBasic.FileIO;
 using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows.Services;
@@ -38,7 +38,7 @@ internal sealed class UninstallUserDataProtector
             if (_recycleBin.TryMoveDirectoryToRecycleBin(legacyAudioPath))
                 return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ExternalException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             Trace.TraceWarning("Could not move legacy audio directory to the Recycle Bin: {0}", ex.Message);
         }
@@ -53,15 +53,20 @@ internal sealed class UninstallUserDataProtector
         }
     }
 
-    private static string DefaultRecoveryRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        RecoveryDirectoryName);
+    private static string DefaultRecoveryRoot
+    {
+        get
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return CombineWithSafeLeaf(localAppData, RecoveryDirectoryName);
+        }
+    }
 
     private void MoveLegacyAudioToRecovery(string legacyAudioPath, string recoveryRoot)
     {
         Directory.CreateDirectory(recoveryRoot);
         var timestamp = _clock().ToString("yyyyMMdd-HHmmss");
-        var target = ResolveUniquePath(Path.Combine(recoveryRoot, $"Audio-{timestamp}"));
+        var target = ResolveUniquePath(CombineWithSafeLeaf(recoveryRoot, $"Audio-{timestamp}"));
         Directory.Move(legacyAudioPath, target);
     }
 
@@ -77,47 +82,39 @@ internal sealed class UninstallUserDataProtector
                 return candidate;
         }
     }
+
+    private static string CombineWithSafeLeaf(string directory, string leafName)
+    {
+        var safeLeafName = Path.GetFileName(leafName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(safeLeafName) || Path.IsPathRooted(safeLeafName))
+            throw new InvalidOperationException("Invalid recovery directory name.");
+
+        return Path.Join(directory, safeLeafName);
+    }
 }
 
 internal sealed class ShellRecycleBinOperation : IRecycleBinOperation
 {
-    private const uint FileOperationDelete = 0x0003;
-    private const ushort FileOperationFlags =
-        0x0040 | // FOF_ALLOWUNDO
-        0x0010 | // FOF_NOCONFIRMATION
-        0x0400 | // FOF_NOERRORUI
-        0x0004;  // FOF_SILENT
-
     public bool TryMoveDirectoryToRecycleBin(string path)
     {
-        var operation = new ShFileOpStruct
+        var fullPath = Path.GetFullPath(path);
+        if (!Directory.Exists(fullPath))
+            return true;
+
+        try
         {
-            WFunc = FileOperationDelete,
-            PFrom = $"{Path.GetFullPath(path)}\0\0",
-            FFlags = FileOperationFlags
-        };
+            FileSystem.DeleteDirectory(
+                fullPath,
+                UIOption.OnlyErrorDialogs,
+                RecycleOption.SendToRecycleBin,
+                UICancelOption.DoNothing);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning("Could not move directory to the Recycle Bin: {0}", ex.Message);
+            return false;
+        }
 
-        var result = SHFileOperation(ref operation);
-        return result == 0 && !operation.FAnyOperationsAborted && !Directory.Exists(path);
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern int SHFileOperation(ref ShFileOpStruct fileOperation);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ShFileOpStruct
-    {
-        public IntPtr HWnd;
-        public uint WFunc;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string PFrom;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? PTo;
-        public ushort FFlags;
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool FAnyOperationsAborted;
-        public IntPtr HNameMappings;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? LpszProgressTitle;
+        return !Directory.Exists(fullPath);
     }
 }

@@ -33,8 +33,8 @@ internal static class UserAudioMigrationService
         }
 
         Directory.CreateDirectory(audioRoot);
-        foreach (var entry in Directory.EnumerateFileSystemEntries(legacyRoot))
-            MoveEntry(entry, Path.Combine(audioRoot, SafeLeafName(Path.GetFileName(entry))));
+        foreach (var entry in Directory.GetFileSystemEntries(legacyRoot))
+            MoveEntry(entry, GetSafeChildPath(audioRoot, entry));
 
         TryDeleteDirectoryIfEmpty(legacyRoot);
     }
@@ -46,8 +46,8 @@ internal static class UserAudioMigrationService
             var resolvedTarget = ResolveUniquePath(target);
             Directory.CreateDirectory(resolvedTarget);
 
-            foreach (var child in Directory.EnumerateFileSystemEntries(source))
-                MoveEntry(child, Path.Combine(resolvedTarget, SafeLeafName(Path.GetFileName(child))));
+            foreach (var child in Directory.GetFileSystemEntries(source))
+                MoveEntry(child, GetSafeChildPath(resolvedTarget, child));
 
             TryDeleteDirectoryIfEmpty(source);
             return;
@@ -72,11 +72,14 @@ internal static class UserAudioMigrationService
 
         for (var index = 1; ; index++)
         {
-            var candidate = Path.Combine(directory, $"{name}-{index}{extension}");
+            var candidate = Path.Join(directory, $"{name}-{index}{extension}");
             if (!File.Exists(candidate) && !Directory.Exists(candidate))
                 return candidate;
         }
     }
+
+    private static string GetSafeChildPath(string directory, string path) =>
+        Path.Join(directory, SafeLeafName(Path.GetFileName(path)));
 
     private static string SafeLeafName(string value)
     {

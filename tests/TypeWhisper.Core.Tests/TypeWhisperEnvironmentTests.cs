@@ -10,13 +10,16 @@ public class TypeWhisperEnvironmentTests
         var basePath = Normalize(TypeWhisperEnvironment.BasePath);
         var audioPath = Normalize(TypeWhisperEnvironment.AudioPath);
         var legacyAudioPath = Normalize(TypeWhisperEnvironment.LegacyAudioPath);
+        var userDataDirectoryName = TypeWhisperEnvironment.IsDevelopmentBuild
+            ? "TypeWhisper-DevUserData"
+            : "TypeWhisper-UserData";
 
         Assert.StartsWith(basePath, legacyAudioPath, StringComparison.OrdinalIgnoreCase);
         Assert.False(
             IsUnderDirectory(audioPath, basePath),
             $"AudioPath '{audioPath}' must not live under Velopack install root '{basePath}'.");
         Assert.EndsWith(
-            Path.Combine(TypeWhisperEnvironment.IsDevelopmentBuild ? "TypeWhisper-DevUserData" : "TypeWhisper-UserData", "Audio"),
+            $"{userDataDirectoryName}{Path.DirectorySeparatorChar}Audio",
             audioPath,
             StringComparison.OrdinalIgnoreCase);
     }

@@ -70,6 +70,22 @@ public sealed class UserAudioMigrationServiceTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); } catch { }
+        try
+        {
+            if (Directory.Exists(_root))
+                Directory.Delete(_root, recursive: true);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            Console.Error.WriteLine($"Test cleanup skipped missing directory '{_root}': {ex.Message}");
+        }
+        catch (IOException ex)
+        {
+            Console.Error.WriteLine($"Test cleanup could not delete '{_root}': {ex.Message}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.Error.WriteLine($"Test cleanup could not access '{_root}': {ex.Message}");
+        }
     }
 }
