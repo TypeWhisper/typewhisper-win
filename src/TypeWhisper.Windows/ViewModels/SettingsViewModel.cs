@@ -184,12 +184,22 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<MicrophoneItem> Microphones { get; } = [];
     /// <summary>
+    /// Gets the preferred microphones in fallback order.
+    /// </summary>
+    public ObservableCollection<MicrophonePriorityListItem> MicrophonePriorityItems { get; } = [];
+    /// <summary>
+    /// Gets whether microphone priority items exist.
+    /// </summary>
+    public bool HasMicrophonePriorityItems => MicrophonePriorityItems.Count > 0;
+    /// <summary>
     /// Gets the widget options.
     /// </summary>
     public ObservableCollection<OverlayWidgetOption> WidgetOptions { get; } = [];
 
     private MicrophoneItem? _selectedMicrophoneItem;
     private bool _isSyncingMicrophoneSelection;
+    private bool _isApplyingMicrophoneItemSelection;
+    private IReadOnlyList<MicrophonePriorityItem> _microphonePriorityList = [];
 
     /// <summary>
     /// Gets the selected microphone item.
@@ -202,10 +212,31 @@ public partial class SettingsViewModel : ObservableObject
             if (!SetProperty(ref _selectedMicrophoneItem, value))
                 return;
 
+            NotifyMicrophonePriorityCommandStates();
+
             if (_isSyncingMicrophoneSelection || _isLoading)
                 return;
 
-            SelectedMicrophoneDevice = value?.DeviceNumber;
+            if (_microphonePriorityList.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(value?.Id))
+                    SyncSelectedMicrophoneItem();
+                return;
+            }
+
+            var priorityChanged = UpdateMicrophonePriorityFromSelectedItem(value);
+            var previousDevice = SelectedMicrophoneDevice;
+            _isApplyingMicrophoneItemSelection = true;
+            try
+            {
+                SelectedMicrophoneDevice = value?.DeviceNumber;
+            }
+            finally
+            {
+                _isApplyingMicrophoneItemSelection = false;
+            }
+            if (priorityChanged && previousDevice == SelectedMicrophoneDevice)
+                Save();
         }
     }
 
@@ -233,9 +264,12 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnSelectedMicrophoneDeviceChanged(int? value)
     {
         if (_isLoading) return;
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
         _audio.SetMicrophoneDevice(value);
         StopMicrophonePreview();
-        SyncSelectedMicrophoneItem();
+        if (!_isApplyingMicrophoneItemSelection)
+            SyncSelectedMicrophoneItem();
+        NotifyMicrophonePriorityCommandStates();
     }
 
     partial void OnSelectedSpokenFeedbackProviderIdChanged(string value)
@@ -350,19 +384,92 @@ public partial class SettingsViewModel : ObservableObject
         var selectedDevice = SelectedMicrophoneDevice;
         Microphones.Clear();
         Microphones.Add(new MicrophoneItem(null, Loc.Instance["Microphone.Default"]));
-        var availableDevices = _audio.GetAvailableInputDevices();
-        foreach (var (number, name) in availableDevices)
+        var availableDevices = _audio.GetAvailableInputDeviceInfos();
+        foreach (var device in availableDevices)
         {
-            Microphones.Add(new MicrophoneItem(number, name));
+            Microphones.Add(new MicrophoneItem(device.DeviceNumber, device.Name, device.Id));
         }
 
-        if (selectedDevice is int selectedDeviceNumber
+        MigrateLegacyMicrophoneSelection(availableDevices);
+        selectedDevice = SelectedMicrophoneDevice;
+
+        var hasAvailablePriorityItem = _microphonePriorityList.Any(priorityItem =>
+            availableDevices.Any(device => MicrophoneMatches(device, priorityItem)));
+        var selectedPriorityItem = _microphonePriorityList.FirstOrDefault();
+        if (_microphonePriorityList.Count > 0 && !hasAvailablePriorityItem && selectedPriorityItem is not null)
+        {
+            Microphones.Add(new MicrophoneItem(
+                selectedDevice,
+                Loc.Instance["Microphone.Disconnected"],
+                selectedPriorityItem.Id));
+        }
+
+        if (_microphonePriorityList.Count == 0
+            && selectedDevice is int selectedDeviceNumber
             && availableDevices.All(device => device.DeviceNumber != selectedDeviceNumber))
         {
             Microphones.Add(new MicrophoneItem(selectedDeviceNumber, Loc.Instance["Microphone.Disconnected"]));
         }
 
         SyncSelectedMicrophoneItem();
+        NotifyMicrophonePriorityCommandStates();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanAddMicrophonePriorityItem))]
+    private void AddMicrophonePriorityItem()
+    {
+        var item = SelectedMicrophoneItem;
+        if (string.IsNullOrWhiteSpace(item?.Id))
+            return;
+
+        if (_microphonePriorityList.Any(existing =>
+                string.Equals(existing.Id, item.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var updated = _microphonePriorityList
+            .Append(new MicrophonePriorityItem(item.Id, item.Name))
+            .ToList();
+
+        if (SetMicrophonePriorityList(updated))
+            Save();
+    }
+
+    private bool CanAddMicrophonePriorityItem() =>
+        !string.IsNullOrWhiteSpace(SelectedMicrophoneItem?.Id);
+
+    [RelayCommand]
+    private void ReorderMicrophonePriorityItem(MicrophonePriorityReorderRequest? request)
+    {
+        if (request is null)
+            return;
+
+        var sourceIndex = IndexOfMicrophonePriorityItem(request.Source);
+        var targetIndex = IndexOfMicrophonePriorityItem(request.Target);
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+            return;
+
+        var updated = _microphonePriorityList.ToList();
+        var moved = updated[sourceIndex];
+        updated.RemoveAt(sourceIndex);
+        updated.Insert(targetIndex > updated.Count ? updated.Count : targetIndex, moved);
+
+        if (SetMicrophonePriorityList(updated))
+            Save();
+    }
+
+    [RelayCommand]
+    private void RemoveMicrophonePriorityItem(MicrophonePriorityListItem? item)
+    {
+        var index = IndexOfMicrophonePriorityItem(item);
+        if (index < 0)
+            return;
+
+        var updated = _microphonePriorityList.ToList();
+        updated.RemoveAt(index);
+        if (SetMicrophonePriorityList(updated))
+            Save();
     }
 
     [RelayCommand]
@@ -484,6 +591,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         _audio.PreviewLevelChanged -= OnPreviewLevelChanged;
         if (!_audio.HasDevice) return;
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         _audio.StartPreview(SelectedMicrophoneDevice);
         _audio.PreviewLevelChanged += OnPreviewLevelChanged;
@@ -571,6 +679,7 @@ public partial class SettingsViewModel : ObservableObject
             HistoryRetentionMinutes = SelectedHistoryRetentionOption?.Minutes ?? AppSettings.Default.HistoryRetentionMinutes,
             TranscriptionTask = TranscriptionTask,
             SelectedMicrophoneDevice = SelectedMicrophoneDevice,
+            MicrophonePriorityList = _microphonePriorityList,
             TranslationTargetLanguage = NormalizeTranslationTarget(TranslationTargetLanguage),
             LastTranslationTargetLanguage = ResolveLastTranslationTarget(),
             ApiServerEnabled = ApiServerEnabled,
@@ -674,7 +783,11 @@ public partial class SettingsViewModel : ObservableObject
             s.PreviewBubbleAutoHideMilliseconds) / 1000d;
         SelectedHistoryRetentionOption = MatchHistoryRetentionOption(s.HistoryRetentionMode, s.HistoryRetentionMinutes);
         TranscriptionTask = s.TranscriptionTask;
+        _microphonePriorityList = s.NormalizeMicrophonePriorityList().MicrophonePriorityList;
+        SyncMicrophonePriorityItems();
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
         SelectedMicrophoneDevice = s.SelectedMicrophoneDevice;
+        _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         TranslationTargetLanguage = s.TranslationTargetLanguage;
         QuickTranslationModeEnabled = !string.IsNullOrWhiteSpace(s.TranslationTargetLanguage);
         ApiServerEnabled = s.ApiServerEnabled;
@@ -801,7 +914,8 @@ public partial class SettingsViewModel : ObservableObject
             or nameof(NewCopyLastTranscriptionHotkey)
             or nameof(NewWorkflowPaletteHotkey)
             or nameof(NewRecorderToggleHotkey)
-            or nameof(ShortcutsError);
+            or nameof(ShortcutsError)
+            or nameof(HasMicrophonePriorityItems);
 
     private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string?> values) =>
         values.Select(HotkeyParser.Normalize)
@@ -982,6 +1096,7 @@ public partial class SettingsViewModel : ObservableObject
         var wasPreviewing = _audio.IsPreviewing;
         StopMicrophonePreview();
         RefreshMicrophones();
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         if (wasPreviewing)
             StartMicrophonePreview();
@@ -989,7 +1104,12 @@ public partial class SettingsViewModel : ObservableObject
 
     private void SyncSelectedMicrophoneItem()
     {
-        var selectedItem = Microphones.FirstOrDefault(m => m.DeviceNumber == SelectedMicrophoneDevice)
+        var selectedItem = _microphonePriorityList
+            .Select(priorityItem => Microphones.FirstOrDefault(m =>
+                string.Equals(m.Id, priorityItem.Id, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(item => item is not null);
+
+        selectedItem ??= Microphones.FirstOrDefault(m => m.DeviceNumber == SelectedMicrophoneDevice)
             ?? Microphones.FirstOrDefault(m => m.DeviceNumber is null);
 
         _isSyncingMicrophoneSelection = true;
@@ -1002,6 +1122,108 @@ public partial class SettingsViewModel : ObservableObject
             _isSyncingMicrophoneSelection = false;
         }
     }
+
+    private bool UpdateMicrophonePriorityFromSelectedItem(MicrophoneItem? item)
+    {
+        if (string.IsNullOrWhiteSpace(item?.Id))
+            return SetMicrophonePriorityList([]);
+
+        if (_microphonePriorityList.Count > 0)
+            return false;
+
+        return SetMicrophonePriorityList([new MicrophonePriorityItem(item.Id, item.Name)]);
+    }
+
+    private void MigrateLegacyMicrophoneSelection(IReadOnlyList<AudioInputDeviceInfo> availableDevices)
+    {
+        if (_microphonePriorityList.Count > 0 || SelectedMicrophoneDevice is not int selectedDevice)
+            return;
+
+        var device = availableDevices.FirstOrDefault(device => device.DeviceNumber == selectedDevice);
+        if (device is null)
+            return;
+
+        _microphonePriorityList = NormalizeMicrophonePriorityList(
+            [new MicrophonePriorityItem(device.Id, device.Name)]);
+        SyncMicrophonePriorityItems();
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
+        _settings.Save(_settings.Current with { MicrophonePriorityList = _microphonePriorityList });
+    }
+
+    private bool SetMicrophonePriorityList(IReadOnlyList<MicrophonePriorityItem> priorityList)
+    {
+        var normalized = NormalizeMicrophonePriorityList(priorityList);
+        if (MicrophonePriorityListsEqual(_microphonePriorityList, normalized))
+            return false;
+
+        _microphonePriorityList = normalized;
+        SyncMicrophonePriorityItems();
+        _audio.SetMicrophonePriorityList(_microphonePriorityList);
+        SyncSelectedMicrophoneItem();
+        NotifyMicrophonePriorityCommandStates();
+        return true;
+    }
+
+    private void SyncMicrophonePriorityItems()
+    {
+        MicrophonePriorityItems.Clear();
+        foreach (var item in _microphonePriorityList)
+            MicrophonePriorityItems.Add(new MicrophonePriorityListItem(item.Id, item.Name));
+
+        OnPropertyChanged(nameof(HasMicrophonePriorityItems));
+    }
+
+    private int IndexOfMicrophonePriorityItem(MicrophonePriorityListItem? item)
+    {
+        if (item is null)
+            return -1;
+
+        for (var i = 0; i < _microphonePriorityList.Count; i++)
+        {
+            if (string.Equals(_microphonePriorityList[i].Id, item.Id, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void NotifyMicrophonePriorityCommandStates()
+    {
+        AddMicrophonePriorityItemCommand.NotifyCanExecuteChanged();
+        RemoveMicrophonePriorityItemCommand.NotifyCanExecuteChanged();
+    }
+
+    private static IReadOnlyList<MicrophonePriorityItem> NormalizeMicrophonePriorityList(
+        IReadOnlyList<MicrophonePriorityItem> priorityList)
+    {
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<MicrophonePriorityItem>();
+        foreach (var item in priorityList)
+        {
+            var id = item.Id.Trim();
+            if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id))
+                continue;
+
+            var name = item.Name.Trim();
+            normalized.Add(new MicrophonePriorityItem(
+                id,
+                string.IsNullOrWhiteSpace(name) ? id : name));
+        }
+
+        return normalized;
+    }
+
+    private static bool MicrophonePriorityListsEqual(
+        IReadOnlyList<MicrophonePriorityItem> left,
+        IReadOnlyList<MicrophonePriorityItem> right) =>
+        left.Count == right.Count
+        && left.Zip(right).All(pair =>
+            string.Equals(pair.First.Id, pair.Second.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(pair.First.Name, pair.Second.Name, StringComparison.Ordinal));
+
+    private static bool MicrophoneMatches(AudioInputDeviceInfo device, MicrophonePriorityItem priorityItem) =>
+        string.Equals(device.Id, priorityItem.Id, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(device.Name, priorityItem.Name, StringComparison.OrdinalIgnoreCase);
 
     private void RefreshSpokenFeedbackProviders()
     {
@@ -1055,7 +1277,22 @@ public partial class SettingsViewModel : ObservableObject
 /// </summary>
 /// <param name="DeviceNumber">Device number supplied to the member.</param>
 /// <param name="Name">Name supplied to the member.</param>
-public sealed record MicrophoneItem(int? DeviceNumber, string Name);
+/// <param name="Id">Stable device id supplied to the member.</param>
+public sealed record MicrophoneItem(int? DeviceNumber, string Name, string? Id = null);
+/// <summary>
+/// Represents one microphone priority row.
+/// </summary>
+/// <param name="Id">Stable device id supplied to the member.</param>
+/// <param name="Name">Display name supplied to the member.</param>
+public sealed record MicrophonePriorityListItem(string Id, string Name);
+/// <summary>
+/// Represents a microphone priority drag reorder request.
+/// </summary>
+/// <param name="Source">Dragged priority item.</param>
+/// <param name="Target">Priority item receiving the drop.</param>
+public sealed record MicrophonePriorityReorderRequest(
+    MicrophonePriorityListItem Source,
+    MicrophonePriorityListItem Target);
 /// <summary>
 /// Represents overlay widget option data.
 /// </summary>

@@ -147,6 +147,10 @@ public record AppSettings
     /// Gets or sets the selected microphone device value.
     /// </summary>
     public int? SelectedMicrophoneDevice { get; init; }
+    /// <summary>
+    /// Gets or sets preferred microphone devices in fallback order.
+    /// </summary>
+    public IReadOnlyList<MicrophonePriorityItem> MicrophonePriorityList { get; init; } = [];
 
     // Model
     /// <summary>
@@ -576,6 +580,27 @@ public record AppSettings
         };
     }
 
+    /// <summary>
+    /// Returns settings with microphone priority entries normalized and de-duplicated.
+    /// </summary>
+    public AppSettings NormalizeMicrophonePriorityList()
+    {
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var items = new List<MicrophonePriorityItem>();
+
+        foreach (var item in MicrophonePriorityList ?? [])
+        {
+            var id = item.Id.Trim();
+            if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id))
+                continue;
+
+            var name = item.Name.Trim();
+            items.Add(new MicrophonePriorityItem(id, string.IsNullOrWhiteSpace(name) ? id : name));
+        }
+
+        return this with { MicrophonePriorityList = items };
+    }
+
     private IEnumerable<string?> ResolveLegacyMainHotkeys()
     {
         var pushToTalkHotkey = HotkeyText(PushToTalkHotkey);
@@ -659,6 +684,13 @@ public record AppSettings
         return value.Trim();
     }
 }
+
+/// <summary>
+/// Represents a preferred microphone device.
+/// </summary>
+/// <param name="Id">Stable device id supplied to the member.</param>
+/// <param name="Name">Friendly device name supplied to the member.</param>
+public sealed record MicrophonePriorityItem(string Id, string Name);
 
 /// <summary>
 /// Lists the supported recording mode values.

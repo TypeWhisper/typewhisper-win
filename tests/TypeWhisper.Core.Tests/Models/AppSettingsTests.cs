@@ -65,6 +65,36 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultMicrophonePriorityList_IsEmpty()
+    {
+        Assert.Empty(AppSettings.Default.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void NormalizeMicrophonePriorityList_TrimsNamesAndDeduplicatesIds()
+    {
+        var settings = AppSettings.Default with
+        {
+            MicrophonePriorityList =
+            [
+                new MicrophonePriorityItem(" usb-mic ", " USB Microphone "),
+                new MicrophonePriorityItem("usb-mic", "Duplicate"),
+                new MicrophonePriorityItem("", "Missing ID"),
+                new MicrophonePriorityItem("desk-mic", "")
+            ]
+        };
+
+        var normalized = settings.NormalizeMicrophonePriorityList();
+
+        Assert.Equal(
+            [
+                new MicrophonePriorityItem("usb-mic", "USB Microphone"),
+                new MicrophonePriorityItem("desk-mic", "desk-mic")
+            ],
+            normalized.MicrophonePriorityList);
+    }
+
+    [Fact]
     public void GetMainDictationHotkeys_PrefersConfiguredListOverLegacyStrings()
     {
         var settings = AppSettings.Default with
