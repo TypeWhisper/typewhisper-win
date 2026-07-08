@@ -1,5 +1,5 @@
-using System.IO;
 using System.Diagnostics;
+using System.IO;
 using TypeWhisper.Windows.Services;
 using Velopack;
 using TypeWhisper.Core;
@@ -35,6 +35,10 @@ public static class Program
     public static void Main(string[] args)
     {
         VelopackApp.Build()
+            .OnBeforeUninstallFastCallback((v) =>
+            {
+                UninstallUserDataProtector.ProtectLegacyAudioDirectory();
+            })
             .OnAfterUpdateFastCallback((v) =>
             {
                 if (StartupService.IsEnabled)
@@ -59,6 +63,8 @@ public static class Program
 
         try
         {
+            UserAudioMigrationService.MigrateLegacyAudioIfNeeded();
+
             var app = new App();
             app.InitializeComponent();
             app.Run();
