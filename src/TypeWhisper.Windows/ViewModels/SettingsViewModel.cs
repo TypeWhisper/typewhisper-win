@@ -1147,7 +1147,15 @@ public partial class SettingsViewModel : ObservableObject
             [new MicrophonePriorityItem(device.Id, device.Name)]);
         SyncMicrophonePriorityItems();
         _audio.SetMicrophonePriorityList(_microphonePriorityList);
-        _settings.Save(_settings.Current with { MicrophonePriorityList = _microphonePriorityList });
+        _isSavingSettings = true;
+        try
+        {
+            _settings.Save(_settings.Current with { MicrophonePriorityList = _microphonePriorityList });
+        }
+        finally
+        {
+            _isSavingSettings = false;
+        }
     }
 
     private bool SetMicrophonePriorityList(IReadOnlyList<MicrophonePriorityItem> priorityList)

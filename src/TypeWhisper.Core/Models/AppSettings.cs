@@ -590,11 +590,14 @@ public record AppSettings
 
         foreach (var item in MicrophonePriorityList ?? [])
         {
-            var id = item.Id.Trim();
+            if (item is null)
+                continue;
+
+            var id = (item.Id ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id))
                 continue;
 
-            var name = item.Name.Trim();
+            var name = (item.Name ?? string.Empty).Trim();
             items.Add(new MicrophonePriorityItem(id, string.IsNullOrWhiteSpace(name) ? id : name));
         }
 

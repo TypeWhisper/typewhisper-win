@@ -222,7 +222,7 @@
                                                Command="{Binding Settings.AddMicrophonePriorityItemCommand}"
                                                Icon="{ui:SymbolIcon Add24}"
                                                Appearance="Secondary"
-                                               AutomationProperties.Name="Add microphone"/>
+                                               AutomationProperties.Name="{loc:Str Microphone.AddPriorityItem}"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -256,10 +256,10 @@
                                                         Height="28"
                                                         Margin="0,0,8,0"
                                                         Cursor="SizeAll"
-                                                        Background="Transparent"
-                                                        PreviewMouseLeftButtonDown="OnMicrophonePriorityDragHandleMouseDown"
-                                                        PreviewMouseMove="OnMicrophonePriorityDragHandleMouseMove"
-                                                        AutomationProperties.Name="Drag microphone">
+                                                         Background="Transparent"
+                                                         PreviewMouseLeftButtonDown="OnMicrophonePriorityDragHandleMouseDown"
+                                                         PreviewMouseMove="OnMicrophonePriorityDragHandleMouseMove"
+                                                         AutomationProperties.Name="{loc:Str Microphone.DragPriorityItem}">
                                                     <TextBlock Text="&#x22EE;&#x22EE;"
                                                                FontSize="15"
                                                                Foreground="{StaticResource HintBrush}"
@@ -276,10 +276,10 @@
                                                            Width="30"
                                                            Height="30"
                                                            Command="{Binding DataContext.Settings.RemoveMicrophonePriorityItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                           CommandParameter="{Binding}"
-                                                           Appearance="Secondary"
-                                                           Padding="0"
-                                                           AutomationProperties.Name="Remove microphone">
+                                                            CommandParameter="{Binding}"
+                                                            Appearance="Secondary"
+                                                            Padding="0"
+                                                            AutomationProperties.Name="{loc:Str Microphone.RemovePriorityItem}">
                                                     <TextBlock Text="&#x00D7;"
                                                                FontSize="16"
                                                                FontWeight="SemiBold"

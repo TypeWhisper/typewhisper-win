@@ -864,6 +864,9 @@
 
   "Microphone.Default": "Standard",
   "Microphone.Disconnected": "Ausgewähltes Mikrofon getrennt",
+  "Microphone.AddPriorityItem": "Mikrofon zur Prioritätsliste hinzufügen",
+  "Microphone.DragPriorityItem": "Mikrofon in Prioritätsliste verschieben",
+  "Microphone.RemovePriorityItem": "Mikrofon aus Prioritätsliste entfernen",
 
   "App.ErrorTitle": "TypeWhisper - Fehler",
   "App.ErrorFormat": "Ein Fehler ist aufgetreten:\n{0}",

@@ -486,7 +486,13 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         Assert.Contains("OnMicrophonePriorityItemDrop", microphoneBlock);
         Assert.Contains("ReorderMicrophonePriorityItemCommand", microphoneBlock);
         Assert.Contains("RemoveMicrophonePriorityItemCommand", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.AddPriorityItem}\"", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.DragPriorityItem}\"", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.RemovePriorityItem}\"", microphoneBlock);
         Assert.Contains("&#x00D7;", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Add microphone\"", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Drag microphone\"", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Remove microphone\"", microphoneBlock);
         Assert.DoesNotContain("MoveMicrophonePriorityItemUpCommand", microphoneBlock);
         Assert.DoesNotContain("MoveMicrophonePriorityItemDownCommand", microphoneBlock);
         Assert.DoesNotContain("ArrowUp24", microphoneBlock);
@@ -745,6 +751,37 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
     }
 
     [Fact]
+    public void RefreshMicrophones_MigratesLegacyMicrophoneWithoutReentrantSettingsLoad()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider();
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 1 });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var settingsReloadCount = 0;
+        var sut = CreateSettingsViewModel(settings, audio, speech, action =>
+        {
+            settingsReloadCount++;
+            action();
+        });
+
+        devices.SetDevices(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+
+        sut.RefreshMicrophonesCommand.Execute(null);
+
+        Assert.Equal(1, settings.SaveCount);
+        Assert.Equal(0, settingsReloadCount);
+        Assert.Equal("usb", sut.SelectedMicrophoneItem?.Id);
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
     public void SettingsRoutePreview_StartsForDictationAndStopsWhenLeaving()
     {
         Loc.Instance.Initialize();
@@ -804,11 +841,12 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
     private static SettingsViewModel CreateSettingsViewModel(
         FakeSettingsService settings,
         AudioRecordingService audio,
-        SpeechFeedbackService speech)
+        SpeechFeedbackService speech,
+        Action<Action>? dispatchToUi = null)
     {
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
-        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: action => action());
+        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: dispatchToUi ?? (action => action()));
     }
 
     private static void RunOnStaThread(Action action)
