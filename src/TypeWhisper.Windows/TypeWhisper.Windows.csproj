@@ -15,6 +15,10 @@
     <ApplicationIcon>Resources\Icons\app.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TypeWhisperStoreBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_STORE</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\TypeWhisper.Core\TypeWhisper.Core.csproj" />
     <ProjectReference Include="..\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />

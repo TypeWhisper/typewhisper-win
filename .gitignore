@@ -17,6 +17,7 @@ releases/
 !docs/releases/
 !docs/releases/*.md
 publish/
+artifacts/
 .agents/
 .claude/
 .venv
