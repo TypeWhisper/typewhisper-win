@@ -22,6 +22,9 @@ public sealed class PluginPackagingWorkflowTests
         Assert.DoesNotContain("Build bundled plugins", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-ChildItem plugins", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet build $project.FullName", workflow, StringComparison.Ordinal);
+        Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
+        Assert.Contains("\"-p:Version=$env:VERSION\"", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:Version=${{ env.VERSION }}", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -35,5 +38,6 @@ public sealed class PluginPackagingWorkflowTests
         Assert.Contains("$layoutPluginsPath", script, StringComparison.Ordinal);
         Assert.Contains("Remove-Item -LiteralPath $layoutPluginsPath", script, StringComparison.Ordinal);
         Assert.Contains("TypeWhisper-$RuntimeIdentifier-*.msix", script, StringComparison.Ordinal);
+        Assert.Contains("must be in the range 0-65535", script, StringComparison.Ordinal);
     }
 }

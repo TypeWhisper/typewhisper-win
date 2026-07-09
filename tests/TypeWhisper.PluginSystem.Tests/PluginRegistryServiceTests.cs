@@ -578,7 +578,7 @@ public class PluginRegistryServiceTests : IDisposable
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallPluginAsync(registryPlugin));
 
         Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(Directory.Exists(Path.Combine(_pluginsRoot, registryPlugin.Id)));
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
     }
 
     [Fact]
@@ -602,7 +602,7 @@ public class PluginRegistryServiceTests : IDisposable
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallPluginAsync(registryPlugin));
 
         Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(Directory.Exists(Path.Combine(_pluginsRoot, registryPlugin.Id)));
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
     }
 
     [Fact]

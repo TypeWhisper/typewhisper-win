@@ -15,9 +15,7 @@ TypeWhisper's Microsoft Store package is an MSIX build that uses the product ide
 
 Run the packaging workflow manually from GitHub Actions:
 
-```powershell
-Store Package
-```
+Open `Actions` -> `Store Package` -> `Run workflow`, enter the package version, and download the generated MSIX artifacts after the workflow completes.
 
 The workflow builds and uploads the x64 and Arm64 MSIX artifacts only. Upload the artifacts manually in Partner Center for the current Store hotfix. Full Store submission automation can be added later with the Microsoft Store Developer CLI or Store submission API after Partner Center credentials are configured as GitHub secrets.
 

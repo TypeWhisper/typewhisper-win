@@ -24,7 +24,12 @@ function Convert-ToMsixVersion([string]$value) {
             throw "MSIX version '$value' must start with numeric version segments."
         }
 
-        [int]$_
+        $segment = [int]$_
+        if ($segment -lt 0 -or $segment -gt 65535) {
+            throw "MSIX version segment '$_' must be in the range 0-65535."
+        }
+
+        $segment
     }
 
     return ($numeric -join ".")

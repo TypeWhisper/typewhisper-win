@@ -19,6 +19,8 @@ jobs:
       VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -32,7 +34,8 @@ jobs:
         run: dotnet restore TypeWhisper.slnx
 
       - name: Build solution
-        run: dotnet build TypeWhisper.slnx -c Release -p:Version=${{ env.VERSION }} --no-restore
+        shell: pwsh
+        run: dotnet build TypeWhisper.slnx -c Release "-p:Version=$env:VERSION" --no-restore
 
       - name: Build MSIX package
         shell: pwsh
