@@ -186,7 +186,10 @@ public partial class App : Application
 
         // Warm up audio in the background so startup stays responsive.
         var audio = _serviceProvider.GetRequiredService<AudioRecordingService>();
-        _ = StartAudioWarmUpInBackground(audio, settings.Current.SelectedMicrophoneDevice);
+        _ = StartAudioWarmUpInBackground(
+            audio,
+            settings.Current.MicrophonePriorityList,
+            settings.Current.SelectedMicrophoneDevice);
 
         // Start and keep the API server aligned with settings.
         var apiServer = _serviceProvider.GetRequiredService<ApiServerController>();
@@ -284,11 +287,14 @@ public partial class App : Application
 
     internal static Task StartAudioWarmUpInBackground(
         AudioRecordingService audio,
+        IReadOnlyList<MicrophonePriorityItem> microphonePriorityList,
         int? selectedMicrophoneDevice) =>
         Task.Run(() =>
         {
             try
             {
+                audio.SetMicrophonePriorityList(microphonePriorityList);
+
                 if (selectedMicrophoneDevice.HasValue)
                     audio.SetMicrophoneDevice(selectedMicrophoneDevice);
 

@@ -180,7 +180,9 @@ public sealed class SettingsService : ISettingsService
                 settings.LocalModelStoragePath)
         };
 
-        return settings.NormalizeHotkeyLists();
+        return settings
+            .NormalizeHotkeyLists()
+            .NormalizeMicrophonePriorityList();
     }
 
     private static void LogWarning(string message)

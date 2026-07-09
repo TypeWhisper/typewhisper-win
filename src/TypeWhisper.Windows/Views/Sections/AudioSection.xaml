@@ -191,6 +191,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -201,17 +203,102 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Dictation.InputDevice}"
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ComboBox Grid.Column="1"
-                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
-                                          ItemsSource="{Binding Settings.Microphones}"
-                                          DisplayMemberPath="Name"
-                                          SelectedItem="{Binding Settings.SelectedMicrophoneItem, Mode=TwoWay}"/>
+                                <Grid Grid.Column="1"
+                                      Width="320"
+                                      HorizontalAlignment="Right">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="36"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0"
+                                              Style="{StaticResource SettingsCompactComboBoxStyle}"
+                                              ItemsSource="{Binding Settings.Microphones}"
+                                              DisplayMemberPath="Name"
+                                              SelectedItem="{Binding Settings.SelectedMicrophoneItem, Mode=TwoWay}"/>
+                                    <ui:Button Grid.Column="2"
+                                               Width="36"
+                                               Height="36"
+                                               Command="{Binding Settings.AddMicrophonePriorityItemCommand}"
+                                               Icon="{ui:SymbolIcon Add24}"
+                                               Appearance="Secondary"
+                                               AutomationProperties.Name="{loc:Str Microphone.AddPriorityItem}"/>
+                                </Grid>
                             </Grid>
                         </Border>
 
                         <Border Grid.Row="1" Background="#18FFFFFF"/>
 
-                        <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="2"
+                                Style="{StaticResource SettingsRowBorderStyle}"
+                                Visibility="{Binding Settings.HasMicrophonePriorityItems, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl ItemsSource="{Binding Settings.MicrophonePriorityItems}"
+                                          Tag="{Binding Settings.ReorderMicrophonePriorityItemCommand}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#101923"
+                                                BorderBrush="#18FFFFFF"
+                                                BorderThickness="1"
+                                                CornerRadius="7"
+                                                Padding="10,8"
+                                                Margin="0,0,0,6"
+                                                AllowDrop="True"
+                                                DragOver="OnMicrophonePriorityItemDragOver"
+                                                Drop="OnMicrophonePriorityItemDrop">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="28"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="36"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Width="24"
+                                                        Height="28"
+                                                        Margin="0,0,8,0"
+                                                        Cursor="SizeAll"
+                                                         Background="Transparent"
+                                                         PreviewMouseLeftButtonDown="OnMicrophonePriorityDragHandleMouseDown"
+                                                         PreviewMouseMove="OnMicrophonePriorityDragHandleMouseMove"
+                                                         AutomationProperties.Name="{loc:Str Microphone.DragPriorityItem}">
+                                                    <TextBlock Text="&#x22EE;&#x22EE;"
+                                                               FontSize="15"
+                                                               Foreground="{StaticResource HintBrush}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Name}"
+                                                           Style="{StaticResource SettingsCompactValueTextStyle}"
+                                                           HorizontalAlignment="Left"
+                                                           VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <ui:Button Grid.Column="2"
+                                                           Width="30"
+                                                           Height="30"
+                                                           Command="{Binding DataContext.Settings.RemoveMicrophonePriorityItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Appearance="Secondary"
+                                                            Padding="0"
+                                                            AutomationProperties.Name="{loc:Str Microphone.RemovePriorityItem}">
+                                                    <TextBlock Text="&#x00D7;"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ui:Button}}"/>
+                                                </ui:Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <Border Grid.Row="3"
+                                Background="#18FFFFFF"
+                                Visibility="{Binding Settings.HasMicrophonePriorityItems, Converter={StaticResource BoolToVis}}"/>
+
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
