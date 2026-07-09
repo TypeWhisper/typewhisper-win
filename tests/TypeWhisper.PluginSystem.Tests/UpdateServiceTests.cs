@@ -5,6 +5,26 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public class UpdateServiceTests
 {
+    [Fact]
+    public void StoreIdentity_UsesReservedPartnerCenterValues()
+    {
+        var identity = AppDistribution.StoreIdentity;
+
+        Assert.Equal("TypeWhisper.TypeWhisper", identity.PackageIdentityName);
+        Assert.Equal("CN=C90DFED3-0D3C-493E-8620-903C9B1A1D75", identity.PackagePublisher);
+        Assert.Equal("TypeWhisper", identity.PublisherDisplayName);
+        Assert.Equal("TypeWhisper.TypeWhisper_51tqb5623pxja", identity.PackageFamilyName);
+        Assert.Equal("9PF42ZCR0JR0", identity.StoreProductId);
+        Assert.Equal("ms-windows-store://pdp/?productid=9PF42ZCR0JR0", identity.StoreProtocolLink);
+    }
+
+    [Fact]
+    public void IsManagedByMicrosoftStore_OnlyTrueForStoreDistribution()
+    {
+        Assert.True(UpdateService.IsManagedByMicrosoftStore(AppDistributionKind.Store));
+        Assert.False(UpdateService.IsManagedByMicrosoftStore(AppDistributionKind.Direct));
+    }
+
     [Theory]
     [InlineData("0.7.1-daily.20260423", ReleaseChannel.Daily)]
     [InlineData("0.7.1-DAILY.20260423+build", ReleaseChannel.Daily)]

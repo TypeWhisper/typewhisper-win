@@ -19,6 +19,7 @@ public sealed class UpdateService
 
     private readonly TrayIconService _trayIcon;
     private readonly ISettingsService _settings;
+    private readonly AppDistributionKind _distributionKind;
     private UpdateManager? _updateManager;
     private UpdateInfo? _pendingUpdate;
 
@@ -68,10 +69,14 @@ public sealed class UpdateService
     /// <summary>
     /// Initializes a new instance of the UpdateService class.
     /// </summary>
-    public UpdateService(TrayIconService trayIcon, ISettingsService settings)
+    public UpdateService(
+        TrayIconService trayIcon,
+        ISettingsService settings,
+        AppDistributionKind? distributionKind = null)
     {
         _trayIcon = trayIcon;
         _settings = settings;
+        _distributionKind = distributionKind ?? AppDistribution.Current;
     }
 
     /// <summary>
@@ -79,6 +84,14 @@ public sealed class UpdateService
     /// </summary>
     public void Initialize(ReleaseChannel? channel = null)
     {
+        if (IsManagedByMicrosoftStore(_distributionKind))
+        {
+            Channel = ReleaseChannel.Stable;
+            _pendingUpdate = null;
+            _updateManager = null;
+            return;
+        }
+
         var resolvedChannel = channel ?? ResolveReleaseChannel(_settings.Current.UpdateChannel, CurrentVersion);
         Channel = resolvedChannel;
         _pendingUpdate = null;
@@ -171,6 +184,9 @@ public sealed class UpdateService
             _ => StableChannelSetting
         };
     }
+
+    internal static bool IsManagedByMicrosoftStore(AppDistributionKind distributionKind) =>
+        distributionKind == AppDistributionKind.Store;
 
     internal static ReleaseChannel InferReleaseChannel(string? version)
     {

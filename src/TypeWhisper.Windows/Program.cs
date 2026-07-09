@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.IO;
 using TypeWhisper.Windows.Services;
-using Velopack;
 using TypeWhisper.Core;
+#if !TYPEWHISPER_STORE
+using Velopack;
+#endif
 
 namespace TypeWhisper.Windows;
 
@@ -34,6 +36,7 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+#if !TYPEWHISPER_STORE
         VelopackApp.Build()
             .OnBeforeUninstallFastCallback((v) =>
             {
@@ -45,6 +48,7 @@ public static class Program
                     StartupService.Enable();
             })
             .Run();
+#endif
 
         StartMinimized = args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
         TypeWhisperEnvironment.EnsureDirectories();

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Moq;
 using Moq.Protected;
@@ -9,6 +10,7 @@ using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
@@ -557,6 +559,79 @@ public class PluginRegistryServiceTests : IDisposable
 
         Assert.True(File.Exists(Path.Combine(activeDir, "keep.txt")));
         Assert.Equal("1.0.0", ReadManifest(activeDir).Version);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_StoreDistributionRequiresPackageHash()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.store-no-hash", "1.0.2");
+        var package = CreatePluginPackage(registryPlugin.Id, "1.0.2");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            distributionKind: AppDistributionKind.Store);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_StoreDistributionRejectsPackageHashMismatch()
+    {
+        var manager = CreateManager();
+        var package = CreatePluginPackage("com.test.store-hash-mismatch", "1.0.2");
+        var wrongHash = Convert.ToHexString(SHA256.HashData([9, 8, 7, 6]));
+        var registryPlugin = CreateRegistryPlugin("com.test.store-hash-mismatch", "1.0.2") with
+        {
+            Sha256 = wrongHash
+        };
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            distributionKind: AppDistributionKind.Store);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task FirstRunAutoInstallAsync_StoreDistributionMarksCompletedWithoutFetchingRegistry()
+    {
+        AppSettings? savedSettings = null;
+        _settings.Setup(s => s.Save(It.IsAny<AppSettings>()))
+            .Callback<AppSettings>(s => savedSettings = s);
+        _settings.Setup(s => s.Current).Returns(new AppSettings { PluginFirstRunCompleted = false });
+        var handler = new Mock<HttpMessageHandler>();
+        var httpClient = TrackDisposable(new HttpClient(handler.Object));
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            _pluginsRoot,
+            distributionKind: AppDistributionKind.Store);
+
+        await service.FirstRunAutoInstallAsync();
+
+        Assert.NotNull(savedSettings);
+        Assert.True(savedSettings!.PluginFirstRunCompleted);
+        handler.Protected().Verify(
+            "SendAsync",
+            Times.Never(),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>());
     }
 
     [Fact]
