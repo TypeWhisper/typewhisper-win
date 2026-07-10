@@ -217,8 +217,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $downloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/$tag/$env:ZIP_NAME"
+          $downloadUrl = "https://typewhisper.github.io/typewhisper-win/plugins/$env:ZIP_NAME"
 
           git fetch origin gh-pages
           git worktree add -B gh-pages gh-pages-work origin/gh-pages

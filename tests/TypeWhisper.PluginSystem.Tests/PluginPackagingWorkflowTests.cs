@@ -48,6 +48,7 @@ public sealed class PluginPackagingWorkflowTests
 
         Assert.Contains("Get-FileHash -Algorithm SHA256", workflow, StringComparison.Ordinal);
         Assert.Contains("PLUGIN_SHA256=$zipSha256", workflow, StringComparison.Ordinal);
+        Assert.Contains("https://typewhisper.github.io/typewhisper-win/plugins/$env:ZIP_NAME", workflow, StringComparison.Ordinal);
         Assert.Contains("Set-RegistryProperty $registry[$j] 'sha256' $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
         Assert.Contains("sha256 = $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
     }
