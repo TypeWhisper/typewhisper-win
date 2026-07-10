@@ -18,7 +18,8 @@
       "transcription",
       "llm",
       "tts"
-    ]
+    ],
+    "sha256": "c2426ad0a4f1002d1e003b872cdc7b32145be433416513568b96fa1ba6368348"
   },
   {
     "id": "com.typewhisper.groq",
@@ -36,7 +37,8 @@
     "categories": [
       "transcription",
       "llm"
-    ]
+    ],
+    "sha256": "dc044c2670e4a973ac8ea2af1c2f0af83cc41c4871e8862e82b4674e90e4ef3e"
   },
   {
     "id": "com.typewhisper.webhook",
@@ -55,7 +57,8 @@
     },
     "categories": [
       "utility"
-    ]
+    ],
+    "sha256": "3d81ed16a41c8f94ec73f2c6d87e18f28e126c40b02b4a672475abf9ce6dc71a"
   },
   {
     "id": "com.typewhisper.sherpa-onnx",
@@ -72,7 +75,8 @@
     "descriptions": null,
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "2142551ea032321b091a61ce1f9a1e64aa15066818824258af3a5a577adf7ddd"
   },
   {
     "id": "com.typewhisper.openai-compatible",
@@ -92,7 +96,8 @@
     "categories": [
       "transcription",
       "llm"
-    ]
+    ],
+    "sha256": "caea04431a901f12defb01bf2e6bb27c089bcb39704d78e12642bd5aa043764a"
   },
   {
     "id": "com.typewhisper.gemini",
@@ -111,7 +116,8 @@
     },
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "20cbf83c8ad59884da75342962d24b43efc529403d294fd1b9de63e039b8612f"
   },
   {
     "id": "com.typewhisper.linear",
@@ -130,7 +136,8 @@
     },
     "categories": [
       "action"
-    ]
+    ],
+    "sha256": "b745964e6f81bc19d5f3f96cc46ad39ecaea8934289739275a3c9b5491cc37a0"
   },
   {
     "id": "com.typewhisper.obsidian",
@@ -149,7 +156,8 @@
     },
     "categories": [
       "action"
-    ]
+    ],
+    "sha256": "cad758ce67b1591da0e726e646ff135dca78975e12809f1247875a9e6606b9ec"
   },
   {
     "id": "com.typewhisper.script",
@@ -168,7 +176,8 @@
     },
     "categories": [
       "post-processing"
-    ]
+    ],
+    "sha256": "67a50678cf075647fd3e906507117396e870b09723acc86732ef05ddc92a6ecf"
   },
   {
     "id": "com.typewhisper.live-transcript",
@@ -185,7 +194,8 @@
     "descriptions": null,
     "categories": [
       "utility"
-    ]
+    ],
+    "sha256": "5ff63d00f7913d79cf60db5dfd0c4d6d7b76c77c9140fae846f343150bc1dc97"
   },
   {
     "id": "com.typewhisper.granite-speech",
@@ -202,7 +212,8 @@
     "descriptions": null,
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "3cc0391c8976ef7feef49718df9a06f87aa10fc7b74d33d38129fed9a0e0c6f5"
   },
   {
     "id": "com.typewhisper.gemma-local",
@@ -221,7 +232,8 @@
     },
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "a9170b43eca2fe642e2d6108f7d2228902901b9389fd088fdde904d7280da33b"
   },
   {
     "id": "com.typewhisper.claude",
@@ -235,7 +247,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-claude-v1.0.0/com.typewhisper.claude-1.0.0.zip",
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "077b0a209c46b860354b42bd2bbbb84fa3772123b5ad97a2ebe2ab0510abfa77"
   },
   {
     "id": "com.typewhisper.openrouter",
@@ -255,7 +268,8 @@
     "iconSystemName": "globe",
     "descriptions": {
       "de": "Zugriff auf LLMs und Speech-to-Text-Modelle von OpenAI, Anthropic, Meta, Google und mehr ueber OpenRouter. Zeigt Modellpreise und Kontoguthaben. Erfordert einen API-Key."
-    }
+    },
+    "sha256": "4e4bba8fbddbb4bd311f66dcd4427d2cb2a2e9c88eb7cd060f90845825b12116"
   },
   {
     "id": "com.typewhisper.cerebras",
@@ -269,7 +283,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cerebras-v1.0.0/com.typewhisper.cerebras-1.0.0.zip",
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "2503f99afce475efc9716c1b621b86fe5b95896191a3c9ec7a9e55bfedb9544a"
   },
   {
     "id": "com.typewhisper.cohere",
@@ -283,7 +298,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cohere-v1.0.0/com.typewhisper.cohere-1.0.0.zip",
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "098cbd9b9af3a3a31b7371260dbe830eb034d20b6bd7bdaa3352b8671766baab"
   },
   {
     "id": "com.typewhisper.fireworks",
@@ -297,7 +313,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-fireworks-v1.0.0/com.typewhisper.fireworks-1.0.0.zip",
     "categories": [
       "llm"
-    ]
+    ],
+    "sha256": "5724b24d1cb53be26323472de5ea7692ce896302d35f406d4b69f3ec4d35bdd4"
   },
   {
     "id": "com.typewhisper.gladia",
@@ -311,7 +328,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-gladia-v1.0.0/com.typewhisper.gladia-1.0.0.zip",
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "b6e7f785c6117b96b0d255237df5452a76f2e76635070722a49400bb183e4e7d"
   },
   {
     "id": "com.typewhisper.speechmatics",
@@ -325,7 +343,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-speechmatics-v1.0.0/com.typewhisper.speechmatics-1.0.0.zip",
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "0511c14f3aa77c76c413094641aa2b7f9ba9afa299e7146f952832618cf83187"
   },
   {
     "id": "com.typewhisper.soniox",
@@ -342,7 +361,8 @@
     ],
     "minHostVersion": null,
     "iconSystemName": null,
-    "descriptions": null
+    "descriptions": null,
+    "sha256": "1a84dcf6d8dae016a2139af2553b3300b2864c3df86695efa51fc0080931a167"
   },
   {
     "id": "com.typewhisper.cloudflare-asr",
@@ -356,7 +376,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-cloudflare-asr-v1.0.0/com.typewhisper.cloudflare-asr-1.0.0.zip",
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "4a22ad276ff4aa88ce2e65d0f291c90475ee012840444cc6b823e7cc97791275"
   },
   {
     "id": "com.typewhisper.google-cloud-stt",
@@ -370,7 +391,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-google-cloud-stt-v1.0.0/com.typewhisper.google-cloud-stt-1.0.0.zip",
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "727e7100ccc98c7424c547cb56b0fa4fdb92d863ed17594b02642eb65728a7c8"
   },
   {
     "id": "com.typewhisper.qwen3-stt",
@@ -389,7 +411,8 @@
     },
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "d27c78a4d3c6c921c53c52ae857f5daef63e9f546bd3b35ae24815932bff8b25"
   },
   {
     "id": "com.typewhisper.voxtral",
@@ -403,7 +426,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-voxtral-v1.0.0/com.typewhisper.voxtral-1.0.0.zip",
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "358872f06a4e5ce26a308ee9234f6630441663299cf40880e93b9254b4aabb81"
   },
   {
     "id": "com.typewhisper.file-memory",
@@ -417,7 +441,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-file-memory-v1.0.0/com.typewhisper.file-memory-1.0.0.zip",
     "categories": [
       "memory"
-    ]
+    ],
+    "sha256": "1d99ca681854f0cb3115888bf393da5a9d62f2cbbdb3b26b3dcfdd8df3fd09ff"
   },
   {
     "id": "com.typewhisper.openai-vector-memory",
@@ -431,7 +456,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-openai-vector-memory-v1.0.0/com.typewhisper.openai-vector-memory-1.0.0.zip",
     "categories": [
       "memory"
-    ]
+    ],
+    "sha256": "55d6d199227189413a3255f3d076559a5b17fb242b5f8649ffe13d2f7a59ca2b"
   },
   {
     "id": "com.typewhisper.whisper-cpp",
@@ -448,7 +474,8 @@
     "descriptions": null,
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "26a844d32adfd5d0de9c21a5a0fd1c9d015d75000fc023046659e9460b66b089"
   },
   {
     "id": "com.typewhisper.elevenlabs",
@@ -467,7 +494,8 @@
     },
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "35745870e563a540e9674501c3af7e4e19f5a58c6b40af36f1363b8008d525af"
   },
   {
     "id": "com.typewhisper.assemblyai",
@@ -484,7 +512,8 @@
     "descriptions": null,
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "a623c9630badd5e8a1c85602fa1219c5144027ca26116b63562ee9085088837c"
   },
   {
     "id": "com.typewhisper.deepgram",
@@ -501,7 +530,8 @@
     "descriptions": null,
     "categories": [
       "transcription"
-    ]
+    ],
+    "sha256": "bb0fd5be7ac234cf5a424e3a578c2ad1ac6e9fefd1408a2f0cc5bc4394770272"
   },
   {
     "id": "com.typewhisper.supertonic-tts",
@@ -520,7 +550,8 @@
     },
     "categories": [
       "tts"
-    ]
+    ],
+    "sha256": "1f49f406db4e605a66a8d5f432ff4f2adfc2ef06aea399297552cdc5d211ba7c"
   },
   {
     "id": "com.typewhisper.xai",
@@ -541,7 +572,8 @@
     "requiresApiKey": true,
     "descriptions": {
       "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech ueber xAI-Grok-APIs. Erfordert einen xAI API-Key."
-    }
+    },
+    "sha256": "dd31449d57ec4a0992dcca206c55476413c87a37bdeea4afae123d5cab1ed487"
   },
   {
     "id": "com.typewhisper.smallest-ai",
@@ -558,7 +590,8 @@
     "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugin-smallest-ai-v1.0.0/com.typewhisper.smallest-ai-1.0.0.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
-    "descriptions": null
+    "descriptions": null,
+    "sha256": "d8e5e9251cd80f87760960d75c20ee1b9972128960e86830f513970692267a05"
   },
   {
     "id": "com.typewhisper.reson8",
@@ -577,6 +610,7 @@
     "requiresApiKey": true,
     "descriptions": {
       "de": "Cloud-Transkription ueber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
-    }
+    },
+    "sha256": "4a4cc52cccb8ad7ca11ffa4ef6bbdc9eeb33a2e0c5bbe01bb6b845c252eb7550"
   }
 ]
