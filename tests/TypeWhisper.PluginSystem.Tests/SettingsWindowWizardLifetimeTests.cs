@@ -31,6 +31,7 @@ public sealed class SettingsWindowWizardLifetimeTests
         Assert.Contains("if (_setupWizard is { IsLoaded: true })", source);
         Assert.Contains("_setupWizard.Activate();", source);
         Assert.Contains("wizard.Closed += OnSetupWizardClosed;", source);
+        Assert.Contains("wizard.Closed -= OnSetupWizardClosed;", source);
         Assert.Contains("_viewModel.SetupWizardRequested -= OnSetupWizardRequested;", source);
 
         var ownerIndex = source.IndexOf("wizard.Owner = this;", StringComparison.Ordinal);

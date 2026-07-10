@@ -63,6 +63,9 @@ public partial class SettingsWindow : FluentWindow
 
     private void OnSetupWizardClosed(object? sender, EventArgs e)
     {
+        if (sender is WelcomeWindow wizard)
+            wizard.Closed -= OnSetupWizardClosed;
+
         if (ReferenceEquals(sender, _setupWizard))
             _setupWizard = null;
     }
