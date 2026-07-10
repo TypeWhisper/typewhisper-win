@@ -213,6 +213,31 @@ public partial class WelcomeViewModel : ObservableObject
     /// </summary>
     public bool IsLocalRecommendationInstalled => LocalEngine is not null;
     /// <summary>
+    /// Gets whether an update is available for the recommended local plugin.
+    /// </summary>
+    public bool IsLocalRecommendationUpdateAvailable =>
+        RecommendedLocalPlugin?.InstallState == PluginInstallState.UpdateAvailable;
+    /// <summary>
+    /// Gets whether the recommended local plugin update is waiting for restart.
+    /// </summary>
+    public bool IsLocalRecommendationPendingRestart =>
+        RecommendedLocalPlugin?.InstallState == PluginInstallState.PendingRestart;
+    /// <summary>
+    /// Gets whether the recommended local plugin can be installed.
+    /// </summary>
+    public bool CanInstallLocalRecommendation =>
+        RecommendedLocalPlugin is not null
+        && !IsLocalRecommendationInstalled
+        && !IsLocalRecommendationUpdateAvailable
+        && !IsLocalRecommendationPendingRestart;
+    /// <summary>
+    /// Gets whether the recommended local plugin can be selected.
+    /// </summary>
+    public bool CanUseLocalRecommendation =>
+        IsLocalRecommendationInstalled
+        && !IsLocalRecommendationUpdateAvailable
+        && !IsLocalRecommendationPendingRestart;
+    /// <summary>
     /// Gets whether is cloud recommendation installed.
     /// </summary>
     public bool IsCloudRecommendationInstalled => CloudEngine is not null;
@@ -450,7 +475,11 @@ public partial class WelcomeViewModel : ObservableObject
         if (plugin is null)
             return;
 
-        await plugin.InstallCommand.ExecuteAsync(null);
+        if (plugin.InstallState == PluginInstallState.UpdateAvailable)
+            await plugin.UpdateCommand.ExecuteAsync(null);
+        else
+            await plugin.InstallCommand.ExecuteAsync(null);
+
         plugin.RefreshInstallState();
         NotifyRecommendationProperties();
         RefreshModels();
@@ -758,6 +787,10 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(RecommendedLocalPlugin));
         OnPropertyChanged(nameof(RecommendedCloudPlugin));
         OnPropertyChanged(nameof(IsLocalRecommendationInstalled));
+        OnPropertyChanged(nameof(IsLocalRecommendationUpdateAvailable));
+        OnPropertyChanged(nameof(IsLocalRecommendationPendingRestart));
+        OnPropertyChanged(nameof(CanInstallLocalRecommendation));
+        OnPropertyChanged(nameof(CanUseLocalRecommendation));
         OnPropertyChanged(nameof(IsCloudRecommendationInstalled));
         OnPropertyChanged(nameof(IsCloudRecommendationConfigured));
         OnPropertyChanged(nameof(IsLocalRecommendationSelected));

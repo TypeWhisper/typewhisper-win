@@ -285,6 +285,17 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public void GetInstallState_UpdateAvailable_WhenOnlyDiskManifestIsOlderThanRegistry()
+    {
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+        var registryPlugin = CreateRegistryPlugin("com.test.disk-update", "1.0.3");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, "1.0.2");
+
+        Assert.Equal(PluginInstallState.UpdateAvailable, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
     public void GetInstallState_PendingRestart_WhenPendingUpdateMatchesRegistryVersion()
     {
         var manager = CreateManager();
