@@ -5,14 +5,12 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DependencyInjection;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
-using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -22,6 +20,11 @@ namespace TypeWhisper.Windows.ViewModels;
 public sealed partial class SettingsWindowViewModel : ObservableObject
 {
     private static SettingsRoute _lastOpenedRoute = SettingsRoute.Dashboard;
+
+    /// <summary>
+    /// Raised when the settings shell should open the setup wizard.
+    /// </summary>
+    public event EventHandler? SetupWizardRequested;
 
     /// <summary>
     /// Gets the settings.
@@ -431,8 +434,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenSetupWizard()
     {
-        var window = App.Services.GetRequiredService<WelcomeWindow>();
-        window.Show();
+        SetupWizardRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand(CanExecute = nameof(CanClearAndSeedDevelopmentData))]
