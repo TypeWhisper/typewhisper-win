@@ -43,4 +43,19 @@ public sealed class WelcomeWindowLayoutTests
         Assert.Contains("ConverterParameter=PendingRestart", xaml);
         Assert.Contains("Welcome.RestartRequired", xaml);
     }
+
+    [Fact]
+    public void WelcomeWindow_ShowsUpdateActionsForRecommendedAndMarketplacePlugins()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "WelcomeWindow.xaml");
+
+        Assert.Contains("IsLocalRecommendationUpdateAvailable", xaml);
+        Assert.Contains("InstallRecommendedLocalCommand", xaml);
+        Assert.Contains("Command=\"{Binding UpdateCommand}\"", xaml);
+        Assert.Contains("ConverterParameter=UpdateAvailable", xaml);
+    }
 }
