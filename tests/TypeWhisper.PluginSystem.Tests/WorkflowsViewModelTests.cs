@@ -100,6 +100,18 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SelectedEditProvider_IgnoresSelectionChangesDuringProviderRefresh()
+    {
+        var sut = CreateViewModel();
+        sut.EditProviderOverride = "none";
+        TestPluginManagerFactory.SetPrivateField(sut, "_isRefreshingProviders", true);
+
+        sut.SelectedEditProvider = null;
+
+        Assert.Equal("none", sut.EditProviderOverride);
+    }
+
+    [Fact]
     public void TaskOptions_PreserveTranslateWhenSelectedProfileCannotResolve()
     {
         var sut = CreateViewModel();

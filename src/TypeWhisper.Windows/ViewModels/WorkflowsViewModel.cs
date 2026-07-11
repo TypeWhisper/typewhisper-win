@@ -303,6 +303,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             ?? AvailableEditProviders.FirstOrDefault();
         set
         {
+            if (_isRefreshingProviders)
+                return;
+
             if (string.Equals(EditProviderOverride, value?.Value, StringComparison.Ordinal))
                 return;
 
