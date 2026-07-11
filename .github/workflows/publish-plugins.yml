@@ -195,10 +195,12 @@ jobs:
           $zipName = "$pluginId-$env:PLUGIN_VERSION.zip"
           Compress-Archive -Path "$stagingDir/*" -DestinationPath $zipName -Force
           $zipSize = (Get-Item $zipName).Length
+          $zipSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipName).Hash.ToLowerInvariant()
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
           echo "ZIP_SIZE=$zipSize" >> $env:GITHUB_ENV
+          echo "PLUGIN_SHA256=$zipSha256" >> $env:GITHUB_ENV
           echo "PLUGIN_ID=$pluginId" >> $env:GITHUB_ENV
-          echo "Created $zipName ($zipSize bytes)"
+          echo "Created $zipName ($zipSize bytes, SHA-256 $zipSha256)"
 
       - name: Create GitHub Release
         env:
@@ -215,8 +217,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $downloadUrl = "https://github.com/TypeWhisper/typewhisper-win/releases/download/$tag/$env:ZIP_NAME"
+          $downloadUrl = "https://typewhisper.github.io/typewhisper-win/plugins/$env:ZIP_NAME"
 
           git fetch origin gh-pages
           git worktree add -B gh-pages gh-pages-work origin/gh-pages
@@ -282,6 +283,7 @@ jobs:
                   Set-RegistryProperty $registry[$j] 'categories' $categories
                   Set-RegistryProperty $registry[$j] 'size' ([long]$env:ZIP_SIZE)
                   Set-RegistryProperty $registry[$j] 'downloadUrl' $downloadUrl
+                  Set-RegistryProperty $registry[$j] 'sha256' $env:PLUGIN_SHA256
                   Set-RegistryProperty $registry[$j] 'iconSystemName' $manifest.iconSystemName
                   Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))
                   Set-RegistryProperty $registry[$j] 'descriptions' $manifest.descriptions
@@ -306,6 +308,7 @@ jobs:
                   categories = $categories
                   size = [long]$env:ZIP_SIZE
                   downloadUrl = $downloadUrl
+                  sha256 = $env:PLUGIN_SHA256
                   iconSystemName = $manifest.iconSystemName
                   requiresApiKey = [bool]($manifest.requiresApiKey)
                   descriptions = $manifest.descriptions

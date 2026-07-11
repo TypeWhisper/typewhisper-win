@@ -40,4 +40,16 @@ public sealed class PluginPackagingWorkflowTests
         Assert.Contains("TypeWhisper-$RuntimeIdentifier-*.msix", script, StringComparison.Ordinal);
         Assert.Contains("must be in the range 0-65535", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void PluginReleaseWorkflow_PublishesPackageHashInRegistry()
+    {
+        var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml");
+
+        Assert.Contains("Get-FileHash -Algorithm SHA256", workflow, StringComparison.Ordinal);
+        Assert.Contains("PLUGIN_SHA256=$zipSha256", workflow, StringComparison.Ordinal);
+        Assert.Contains("https://typewhisper.github.io/typewhisper-win/plugins/$env:ZIP_NAME", workflow, StringComparison.Ordinal);
+        Assert.Contains("Set-RegistryProperty $registry[$j] 'sha256' $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
+        Assert.Contains("sha256 = $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
+    }
 }
