@@ -529,6 +529,7 @@
   "Shortcuts.AddHotkey": "Hotkey hinzufügen",
   "Shortcuts.RemoveHotkey": "Hotkey entfernen",
   "Shortcuts.ValidationDuplicateFormat": "{0} ist bereits einem anderen Shortcut zugewiesen.",
+  "Shortcuts.ValidationModifierOnlyHold": "Shortcuts nur aus Modifikatortasten können nicht für reine Halte-Diktate verwendet werden.",
   "Appearance.LayoutSection": "Overlay-Layout",
   "Appearance.Style": "Indikator-Stil",
   "Appearance.StyleStatusIsland": "Status Island",
@@ -874,7 +875,7 @@
   "Hotkey.Placeholder": "Tastenkombination dr\u00fccken...",
   "Hotkey.ClickToAssign": "Klicken zum Belegen",
   "Hotkey.Clear": "Leeren",
-  "Hotkey.ModifierOnlyHint": "Einzelne linke/rechte Ctrl-, Alt- und Shift-Tasten sind erlaubt. Win allein bleibt reserviert; nutze Kombinationen wie Ctrl+Shift oder Alt+Win für Windows-Shortcuts.",
+  "Hotkey.ModifierOnlyHint": "Shortcuts nur aus Modifikatortasten lösen beim Loslassen aus und bleiben in längeren Tastenkombinationen verfügbar. Win allein bleibt reserviert; für reine Halte-Diktate sind sie nicht verfügbar.",
 
   "PromptPalette.NoActions": "Keine Aktionen gefunden",
 
