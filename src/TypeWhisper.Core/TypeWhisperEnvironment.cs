@@ -22,11 +22,11 @@ public static class TypeWhisperEnvironment
 
     private static readonly string _localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-    private static readonly string _basePath = Path.Join(
+    private static readonly string _legacyBasePath = Path.Join(
         _localAppDataPath,
         IsDevelopmentBuild ? "TypeWhisper-Dev" : "TypeWhisper");
 
-    private static readonly string _userDataBasePath = Path.Join(
+    private static readonly string _basePath = Path.Join(
         _localAppDataPath,
         IsDevelopmentBuild ? "TypeWhisper-DevUserData" : "TypeWhisper-UserData");
 
@@ -35,9 +35,13 @@ public static class TypeWhisperEnvironment
     /// </summary>
     public static string BasePath => _basePath;
     /// <summary>
+    /// Gets the previous base path inside the Velopack install root.
+    /// </summary>
+    public static string LegacyBasePath => _legacyBasePath;
+    /// <summary>
     /// Gets the base path for user-created data that must survive Velopack uninstall cleanup.
     /// </summary>
-    public static string UserDataBasePath => _userDataBasePath;
+    public static string UserDataBasePath => _basePath;
     /// <summary>
     /// Gets the models path.
     /// </summary>
@@ -57,11 +61,11 @@ public static class TypeWhisperEnvironment
     /// <summary>
     /// Gets the audio path.
     /// </summary>
-    public static string AudioPath => Path.Join(_userDataBasePath, "Audio");
+    public static string AudioPath => Path.Join(_basePath, "Audio");
     /// <summary>
     /// Gets the previous audio path inside the Velopack install root.
     /// </summary>
-    public static string LegacyAudioPath => Path.Join(_basePath, "Audio");
+    public static string LegacyAudioPath => Path.Join(_legacyBasePath, "Audio");
     /// <summary>
     /// Gets the plugin data path.
     /// </summary>

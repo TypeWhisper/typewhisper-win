@@ -51,6 +51,20 @@ public static class Program
 #endif
 
         StartMinimized = args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            UserDataMigrationService.MigrateLegacyDataIfNeeded();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Windows.MessageBox.Show(
+                $"TypeWhisper could not move its user data outside the application directory. No data was deleted.\n\n{ex.Message}",
+                "TypeWhisper",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            return;
+        }
+
         TypeWhisperEnvironment.EnsureDirectories();
         var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
 
@@ -67,8 +81,6 @@ public static class Program
 
         try
         {
-            UserAudioMigrationService.MigrateLegacyAudioIfNeeded();
-
             var app = new App();
             app.InitializeComponent();
             app.Run();

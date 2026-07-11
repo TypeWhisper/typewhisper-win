@@ -66,6 +66,26 @@ public class DictationOverlayPresentationTests
     }
 
     [Fact]
+    public void MissingModel_UsesVisibleLoggedFeedbackPath()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var helper = TestFile.ExtractBlock(
+            source,
+            "private void ApplyModelUnavailableFeedback(string? modelId, Exception? error = null)",
+            900);
+        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 4200);
+
+        Assert.Contains("_errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);", helper, StringComparison.Ordinal);
+        Assert.Contains("ApplyTransientIdleFeedback(feedback, feedbackIsError: true);", helper, StringComparison.Ordinal);
+        Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId);", startRecording, StringComparison.Ordinal);
+        Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId, ex);", startRecording, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuiltInPartialPreview_ShowsWhenExternalPreviewIsInactive()
     {
         Assert.True(DictationOverlayPresentation.ShowBuiltInPartialPreview(
