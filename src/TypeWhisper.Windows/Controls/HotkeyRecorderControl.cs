@@ -286,6 +286,12 @@ public sealed class HotkeyRecorderControl : Control
             return;
         }
 
+        if (IsTemplateButtonClick(e.OriginalSource))
+        {
+            base.OnPreviewMouseDown(e);
+            return;
+        }
+
         if (HotkeyKeyMap.TryGetMouseToken(e.ChangedButton, out var token))
         {
             CommitRecordedHotkey(FormatMouseHotkey(_recordingSession.GetCurrentModifiers(), token));
