@@ -450,6 +450,9 @@ public sealed record Workflow
         string? detectedLanguage = null,
         string? configuredLanguage = null)
     {
+        if (string.Equals(Behavior.ProviderOverride, "none", StringComparison.OrdinalIgnoreCase))
+            return null;
+
         var languageHint = BuildLanguageHint(detectedLanguage, configuredLanguage);
         var settingsInstruction = BuildSettingsInstruction();
         var fineTuningInstruction = BuildFineTuningInstruction();
