@@ -513,7 +513,11 @@ public partial class SettingsViewModel : ObservableObject
 
     [RelayCommand]
     private void AddHoldOnlyHotkey(string? hotkey = null) =>
-        AddShortcutHotkey(HoldOnlyHotkeys, hotkey ?? NewHoldOnlyHotkey, value => NewHoldOnlyHotkey = value);
+        AddShortcutHotkey(
+            HoldOnlyHotkeys,
+            hotkey ?? NewHoldOnlyHotkey,
+            value => NewHoldOnlyHotkey = value,
+            rejectModifierOnly: true);
 
     [RelayCommand]
     private void RemoveHoldOnlyHotkey(string? hotkey) =>
@@ -841,11 +845,19 @@ public partial class SettingsViewModel : ObservableObject
     private void AddShortcutHotkey(
         ObservableCollection<string> target,
         string? hotkey,
-        Action<string> setNewHotkey)
+        Action<string> setNewHotkey,
+        bool rejectModifierOnly = false)
     {
         var normalized = HotkeyParser.Normalize(hotkey);
         if (string.IsNullOrWhiteSpace(normalized))
             return;
+
+        if (rejectModifierOnly && HotkeyParser.IsModifierOnly(normalized))
+        {
+            ShortcutsError = Loc.Instance.GetString("Shortcuts.ValidationModifierOnlyHold");
+            setNewHotkey("");
+            return;
+        }
 
         if (GetAllShortcutHotkeys().Any(existing =>
                 string.Equals(existing, normalized, StringComparison.OrdinalIgnoreCase)))

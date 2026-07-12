@@ -180,7 +180,9 @@ public sealed class HotkeyService : IDisposable
     [
         .. BuildAppHotkeyBindings(AppHotkeyAction.MainDictation, settings.GetMainDictationHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.ToggleOnly, settings.GetToggleOnlyHotkeys()),
-        .. BuildAppHotkeyBindings(AppHotkeyAction.HoldOnly, settings.GetHoldOnlyHotkeys()),
+        .. BuildAppHotkeyBindings(
+            AppHotkeyAction.HoldOnly,
+            settings.GetHoldOnlyHotkeys().Where(static hotkey => !HotkeyParser.IsModifierOnly(hotkey))),
         .. BuildAppHotkeyBindings(AppHotkeyAction.RecentTranscriptions, settings.GetRecentTranscriptionsHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.CopyLastTranscription, settings.GetCopyLastTranscriptionHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.WorkflowPalette, settings.GetWorkflowPaletteHotkeys()),

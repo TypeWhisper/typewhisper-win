@@ -529,6 +529,7 @@
   "Shortcuts.AddHotkey": "Add hotkey",
   "Shortcuts.RemoveHotkey": "Remove hotkey",
   "Shortcuts.ValidationDuplicateFormat": "{0} is already assigned to another shortcut.",
+  "Shortcuts.ValidationModifierOnlyHold": "Modifier-only shortcuts cannot be used for hold-only dictation.",
   "Appearance.LayoutSection": "Overlay layout",
   "Appearance.Style": "Indicator style",
   "Appearance.StyleStatusIsland": "Status Island",
@@ -874,7 +875,7 @@
   "Hotkey.Placeholder": "Press key combination...",
   "Hotkey.ClickToAssign": "Click to assign",
   "Hotkey.Clear": "Clear",
-  "Hotkey.ModifierOnlyHint": "Single left/right Ctrl, Alt, and Shift keys are allowed. Win alone is reserved; use combinations like Ctrl+Shift or Alt+Win for Windows-key shortcuts.",
+  "Hotkey.ModifierOnlyHint": "Modifier-only shortcuts trigger on release and stay available in longer key combinations. Win alone is reserved, and modifier-only shortcuts cannot be used for hold-only dictation.",
 
   "PromptPalette.NoActions": "No actions found",
 
