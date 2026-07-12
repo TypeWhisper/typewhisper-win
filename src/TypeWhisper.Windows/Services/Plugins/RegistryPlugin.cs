@@ -50,6 +50,10 @@ public sealed record RegistryPlugin
     /// </summary>
     public string DownloadUrl { get; init; } = "";
     /// <summary>
+    /// Gets or sets the expected SHA-256 hash for the plugin package.
+    /// </summary>
+    public string? Sha256 { get; init; }
+    /// <summary>
     /// Gets or sets the icon system name value.
     /// </summary>
     public string? IconSystemName { get; init; }

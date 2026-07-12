@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
@@ -38,6 +39,7 @@ public sealed class PluginRegistryService
     private readonly string _pendingUninstallsPath;
     private readonly Func<string, string, CancellationToken, Task> _replaceActiveDirectoryAsync;
     private readonly Func<string, CancellationToken, Task> _deleteActiveDirectoryAsync;
+    private readonly AppDistributionKind _distributionKind;
 
     private List<RegistryPlugin>? _cachedRegistry;
     private DateTime _cacheTimestamp;
@@ -54,12 +56,14 @@ public sealed class PluginRegistryService
         string? pluginsPath = null,
         Func<string, string, CancellationToken, Task>? replaceActiveDirectoryAsync = null,
         Func<string, CancellationToken, Task>? deleteActiveDirectoryAsync = null,
-        string? bundledPluginsPath = null)
+        string? bundledPluginsPath = null,
+        AppDistributionKind? distributionKind = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
         _settings = settings;
         _httpClient = httpClient ?? new HttpClient();
+        _distributionKind = distributionKind ?? AppDistribution.Current;
         _pluginsPath = Path.GetFullPath(pluginsPath ?? TypeWhisperEnvironment.PluginsPath);
         _bundledPluginsPath = Path.GetFullPath(bundledPluginsPath ?? Path.Join(AppContext.BaseDirectory, "Plugins"));
         _pendingUpdatesPath = GetValidatedChildDirectory(_pluginsPath, PendingUpdatesDirectoryName, "pending updates directory");
@@ -178,6 +182,7 @@ public sealed class PluginRegistryService
                 }
             }
 
+            VerifyDownloadedPackage(registryPlugin, tempZip);
             ZipFile.ExtractToDirectory(tempZip, stagingDir, overwriteFiles: true);
 
             // Unblock downloaded files
@@ -359,40 +364,47 @@ public sealed class PluginRegistryService
     }
 
     /// <summary>
-    /// On first run, auto-installs all compatible registry plugins.
-    /// Sets the PluginFirstRunCompleted flag to prevent re-running.
+    /// Marks first-run plugin setup as complete without installing marketplace plugins by default.
     /// </summary>
-    public async Task FirstRunAutoInstallAsync(CancellationToken ct = default)
+    public Task FirstRunAutoInstallAsync(CancellationToken ct = default)
     {
         if (_settings.Current.PluginFirstRunCompleted)
-            return;
+            return Task.CompletedTask;
 
-        Debug.WriteLine("[PluginRegistry] First run detected, auto-installing registry plugins...");
-
-        try
+        if (_distributionKind == AppDistributionKind.Store)
         {
-            var registry = await FetchRegistryAsync(ct);
-            foreach (var plugin in registry)
-            {
-                if (GetInstallState(plugin) == PluginInstallState.NotInstalled)
-                {
-                    try
-                    {
-                        await InstallPluginAsync(plugin, ct: ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[PluginRegistry] Auto-install failed for {plugin.Id}: {ex.Message}");
-                    }
-                }
-            }
+            Debug.WriteLine("[PluginRegistry] Store distribution skips first-run plugin auto-install.");
         }
-        catch (Exception ex)
+        else
         {
-            Debug.WriteLine($"[PluginRegistry] First run auto-install failed: {ex.Message}");
+            Debug.WriteLine("[PluginRegistry] First run detected; marketplace plugin auto-install is disabled.");
         }
 
         _settings.Save(_settings.Current with { PluginFirstRunCompleted = true });
+        return Task.CompletedTask;
+    }
+
+    private void VerifyDownloadedPackage(RegistryPlugin registryPlugin, string packagePath)
+    {
+        if (_distributionKind != AppDistributionKind.Store)
+            return;
+
+        if (string.IsNullOrWhiteSpace(registryPlugin.Sha256))
+            throw new InvalidOperationException("Store plugin packages must include a SHA-256 hash.");
+
+        var expectedHash = NormalizeSha256(registryPlugin.Sha256);
+        var actualHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)));
+        if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Store plugin package SHA-256 hash does not match the registry entry.");
+    }
+
+    private static string NormalizeSha256(string sha256)
+    {
+        var normalized = sha256.Trim().Replace("-", "", StringComparison.Ordinal).ToUpperInvariant();
+        if (normalized.Length != 64 || normalized.Any(c => !Uri.IsHexDigit(c)))
+            throw new InvalidOperationException("Store plugin package SHA-256 hash is invalid.");
+
+        return normalized;
     }
 
     private static Version GetHostVersion()

@@ -135,6 +135,17 @@ public sealed class SettingsService : ISettingsService
         if (!obj.ContainsKey("targetAppCorrectionLearningEnabled"))
             settings = settings with { TargetAppCorrectionLearningEnabled = false };
 
+        if (!obj.ContainsKey("languageHints"))
+        {
+            settings = settings with
+            {
+                LanguageHints = string.IsNullOrWhiteSpace(settings.Language)
+                    || settings.Language.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                        ? []
+                        : [settings.Language]
+            };
+        }
+
         if (!obj.ContainsKey("historyRetentionMode") && obj.TryGetPropertyValue("historyRetentionDays", out var legacyNode))
         {
             var legacyDays = legacyNode?.GetValue<int?>();
@@ -170,8 +181,11 @@ public sealed class SettingsService : ISettingsService
         if (!Enum.IsDefined(settings.IndicatorStyle))
             settings = settings with { IndicatorStyle = AppSettings.Default.IndicatorStyle };
 
+        var languageHints = AppSettings.NormalizeLanguageHints(settings.GetLanguageHints());
         settings = settings with
         {
+            LanguageHints = languageHints,
+            Language = languageHints.FirstOrDefault() ?? "auto",
             LiveTranscriptionFontSize = AppSettings.NormalizeLiveTranscriptionFontSize(
                 settings.LiveTranscriptionFontSize),
             LocalModelAcceleration = AppSettings.NormalizeLocalModelAcceleration(
@@ -180,7 +194,9 @@ public sealed class SettingsService : ISettingsService
                 settings.LocalModelStoragePath)
         };
 
-        return settings.NormalizeHotkeyLists();
+        return settings
+            .NormalizeHotkeyLists()
+            .NormalizeMicrophonePriorityList();
     }
 
     private static void LogWarning(string message)

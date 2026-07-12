@@ -386,9 +386,14 @@
                                                            Command="{Binding InstallCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
+                                                <ui:Button Appearance="Primary"
+                                                           Content="{loc:Str Plugins.Update}"
+                                                           Command="{Binding UpdateCommand}"
+                                                           IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
+                                                           Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=UpdateAvailable}"/>
                                                 <TextBlock Foreground="{StaticResource ActiveIndicatorBrush}"
                                                            FontSize="12"
-                                                           Visibility="{Binding IsInstalledOrUpdateAvailable, Converter={StaticResource BoolToVis}}">
+                                                           Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}">
                                                     <Run Text="&#x2705; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.InstalledBadge], Mode=OneWay}"/>
                                                 </TextBlock>
                                                 <TextBlock Foreground="{StaticResource WarningBrush}"

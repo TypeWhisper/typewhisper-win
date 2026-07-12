@@ -212,7 +212,7 @@ public class SonioxPluginTests
     }
 
     [Fact]
-    public async Task TranscribeAsync_UsesAsyncTranscriptionFlowAndCleansUp()
+    public async Task TranscribeWithLanguageHintsAsync_PreservesOrderAndCleansUp()
     {
         var seen = new List<string>();
         var handler = new CapturingHandler((request, body) =>
@@ -236,7 +236,7 @@ public class SonioxPluginTests
                 var root = doc.RootElement;
                 Assert.Equal("stt-async-v4", root.GetProperty("model").GetString());
                 Assert.Equal("84c32fc6-4fb5-4e7a-b656-b5ec70493753", root.GetProperty("file_id").GetString());
-                Assert.Equal(["de"], root.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
+                Assert.Equal(["de", "en"], root.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
                 return JsonResponse("""{ "id": "73d4357d-cad2-4338-a60d-ec6f2044f721", "status": "queued" }""", HttpStatusCode.Created);
             }
 
@@ -275,7 +275,8 @@ public class SonioxPluginTests
         var sut = new SonioxPlugin(httpClient, pollDelay: TimeSpan.Zero, maxPollAttempts: 3);
         await sut.ActivateAsync(host);
 
-        var result = await sut.TranscribeAsync([1, 2, 3], "de", translate: false, prompt: null, CancellationToken.None);
+        var result = await sut.TranscribeWithLanguageHintsAsync(
+            [1, 2, 3], ["de", "en"], translate: false, prompt: null, CancellationToken.None);
 
         Assert.Equal("Hallo Welt", result.Text);
         Assert.Equal("de", result.DetectedLanguage);

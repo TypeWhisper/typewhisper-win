@@ -98,6 +98,39 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void BuildAppHotkeyBindings_SkipsModifierOnlyHoldShortcut()
+    {
+        var settings = AppSettings.Default with
+        {
+            HoldOnlyHotkeys = ["Ctrl+Shift", "Ctrl+Alt+H"]
+        };
+
+        var bindings = HotkeyService.BuildAppHotkeyBindings(settings)
+            .Where(binding => binding.Action == AppHotkeyAction.HoldOnly);
+
+        Assert.Equal(["Ctrl+Alt+H"], bindings.Select(binding => binding.Hotkey));
+    }
+
+    [Fact]
+    public void HybridModifierTap_StartsInToggleMode()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default),
+            new FakeWorkflowService());
+        var starts = 0;
+        var stops = 0;
+        sut.DictationStartRequested += (_, _) => starts++;
+        sut.DictationStopRequested += (_, _) => stops++;
+
+        InvokePrivate(sut, "OnHybridKeyDown");
+        InvokePrivate(sut, "OnHybridKeyUp");
+
+        Assert.Equal(1, starts);
+        Assert.Equal(0, stops);
+        Assert.Equal(HotkeyMode.Toggle, sut.CurrentMode);
+    }
+
+    [Fact]
     public void WorkflowPaletteRequested_EventIsRaised()
     {
         var sut = new HotkeyService(
@@ -114,6 +147,13 @@ public sealed class HotkeyServiceTests
         method!.Invoke(sut, [null, EventArgs.Empty]);
 
         Assert.True(raised);
+    }
+
+    private static void InvokePrivate(HotkeyService sut, string methodName)
+    {
+        var method = typeof(HotkeyService).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method!.Invoke(sut, [null, EventArgs.Empty]);
     }
 
     [Fact]

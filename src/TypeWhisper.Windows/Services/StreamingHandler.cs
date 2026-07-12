@@ -56,6 +56,20 @@ public sealed class StreamingHandler : IDisposable
     public void Start(
         string? language,
         TranscriptionTask task,
+        Func<bool> isStillRecording) =>
+        StartWithLanguageHints(
+            string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                ? []
+                : [language],
+            task,
+            isStillRecording);
+
+    /// <summary>
+    /// Starts the service or session with ordered language hints.
+    /// </summary>
+    public void StartWithLanguageHints(
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task,
         Func<bool> isStillRecording)
     {
         Stop();
@@ -70,11 +84,11 @@ public sealed class StreamingHandler : IDisposable
         if (plugin is not null && plugin.SupportsStreaming)
         {
             _audio.SamplesAvailable += OnStreamingSamplesAvailable;
-            _streamingTask = RunWebSocketStreamingAsync(plugin, language, sessionVersion, ct);
+            _streamingTask = RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
         }
         else
         {
-            _streamingTask = RunPollingFallbackAsync(language, task, isStillRecording, sessionVersion, ct);
+            _streamingTask = RunPollingFallbackAsync(languageHints, task, isStillRecording, sessionVersion, ct);
         }
     }
 
@@ -132,12 +146,14 @@ public sealed class StreamingHandler : IDisposable
     // ── WebSocket streaming path ──
 
     private async Task RunWebSocketStreamingAsync(
-        ITranscriptionEnginePlugin plugin, string? language, int sessionVersion, CancellationToken ct)
+        ITranscriptionEnginePlugin plugin,
+        IReadOnlyList<string> languageHints,
+        int sessionVersion,
+        CancellationToken ct)
     {
         try
         {
-            var lang = language == "auto" ? null : language;
-            var session = await plugin.StartStreamingAsync(lang, ct);
+            var session = await plugin.StartStreamingWithLanguageHintsAsync(languageHints, ct);
             if (!_transcriptState.IsCurrentSession(sessionVersion) || ct.IsCancellationRequested)
             {
                 await CleanupSessionAsync(session);
@@ -342,7 +358,7 @@ public sealed class StreamingHandler : IDisposable
     // ── Polling fallback path ──
 
     private async Task RunPollingFallbackAsync(
-        string? language, TranscriptionTask task,
+        IReadOnlyList<string> languageHints, TranscriptionTask task,
         Func<bool> isStillRecording, int sessionVersion, CancellationToken ct)
     {
         var engine = _modelManager.Engine;
@@ -362,8 +378,7 @@ public sealed class StreamingHandler : IDisposable
                 {
                     try
                     {
-                        var lang = language == "auto" ? null : language;
-                        var result = await engine.TranscribeAsync(buffer, lang, task, ct);
+                        var result = await engine.TranscribeWithLanguageHintsAsync(buffer, languageHints, task, ct);
 
                         if (result.NoSpeechProbability is > 0.8f)
                             continue;

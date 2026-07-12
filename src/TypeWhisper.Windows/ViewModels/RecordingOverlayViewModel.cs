@@ -92,7 +92,9 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     /// <summary>
     /// Gets the status text.
     /// </summary>
-    public string StatusText => UseDictation ? _dictation.StatusText : _recorder.StatusText;
+    public string StatusText => UseDictation
+        ? _dictation.CancelWarningText ?? _dictation.StatusText
+        : _recorder.StatusText;
     /// <summary>
     /// Gets the partial text.
     /// </summary>

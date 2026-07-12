@@ -276,6 +276,33 @@ public sealed class HotkeyRecorderControl : Control
     }
 
     /// <summary>
+    /// Captures the next mouse button pressed after recording starts.
+    /// </summary>
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
+    {
+        if (!IsRecording)
+        {
+            base.OnPreviewMouseDown(e);
+            return;
+        }
+
+        if (IsTemplateButtonClick(e.OriginalSource))
+        {
+            base.OnPreviewMouseDown(e);
+            return;
+        }
+
+        if (HotkeyKeyMap.TryGetMouseToken(e.ChangedButton, out var token))
+        {
+            CommitRecordedHotkey(FormatMouseHotkey(_recordingSession.GetCurrentModifiers(), token));
+            e.Handled = true;
+            return;
+        }
+
+        base.OnPreviewMouseDown(e);
+    }
+
+    /// <summary>
     /// Completes modifier-only hotkey recording when modifier keys are released.
     /// </summary>
     protected override void OnPreviewKeyUp(KeyEventArgs e)
@@ -332,6 +359,12 @@ public sealed class HotkeyRecorderControl : Control
 
         parts.Add(keyName);
         return string.Join("+", parts);
+    }
+
+    internal static string FormatMouseHotkey(ModifierKeys modifiers, string mouseToken)
+    {
+        var modifierText = FormatModifierOnly(modifiers);
+        return modifierText.Length == 0 ? mouseToken : $"{modifierText}+{mouseToken}";
     }
 
     internal static string FormatModifierOnly(ModifierKeys modifiers)

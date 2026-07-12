@@ -158,8 +158,6 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         _host = host;
         _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
         SherpaOnnxNativeRuntime.RegisterResolver();
-        if (_cudaRuntimeInstaller.IsInstalled && _cudaRuntimeInstaller.RuntimeDirectory is { } runtimeDirectory)
-            SherpaOnnxNativeRuntime.ConfigureCudaRuntime(runtimeDirectory);
         MigrateModelFiles();
         return Task.CompletedTask;
     }

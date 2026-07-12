@@ -3,6 +3,22 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class TrayIntegrationTests
 {
     [Fact]
+    public void App_RemainsRunningInTrayUntilExplicitExit()
+    {
+        var appXaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml");
+        var appCode = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+
+        Assert.Contains("ShutdownMode=\"OnExplicitShutdown\"", appXaml);
+        Assert.Contains("_trayIcon.ExitRequested += (_, _) => Shutdown();", appCode);
+    }
+
+    [Fact]
     public void App_DispatchesTrayViewModelActionsToUiThread()
     {
         var code = TestFile.ReadProjectFile(

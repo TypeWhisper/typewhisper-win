@@ -1,0 +1,47 @@
+name: Store Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version, for example 1.0.1.1"
+        required: true
+        default: "1.0.1.1"
+
+jobs:
+  package:
+    name: Build Store MSIX
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Build.props
+
+      - name: Restore solution
+        run: dotnet restore TypeWhisper.slnx
+
+      - name: Build solution
+        shell: pwsh
+        run: dotnet build TypeWhisper.slnx -c Release "-p:Version=$env:VERSION" --no-restore
+
+      - name: Build MSIX package
+        shell: pwsh
+        run: ./eng/Build-StorePackage.ps1 -Version $env:VERSION -RuntimeIdentifier ${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: store-msix-${{ matrix.rid }}
+          path: artifacts/store/packages/*.msix
