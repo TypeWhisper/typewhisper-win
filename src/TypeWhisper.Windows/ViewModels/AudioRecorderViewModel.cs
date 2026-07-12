@@ -304,8 +304,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
         if (TranscriptionEnabled && !string.IsNullOrWhiteSpace(_settings.Current.SelectedModelId))
         {
-            var configuredLanguage = _settings.Current.Language == "auto" ? null : _settings.Current.Language;
-            _streamingHandler.Start(configuredLanguage, CurrentRecorderTask, () => IsRecording);
+            _streamingHandler.StartWithLanguageHints(
+                _settings.Current.GetLanguageHints(), CurrentRecorderTask, () => IsRecording);
         }
 
         return true;
@@ -374,6 +374,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         TranscriptionResult result,
         TranscriptionTask task,
         string? configuredLanguage,
+        IReadOnlyList<string> configuredLanguageHints,
         string? translationTarget,
         CancellationToken ct)
     {
@@ -384,6 +385,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,
+            ConfiguredLanguageCandidates = configuredLanguageHints,
             TranslationHandler = shouldTranslate
                 ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
                 : null,
@@ -443,12 +445,13 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 false,
                 ct);
 
-            var configuredLanguage = settings.Language == "auto" ? null : settings.Language;
+            var configuredLanguageHints = settings.GetLanguageHints();
+            var configuredLanguage = configuredLanguageHints.FirstOrDefault();
             var task = CurrentRecorderTask;
             var translationTarget = NormalizeOptional(TranslationTargetLanguage);
-            var activeResult = await _modelManager.TranscribeActiveAsync(
+            var activeResult = await _modelManager.TranscribeActiveWithLanguageHintsAsync(
                 samples,
-                configuredLanguage,
+                configuredLanguageHints,
                 task,
                 prompt: null,
                 ct);
@@ -456,6 +459,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 activeResult.Result,
                 task,
                 configuredLanguage,
+                configuredLanguageHints,
                 translationTarget,
                 ct);
             if (string.IsNullOrWhiteSpace(transcript) && !string.IsNullOrWhiteSpace(liveTranscript))

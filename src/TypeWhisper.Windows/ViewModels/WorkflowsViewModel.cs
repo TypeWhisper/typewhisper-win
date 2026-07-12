@@ -30,6 +30,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     private bool _isRefreshingProviders;
     private string? _editingWorkflowId;
     private DateTime _editingCreatedAt;
+    private bool _isPopulatingLanguage;
+    private IReadOnlyList<string> _editLanguageHints = [];
 
     [ObservableProperty] private Workflow? _selectedWorkflow;
     [ObservableProperty] private bool _isEditorOpen;
@@ -653,7 +655,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditIsEnabled = workflow.IsEnabled;
         EditTemplate = workflow.Template;
         PopulateTriggerEditor(workflow.Trigger);
-        EditLanguage = workflow.Behavior.InputLanguage;
+        _editLanguageHints = AppSettings.NormalizeLanguageHints(workflow.Behavior.InputLanguageHints);
+        _isPopulatingLanguage = true;
+        EditLanguage = _editLanguageHints.FirstOrDefault() ?? workflow.Behavior.InputLanguage;
+        _isPopulatingLanguage = false;
         EditTask = workflow.Behavior.SelectedTask;
         EditTranslationTarget = workflow.Behavior.TranslationTarget;
         EditWhisperModeOverride = workflow.Behavior.WhisperModeOverride;
@@ -770,11 +775,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             ProviderOverride = string.IsNullOrWhiteSpace(EditProviderOverride) ? null : EditProviderOverride,
             ModelOverride = ParseModelOverride(EditProviderOverride),
             InputLanguage = string.IsNullOrWhiteSpace(EditLanguage) ? null : EditLanguage,
+            InputLanguageHints = _editLanguageHints,
             SelectedTask = string.IsNullOrWhiteSpace(EditTask) ? null : EditTask,
             TranslationTarget = string.IsNullOrWhiteSpace(EditTranslationTarget) ? null : EditTranslationTarget,
             WhisperModeOverride = EditWhisperModeOverride,
             TranscriptionModelOverride = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride) ? null : EditTranscriptionModelOverride
         };
+    }
+
+    partial void OnEditLanguageChanged(string? value)
+    {
+        if (!_isPopulatingLanguage)
+            _editLanguageHints = [];
     }
 
     private string? ValidateEditor()
@@ -985,7 +997,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         ]);
         ReplaceCollection(LanguageOptions,
         [
-            new SettingOption(null, Loc.Instance.GetString("Workflows.LanguageGlobalFormat", LanguageDisplayName(_settings.Current.Language))),
+            new SettingOption(null, Loc.Instance.GetString(
+                "Workflows.LanguageGlobalFormat",
+                LanguageDisplayName(_settings.Current.GetLanguageHints().FirstOrDefault() ?? "auto"))),
             new SettingOption("auto", Loc.Instance["Workflows.LanguageAuto"]),
             new SettingOption("de", "Deutsch"),
             new SettingOption("en", "English"),

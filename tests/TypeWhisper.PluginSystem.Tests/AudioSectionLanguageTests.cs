@@ -3,7 +3,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class AudioSectionLanguageTests
 {
     [Fact]
-    public void SpokenLanguageSelector_OffersChinese()
+    public void SpokenLanguageSelector_UsesOrderedLanguageHintList()
     {
         var xaml = TestFile.ReadProjectFile(
             "src",
@@ -12,6 +12,14 @@ public sealed class AudioSectionLanguageTests
             "Sections",
             "AudioSection.xaml");
 
-        Assert.Contains("<ComboBoxItem Content=\"中文\" Tag=\"zh\"/>", xaml);
+        var viewModel = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "SettingsViewModel.cs");
+
+        Assert.Contains("Settings.AvailableLanguageHints", xaml);
+        Assert.Contains("Settings.SelectedLanguageHints", xaml);
+        Assert.Contains("new(\"zh\", \"中文\")", viewModel);
     }
 }

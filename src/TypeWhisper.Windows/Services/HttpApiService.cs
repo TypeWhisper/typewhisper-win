@@ -404,14 +404,15 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             transcribeRequest.AwaitDownload,
             ct);
 
-        var prompt = MergePrompt(
-            transcribeRequest.Prompt,
-            BuildLanguageHintsPrompt(transcribeRequest.LanguageHints),
-            _dictionary.GetTermsForPrompt());
+        var prompt = MergePrompt(transcribeRequest.Prompt, _dictionary.GetTermsForPrompt());
 
-        var activeResult = await _modelManager.TranscribeActiveAsync(
+        var languageHints = transcribeRequest.Language is { } language
+            ? AppSettings.NormalizeLanguageHints([language])
+            : AppSettings.NormalizeLanguageHints(transcribeRequest.LanguageHints);
+
+        var activeResult = await _modelManager.TranscribeActiveWithLanguageHintsAsync(
             samples,
-            transcribeRequest.Language,
+            languageHints,
             transcribeRequest.Task,
             prompt,
             ct);
@@ -424,16 +425,16 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
             TranscriptionTask = transcribeRequest.Task,
             DetectedLanguage = result.DetectedLanguage,
-            ConfiguredLanguage = transcribeRequest.Language,
-            ConfiguredLanguageCandidates = transcribeRequest.LanguageHints,
+            ConfiguredLanguage = languageHints.FirstOrDefault(),
+            ConfiguredLanguageCandidates = languageHints,
             VocabularyBooster = GetVocabularyBooster(),
             DictionaryCorrector = _dictionary.ApplyCorrections
         }, ct);
         var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
             result,
             transcribeRequest.Task,
-            transcribeRequest.Language,
-            transcribeRequest.LanguageHints,
+            languageHints.FirstOrDefault(),
+            languageHints,
             currentSettings.TranscriptionNumberNormalizationEnabled,
             transcribeRequest.NormalizeNumbers);
 
@@ -441,7 +442,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         if (!string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage))
         {
             var sourceLanguage = result.DetectedLanguage
-                ?? transcribeRequest.Language
+                ?? languageHints.FirstOrDefault()
                 ?? "en";
 
             try
@@ -1050,6 +1051,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
     private static WorkflowLanguageDto ResolveWorkflowLanguage(Workflow workflow)
     {
+        var explicitHints = AppSettings.NormalizeLanguageHints(workflow.Behavior.InputLanguageHints);
+        if (explicitHints.Count > 0)
+            return new WorkflowLanguageDto("multiple", null, explicitHints);
+
         var configured = FirstNonBlank(
             workflow.Behavior.InputLanguage,
             WorkflowSetting(workflow, "inputLanguage"),
@@ -1064,10 +1069,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             try
             {
                 var hints = JsonSerializer.Deserialize<IReadOnlyList<string>>(trimmed) ?? [];
-                var normalized = hints
-                    .Select(value => value.Trim())
-                    .Where(value => !string.IsNullOrWhiteSpace(value))
-                    .ToList();
+                var normalized = AppSettings.NormalizeLanguageHints(hints);
 
                 if (normalized.Count > 0)
                     return new WorkflowLanguageDto("multiple", null, normalized);
@@ -1329,8 +1331,6 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return string.IsNullOrWhiteSpace(sanitized) ? "tmp" : sanitized.ToLowerInvariant();
     }
 
-    private static string? BuildLanguageHintsPrompt(IReadOnlyList<string> languageHints) =>
-        languageHints.Count == 0 ? null : "Language hints: " + string.Join(", ", languageHints);
 
     private static string? MergePrompt(params string?[] prompts)
     {

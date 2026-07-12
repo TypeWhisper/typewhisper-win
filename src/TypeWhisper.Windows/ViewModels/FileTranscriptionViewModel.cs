@@ -392,7 +392,6 @@ public partial class FileTranscriptionViewModel : ObservableObject
     private FileTranscriptionProcessOptions BuildFileTranscriptionOptions()
     {
         var s = _settings.Current;
-        var language = s.Language == "auto" ? null : s.Language;
         var task = s.TranscriptionTask == "translate"
             ? TranscriptionTask.Translate
             : TranscriptionTask.Transcribe;
@@ -400,8 +399,9 @@ public partial class FileTranscriptionViewModel : ObservableObject
         return new FileTranscriptionProcessOptions(
             CleanSettingValue(FileTranscriptionEngineOverride),
             CleanSettingValue(FileTranscriptionModelOverride),
-            language,
-            task);
+            Language: null,
+            task,
+            s.GetLanguageHints());
     }
 
     private void SetStatus(FileTranscriptionQueueItemViewModel item, FileTranscriptionQueueItemStatus status, string statusText)
@@ -638,9 +638,10 @@ public partial class FileTranscriptionViewModel : ObservableObject
             await using var modelScope = await _modelManager.BeginTranscriptionRequestAsync(engine, model, false, ct);
             var samples = await _audioFile.LoadAudioAsync(request.FilePath, ct);
             var language = WatchFolderLanguage == "auto" ? null : CleanSettingValue(WatchFolderLanguage);
-            var activeResult = await _modelManager.TranscribeActiveAsync(
+            var languageHints = AppSettings.NormalizeLanguageHints(language is null ? [] : [language]);
+            var activeResult = await _modelManager.TranscribeActiveWithLanguageHintsAsync(
                 samples,
-                language,
+                languageHints,
                 TranscriptionTask.Transcribe,
                 prompt: null,
                 cancellationToken: ct);
@@ -652,6 +653,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
                 TranscriptionTask = TranscriptionTask.Transcribe,
                 DetectedLanguage = result.DetectedLanguage,
                 ConfiguredLanguage = language,
+                ConfiguredLanguageCandidates = languageHints,
                 VocabularyBooster = GetVocabularyBooster(),
                 DictionaryCorrector = _dictionary.ApplyCorrections
             }, ct);
@@ -659,7 +661,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
                 result,
                 TranscriptionTask.Transcribe,
                 language,
-                [],
+                languageHints,
                 _settings.Current.TranscriptionNumberNormalizationEnabled);
 
             _modelManager.ScheduleAutoUnload();

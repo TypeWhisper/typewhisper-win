@@ -463,4 +463,47 @@ public class SettingsServiceTests : IDisposable
 
         Assert.Equal(HistoryRetentionMode.UntilAppCloses, loaded.Current.HistoryRetentionMode);
     }
+
+    [Fact]
+    public void Load_LegacyLanguage_MigratesToSingleHint()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "de"
+        }
+        """);
+
+        var loaded = new SettingsService(_filePath).Current;
+
+        Assert.Equal(["de"], loaded.LanguageHints);
+        Assert.Equal("de", loaded.Language);
+    }
+
+    [Fact]
+    public void SaveAndLoad_NormalizesOrderedLanguageHints()
+    {
+        var sut = new SettingsService(_filePath);
+        sut.Save(AppSettings.Default with
+        {
+            LanguageHints = [" de ", "en", "DE", "", "auto"]
+        });
+
+        var loaded = new SettingsService(_filePath).Current;
+
+        Assert.Equal(["de", "en"], loaded.LanguageHints);
+        Assert.Equal("de", loaded.Language);
+    }
+
+    [Fact]
+    public void WorkflowLanguageHints_UseGlobalExactAndAutoModes()
+    {
+        Assert.Equal(
+            ["de", "en"],
+            new WorkflowBehavior().GetLanguageHints(["de", "en"]));
+        Assert.Equal(
+            ["fr"],
+            new WorkflowBehavior { InputLanguage = "fr" }.GetLanguageHints(["de", "en"]));
+        Assert.Empty(
+            new WorkflowBehavior { InputLanguage = "auto" }.GetLanguageHints(["de", "en"]));
+    }
 }

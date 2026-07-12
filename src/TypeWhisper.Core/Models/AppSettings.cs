@@ -128,6 +128,10 @@ public record AppSettings
     /// </summary>
     public string Language { get; init; } = "auto";
     /// <summary>
+    /// Gets or sets the ordered transcription language hints. An empty list enables unrestricted auto-detection.
+    /// </summary>
+    public IReadOnlyList<string> LanguageHints { get; init; } = [];
+    /// <summary>
     /// Gets or sets the auto paste value.
     /// </summary>
     public bool AutoPaste { get; init; } = true;
@@ -472,6 +476,27 @@ public record AppSettings
     /// Gets or sets the update channel value.
     /// </summary>
     public string? UpdateChannel { get; init; }
+
+    /// <summary>
+    /// Returns normalized ordered language hints, including the legacy single-language setting when needed.
+    /// </summary>
+    public IReadOnlyList<string> GetLanguageHints() =>
+        NormalizeLanguageHints(LanguageHints is { Count: > 0 }
+            ? LanguageHints
+            : string.IsNullOrWhiteSpace(Language) || Language.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                ? []
+                : [Language]);
+
+    /// <summary>
+    /// Normalizes language hints while preserving their priority order.
+    /// </summary>
+    public static IReadOnlyList<string> NormalizeLanguageHints(IEnumerable<string?>? values) =>
+        values?.Select(static value => value?.Trim())
+            .Where(static value => !string.IsNullOrEmpty(value)
+                && !string.Equals(value, "auto", StringComparison.OrdinalIgnoreCase))
+            .Select(static value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
 
     /// <summary>
     /// Creates a new value using the supplied arguments.

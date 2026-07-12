@@ -50,6 +50,18 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public async Task OrderedLanguageHints_DefaultToFirstLanguageForLegacyPlugin()
+    {
+        var concrete = new DelayedStreamingPlugin();
+        ITranscriptionEnginePlugin plugin = concrete;
+
+        await plugin.TranscribeWithLanguageHintsAsync(
+            [1, 2, 3], ["de", "en"], false, null, CancellationToken.None);
+
+        Assert.Equal("de", concrete.LastLanguage);
+    }
+
+    [Fact]
     public void PluginTranscriptionResult_NoSpeechProbability_DefaultIsNull()
     {
         var result = new PluginTranscriptionResult("Hello", "en", 2.0);
@@ -300,6 +312,7 @@ public class StreamingTranscriptionTests
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public bool SupportsStreaming => true;
+        public string? LastLanguage { get; private set; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -315,8 +328,11 @@ public class StreamingTranscriptionTests
             string? language,
             bool translate,
             string? prompt,
-            CancellationToken ct) =>
-            Task.FromResult(new PluginTranscriptionResult("", language ?? "en", 0));
+            CancellationToken ct)
+        {
+            LastLanguage = language;
+            return Task.FromResult(new PluginTranscriptionResult("", language ?? "en", 0));
+        }
     }
 
     private sealed class CapturingStreamingSession : IStreamingSession
