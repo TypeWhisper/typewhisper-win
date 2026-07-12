@@ -199,13 +199,16 @@ public class HotkeyInputTests
             NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT,
             activateModifierOnlyOnKeyDown: true);
 
-        _ = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        var ctrlDown = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        Assert.Equal(default, ctrlDown);
 
         var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
         Assert.True(shiftDown.RaiseKeyDown);
+        Assert.True(shiftDown.Swallow);
 
         var shiftUp = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true);
         Assert.True(shiftUp.RaiseKeyUp);
+        Assert.True(shiftUp.Swallow);
     }
 
     [Fact]
