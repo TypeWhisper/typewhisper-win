@@ -151,9 +151,12 @@ public sealed class WorkflowPaletteService
         try
         {
             var processedText = context.SourceText;
+            var workflowLanguage = workflow.Behavior
+                .GetLanguageHints(_settings.Current.GetLanguageHints())
+                .FirstOrDefault();
             if (workflow.SystemPrompt(
                     fallbackTranslationTarget: workflow.Behavior.TranslationTarget,
-                    configuredLanguage: NormalizeConfiguredLanguage(workflow.Behavior.InputLanguage)) is { } systemPrompt)
+                    configuredLanguage: workflowLanguage) is { } systemPrompt)
             {
                 if (!_textProcessor.IsAnyProviderAvailable)
                 {
@@ -185,7 +188,7 @@ public sealed class WorkflowPaletteService
                             context.TargetWindowTitle,
                             context.TargetProcessName,
                             context.TargetUrl,
-                            NormalizeConfiguredLanguage(workflow.Behavior.InputLanguage),
+                            workflowLanguage,
                             context.SourceText),
                         CancellationToken.None);
 

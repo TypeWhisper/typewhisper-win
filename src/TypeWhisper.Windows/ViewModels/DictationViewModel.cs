@@ -500,8 +500,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     }
 
     // Effective settings: workflow override -> global setting
-    private string? EffectiveLanguage =>
-        _activeWorkflow?.Behavior.InputLanguage ?? _settings.Current.Language;
+    private IReadOnlyList<string> EffectiveLanguageHints =>
+        _activeWorkflow?.Behavior.GetLanguageHints(_settings.Current.GetLanguageHints())
+        ?? _settings.Current.GetLanguageHints();
+
+    private string EffectiveLanguage => EffectiveLanguageHints.FirstOrDefault() ?? "auto";
 
     private TranscriptionTask EffectiveTask =>
         (_activeWorkflow?.Behavior.SelectedTask ?? _settings.Current.TranscriptionTask) == "translate"
@@ -992,7 +995,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         if (liveTranscriptionMode is LiveTranscriptionStartupMode.PluginStreaming
             or LiveTranscriptionStartupMode.PluginPollingFallback)
         {
-            _streamingHandler.Start(EffectiveLanguage, EffectiveTask, () => _isRecording);
+            _streamingHandler.StartWithLanguageHints(EffectiveLanguageHints, EffectiveTask, () => _isRecording);
         }
         else if (liveTranscriptionMode == LiveTranscriptionStartupMode.LegacyVad)
         {
@@ -1149,6 +1152,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 _capturedWindowTitle,
                 _capturedUrl,
                 EffectiveLanguage,
+                EffectiveLanguageHints.ToList(),
                 EffectiveTask,
                 _modelManager.ActiveModelId,
                 apiSessionId,
@@ -1264,13 +1268,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             long? fullDecodeDurationMs = null;
 
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+            var language = job.EffectiveLanguageHints.FirstOrDefault();
             var decodeStartedAt = DateTime.UtcNow;
             TranscriptionResult? result = null;
             try
             {
-                result = await _modelManager.Engine.TranscribeAsync(
-                    decodeSamples, language, job.EffectiveTask, ct);
+                result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                    decodeSamples, job.EffectiveLanguageHints, job.EffectiveTask, ct);
                 fullDecodeText = result.Text ?? "";
                 fullDecodeDetectedLanguage = result.DetectedLanguage;
             }
@@ -1375,9 +1379,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 if (!tailHardeningEnabled)
                 {
                     var compareStartedAt = DateTime.UtcNow;
-                    var compareResult = await _modelManager.Engine.TranscribeAsync(
+                    var compareResult = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
                         ParakeetTailHelper.AppendTailGuard(job.Samples),
-                        job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                        job.EffectiveLanguageHints,
                         job.EffectiveTask,
                         ct);
                     job = job with
@@ -1465,6 +1469,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 TranscriptionTask = job.EffectiveTask,
                 DetectedLanguage = detectedLanguage,
                 ConfiguredLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                ConfiguredLanguageCandidates = job.EffectiveLanguageHints,
                 AppFormatter = AppFormatterService.Format,
                 TargetProcessName = job.CapturedProcessName,
                 VocabularyBooster = GetVocabularyBooster(),
@@ -2238,7 +2243,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             try
             {
-                var result = await _modelManager.Engine.TranscribeAsync(segment.Samples);
+                var result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                    segment.Samples, EffectiveLanguageHints);
                 if (!string.IsNullOrWhiteSpace(result.Text))
                 {
                     _partialSegments.Add(result.Text);
@@ -2391,6 +2397,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         string? CapturedWindowTitle,
         string? CapturedUrl,
         string? EffectiveLanguage,
+        IReadOnlyList<string> EffectiveLanguageHints,
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,

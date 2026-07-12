@@ -45,7 +45,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _newWorkflowPaletteHotkey = "";
     [ObservableProperty] private string _newRecorderToggleHotkey = "";
     [ObservableProperty] private string _shortcutsError = "";
-    [ObservableProperty] private string _language = "auto";
+    [ObservableProperty] private LanguageHintOption? _selectedLanguageHintToAdd;
     [ObservableProperty] private bool _autoPaste = true;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
     [ObservableProperty] private bool _whisperModeEnabled;
@@ -112,6 +112,22 @@ public partial class SettingsViewModel : ObservableObject
     /// Gets the spoken feedback voices.
     /// </summary>
     public ObservableCollection<TtsVoiceOption> SpokenFeedbackVoices { get; } = [];
+    /// <summary>
+    /// Gets the selectable spoken languages.
+    /// </summary>
+    public ObservableCollection<LanguageHintOption> AvailableLanguageHints { get; } = [];
+    /// <summary>
+    /// Gets the selected spoken languages in priority order.
+    /// </summary>
+    public ObservableCollection<LanguageHintOption> SelectedLanguageHints { get; } = [];
+    /// <summary>
+    /// Gets whether spoken language hints are selected.
+    /// </summary>
+    public bool HasSelectedLanguageHints => SelectedLanguageHints.Count > 0;
+    /// <summary>
+    /// Gets whether unrestricted language auto-detection is enabled.
+    /// </summary>
+    public bool HasNoSelectedLanguageHints => !HasSelectedLanguageHints;
 
     /// <summary>
     /// Gets the configured main dictation hotkeys.
@@ -340,6 +356,7 @@ public partial class SettingsViewModel : ObservableObject
         RegisterShortcutHotkeyCollections();
 
         _isLoading = true;
+        ReplaceCollection(AvailableLanguageHints, BuildLanguageHintOptions());
         RefreshLocalizedCollections(refreshMicrophones: false);
         LoadFromSettings(_settings.Current);
         RefreshSpokenFeedbackProviders();
@@ -438,6 +455,60 @@ public partial class SettingsViewModel : ObservableObject
 
     private bool CanAddMicrophonePriorityItem() =>
         !string.IsNullOrWhiteSpace(SelectedMicrophoneItem?.Id);
+
+    [RelayCommand]
+    private void AddLanguageHint()
+    {
+        var option = SelectedLanguageHintToAdd;
+        if (option is null || SelectedLanguageHints.Any(item =>
+                string.Equals(item.Code, option.Code, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        SelectedLanguageHints.Add(option);
+        SelectedLanguageHintToAdd = null;
+        LanguageHintsChanged();
+    }
+
+    [RelayCommand]
+    private void MoveLanguageHintEarlier(LanguageHintOption? option) =>
+        MoveLanguageHint(option, -1);
+
+    [RelayCommand]
+    private void MoveLanguageHintLater(LanguageHintOption? option) =>
+        MoveLanguageHint(option, 1);
+
+    [RelayCommand]
+    private void RemoveLanguageHint(LanguageHintOption? option)
+    {
+        if (option is null || !SelectedLanguageHints.Remove(option))
+            return;
+
+        LanguageHintsChanged();
+    }
+
+    private void MoveLanguageHint(LanguageHintOption? option, int offset)
+    {
+        if (option is null)
+            return;
+
+        var index = SelectedLanguageHints.IndexOf(option);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= SelectedLanguageHints.Count)
+            return;
+
+        SelectedLanguageHints.Move(index, target);
+        LanguageHintsChanged();
+    }
+
+    private void LanguageHintsChanged()
+    {
+        OnPropertyChanged(nameof(HasSelectedLanguageHints));
+        OnPropertyChanged(nameof(HasNoSelectedLanguageHints));
+        if (!_isLoading)
+            Save();
+    }
 
     [RelayCommand]
     private void ReorderMicrophonePriorityItem(MicrophonePriorityReorderRequest? request)
@@ -665,7 +736,8 @@ public partial class SettingsViewModel : ObservableObject
             ToggleHotkey = mainDictationHotkey,
             PushToTalkHotkey = mainDictationHotkey,
             MainDictationHotkeys = mainDictationHotkeys,
-            Language = Language,
+            LanguageHints = SelectedLanguageHints.Select(static option => option.Code).ToList(),
+            Language = SelectedLanguageHints.FirstOrDefault()?.Code ?? "auto",
             AutoPaste = AutoPaste,
             Mode = Mode,
             WhisperModeEnabled = WhisperModeEnabled,
@@ -771,7 +843,15 @@ public partial class SettingsViewModel : ObservableObject
 
         ToggleHotkey = mainDictationHotkey;
         PushToTalkHotkey = mainDictationHotkey;
-        Language = s.Language;
+        var languageHints = s.GetLanguageHints();
+        ReplaceCollection(
+            SelectedLanguageHints,
+            languageHints.Select(code =>
+                AvailableLanguageHints.FirstOrDefault(option =>
+                    string.Equals(option.Code, code, StringComparison.OrdinalIgnoreCase))
+                ?? new LanguageHintOption(code, code)).ToList());
+        OnPropertyChanged(nameof(HasSelectedLanguageHints));
+        OnPropertyChanged(nameof(HasNoSelectedLanguageHints));
         AutoPaste = s.AutoPaste;
         Mode = s.Mode;
         WhisperModeEnabled = s.WhisperModeEnabled;
@@ -926,6 +1006,9 @@ public partial class SettingsViewModel : ObservableObject
             or nameof(NewCopyLastTranscriptionHotkey)
             or nameof(NewWorkflowPaletteHotkey)
             or nameof(NewRecorderToggleHotkey)
+            or nameof(SelectedLanguageHintToAdd)
+            or nameof(HasSelectedLanguageHints)
+            or nameof(HasNoSelectedLanguageHints)
             or nameof(ShortcutsError)
             or nameof(HasMicrophonePriorityItems);
 
@@ -937,6 +1020,23 @@ public partial class SettingsViewModel : ObservableObject
 
     private static string FirstOrEmpty(IReadOnlyList<string> values) =>
         values.Count == 0 ? "" : values[0];
+
+    private static IReadOnlyList<LanguageHintOption> BuildLanguageHintOptions() =>
+    [
+        new("de", "Deutsch"),
+        new("en", "English"),
+        new("fr", "Français"),
+        new("es", "Español"),
+        new("zh", "中文"),
+        new("it", "Italiano"),
+        new("pt", "Português"),
+        new("nl", "Nederlands"),
+        new("pl", "Polski"),
+        new("cs", "Čeština"),
+        new("sv", "Svenska"),
+        new("da", "Dansk"),
+        new("fi", "Suomi")
+    ];
 
     private void OnSettingsChanged(AppSettings updatedSettings)
     {
@@ -1331,3 +1431,7 @@ public sealed record HistoryRetentionOption(HistoryRetentionMode Mode, int? Minu
 /// </summary>
 /// <param name="Command">Command supplied to the member.</param>
 public sealed record CommandExample(string Command);
+/// <summary>
+/// Represents a selectable spoken-language hint.
+/// </summary>
+public sealed record LanguageHintOption(string Code, string DisplayName);

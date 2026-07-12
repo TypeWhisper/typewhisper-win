@@ -838,6 +838,38 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         });
     }
 
+    [Fact]
+    public void LanguageHints_AddReorderRemoveAndPersistImmediately()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(
+            settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "de");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "de");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "en");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.MoveLanguageHintEarlierCommand.Execute(sut.SelectedLanguageHints[1]);
+
+        Assert.Equal(["en", "de"], settings.Current.LanguageHints);
+        Assert.Equal("en", settings.Current.Language);
+
+        sut.RemoveLanguageHintCommand.Execute(sut.SelectedLanguageHints[0]);
+        sut.RemoveLanguageHintCommand.Execute(sut.SelectedLanguageHints[0]);
+
+        Assert.Empty(settings.Current.LanguageHints);
+        Assert.Equal("auto", settings.Current.Language);
+    }
+
     private static SettingsViewModel CreateSettingsViewModel(
         FakeSettingsService settings,
         AudioRecordingService audio,
