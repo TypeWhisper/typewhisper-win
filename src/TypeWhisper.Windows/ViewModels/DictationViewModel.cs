@@ -6,7 +6,6 @@ using System.Threading.Channels;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SherpaOnnx;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -123,6 +122,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private int _feedbackAutoHideMilliseconds = 2000;
     private bool _isRecording;
     private bool _isStoppingRecording;
+    private DictationState? _cancelConfirmationState;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
     private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
@@ -152,7 +152,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     // Live transcription
     private readonly StreamingHandler _streamingHandler;
     // VAD for live transcription (fallback for non-plugin models)
-    private VoiceActivityDetector? _vad;
+    private SimpleVoiceActivityDetector? _vad;
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
     private bool _disposed;
@@ -177,6 +177,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     [ObservableProperty] private string? _feedbackActionText;
     [ObservableProperty] private string? _lastTranscribedText;
     [ObservableProperty] private string? _lastTranscriptionLanguage;
+    [ObservableProperty] private string? _cancelWarningText;
 
     /// <summary>
     /// Returns whether read back last transcription.
@@ -301,8 +302,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             }
         });
 
-        _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
-            await AbortActiveOperation());
+        _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(HandleCancelRequested);
         _hotkey.RecentTranscriptionsRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(ShowRecentTranscriptionsPalette);
         _hotkey.CopyLastTranscriptionRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
             await CopyLastTranscriptionToClipboardAsync());
@@ -501,8 +501,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     }
 
     // Effective settings: workflow override -> global setting
-    private string? EffectiveLanguage =>
-        _activeWorkflow?.Behavior.InputLanguage ?? _settings.Current.Language;
+    private IReadOnlyList<string> EffectiveLanguageHints =>
+        _activeWorkflow?.Behavior.GetLanguageHints(_settings.Current.GetLanguageHints())
+        ?? _settings.Current.GetLanguageHints();
+
+    private string EffectiveLanguage => EffectiveLanguageHints.FirstOrDefault() ?? "auto";
 
     private TranscriptionTask EffectiveTask =>
         (_activeWorkflow?.Behavior.SelectedTask ?? _settings.Current.TranscriptionTask) == "translate"
@@ -880,12 +883,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         CurrentHotkeyMode = null;
     }
 
-    private void ApplyModelLoadFailureFeedback(Exception ex)
+    private void ApplyModelUnavailableFeedback(string? modelId, Exception? error = null)
     {
         _isRecording = false;
-        ApplyTransientIdleFeedback(
-            Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
-            feedbackIsError: true);
+        var feedback = error is null
+            ? Loc.Instance["Status.NoModelLoaded"]
+            : Loc.Instance.GetString("Status.ModelErrorFormat", error.Message);
+        var diagnostic = string.IsNullOrWhiteSpace(modelId)
+            ? feedback
+            : $"{feedback} ({modelId})";
+
+        _errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);
+        ApplyTransientIdleFeedback(feedback, feedbackIsError: true);
     }
 
     private async Task StartRecording()
@@ -916,8 +925,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         var desiredModelId = EffectiveModelId ?? _settings.Current.SelectedModelId;
         if (string.IsNullOrWhiteSpace(desiredModelId))
         {
-            StatusText = Loc.Instance["Status.NoModelLoaded"];
-            _isRecording = false;
+            ApplyModelUnavailableFeedback(desiredModelId);
             return;
         }
 
@@ -925,8 +933,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
             {
-                StatusText = Loc.Instance["Status.NoModelLoaded"];
-                _isRecording = false;
+                ApplyModelUnavailableFeedback(desiredModelId);
                 return;
             }
         }
@@ -937,29 +944,28 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
         catch (InvalidOperationException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (IOException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (ArgumentException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (UnauthorizedAccessException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
 
         if (!_modelManager.Engine.IsModelLoaded)
         {
-            _isRecording = false;
-            ApplyTransientIdleFeedback(Loc.Instance["Status.NoModelLoaded"], feedbackIsError: true);
+            ApplyModelUnavailableFeedback(desiredModelId);
             return;
         }
 
@@ -993,7 +999,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         if (liveTranscriptionMode is LiveTranscriptionStartupMode.PluginStreaming
             or LiveTranscriptionStartupMode.PluginPollingFallback)
         {
-            _streamingHandler.Start(EffectiveLanguage, EffectiveTask, () => _isRecording);
+            _streamingHandler.StartWithLanguageHints(EffectiveLanguageHints, EffectiveTask, () => _isRecording);
         }
         else if (liveTranscriptionMode == LiveTranscriptionStartupMode.LegacyVad)
         {
@@ -1150,6 +1156,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 _capturedWindowTitle,
                 _capturedUrl,
                 EffectiveLanguage,
+                EffectiveLanguageHints.ToList(),
                 EffectiveTask,
                 _modelManager.ActiveModelId,
                 apiSessionId,
@@ -1222,6 +1229,50 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         return Task.CompletedTask;
     }
 
+    internal async Task HandleCancelRequested()
+    {
+        if (State is not (DictationState.Recording or DictationState.Processing))
+            return;
+
+        if (ConfirmCancel(State, ref _cancelConfirmationState))
+        {
+            CancelWarningText = null;
+            await AbortActiveOperation();
+            return;
+        }
+
+        CancelWarningText = State == DictationState.Recording
+            ? Loc.Instance["Status.CancelRecordingConfirm"]
+            : Loc.Instance["Status.CancelTranscriptionConfirm"];
+    }
+
+    partial void OnStateChanged(DictationState value)
+    {
+        ResetCancelConfirmation(value, ref _cancelConfirmationState);
+        if (_cancelConfirmationState is null)
+            CancelWarningText = null;
+    }
+
+    internal static bool ConfirmCancel(DictationState state, ref DictationState? confirmationState)
+    {
+        if (confirmationState != state)
+        {
+            confirmationState = state;
+            return false;
+        }
+
+        confirmationState = null;
+        return true;
+    }
+
+    internal static void ResetCancelConfirmation(
+        DictationState state,
+        ref DictationState? confirmationState)
+    {
+        if (confirmationState != state)
+            confirmationState = null;
+    }
+
     private async Task ProcessJobsAsync(CancellationToken ct)
     {
         await foreach (var job in _jobChannel.Reader.ReadAllAsync(ct))
@@ -1265,13 +1316,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             long? fullDecodeDurationMs = null;
 
             var previewText = DictationFinalTextPolicy.JoinPreviewSegments(job.PartialSegments);
-            var language = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage;
+            var language = job.EffectiveLanguageHints.FirstOrDefault();
             var decodeStartedAt = DateTime.UtcNow;
             TranscriptionResult? result = null;
             try
             {
-                result = await _modelManager.Engine.TranscribeAsync(
-                    decodeSamples, language, job.EffectiveTask, ct);
+                result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                    decodeSamples, job.EffectiveLanguageHints, job.EffectiveTask, ct);
                 fullDecodeText = result.Text ?? "";
                 fullDecodeDetectedLanguage = result.DetectedLanguage;
             }
@@ -1376,9 +1427,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 if (!tailHardeningEnabled)
                 {
                     var compareStartedAt = DateTime.UtcNow;
-                    var compareResult = await _modelManager.Engine.TranscribeAsync(
+                    var compareResult = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
                         ParakeetTailHelper.AppendTailGuard(job.Samples),
-                        job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                        job.EffectiveLanguageHints,
                         job.EffectiveTask,
                         ct);
                     job = job with
@@ -1466,6 +1517,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 TranscriptionTask = job.EffectiveTask,
                 DetectedLanguage = detectedLanguage,
                 ConfiguredLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
+                ConfiguredLanguageCandidates = job.EffectiveLanguageHints,
                 AppFormatter = AppFormatterService.Format,
                 TargetProcessName = job.CapturedProcessName,
                 VocabularyBooster = GetVocabularyBooster(),
@@ -2230,21 +2282,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (_vad is null) return;
 
+        _lastVadDiscardedShortSegmentCount = _vad.DiscardedShortSegmentCount;
         while (!_vad.IsEmpty())
         {
             var segment = _vad.Front();
             _vad.Pop();
             _lastVadSegmentLength = segment.Samples.Length;
 
-            if (segment.Samples.Length < 1600)
-            {
-                _lastVadDiscardedShortSegmentCount++;
-                continue; // Skip very short segments
-            }
-
             try
             {
-                var result = await _modelManager.Engine.TranscribeAsync(segment.Samples);
+                var result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                    segment.Samples, EffectiveLanguageHints);
                 if (!string.IsNullOrWhiteSpace(result.Text))
                 {
                     _partialSegments.Add(result.Text);
@@ -2259,21 +2307,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
     }
 
-    private static VoiceActivityDetector CreateVoiceActivityDetector()
-    {
-        var config = new VadModelConfig
-        {
-            SileroVad = new SileroVadModelConfig
-            {
-                Model = Path.Combine(AppContext.BaseDirectory, "Resources", "silero_vad.onnx"),
-                Threshold = 0.5f,
-                MinSilenceDuration = 0.5f,
-                MinSpeechDuration = 0.25f,
-            },
-            SampleRate = 16000,
-        };
-        return new VoiceActivityDetector(config, 60);
-    }
+    private static SimpleVoiceActivityDetector CreateVoiceActivityDetector() => new();
 
     [RelayCommand]
     private void CancelProcessing()
@@ -2411,6 +2445,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         string? CapturedWindowTitle,
         string? CapturedUrl,
         string? EffectiveLanguage,
+        IReadOnlyList<string> EffectiveLanguageHints,
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
         Guid? ApiSessionId,

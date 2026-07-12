@@ -37,23 +37,23 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
         MonthlyCommercialOptions =
         [
-            new LicensePurchaseOption("Individual", "5 EUR/mo", Loc.Instance["License.TierIndividualHint"], CheckoutUrlIndividual),
-            new LicensePurchaseOption("Team", "19 EUR/mo", Loc.Instance["License.TierTeamHint"], CheckoutUrlTeam),
-            new LicensePurchaseOption("Enterprise", "99 EUR/mo", Loc.Instance["License.TierEnterpriseHint"], CheckoutUrlEnterprise),
+            new LicensePurchaseOption("Individual", "5 EUR/mo", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividual, "settings_individual_monthly")),
+            new LicensePurchaseOption("Team", "19 EUR/mo", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeam, "settings_team_monthly")),
+            new LicensePurchaseOption("Enterprise", "99 EUR/mo", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterprise, "settings_enterprise_monthly")),
         ];
 
         LifetimeCommercialOptions =
         [
-            new LicensePurchaseOption("Individual", "99 EUR", Loc.Instance["License.TierIndividualHint"], CheckoutUrlIndividualLifetime),
-            new LicensePurchaseOption("Team", "299 EUR", Loc.Instance["License.TierTeamHint"], CheckoutUrlTeamLifetime),
-            new LicensePurchaseOption("Enterprise", "999 EUR", Loc.Instance["License.TierEnterpriseHint"], CheckoutUrlEnterpriseLifetime),
+            new LicensePurchaseOption("Individual", "99 EUR", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividualLifetime, "settings_individual_lifetime")),
+            new LicensePurchaseOption("Team", "299 EUR", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeamLifetime, "settings_team_lifetime")),
+            new LicensePurchaseOption("Enterprise", "999 EUR", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterpriseLifetime, "settings_enterprise_lifetime")),
         ];
 
         SupporterOptions =
         [
-            new LicensePurchaseOption("Bronze", "10 EUR", Loc.Instance["License.SupporterBronzeHint"], CheckoutUrlSupporterBronze),
-            new LicensePurchaseOption("Silver", "25 EUR", Loc.Instance["License.SupporterSilverHint"], CheckoutUrlSupporterSilver),
-            new LicensePurchaseOption("Gold", "50 EUR", Loc.Instance["License.SupporterGoldHint"], CheckoutUrlSupporterGold),
+            new LicensePurchaseOption("Bronze", "10 EUR", Loc.Instance["License.SupporterBronzeHint"], AttributedCheckoutUrl(CheckoutUrlSupporterBronze, "settings_bronze_one_time")),
+            new LicensePurchaseOption("Silver", "25 EUR", Loc.Instance["License.SupporterSilverHint"], AttributedCheckoutUrl(CheckoutUrlSupporterSilver, "settings_silver_one_time")),
+            new LicensePurchaseOption("Gold", "50 EUR", Loc.Instance["License.SupporterGoldHint"], AttributedCheckoutUrl(CheckoutUrlSupporterGold, "settings_gold_one_time")),
         ];
 
         SelectPrivateUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.PrivateUser));
@@ -74,6 +74,9 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         License.PropertyChanged += OnServicePropertyChanged;
         Discord.PropertyChanged += OnServicePropertyChanged;
     }
+
+    private static string AttributedCheckoutUrl(string baseUrl, string content) =>
+        PolarCheckoutUrlBuilder.BuildAppCheckoutUrl(baseUrl, content);
 
     /// <summary>
     /// Gets the license.

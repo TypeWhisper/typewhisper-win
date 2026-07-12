@@ -32,6 +32,11 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct);
 
+    /// <summary>Transcribes WAV audio with ordered language hints.</summary>
+    Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
+        byte[] wavAudio, IReadOnlyList<string> languageHints, bool translate, string? prompt, CancellationToken ct) =>
+        TranscribeAsync(wavAudio, FirstLanguageHint(languageHints), translate, prompt, ct);
+
     /// <summary>Whether this engine supports downloading and managing local model files.</summary>
     bool SupportsModelDownload => false;
 
@@ -54,6 +59,11 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     /// </summary>
     Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
         => throw new NotSupportedException();
+
+    /// <summary>Opens a real-time streaming session with ordered language hints.</summary>
+    Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(
+        IReadOnlyList<string> languageHints, CancellationToken ct) =>
+        StartStreamingAsync(FirstLanguageHint(languageHints), ct);
 
     /// <summary>Unloads the currently loaded model from memory to free resources.</summary>
     Task UnloadModelAsync() => Task.CompletedTask;
@@ -89,4 +99,13 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
         byte[] wavAudio, string? language, bool translate, string? prompt,
         Func<string, bool> onProgress, CancellationToken ct)
         => TranscribeAsync(wavAudio, language, translate, prompt, ct);
+
+    /// <summary>Transcribes audio with progress updates and ordered language hints.</summary>
+    Task<PluginTranscriptionResult> TranscribeStreamingWithLanguageHintsAsync(
+        byte[] wavAudio, IReadOnlyList<string> languageHints, bool translate, string? prompt,
+        Func<string, bool> onProgress, CancellationToken ct) =>
+        TranscribeStreamingAsync(wavAudio, FirstLanguageHint(languageHints), translate, prompt, onProgress, ct);
+
+    private static string? FirstLanguageHint(IReadOnlyList<string> languageHints) =>
+        languageHints.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 }

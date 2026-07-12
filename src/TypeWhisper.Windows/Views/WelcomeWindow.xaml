@@ -200,36 +200,32 @@
                                                         Command="{Binding InstallRecommendedLocalCommand}"
                                                         Padding="12,6"
                                                         IsEnabled="{Binding RecommendedLocalPlugin.IsWorking, Converter={StaticResource InvertBool}}"
-                                                        Margin="0,0,8,0">
-                                                    <Button.Style>
-                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsLocalRecommendationInstalled}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding RecommendedLocalPlugin}" Value="{x:Null}">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Button.Style>
-                                                </Button>
+                                                        Margin="0,0,8,0"
+                                                        Visibility="{Binding CanInstallLocalRecommendation, Converter={StaticResource BoolToVis}}"/>
+
+                                                <Button Content="{loc:Str Plugins.Update}"
+                                                        Command="{Binding InstallRecommendedLocalCommand}"
+                                                        Padding="12,6"
+                                                        IsEnabled="{Binding RecommendedLocalPlugin.IsWorking, Converter={StaticResource InvertBool}}"
+                                                        Margin="0,0,8,0"
+                                                        Visibility="{Binding IsLocalRecommendationUpdateAvailable, Converter={StaticResource BoolToVis}}"/>
 
                                                 <Button Content="{loc:Str Welcome.UseParakeet}"
                                                         Command="{Binding SelectRecommendedLocalCommand}"
-                                                        Padding="12,6">
-                                                    <Button.Style>
-                                                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsLocalRecommendationInstalled}" Value="False">
-                                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Button.Style>
-                                                </Button>
+                                                        Padding="12,6"
+                                                        Visibility="{Binding CanUseLocalRecommendation, Converter={StaticResource BoolToVis}}"/>
+
+                                                <Border Background="#16F2A93B"
+                                                        BorderBrush="#33F2A93B"
+                                                        BorderThickness="1"
+                                                        CornerRadius="999"
+                                                        Padding="10,5"
+                                                        Visibility="{Binding IsLocalRecommendationPendingRestart, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{loc:Str Welcome.RestartRequired}"
+                                                               Foreground="{StaticResource WarningBrush}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"/>
+                                                </Border>
                                             </StackPanel>
 
                                             <ProgressBar Grid.Row="1"
@@ -566,6 +562,14 @@
                                                                     MinWidth="84"
                                                                     IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                                     Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
+                                                            <Button Content="{loc:Str Plugins.Update}"
+                                                                    Command="{Binding UpdateCommand}"
+                                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                                    FontSize="11"
+                                                                    Padding="12,6"
+                                                                    MinWidth="84"
+                                                                    IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
+                                                                    Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=UpdateAvailable}"/>
                                                             <Border Background="#1239B980"
                                                                     BorderBrush="#2239B980"
                                                                     BorderThickness="1"

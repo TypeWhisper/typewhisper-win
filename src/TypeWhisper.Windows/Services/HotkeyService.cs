@@ -133,7 +133,9 @@ public sealed class HotkeyService : IDisposable
         {
             var hook = new KeyboardHook();
             AttachAppHotkeyHandler(hook, binding.Action);
-            hook.SetHotkey(binding.Hotkey);
+            hook.SetHotkey(
+                binding.Hotkey,
+                activateModifierOnlyOnKeyDown: binding.Action == AppHotkeyAction.MainDictation);
             hook.Start();
             _appHotkeyHooks.Add(hook);
         }
@@ -180,7 +182,9 @@ public sealed class HotkeyService : IDisposable
     [
         .. BuildAppHotkeyBindings(AppHotkeyAction.MainDictation, settings.GetMainDictationHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.ToggleOnly, settings.GetToggleOnlyHotkeys()),
-        .. BuildAppHotkeyBindings(AppHotkeyAction.HoldOnly, settings.GetHoldOnlyHotkeys()),
+        .. BuildAppHotkeyBindings(
+            AppHotkeyAction.HoldOnly,
+            settings.GetHoldOnlyHotkeys().Where(static hotkey => !HotkeyParser.IsModifierOnly(hotkey))),
         .. BuildAppHotkeyBindings(AppHotkeyAction.RecentTranscriptions, settings.GetRecentTranscriptionsHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.CopyLastTranscription, settings.GetCopyLastTranscriptionHotkeys()),
         .. BuildAppHotkeyBindings(AppHotkeyAction.WorkflowPalette, settings.GetWorkflowPaletteHotkeys()),

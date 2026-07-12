@@ -34,7 +34,7 @@ public sealed class PluginsSectionLayoutTests
     }
 
     [Fact]
-    public void PluginsSection_DoesNotOfferMarketplaceUpdates()
+    public void PluginsSection_OffersMarketplaceUpdates()
     {
         var xaml = TestFile.ReadProjectFile(
             "src",
@@ -43,6 +43,7 @@ public sealed class PluginsSectionLayoutTests
             "Sections",
             "PluginsSection.xaml");
 
-        Assert.DoesNotContain("ConverterParameter=UpdateAvailable", xaml);
+        Assert.Contains("Command=\"{Binding UpdateCommand}\"", xaml);
+        Assert.Contains("ConverterParameter=UpdateAvailable", xaml);
     }
 }

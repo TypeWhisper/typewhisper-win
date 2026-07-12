@@ -82,6 +82,51 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public void WarmUp_UsesPriorityDeviceId_WhenDeviceOrderChanges()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        sut.SetMicrophonePriorityList([new MicrophonePriorityItem("usb", "USB Microphone")]);
+
+        Assert.True(sut.WarmUp());
+        devices.SetDevices(
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"));
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void WarmUp_UsesNextAvailablePriorityDevice_ThenFallsBackToSystemDefault()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"))
+        {
+            DefaultDeviceName = "Built-in Microphone"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        sut.SetMicrophonePriorityList(
+        [
+            new MicrophonePriorityItem("missing", "Desk Mic"),
+            new MicrophonePriorityItem("usb", "USB Microphone")
+        ]);
+
+        Assert.True(sut.WarmUp());
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+
+        devices.SetDevices(new FakeAudioInputDevice("built-in", "Built-in Microphone"));
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
     public void CheckForDeviceChanges_DoesNotRaiseDeviceAvailable_WhenDeviceAppearsWithoutReportedLoss()
     {
         var devices = new FakeAudioInputDeviceProvider();
@@ -268,6 +313,144 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         Assert.False(sut.IsRecording);
     }
 
+    [Fact]
+    public void WarmUp_PrefersSystemDefaultDevice_WhenNoDeviceConfigured()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone Array (Built-in)",
+            "Microphone (USB Audio Device)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+
+        Assert.True(sut.WarmUp());
+
+        Assert.Equal(1, captures.Created.Single().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_ReturnsToDefaultDevice_WhenItReconnectsInAutoMode()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        Assert.Equal(0, captures.Created.Single().DeviceNumber);
+
+        // Device disappears (e.g. KVM or dock switch); system default falls back.
+        devices.SetDevices("Microphone Array (Built-in)");
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+
+        // Device returns at a different index and becomes the default again.
+        devices.SetDevices("Microphone Array (Built-in)", "Microphone (USB Audio Device)");
+        devices.DefaultDeviceName = "Microphone (USB Audio Device)";
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_DoesNotMigrateToPreferredDevice_WhileRecording()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        devices.SetDevices("Microphone Array (Built-in)");
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+        var capturesBeforeRecording = captures.Created.Count;
+
+        sut.StartRecording();
+        devices.SetDevices("Microphone Array (Built-in)", "Microphone (USB Audio Device)");
+        devices.DefaultDeviceName = "Microphone (USB Audio Device)";
+        sut.CheckForDeviceChanges();
+        Assert.Equal(capturesBeforeRecording, captures.Created.Count);
+
+        sut.StopRecording();
+        sut.CheckForDeviceChanges();
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_FollowsNewSystemDefault_WhenDeviceListIsUnchanged()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        sut.CheckForDeviceChanges();
+        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+
+        // The user changes the Windows default mic; no device is added/removed.
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void CheckForDeviceChanges_DefersUnchangedSignatureDefaultMigration_WhileRecording()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("usb", "Microphone (USB Audio Device)"),
+            new FakeAudioInputDevice("built-in", "Microphone Array (Built-in)"))
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        sut.CheckForDeviceChanges();
+
+        sut.StartRecording();
+        devices.DefaultDeviceName = "Microphone Array (Built-in)";
+        sut.CheckForDeviceChanges();
+        Assert.Equal(1, captures.Created.Count);
+
+        sut.StopRecording();
+        sut.CheckForDeviceChanges();
+
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void StartPreview_UsesExplicitlyRequestedDevice_OverConfiguredSelection()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone (USB Audio Device)",
+            "Microphone Array (Built-in)")
+        {
+            DefaultDeviceName = "Microphone (USB Audio Device)"
+        };
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+
+        sut.StartPreview(1);
+
+        Assert.True(sut.IsPreviewing);
+        Assert.Equal(1, captures.Created.Single().DeviceNumber);
+    }
+
     private static AudioRecordingService CreateService(
         FakeAudioInputDeviceProvider devices,
         FakeAudioInputCaptureFactory captures) =>
@@ -276,6 +459,50 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
 public sealed class SettingsViewModelMicrophoneDeviceTests
 {
+    [Fact]
+    public void AudioSection_UsesDropdownAddButtonAndDragDropPriorityEditor()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "AudioSection.xaml");
+        const string marker = "{loc:Str Recording.Microphone}";
+        const string nextSection = "{loc:Str General.Language}";
+        var start = source.IndexOf(marker, StringComparison.Ordinal);
+        var end = source.IndexOf(nextSection, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Expected to find {marker}.");
+        Assert.True(end > start, $"Expected to find {nextSection} after {marker}.");
+        var microphoneBlock = source[start..end];
+
+        Assert.Contains("<ComboBox", microphoneBlock);
+        Assert.Contains("SelectedMicrophoneItem", microphoneBlock);
+        Assert.Contains("AddMicrophonePriorityItemCommand", microphoneBlock);
+        Assert.Contains("MicrophonePriorityItems", microphoneBlock);
+        Assert.Contains("OnMicrophonePriorityDragHandleMouseDown", microphoneBlock);
+        Assert.Contains("OnMicrophonePriorityDragHandleMouseMove", microphoneBlock);
+        Assert.Contains("OnMicrophonePriorityItemDragOver", microphoneBlock);
+        Assert.Contains("OnMicrophonePriorityItemDrop", microphoneBlock);
+        Assert.Contains("ReorderMicrophonePriorityItemCommand", microphoneBlock);
+        Assert.Contains("RemoveMicrophonePriorityItemCommand", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.AddPriorityItem}\"", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.DragPriorityItem}\"", microphoneBlock);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.RemovePriorityItem}\"", microphoneBlock);
+        Assert.Contains("&#x00D7;", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Add microphone\"", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Drag microphone\"", microphoneBlock);
+        Assert.DoesNotContain("AutomationProperties.Name=\"Remove microphone\"", microphoneBlock);
+        Assert.DoesNotContain("MoveMicrophonePriorityItemUpCommand", microphoneBlock);
+        Assert.DoesNotContain("MoveMicrophonePriorityItemDownCommand", microphoneBlock);
+        Assert.DoesNotContain("ArrowUp24", microphoneBlock);
+        Assert.DoesNotContain("ArrowDown24", microphoneBlock);
+        Assert.DoesNotContain("Delete24", microphoneBlock);
+        Assert.DoesNotContain("&#xE711;", microphoneBlock);
+        Assert.DoesNotContain("MicrophonePickerListItemStyle", microphoneBlock);
+        Assert.DoesNotContain("<ListBox ItemsSource=\"{Binding Settings.Microphones}\"", microphoneBlock);
+    }
+
     [Fact]
     public void Constructor_EnumeratesMicrophoneNamesOnlyOnce()
     {
@@ -349,7 +576,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         var devices = new FakeAudioInputDeviceProvider("Built-in Microphone");
         var captures = new FakeAudioInputCaptureFactory();
         using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
-        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 0 });
+        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = null });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
         using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
         var sut = CreateSettingsViewModel(settings, audio, speech);
@@ -358,6 +585,200 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
 
         Assert.Null(sut.SelectedMicrophoneDevice);
         Assert.Null(settings.Current.SelectedMicrophoneDevice);
+        Assert.Empty(settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void SelectingDefaultMicrophoneItem_DoesNotClearExistingPriorityList()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var priorityList = new[]
+        {
+            new MicrophonePriorityItem("usb", "USB Microphone"),
+            new MicrophonePriorityItem("desk", "Desk Microphone")
+        };
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("desk", "Desk Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with { MicrophonePriorityList = priorityList });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        sut.SelectedMicrophoneItem = Assert.Single(sut.Microphones, m => m.DeviceNumber is null);
+
+        Assert.Equal(priorityList, settings.Current.MicrophonePriorityList);
+        Assert.Equal(priorityList, sut.MicrophonePriorityItems.Select(item => new MicrophonePriorityItem(item.Id, item.Name)).ToArray());
+        Assert.Equal("usb", sut.SelectedMicrophoneItem?.Id);
+    }
+
+    [Fact]
+    public void SelectingMicrophoneCandidate_WhenPriorityListExists_DoesNotStopPreviewOrPersistDeviceSwitch()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("desk", "Desk Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedMicrophoneDevice = 0,
+            MicrophonePriorityList = [new MicrophonePriorityItem("usb", "USB Microphone")]
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+        sut.StartMicrophonePreview();
+
+        sut.SelectedMicrophoneItem = Assert.Single(sut.Microphones, m => m.Id == "desk");
+
+        Assert.True(audio.IsPreviewing);
+        Assert.Equal(0, sut.SelectedMicrophoneDevice);
+        Assert.Equal(0, settings.Current.SelectedMicrophoneDevice);
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void SelectingMicrophoneItem_PersistsPrioritySelection()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        sut.SelectedMicrophoneItem = Assert.Single(sut.Microphones, m => m.Id == "usb");
+
+        Assert.Equal(1, sut.SelectedMicrophoneDevice);
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void AddAndDragSortMicrophonePriorityItems_PersistsFallbackOrder()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("desk", "Desk Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        sut.SelectedMicrophoneItem = Assert.Single(sut.Microphones, m => m.Id == "usb");
+        sut.SelectedMicrophoneItem = Assert.Single(sut.Microphones, m => m.Id == "desk");
+        sut.AddMicrophonePriorityItemCommand.Execute(null);
+
+        Assert.Equal(
+            [
+                new MicrophonePriorityItem("usb", "USB Microphone"),
+                new MicrophonePriorityItem("desk", "Desk Microphone")
+            ],
+            settings.Current.MicrophonePriorityList);
+
+        var desk = Assert.Single(sut.MicrophonePriorityItems, item => item.Id == "desk");
+        var usb = Assert.Single(sut.MicrophonePriorityItems, item => item.Id == "usb");
+        var commandProperty = typeof(SettingsViewModel).GetProperty("ReorderMicrophonePriorityItemCommand");
+        Assert.NotNull(commandProperty);
+        var requestType = typeof(SettingsViewModel).Assembly.GetType(
+            "TypeWhisper.Windows.ViewModels.MicrophonePriorityReorderRequest");
+        Assert.NotNull(requestType);
+        var command = Assert.IsAssignableFrom<System.Windows.Input.ICommand>(commandProperty.GetValue(sut));
+
+        command.Execute(Activator.CreateInstance(requestType, desk, usb));
+
+        Assert.Equal(
+            [
+                new MicrophonePriorityItem("desk", "Desk Microphone"),
+                new MicrophonePriorityItem("usb", "USB Microphone")
+            ],
+            settings.Current.MicrophonePriorityList);
+
+        desk = Assert.Single(sut.MicrophonePriorityItems, item => item.Id == "desk");
+        usb = Assert.Single(sut.MicrophonePriorityItems, item => item.Id == "usb");
+        command.Execute(Activator.CreateInstance(requestType, desk, usb));
+
+        Assert.Equal(
+            [
+                new MicrophonePriorityItem("usb", "USB Microphone"),
+                new MicrophonePriorityItem("desk", "Desk Microphone")
+            ],
+            settings.Current.MicrophonePriorityList);
+
+        sut.RemoveMicrophonePriorityItemCommand.Execute(desk);
+
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void Constructor_MigratesLegacySelectedMicrophoneDeviceToPriorityList()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 1 });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        Assert.Equal("usb", sut.SelectedMicrophoneItem?.Id);
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
+    }
+
+    [Fact]
+    public void RefreshMicrophones_MigratesLegacyMicrophoneWithoutReentrantSettingsLoad()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider();
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 1 });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var settingsReloadCount = 0;
+        var sut = CreateSettingsViewModel(settings, audio, speech, action =>
+        {
+            settingsReloadCount++;
+            action();
+        });
+
+        devices.SetDevices(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+
+        sut.RefreshMicrophonesCommand.Execute(null);
+
+        Assert.Equal(1, settings.SaveCount);
+        Assert.Equal(0, settingsReloadCount);
+        Assert.Equal("usb", sut.SelectedMicrophoneItem?.Id);
+        Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
     }
 
     [Fact]
@@ -417,14 +838,47 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         });
     }
 
+    [Fact]
+    public void LanguageHints_AddReorderRemoveAndPersistImmediately()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        using var speech = new SpeechFeedbackService(
+            settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
+        var sut = CreateSettingsViewModel(settings, audio, speech);
+
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "de");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "de");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.SelectedLanguageHintToAdd = Assert.Single(sut.AvailableLanguageHints, item => item.Code == "en");
+        sut.AddLanguageHintCommand.Execute(null);
+        sut.MoveLanguageHintEarlierCommand.Execute(sut.SelectedLanguageHints[1]);
+
+        Assert.Equal(["en", "de"], settings.Current.LanguageHints);
+        Assert.Equal("en", settings.Current.Language);
+
+        sut.RemoveLanguageHintCommand.Execute(sut.SelectedLanguageHints[0]);
+        sut.RemoveLanguageHintCommand.Execute(sut.SelectedLanguageHints[0]);
+
+        Assert.Empty(settings.Current.LanguageHints);
+        Assert.Equal("auto", settings.Current.Language);
+    }
+
     private static SettingsViewModel CreateSettingsViewModel(
         FakeSettingsService settings,
         AudioRecordingService audio,
-        SpeechFeedbackService speech)
+        SpeechFeedbackService speech,
+        Action<Action>? dispatchToUi = null)
     {
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
-        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: action => action());
+        return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: dispatchToUi ?? (action => action()));
     }
 
     private static void RunOnStaThread(Action action)
@@ -711,30 +1165,75 @@ internal sealed class FakeSystemAudioLoopbackCapture : ISystemAudioLoopbackCaptu
     public void Dispose() { }
 }
 
+internal sealed record FakeAudioInputDevice(string Id, string Name);
+
 internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
 {
-    private readonly List<string> _deviceNames;
+    private readonly List<FakeAudioInputDevice> _devices;
 
-    public FakeAudioInputDeviceProvider(params string[] deviceNames)
+    public FakeAudioInputDeviceProvider()
     {
-        _deviceNames = [.. deviceNames];
+        _devices = [];
     }
 
-    public int DeviceCount => _deviceNames.Count;
+    public FakeAudioInputDeviceProvider(params string[] deviceNames)
+        : this(deviceNames.Select((name, index) => new FakeAudioInputDevice($"device-{index}", name)).ToArray())
+    {
+    }
+
+    public FakeAudioInputDeviceProvider(params FakeAudioInputDevice[] devices)
+    {
+        _devices = [.. devices];
+    }
+
+    public int DeviceCount => _devices.Count;
 
     public int DeviceNameRequestCount { get; private set; }
+
+    public string? DefaultDeviceName { get; set; }
 
     public string GetDeviceName(int deviceNumber)
     {
         DeviceNameRequestCount++;
-        return _deviceNames[deviceNumber];
+        return _devices[deviceNumber].Name;
+    }
+
+    public string? GetDefaultDeviceName() => DefaultDeviceName;
+
+    public AudioInputDeviceInfo GetDeviceInfo(int deviceNumber)
+    {
+        return ToDeviceInfo(deviceNumber);
+    }
+
+    public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos()
+    {
+        return _devices
+            .Select((_, index) => ToDeviceInfo(index))
+            .ToList();
     }
 
     public void SetDevices(params string[] deviceNames)
     {
-        _deviceNames.Clear();
-        _deviceNames.AddRange(deviceNames);
+        SetDevices(deviceNames.Select((name, index) => new FakeAudioInputDevice($"device-{index}", name)).ToArray());
     }
+
+    public void SetDevices()
+    {
+        _devices.Clear();
+    }
+
+    public void SetDevices(params FakeAudioInputDevice[] devices)
+    {
+        _devices.Clear();
+        _devices.AddRange(devices);
+    }
+
+    private AudioInputDeviceInfo ToDeviceInfo(int deviceNumber) =>
+        new(
+            deviceNumber,
+            _devices[deviceNumber].Id,
+            _devices[deviceNumber].Name,
+            _devices[deviceNumber].Name == DefaultDeviceName);
 }
 
 internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory

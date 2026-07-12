@@ -558,7 +558,8 @@ public class HttpApiServiceTests : IDisposable
         Assert.Equal("mock", json["engine"].GetString());
         Assert.Equal("tiny", json["model"].GetString());
         Assert.Equal("transcribed", json["text"].GetString());
-        Assert.Contains("Language hints: de, en", plugin.LastPrompt);
+        Assert.Equal(["de", "en"], plugin.LastLanguageHints);
+        Assert.Null(plugin.LastPrompt);
         Assert.Single(json["segments"].EnumerateArray());
     }
 
@@ -1109,6 +1110,7 @@ public class HttpApiServiceTests : IDisposable
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin
     {
         public string? LastPrompt { get; private set; }
+        public IReadOnlyList<string> LastLanguageHints { get; private set; } = [];
         public string ResponseText { get; init; } = "transcribed";
 
         public string PluginId => "com.typewhisper.mock";
@@ -1145,6 +1147,17 @@ public class HttpApiServiceTests : IDisposable
             {
                 Segments = [new PluginTranscriptionSegment(ResponseText, 0, 1.25)]
             });
+        }
+
+        public Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
+            byte[] wavAudio,
+            IReadOnlyList<string> languageHints,
+            bool translate,
+            string? prompt,
+            CancellationToken ct)
+        {
+            LastLanguageHints = languageHints.ToList();
+            return TranscribeAsync(wavAudio, languageHints.FirstOrDefault(), translate, prompt, ct);
         }
 
         public void Dispose() { }

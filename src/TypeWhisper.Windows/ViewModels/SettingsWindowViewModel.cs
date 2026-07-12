@@ -1,15 +1,16 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DependencyInjection;
+using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
-using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -19,6 +20,11 @@ namespace TypeWhisper.Windows.ViewModels;
 public sealed partial class SettingsWindowViewModel : ObservableObject
 {
     private static SettingsRoute _lastOpenedRoute = SettingsRoute.Dashboard;
+
+    /// <summary>
+    /// Raised when the settings shell should open the setup wizard.
+    /// </summary>
+    public event EventHandler? SetupWizardRequested;
 
     /// <summary>
     /// Gets the settings.
@@ -72,6 +78,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private readonly UpdateService _updateService;
     private readonly ISettingsService _settingsService;
     private readonly IErrorLogService _errorLog;
+    private readonly DevelopmentDataSeeder _developmentDataSeeder;
     private readonly DispatcherTimer _indicatorPreviewTimer = new(DispatcherPriority.Background);
     private readonly DateTime _indicatorPreviewStartedAt = DateTime.UtcNow;
     private bool _isSyncingUpdateChannel;
@@ -85,6 +92,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private string _updateStatusText = "";
     [ObservableProperty] private bool _isCheckingForUpdates;
     [ObservableProperty] private bool _isUpdateAvailable;
+    [ObservableProperty] private bool _isDevelopmentSeeding;
+    [ObservableProperty] private string _developmentSeedStatusText = "";
+    [ObservableProperty] private bool _isDevelopmentSeedFailure;
     [ObservableProperty] private int _pendingFileImporterRequestId;
     [ObservableProperty] private ReleaseChannel _selectedUpdateChannel;
     [ObservableProperty] private float _audioLevel = 0.18f;
@@ -99,6 +109,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Builds current app version display.
     /// </summary>
     public string CurrentAppVersionDisplay => BuildCurrentAppVersionDisplay();
+    /// <summary>
+    /// Gets whether development-only dashboard tools should be visible.
+    /// </summary>
+    public bool IsDevelopmentBuild => TypeWhisperEnvironment.IsDevelopmentBuild;
     /// <summary>
     /// Gets the current page content width.
     /// </summary>
@@ -259,7 +273,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         FileTranscriptionViewModel fileTranscription,
         UpdateService updateService,
         ISettingsService settingsService,
-        IErrorLogService errorLog)
+        IErrorLogService errorLog,
+        DevelopmentDataSeeder developmentDataSeeder)
     {
         Settings = settings;
         ModelManager = modelManager;
@@ -276,6 +291,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         _updateService = updateService;
         _settingsService = settingsService;
         _errorLog = errorLog;
+        _developmentDataSeeder = developmentDataSeeder;
         Plugins.PropertyChanged += OnPluginsPropertyChanged;
         Loc.Instance.LanguageChanged += (_, _) =>
         {
@@ -418,9 +434,53 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [RelayCommand]
     private void OpenSetupWizard()
     {
-        var window = App.Services.GetRequiredService<WelcomeWindow>();
-        window.Show();
+        SetupWizardRequested?.Invoke(this, EventArgs.Empty);
     }
+
+    [RelayCommand(CanExecute = nameof(CanClearAndSeedDevelopmentData))]
+    private async Task ClearAndSeedDevelopmentData()
+    {
+        if (!IsDevelopmentBuild)
+            return;
+
+        var result = MessageBox.Show(
+            Loc.Instance["Dashboard.DevSeedConfirm"],
+            Loc.Instance["Dashboard.DevSeedTitle"],
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        IsDevelopmentSeeding = true;
+        DevelopmentSeedStatusText = "";
+        IsDevelopmentSeedFailure = false;
+
+        try
+        {
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            var seedResult = _developmentDataSeeder.ClearAndSeed();
+            DevelopmentSeedStatusText = seedResult == DevelopmentDataSeedResult.Seeded
+                ? Loc.Instance["Dashboard.DevSeedSuccess"]
+                : Loc.Instance["Dashboard.DevSeedUnavailable"];
+            IsDevelopmentSeedFailure = false;
+            Dashboard.Refresh();
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            IsDevelopmentSeedFailure = true;
+            DevelopmentSeedStatusText = Loc.Instance.GetString("Dashboard.DevSeedFailedFormat", ex.Message);
+        }
+        finally
+        {
+            IsDevelopmentSeeding = false;
+        }
+    }
+
+    private bool CanClearAndSeedDevelopmentData() =>
+        IsDevelopmentBuild && !IsDevelopmentSeeding;
+
+    partial void OnIsDevelopmentSeedingChanged(bool value) =>
+        ClearAndSeedDevelopmentDataCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// Performs register section.

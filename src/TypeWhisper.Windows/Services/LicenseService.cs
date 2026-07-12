@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -44,6 +45,8 @@ public sealed partial class LicenseService : ObservableObject
     private readonly HttpClient _http;
     private readonly string _credentialPath;
     private readonly string _legacyCredentialPath;
+    private readonly AppDistributionKind _distributionKind;
+    private readonly string _appVersion;
 
     private bool _suppressPersistence;
     private string? _commercialLicenseKey;
@@ -134,11 +137,17 @@ public sealed partial class LicenseService : ObservableObject
     {
     }
 
-    internal LicenseService(HttpClient http, string dataPath)
+    internal LicenseService(
+        HttpClient http,
+        string dataPath,
+        AppDistributionKind? distributionKind = null,
+        string? appVersion = null)
     {
         _http = http;
         _credentialPath = ResolveDataFilePath(dataPath, CredentialStoreFileName);
         _legacyCredentialPath = ResolveDataFilePath(dataPath, LegacyCredentialFileName);
+        _distributionKind = distributionKind ?? AppDistribution.Current;
+        _appVersion = appVersion ?? GetAppVersion();
         LoadStore();
     }
 
@@ -834,7 +843,18 @@ public sealed partial class LicenseService : ObservableObject
 
     private async Task<PolarActivationResponse> ActivateCoreAsync(string key, CancellationToken ct)
     {
-        var body = new { key, organization_id = OrganizationId, label = Environment.MachineName };
+        var body = new
+        {
+            key,
+            organization_id = OrganizationId,
+            label = Environment.MachineName,
+            meta = new
+            {
+                platform = "windows",
+                app_version = _appVersion,
+                distribution = _distributionKind == AppDistributionKind.Store ? "store" : "direct"
+            }
+        };
         var response = await _http.PostAsJsonAsync($"{BaseUrl}/activate", body, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
@@ -856,6 +876,14 @@ public sealed partial class LicenseService : ObservableObject
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
             ?? throw new InvalidOperationException("Validation failed: Polar returned an empty response.");
+    }
+
+    private static string GetAppVersion()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "0.0.0";
     }
 
     private async Task DeactivateCoreAsync(string key, string activationId, CancellationToken ct)

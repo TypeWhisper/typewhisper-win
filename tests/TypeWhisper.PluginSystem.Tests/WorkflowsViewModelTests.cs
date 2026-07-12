@@ -85,8 +85,30 @@ public sealed class WorkflowsViewModelTests : IDisposable
 
         Assert.Null(sut.EditProviderOverride);
         Assert.Same(
-            Assert.Single(sut.AvailableProviders, option => option.Value is null),
+            Assert.Single(sut.AvailableEditProviders, option => option.Value is null),
             sut.SelectedEditProvider);
+    }
+
+    [Fact]
+    public void WorkflowProviderOptions_OfferNoneWithoutChangingGlobalProviders()
+    {
+        var sut = CreateViewModel();
+
+        Assert.Equal("none", sut.AvailableEditProviders[0].Value);
+        Assert.Equal("None (no post-processing)", sut.AvailableEditProviders[0].DisplayName);
+        Assert.DoesNotContain(sut.AvailableProviders, option => option.Value == "none");
+    }
+
+    [Fact]
+    public void SelectedEditProvider_IgnoresSelectionChangesDuringProviderRefresh()
+    {
+        var sut = CreateViewModel();
+        sut.EditProviderOverride = "none";
+        TestPluginManagerFactory.SetPrivateField(sut, "_isRefreshingProviders", true);
+
+        sut.SelectedEditProvider = null;
+
+        Assert.Equal("none", sut.EditProviderOverride);
     }
 
     [Fact]
@@ -163,6 +185,38 @@ public sealed class WorkflowsViewModelTests : IDisposable
 
         var saved = Assert.Single(workflows.Workflows);
         Assert.Equal(["Ctrl+Alt+R", "Ctrl+Shift+R"], saved.Trigger.Hotkeys);
+    }
+
+    [Fact]
+    public void SaveEditor_PersistsAndReloadsNoPostProcessingProvider()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.EditTriggerMode = WorkflowTriggerMode.Global;
+        sut.SelectedEditProvider = sut.AvailableEditProviders[0];
+
+        sut.SaveEditorCommand.Execute(null);
+
+        var saved = Assert.Single(workflows.Workflows);
+        Assert.Equal("none", saved.Behavior.ProviderOverride);
+        sut.StartEditCommand.Execute(saved);
+        Assert.Equal("none", sut.SelectedEditProvider?.Value);
+    }
+
+    [Fact]
+    public void SaveEditor_AllowsCustomWorkflowWithoutPrompt()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.EditTriggerMode = WorkflowTriggerMode.Global;
+        sut.EditTemplate = WorkflowTemplate.Custom;
+        sut.EditCustomInstruction = "";
+        sut.EditFineTuning = "";
+
+        sut.SaveEditorCommand.Execute(null);
+
+        var saved = Assert.Single(workflows.Workflows);
+        Assert.Null(saved.SystemPrompt());
     }
 
     [Fact]

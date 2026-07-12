@@ -8,10 +8,14 @@ namespace TypeWhisper.Windows.Native;
 /// </summary>
 public sealed class KeyboardHook : IDisposable
 {
-    private IntPtr _hookId = IntPtr.Zero;
-    private readonly NativeMethods.LowLevelKeyboardProc _proc;
+    private IntPtr _keyboardHookId = IntPtr.Zero;
+    private IntPtr _mouseHookId = IntPtr.Zero;
+    private readonly NativeMethods.LowLevelKeyboardProc _keyboardProc;
+    private readonly NativeMethods.LowLevelMouseProc _mouseProc;
     private bool _disposed;
     private readonly HotkeyMatchStateMachine _stateMachine = new();
+    private readonly MouseHotkeyMatchStateMachine _mouseStateMachine = new();
+    private HotkeyTargetKind _targetKind;
 
     /// <summary>
     /// Raised when the key down event occurs.
@@ -31,17 +35,25 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public KeyboardHook()
     {
-        _proc = HookCallback;
+        _keyboardProc = KeyboardHookCallback;
+        _mouseProc = MouseHookCallback;
     }
 
     /// <summary>
     /// Sets hotkey.
     /// </summary>
-    public void SetHotkey(string hotkeyString)
+    public void SetHotkey(string hotkeyString, bool activateModifierOnlyOnKeyDown = false)
     {
-        if (HotkeyParser.Parse(hotkeyString, out var modifiers, out var vk))
+        _stateMachine.Reset();
+        _mouseStateMachine.Reset();
+
+        if (HotkeyParser.Parse(hotkeyString, out ParsedHotkey parsed))
         {
-            _stateMachine.SetHotkey(modifiers, vk);
+            _targetKind = parsed.Kind;
+            if (parsed.Kind == HotkeyTargetKind.Mouse)
+                _mouseStateMachine.SetHotkey(parsed.Modifiers, parsed.MouseButton);
+            else
+                _stateMachine.SetHotkey(parsed.Modifiers, parsed.Code, activateModifierOnlyOnKeyDown);
         }
     }
 
@@ -50,18 +62,30 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public void Start()
     {
-        if (_hookId != IntPtr.Zero) return;
+        if (_keyboardHookId != IntPtr.Zero || _mouseHookId != IntPtr.Zero) return;
 
         using var process = Process.GetCurrentProcess();
         using var module = process.MainModule;
 
         if (module is not null)
         {
-            _hookId = NativeMethods.SetWindowsHookExW(
-                NativeMethods.WH_KEYBOARD_LL,
-                _proc,
-                NativeMethods.GetModuleHandleW(module.ModuleName),
-                0);
+            var moduleHandle = NativeMethods.GetModuleHandleW(module.ModuleName);
+            if (_targetKind == HotkeyTargetKind.Mouse && _mouseStateMachine.HasHotkey)
+            {
+                _mouseHookId = NativeMethods.SetWindowsMouseHookExW(
+                    NativeMethods.WH_MOUSE_LL,
+                    _mouseProc,
+                    moduleHandle,
+                    0);
+            }
+            else if (_stateMachine.HasHotkey)
+            {
+                _keyboardHookId = NativeMethods.SetWindowsHookExW(
+                    NativeMethods.WH_KEYBOARD_LL,
+                    _keyboardProc,
+                    moduleHandle,
+                    0);
+            }
         }
     }
 
@@ -70,23 +94,33 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public void Stop()
     {
-        if (_hookId != IntPtr.Zero)
+        if (_keyboardHookId != IntPtr.Zero)
         {
-            NativeMethods.UnhookWindowsHookEx(_hookId);
-            _hookId = IntPtr.Zero;
+            NativeMethods.UnhookWindowsHookEx(_keyboardHookId);
+            _keyboardHookId = IntPtr.Zero;
+        }
+        if (_mouseHookId != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWindowsHookEx(_mouseHookId);
+            _mouseHookId = IntPtr.Zero;
         }
         _stateMachine.Reset();
+        _mouseStateMachine.Reset();
     }
 
-    internal void ResetRuntimeState() => _stateMachine.ResetRuntimeState();
+    internal void ResetRuntimeState()
+    {
+        _stateMachine.ResetRuntimeState();
+        _mouseStateMachine.ResetRuntimeState();
+    }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && _stateMachine.HasHotkey)
         {
             var hookStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
             if (ShouldIgnoreInjectedInput(hookStruct))
-                return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+                return NativeMethods.CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
 
             var vkCode = hookStruct.vkCode;
 
@@ -111,12 +145,87 @@ public sealed class KeyboardHook : IDisposable
             }
         }
 
-        return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        return NativeMethods.CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
+    }
+
+    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && _mouseStateMachine.HasHotkey)
+        {
+            var hookStruct = Marshal.PtrToStructure<NativeMethods.MSLLHOOKSTRUCT>(lParam);
+            if (!ShouldIgnoreInjectedInput(hookStruct)
+                && TryGetMouseEvent(wParam, hookStruct.mouseData, out var button, out var isDown, out var isUp))
+            {
+                var result = _mouseStateMachine.ProcessMouseEvent(
+                    button,
+                    isDown,
+                    isUp,
+                    GetCurrentModifiers());
+                if (IsEnabled)
+                {
+                    if (result.RaiseKeyDown)
+                        KeyDown?.Invoke(this, EventArgs.Empty);
+                    if (result.RaiseKeyUp)
+                        KeyUp?.Invoke(this, EventArgs.Empty);
+                    if (result.Swallow)
+                        return (IntPtr)1;
+                }
+            }
+        }
+
+        return NativeMethods.CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
     }
 
     internal static bool ShouldIgnoreInjectedInput(in NativeMethods.KBDLLHOOKSTRUCT hookStruct) =>
         (hookStruct.flags & NativeMethods.LLKHF_INJECTED) != 0
         && hookStruct.dwExtraInfo == NativeMethods.SelfInjectedInputMarker;
+
+    internal static bool ShouldIgnoreInjectedInput(in NativeMethods.MSLLHOOKSTRUCT hookStruct) =>
+        (hookStruct.flags & NativeMethods.LLMHF_INJECTED) != 0
+        && hookStruct.dwExtraInfo == NativeMethods.SelfInjectedInputMarker;
+
+    internal static bool TryGetMouseEvent(
+        IntPtr message,
+        uint mouseData,
+        out HotkeyMouseButton button,
+        out bool isDown,
+        out bool isUp)
+    {
+        isDown = message == NativeMethods.WM_LBUTTONDOWN
+            || message == NativeMethods.WM_RBUTTONDOWN
+            || message == NativeMethods.WM_MBUTTONDOWN
+            || message == NativeMethods.WM_XBUTTONDOWN;
+        isUp = message == NativeMethods.WM_LBUTTONUP
+            || message == NativeMethods.WM_RBUTTONUP
+            || message == NativeMethods.WM_MBUTTONUP
+            || message == NativeMethods.WM_XBUTTONUP;
+
+        button = message.ToInt32() switch
+        {
+            NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_LBUTTONUP => HotkeyMouseButton.Left,
+            NativeMethods.WM_RBUTTONDOWN or NativeMethods.WM_RBUTTONUP => HotkeyMouseButton.Right,
+            NativeMethods.WM_MBUTTONDOWN or NativeMethods.WM_MBUTTONUP => HotkeyMouseButton.Middle,
+            NativeMethods.WM_XBUTTONDOWN or NativeMethods.WM_XBUTTONUP
+                when mouseData >> 16 == NativeMethods.XBUTTON1 => HotkeyMouseButton.Back,
+            NativeMethods.WM_XBUTTONDOWN or NativeMethods.WM_XBUTTONUP
+                when mouseData >> 16 == NativeMethods.XBUTTON2 => HotkeyMouseButton.Forward,
+            _ => (HotkeyMouseButton)(-1)
+        };
+        return (isDown || isUp) && (int)button >= 0;
+    }
+
+    private static uint GetCurrentModifiers()
+    {
+        var modifiers = 0u;
+        if (IsKeyDown(NativeMethods.VK_CONTROL)) modifiers |= NativeMethods.MOD_CONTROL;
+        if (IsKeyDown(NativeMethods.VK_SHIFT)) modifiers |= NativeMethods.MOD_SHIFT;
+        if (IsKeyDown(NativeMethods.VK_MENU)) modifiers |= NativeMethods.MOD_ALT;
+        if (IsKeyDown(NativeMethods.VK_LWIN) || IsKeyDown(NativeMethods.VK_RWIN)) modifiers |= NativeMethods.MOD_WIN;
+        return modifiers;
+    }
+
+    private static bool IsKeyDown(int virtualKey) =>
+        (NativeMethods.GetAsyncKeyState(virtualKey) & unchecked((short)0x8000)) != 0;
 
     private static void SendSyntheticKeyTap(ushort vk)
     {
@@ -211,6 +320,63 @@ internal readonly record struct HotkeyProcessResult(
     uint SyntheticKeyTapVk = 0,
     uint SyntheticKeyUpVk = 0);
 
+internal sealed class MouseHotkeyMatchStateMachine
+{
+    private uint _targetModifiers;
+    private HotkeyMouseButton _targetButton;
+    private bool _hasHotkey;
+    private bool _isPressed;
+
+    public bool HasHotkey => _hasHotkey;
+
+    public void SetHotkey(uint modifiers, HotkeyMouseButton button)
+    {
+        _targetModifiers = modifiers;
+        _targetButton = button;
+        _hasHotkey = true;
+        ResetRuntimeState();
+    }
+
+    public HotkeyProcessResult ProcessMouseEvent(
+        HotkeyMouseButton button,
+        bool isButtonDown,
+        bool isButtonUp,
+        uint currentModifiers)
+    {
+        if (!_hasHotkey || button != _targetButton)
+            return default;
+
+        if (isButtonDown)
+        {
+            if (_isPressed)
+                return new HotkeyProcessResult(false, false, true);
+            if (currentModifiers != _targetModifiers)
+                return default;
+
+            _isPressed = true;
+            return new HotkeyProcessResult(true, false, true);
+        }
+
+        if (isButtonUp && _isPressed)
+        {
+            _isPressed = false;
+            return new HotkeyProcessResult(false, true, true);
+        }
+
+        return default;
+    }
+
+    public void Reset()
+    {
+        _targetModifiers = 0;
+        _targetButton = default;
+        _hasHotkey = false;
+        ResetRuntimeState();
+    }
+
+    public void ResetRuntimeState() => _isPressed = false;
+}
+
 internal sealed class HotkeyMatchStateMachine
 {
     private readonly HashSet<uint> _pressedKeys = [];
@@ -220,8 +386,11 @@ internal sealed class HotkeyMatchStateMachine
     private uint _pendingSuppressedWinKey;
     private uint _targetModifiers;
     private uint _targetVk;
+    private bool _activateModifierOnlyOnKeyDown;
     private bool _isPressed;
     private bool _winPassThroughActive;
+    private bool _modifierOnlyReady;
+    private bool _modifierOnlyCanceled;
 
     /// <summary>
     /// Gets whether has hotkey.
@@ -231,10 +400,11 @@ internal sealed class HotkeyMatchStateMachine
     /// <summary>
     /// Sets hotkey.
     /// </summary>
-    public void SetHotkey(uint modifiers, uint vk)
+    public void SetHotkey(uint modifiers, uint vk, bool activateModifierOnlyOnKeyDown = false)
     {
         _targetModifiers = modifiers;
         _targetVk = vk;
+        _activateModifierOnlyOnKeyDown = activateModifierOnlyOnKeyDown;
         ResetRuntimeState();
     }
 
@@ -245,6 +415,7 @@ internal sealed class HotkeyMatchStateMachine
     {
         _targetModifiers = 0;
         _targetVk = 0;
+        _activateModifierOnlyOnKeyDown = false;
         ResetRuntimeState();
     }
 
@@ -255,6 +426,9 @@ internal sealed class HotkeyMatchStateMachine
     {
         if (!HasHotkey || (!isKeyDown && !isKeyUp))
             return default;
+
+        if (IsModifierOnly && !_activateModifierOnlyOnKeyDown)
+            return ProcessModifierOnlyKeyEvent(vkCode, isKeyDown, isKeyUp);
 
         var swallow = false;
         var raiseKeyDown = false;
@@ -354,6 +528,89 @@ internal sealed class HotkeyMatchStateMachine
             SyntheticKeyUpVk: syntheticKeyUpVk);
     }
 
+    private HotkeyProcessResult ProcessModifierOnlyKeyEvent(uint vkCode, bool isKeyDown, bool isKeyUp)
+    {
+        var swallow = false;
+        var raiseKeyDown = false;
+        var raiseKeyUp = false;
+        uint syntheticKeyDownVk = 0;
+        uint syntheticKeyTapVk = 0;
+
+        if (isKeyUp && _pendingSuppressedKeyUps.Remove(vkCode))
+            swallow = true;
+
+        if (isKeyDown)
+        {
+            var firstPress = _pressedKeys.Add(vkCode);
+            if (!firstPress)
+                return new HotkeyProcessResult(false, false, _suppressedKeyDowns.Contains(vkCode));
+
+            if (ShouldPreSuppressWinKeyDown(vkCode))
+            {
+                swallow = true;
+                _pendingSuppressedWinKey = vkCode;
+                _suppressedKeyDowns.Add(vkCode);
+            }
+
+            if (HasUnexpectedModifierOnlyKey())
+            {
+                _modifierOnlyCanceled = true;
+                _modifierOnlyReady = false;
+                if (_pendingSuppressedWinKey != 0 && vkCode != _pendingSuppressedWinKey)
+                {
+                    syntheticKeyDownVk = _pendingSuppressedWinKey;
+                    _suppressedKeyDowns.Remove(_pendingSuppressedWinKey);
+                    _pendingSuppressedWinKey = 0;
+                }
+            }
+            else if (!_modifierOnlyCanceled && AreModifierOnlyTargetsPressed())
+            {
+                _modifierOnlyReady = true;
+            }
+        }
+        else if (isKeyUp)
+        {
+            var suppressedKeyDown = _suppressedKeyDowns.Contains(vkCode);
+            if (_modifierOnlyReady && IsModifierOnlyRelease(vkCode))
+            {
+                _modifierOnlyReady = false;
+                _modifierOnlyCanceled = true;
+                raiseKeyDown = true;
+                raiseKeyUp = true;
+
+                if (_pendingSuppressedWinKey != 0)
+                {
+                    if (_pendingSuppressedWinKey != vkCode)
+                        _pendingSuppressedKeyUps.Add(_pendingSuppressedWinKey);
+                    _pendingSuppressedWinKey = 0;
+                }
+
+                swallow |= suppressedKeyDown;
+            }
+            else if (_pendingSuppressedWinKey == vkCode)
+            {
+                _pendingSuppressedWinKey = 0;
+                syntheticKeyTapVk = vkCode;
+                swallow = true;
+            }
+
+            _pressedKeys.Remove(vkCode);
+            _suppressedKeyDowns.Remove(vkCode);
+            if (!HasAnyModifierOnlyTargetPressed())
+            {
+                _modifierOnlyReady = false;
+                _modifierOnlyCanceled = false;
+            }
+        }
+
+        return new HotkeyProcessResult(
+            raiseKeyDown,
+            raiseKeyUp,
+            swallow,
+            SyntheticKeyDownVk: syntheticKeyDownVk,
+            SyntheticKeyTapVk: syntheticKeyTapVk);
+    }
+
     internal void ResetRuntimeState()
     {
         _pressedKeys.Clear();
@@ -362,6 +619,8 @@ internal sealed class HotkeyMatchStateMachine
         _pendingSuppressedWinKey = 0;
         _isPressed = false;
         _winPassThroughActive = false;
+        _modifierOnlyReady = false;
+        _modifierOnlyCanceled = false;
     }
 
     private bool ShouldActivate(uint vkCode)
@@ -370,7 +629,7 @@ internal sealed class HotkeyMatchStateMachine
             return false;
 
         if (_targetVk != 0)
-            return vkCode == _targetVk && AreRequiredModifiersPressed();
+            return vkCode == _targetVk && GetPressedModifiers() == _targetModifiers;
 
         return HotkeyKeyClassifier.IsModifierKey(vkCode)
             && IsRequiredModifier(vkCode)
@@ -425,6 +684,49 @@ internal sealed class HotkeyMatchStateMachine
         var altOk = (_targetModifiers & NativeMethods.MOD_ALT) == 0 || AnyPressed(HotkeyModifier.Alt);
         var winOk = (_targetModifiers & NativeMethods.MOD_WIN) == 0 || AnyPressed(HotkeyModifier.Win);
         return ctrlOk && shiftOk && altOk && winOk;
+    }
+
+    private bool IsModifierOnly =>
+        _targetVk == 0 || (_targetModifiers == 0 && HotkeyKeyClassifier.IsModifierKey(_targetVk));
+
+    private bool HasUnexpectedModifierOnlyKey() =>
+        _pressedKeys.Any(vkCode => !IsModifierOnlyTargetKey(vkCode));
+
+    private bool AreModifierOnlyTargetsPressed()
+    {
+        if (_targetVk != 0)
+            return _pressedKeys.Contains(_targetVk) && !HasUnexpectedModifierOnlyKey();
+
+        return AreRequiredModifiersPressed()
+            && GetPressedModifiers() == _targetModifiers
+            && !HasUnexpectedModifierOnlyKey();
+    }
+
+    private bool IsModifierOnlyTargetKey(uint vkCode)
+    {
+        if (_targetVk != 0)
+            return vkCode == _targetVk;
+        return IsRequiredModifier(vkCode);
+    }
+
+    private bool IsModifierOnlyRelease(uint vkCode)
+    {
+        if (_targetVk != 0)
+            return vkCode == _targetVk;
+        return RequiredModifierReleased(vkCode);
+    }
+
+    private bool HasAnyModifierOnlyTargetPressed() =>
+        _pressedKeys.Any(IsModifierOnlyTargetKey);
+
+    private uint GetPressedModifiers()
+    {
+        var modifiers = 0u;
+        if (AnyPressed(HotkeyModifier.Control)) modifiers |= NativeMethods.MOD_CONTROL;
+        if (AnyPressed(HotkeyModifier.Shift)) modifiers |= NativeMethods.MOD_SHIFT;
+        if (AnyPressed(HotkeyModifier.Alt)) modifiers |= NativeMethods.MOD_ALT;
+        if (AnyPressed(HotkeyModifier.Win)) modifiers |= NativeMethods.MOD_WIN;
+        return modifiers;
     }
 
     private bool IsRequiredModifier(uint vkCode) =>
@@ -552,20 +854,36 @@ internal static class HotkeyParser
     public static string Normalize(string? hotkeyString)
     {
         var normalized = hotkeyString?.Trim() ?? "";
-        return Parse(normalized, out _, out _) ? normalized : "";
+        return Parse(normalized, out ParsedHotkey _) ? normalized : "";
     }
+
+    public static bool IsModifierOnly(string? hotkeyString) =>
+        Parse(hotkeyString ?? "", out ParsedHotkey parsed) && parsed.IsModifierOnly;
 
     /// <summary>
     /// Parses the supplied value into the expected representation.
     /// </summary>
     public static bool Parse(string hotkeyString, out uint modifiers, out uint vk)
     {
-        modifiers = 0;
-        vk = 0;
+        var parsed = Parse(hotkeyString, out ParsedHotkey result);
+        modifiers = result.Modifiers;
+        vk = result.Kind == HotkeyTargetKind.Keyboard ? result.Code : 0;
+        return parsed && result.Kind == HotkeyTargetKind.Keyboard;
+    }
+
+    public static bool Parse(string hotkeyString, out ParsedHotkey result)
+    {
+        var modifiers = 0u;
+        var code = 0u;
+        var kind = HotkeyTargetKind.Keyboard;
+        result = default;
         if (string.IsNullOrWhiteSpace(hotkeyString)) return false;
 
-        if (TryParseSideSpecificSingleModifier(hotkeyString.Trim(), out vk))
+        if (TryParseSideSpecificSingleModifier(hotkeyString.Trim(), out code))
+        {
+            result = new ParsedHotkey(0, HotkeyTargetKind.Keyboard, code);
             return true;
+        }
 
         foreach (var part in hotkeyString.Split('+'))
         {
@@ -581,15 +899,32 @@ internal static class HotkeyParser
                 case "WIN" or "SUPER" or "META":
                     modifiers |= NativeMethods.MOD_WIN; break;
                 default:
-                    vk = ParseKey(part.Trim());
-                    if (vk == 0) return false;
+                    if (HotkeyKeyMap.TryGetMouseButton(part.Trim(), out var mouseButton))
+                    {
+                        if (code != 0 || kind == HotkeyTargetKind.Mouse)
+                            return false;
+                        kind = HotkeyTargetKind.Mouse;
+                        code = (uint)mouseButton + 1;
+                        break;
+                    }
+
+                    var vk = ParseKey(part.Trim());
+                    if (vk == 0 || code != 0 || kind == HotkeyTargetKind.Mouse)
+                        return false;
+                    code = vk;
                     break;
             }
         }
 
-        if (vk == 0)
-            return CountModifiers(modifiers) >= 2;
+        if (code == 0)
+        {
+            if (CountModifiers(modifiers) < 2)
+                return false;
+            result = new ParsedHotkey(modifiers, HotkeyTargetKind.Keyboard, 0);
+            return true;
+        }
 
+        result = new ParsedHotkey(modifiers, kind, code);
         return true;
     }
 
@@ -621,4 +956,19 @@ internal static class HotkeyParser
         if ((modifiers & NativeMethods.MOD_WIN) != 0) count++;
         return count;
     }
+}
+
+internal enum HotkeyTargetKind
+{
+    Keyboard,
+    Mouse
+}
+
+internal readonly record struct ParsedHotkey(uint Modifiers, HotkeyTargetKind Kind, uint Code)
+{
+    public bool IsModifierOnly =>
+        Kind == HotkeyTargetKind.Keyboard
+        && (Code == 0 || (Modifiers == 0 && HotkeyKeyClassifier.IsModifierKey(Code)));
+
+    public HotkeyMouseButton MouseButton => (HotkeyMouseButton)(Code - 1);
 }

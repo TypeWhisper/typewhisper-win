@@ -30,6 +30,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     private bool _isRefreshingProviders;
     private string? _editingWorkflowId;
     private DateTime _editingCreatedAt;
+    private bool _isPopulatingLanguage;
+    private IReadOnlyList<string> _editLanguageHints = [];
 
     [ObservableProperty] private Workflow? _selectedWorkflow;
     [ObservableProperty] private bool _isEditorOpen;
@@ -130,6 +132,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// Gets the available providers.
     /// </summary>
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
+    /// <summary>
+    /// Gets the providers available to workflow overrides.
+    /// </summary>
+    public ObservableCollection<ProviderOption> AvailableEditProviders { get; } = [];
     /// <summary>
     /// Gets the action plugin options.
     /// </summary>
@@ -295,10 +301,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// </summary>
     public ProviderOption? SelectedEditProvider
     {
-        get => AvailableProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
-            ?? AvailableProviders.FirstOrDefault();
+        get => AvailableEditProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
+            ?? AvailableEditProviders.FirstOrDefault();
         set
         {
+            if (_isRefreshingProviders)
+                return;
+
             if (string.Equals(EditProviderOverride, value?.Value, StringComparison.Ordinal))
                 return;
 
@@ -646,7 +655,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditIsEnabled = workflow.IsEnabled;
         EditTemplate = workflow.Template;
         PopulateTriggerEditor(workflow.Trigger);
-        EditLanguage = workflow.Behavior.InputLanguage;
+        _editLanguageHints = AppSettings.NormalizeLanguageHints(workflow.Behavior.InputLanguageHints);
+        _isPopulatingLanguage = true;
+        EditLanguage = _editLanguageHints.FirstOrDefault() ?? workflow.Behavior.InputLanguage;
+        _isPopulatingLanguage = false;
         EditTask = workflow.Behavior.SelectedTask;
         EditTranslationTarget = workflow.Behavior.TranslationTarget;
         EditWhisperModeOverride = workflow.Behavior.WhisperModeOverride;
@@ -763,11 +775,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             ProviderOverride = string.IsNullOrWhiteSpace(EditProviderOverride) ? null : EditProviderOverride,
             ModelOverride = ParseModelOverride(EditProviderOverride),
             InputLanguage = string.IsNullOrWhiteSpace(EditLanguage) ? null : EditLanguage,
+            InputLanguageHints = _editLanguageHints,
             SelectedTask = string.IsNullOrWhiteSpace(EditTask) ? null : EditTask,
             TranslationTarget = string.IsNullOrWhiteSpace(EditTranslationTarget) ? null : EditTranslationTarget,
             WhisperModeOverride = EditWhisperModeOverride,
             TranscriptionModelOverride = string.IsNullOrWhiteSpace(EditTranscriptionModelOverride) ? null : EditTranscriptionModelOverride
         };
+    }
+
+    partial void OnEditLanguageChanged(string? value)
+    {
+        if (!_isPopulatingLanguage)
+            _editLanguageHints = [];
     }
 
     private string? ValidateEditor()
@@ -793,11 +812,6 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         if (EditTemplate == WorkflowTemplate.Translation && string.IsNullOrWhiteSpace(EditTranslationTargetLanguage))
             return Loc.Instance["Workflows.ValidationTranslation"];
-
-        if (EditTemplate == WorkflowTemplate.Custom
-            && string.IsNullOrWhiteSpace(EditCustomInstruction)
-            && string.IsNullOrWhiteSpace(EditFineTuning))
-            return Loc.Instance["Workflows.ValidationCustom"];
 
         return null;
     }
@@ -983,7 +997,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         ]);
         ReplaceCollection(LanguageOptions,
         [
-            new SettingOption(null, Loc.Instance.GetString("Workflows.LanguageGlobalFormat", LanguageDisplayName(_settings.Current.Language))),
+            new SettingOption(null, Loc.Instance.GetString(
+                "Workflows.LanguageGlobalFormat",
+                LanguageDisplayName(_settings.Current.GetLanguageHints().FirstOrDefault() ?? "auto"))),
             new SettingOption("auto", Loc.Instance["Workflows.LanguageAuto"]),
             new SettingOption("de", "Deutsch"),
             new SettingOption("en", "English"),
@@ -1026,11 +1042,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         _isRefreshingProviders = true;
         AvailableProviders.Clear();
-        AvailableProviders.Add(new ProviderOption(null, GetDefaultProviderLabel(explicitOptions)));
+        AvailableEditProviders.Clear();
+        var defaultOption = new ProviderOption(null, GetDefaultProviderLabel(explicitOptions));
+        AvailableProviders.Add(defaultOption);
+        AvailableEditProviders.Add(new ProviderOption("none", Loc.Instance["Workflows.NoPostProcessingProvider"]));
+        AvailableEditProviders.Add(defaultOption);
         foreach (var option in explicitOptions)
+        {
             AvailableProviders.Add(option);
-        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider);
-        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride);
+            AvailableEditProviders.Add(option);
+        }
+        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider, AvailableProviders);
+        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride, AvailableEditProviders);
         _isRefreshingProviders = false;
         if (clearDefaultProvider)
             DefaultLlmProvider = null;
@@ -1040,9 +1063,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedEditProvider));
     }
 
-    private bool IsStaleProviderSelection(string? value) =>
+    private static bool IsStaleProviderSelection(string? value, IEnumerable<ProviderOption> options) =>
         !string.IsNullOrWhiteSpace(value)
-        && !AvailableProviders.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
+        && !options.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
 
     private string GetDefaultProviderLabel(IReadOnlyList<ProviderOption> explicitOptions)
     {

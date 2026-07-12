@@ -246,9 +246,8 @@ public sealed class SpeechFeedbackService : IDisposable
             !string.IsNullOrWhiteSpace(request.Language))
             return request;
 
-        var configuredLanguage = _settings.Current.Language;
-        if (string.IsNullOrWhiteSpace(configuredLanguage) ||
-            string.Equals(configuredLanguage, "auto", StringComparison.OrdinalIgnoreCase))
+        var configuredLanguage = _settings.Current.GetLanguageHints().FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(configuredLanguage))
             return request;
 
         return request with { Language = configuredLanguage };

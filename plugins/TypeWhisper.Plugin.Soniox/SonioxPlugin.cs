@@ -164,6 +164,22 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         string? language,
         bool translate,
         string? prompt,
+        CancellationToken ct) =>
+        await TranscribeWithLanguageHintsAsync(
+            wavAudio,
+            NormalizeLanguage(language) is { } normalizedLanguage ? [normalizedLanguage] : [],
+            translate,
+            prompt,
+            ct);
+
+    /// <summary>
+    /// Transcribes PCM audio using ordered language hints.
+    /// </summary>
+    public async Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
+        byte[] wavAudio,
+        IReadOnlyList<string> languageHints,
+        bool translate,
+        string? prompt,
         CancellationToken ct)
     {
         if (translate)
@@ -179,10 +195,16 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         try
         {
             fileId = await UploadFileAsync(wavAudio, apiKey, ct);
-            transcriptionId = await CreateTranscriptionAsync(fileId, language, apiKey, ct);
+            var normalizedLanguageHints = languageHints
+                .Select(NormalizeLanguage)
+                .Where(static language => language is not null)
+                .Select(static language => language!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            transcriptionId = await CreateTranscriptionAsync(fileId, normalizedLanguageHints, apiKey, ct);
             var completedDetails = await WaitUntilCompletedAsync(transcriptionId, apiKey, ct);
             var transcriptJson = await FetchTranscriptAsync(transcriptionId, apiKey, ct);
-            var result = ParseTranscript(transcriptJson, completedDetails, NormalizeLanguage(language));
+            var result = ParseTranscript(transcriptJson, completedDetails, normalizedLanguageHints.FirstOrDefault());
 
             // Deleting the uploaded file and the transcription is best-effort housekeeping the
             // caller does not need to wait for. Run it off the critical path so the two extra
@@ -295,7 +317,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private async Task<string> CreateTranscriptionAsync(
         string fileId,
-        string? language,
+        IReadOnlyList<string> languageHints,
         string apiKey,
         CancellationToken ct)
     {
@@ -305,8 +327,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ["file_id"] = fileId,
         };
 
-        if (NormalizeLanguage(language) is { } normalizedLanguage)
-            payload["language_hints"] = new[] { normalizedLanguage };
+        if (languageHints.Count > 0)
+            payload["language_hints"] = languageHints;
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/transcriptions");
         AddAuthorization(request, apiKey);

@@ -65,6 +65,22 @@ internal static partial class NativeMethods
     /// Defines the wh keyboard ll constant.
     /// </summary>
     public const int WH_KEYBOARD_LL = 13;
+    /// <summary>
+    /// Defines the wh mouse ll constant.
+    /// </summary>
+    public const int WH_MOUSE_LL = 14;
+
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_RBUTTONDOWN = 0x0204;
+    public const int WM_RBUTTONUP = 0x0205;
+    public const int WM_MBUTTONDOWN = 0x0207;
+    public const int WM_MBUTTONUP = 0x0208;
+    public const int WM_XBUTTONDOWN = 0x020B;
+    public const int WM_XBUTTONUP = 0x020C;
+    public const uint XBUTTON1 = 0x0001;
+    public const uint XBUTTON2 = 0x0002;
+    public const uint LLMHF_INJECTED = 0x00000001;
 
     // Virtual key codes
     /// <summary>
@@ -115,6 +131,34 @@ internal static partial class NativeMethods
     /// Defines the vk space constant.
     /// </summary>
     public const int VK_SPACE = 0x20;
+    public const int VK_CAPITAL = 0x14;
+    public const int VK_SLEEP = 0x5F;
+    public const int VK_MULTIPLY = 0x6A;
+    public const int VK_ADD = 0x6B;
+    public const int VK_SEPARATOR = 0x6C;
+    public const int VK_SUBTRACT = 0x6D;
+    public const int VK_DECIMAL = 0x6E;
+    public const int VK_DIVIDE = 0x6F;
+    public const int VK_NUMLOCK = 0x90;
+    public const int VK_APPS = 0x5D;
+    public const int VK_BROWSER_BACK = 0xA6;
+    public const int VK_BROWSER_FORWARD = 0xA7;
+    public const int VK_BROWSER_REFRESH = 0xA8;
+    public const int VK_BROWSER_STOP = 0xA9;
+    public const int VK_BROWSER_SEARCH = 0xAA;
+    public const int VK_BROWSER_FAVORITES = 0xAB;
+    public const int VK_BROWSER_HOME = 0xAC;
+    public const int VK_VOLUME_MUTE = 0xAD;
+    public const int VK_VOLUME_DOWN = 0xAE;
+    public const int VK_VOLUME_UP = 0xAF;
+    public const int VK_MEDIA_NEXT_TRACK = 0xB0;
+    public const int VK_MEDIA_PREV_TRACK = 0xB1;
+    public const int VK_MEDIA_STOP = 0xB2;
+    public const int VK_MEDIA_PLAY_PAUSE = 0xB3;
+    public const int VK_LAUNCH_MAIL = 0xB4;
+    public const int VK_LAUNCH_MEDIA_SELECT = 0xB5;
+    public const int VK_LAUNCH_APP1 = 0xB6;
+    public const int VK_LAUNCH_APP2 = 0xB7;
     /// <summary>
     /// Defines the vk prior constant.
     /// </summary>
@@ -152,6 +196,7 @@ internal static partial class NativeMethods
     /// Represents the callback signature used by the low-level keyboard hook.
     /// </summary>
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     /// <summary>
     /// Performs register hot key.
@@ -172,6 +217,9 @@ internal static partial class NativeMethods
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial IntPtr SetWindowsHookExW(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+    public static partial IntPtr SetWindowsMouseHookExW(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     /// <summary>
     /// Performs unhook windows hook ex.
@@ -230,6 +278,16 @@ internal static partial class NativeMethods
         /// <summary>
         /// Gets or sets extra Win32 input information.
         /// </summary>
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSLLHOOKSTRUCT
+    {
+        public POINT pt;
+        public uint mouseData;
+        public uint flags;
+        public uint time;
         public IntPtr dwExtraInfo;
     }
 

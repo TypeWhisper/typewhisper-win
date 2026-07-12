@@ -29,6 +29,16 @@ public interface ITranscriptionEngine
         string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transcribes PCM audio using ordered language hints.
+    /// </summary>
+    Task<TranscriptionResult> TranscribeWithLanguageHintsAsync(
+        float[] audioSamples,
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task = TranscriptionTask.Transcribe,
+        CancellationToken cancellationToken = default) =>
+        TranscribeAsync(audioSamples, languageHints.FirstOrDefault(), task, cancellationToken);
 }
 
 /// <summary>

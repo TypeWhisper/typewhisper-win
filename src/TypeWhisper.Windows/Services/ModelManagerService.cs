@@ -478,6 +478,21 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         string? language = null,
         TranscriptionTask task = TranscriptionTask.Transcribe,
         string? prompt = null,
+        CancellationToken cancellationToken = default) =>
+        await TranscribeActiveWithLanguageHintsAsync(
+            audioSamples,
+            string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                ? []
+                : [language],
+            task,
+            prompt,
+            cancellationToken);
+
+    internal async Task<ActiveModelTranscriptionResult> TranscribeActiveWithLanguageHintsAsync(
+        float[] audioSamples,
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task = TranscriptionTask.Transcribe,
+        string? prompt = null,
         CancellationToken cancellationToken = default)
     {
         var plugin = ActiveTranscriptionPlugin
@@ -490,7 +505,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var wavBytes = WavEncoder.Encode(audioSamples);
         var translate = task == TranscriptionTask.Translate;
         var stopwatch = Stopwatch.StartNew();
-        var result = await plugin.TranscribeAsync(wavBytes, language, translate, prompt, cancellationToken);
+        var result = await plugin.TranscribeWithLanguageHintsAsync(
+            wavBytes, languageHints, translate, prompt, cancellationToken);
         stopwatch.Stop();
 
         var transcription = new TranscriptionResult
@@ -800,6 +816,29 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
         var wavBytes = WavEncoder.Encode(audioSamples);
         var translate = task == TranscriptionTask.Translate && _plugin.SupportsTranslation;
         var result = await _plugin.TranscribeAsync(wavBytes, language, translate, null, cancellationToken);
+        return new TranscriptionResult
+        {
+            Text = result.Text,
+            DetectedLanguage = result.DetectedLanguage,
+            Duration = result.DurationSeconds,
+            NoSpeechProbability = result.NoSpeechProbability,
+            Segments = result.Segments.Select(seg => new TranscriptionSegment(seg.Text, seg.Start, seg.End)).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Transcribes PCM audio using ordered language hints.
+    /// </summary>
+    public async Task<TranscriptionResult> TranscribeWithLanguageHintsAsync(
+        float[] audioSamples,
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task = TranscriptionTask.Transcribe,
+        CancellationToken cancellationToken = default)
+    {
+        var wavBytes = WavEncoder.Encode(audioSamples);
+        var translate = task == TranscriptionTask.Translate && _plugin.SupportsTranslation;
+        var result = await _plugin.TranscribeWithLanguageHintsAsync(
+            wavBytes, languageHints, translate, null, cancellationToken);
         return new TranscriptionResult
         {
             Text = result.Text,

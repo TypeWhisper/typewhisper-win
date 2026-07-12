@@ -277,6 +277,31 @@ public sealed record WorkflowBehavior
     /// </summary>
     public string? InputLanguage { get; init; }
     /// <summary>
+    /// Gets or sets ordered input language hints.
+    /// </summary>
+    public IReadOnlyList<string> InputLanguageHints { get; init; } = [];
+
+    /// <summary>
+    /// Resolves this workflow's ordered language hints against the global setting.
+    /// </summary>
+    public IReadOnlyList<string> GetLanguageHints(IReadOnlyList<string> globalHints)
+    {
+        var hints = AppSettings.NormalizeLanguageHints(InputLanguageHints);
+        if (hints.Count > 0)
+            return hints;
+
+        if (string.IsNullOrWhiteSpace(InputLanguage)
+            || InputLanguage.Equals("global", StringComparison.OrdinalIgnoreCase)
+            || InputLanguage.Equals("inherit_global", StringComparison.OrdinalIgnoreCase))
+        {
+            return AppSettings.NormalizeLanguageHints(globalHints);
+        }
+
+        return InputLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? []
+            : AppSettings.NormalizeLanguageHints([InputLanguage]);
+    }
+    /// <summary>
     /// Gets or sets the selected task value.
     /// </summary>
     public string? SelectedTask { get; init; }
@@ -450,6 +475,9 @@ public sealed record Workflow
         string? detectedLanguage = null,
         string? configuredLanguage = null)
     {
+        if (string.Equals(Behavior.ProviderOverride, "none", StringComparison.OrdinalIgnoreCase))
+            return null;
+
         var languageHint = BuildLanguageHint(detectedLanguage, configuredLanguage);
         var settingsInstruction = BuildSettingsInstruction();
         var fineTuningInstruction = BuildFineTuningInstruction();

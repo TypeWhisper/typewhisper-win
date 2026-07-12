@@ -107,6 +107,18 @@ public sealed class SettingsViewModelHotkeyTests
     }
 
     [Fact]
+    public void AddHoldOnlyHotkey_RejectsModifierOnlyShortcut()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with { HoldOnlyHotkeys = [] });
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.AddHoldOnlyHotkeyCommand.Execute("Ctrl+Shift");
+
+        Assert.Empty(sut.HoldOnlyHotkeys);
+        Assert.Contains("hold-only", sut.ShortcutsError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void AddAndRemoveRecorderToggleHotkeys_PersistsListAndLegacyFirstValue()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

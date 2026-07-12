@@ -28,11 +28,13 @@ public interface IFileTranscriptionProcessor
 /// <param name="ModelId">Model id supplied to the member.</param>
 /// <param name="Language">Language supplied to the member.</param>
 /// <param name="Task">Task supplied to the member.</param>
+/// <param name="LanguageHints">Ordered language hints supplied to the member.</param>
 public sealed record FileTranscriptionProcessOptions(
     string? EngineId = null,
     string? ModelId = null,
     string? Language = null,
-    TranscriptionTask? Task = null);
+    TranscriptionTask? Task = null,
+    IReadOnlyList<string>? LanguageHints = null);
 
 /// <summary>
 /// Represents file transcription process progress data.
@@ -89,15 +91,19 @@ public sealed class FileTranscriptionProcessor(
             Loc.Instance["FileTranscription.Transcribing"]));
 
         var currentSettings = settings.Current;
-        var configuredLanguage = options?.Language ?? currentSettings.Language;
-        var language = configuredLanguage == "auto" ? null : configuredLanguage;
+        var languageHints = options?.Language is { } configuredLanguage
+            ? AppSettings.NormalizeLanguageHints([configuredLanguage])
+            : options?.LanguageHints is { Count: > 0 } configuredHints
+                ? AppSettings.NormalizeLanguageHints(configuredHints)
+                : currentSettings.GetLanguageHints();
+        var language = languageHints.FirstOrDefault();
         var task = options?.Task ?? (currentSettings.TranscriptionTask == "translate"
             ? TranscriptionTask.Translate
             : TranscriptionTask.Transcribe);
 
-        var activeResult = await modelManager.TranscribeActiveAsync(
+        var activeResult = await modelManager.TranscribeActiveWithLanguageHintsAsync(
             samples,
-            language,
+            languageHints,
             task,
             prompt: null,
             cancellationToken);
@@ -108,6 +114,7 @@ public sealed class FileTranscriptionProcessor(
             TranscriptionTask = task,
             DetectedLanguage = result.DetectedLanguage,
             ConfiguredLanguage = language,
+            ConfiguredLanguageCandidates = languageHints,
             VocabularyBooster = currentSettings.VocabularyBoostingEnabled ? vocabularyBoosting.Apply : null,
             DictionaryCorrector = dictionary.ApplyCorrections
         }, cancellationToken);
@@ -115,7 +122,7 @@ public sealed class FileTranscriptionProcessor(
             result,
             task,
             language,
-            [],
+            languageHints,
             currentSettings.TranscriptionNumberNormalizationEnabled);
 
         modelManager.ScheduleAutoUnload();
