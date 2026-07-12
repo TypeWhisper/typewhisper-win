@@ -15,7 +15,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 {
     internal const string DefaultModelId = "default";
 
-    private const string BaseUrl = "https://api.soniox.com";
+    internal const string DefaultRegionId = "us";
+    private const string RegionSettingKey = "region";
     private const string ApiKeySecretName = "api-key";
     private const string SonioxAsyncModelId = "stt-async-v5";
     private const int DefaultMaxPollAttempts = 3600;
@@ -40,6 +41,19 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         },
     ];
 
+    // Soniox data residency: each region has its own domain and requires an API key from a
+    // project created in that region. https://soniox.com/docs/stt/data-residency
+    private static readonly IReadOnlyList<SonioxRegion> Regions =
+    [
+        new(DefaultRegionId, "United States", "https://api.soniox.com"),
+        new("eu", "European Union", "https://api.eu.soniox.com"),
+        new("jp", "Japan", "https://api.jp.soniox.com"),
+    ];
+
+    // Each auto-detect probe is bounded so an unreachable region fails fast rather than
+    // blocking the settings Test flow for the full HttpClient timeout.
+    private static readonly TimeSpan RegionProbeTimeout = TimeSpan.FromSeconds(10);
+
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _initialPollDelay;
     private readonly TimeSpan _maxPollDelay;
@@ -49,6 +63,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
+    private string _region = DefaultRegionId;
     private Task _lastCleanupTask = Task.CompletedTask;
 
     /// <summary>
@@ -75,6 +90,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         _maxPollAttempts = maxPollAttempts;
     }
 
+    private string BaseUrl => ResolveRegion(_region).BaseUrl;
+
     // ITypeWhisperPlugin
 
     /// <summary>
@@ -88,7 +105,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.3";
+    public string PluginVersion => "1.0.4";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -98,7 +115,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         _host = host;
         _apiKey = NormalizeApiKey(await host.LoadSecretAsync(ApiKeySecretName));
         _selectedModelId = DefaultModelId;
-        host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
+        _region = NormalizeRegionId(host.GetSetting<string>(RegionSettingKey));
+        host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured}, region={_region})");
     }
 
     /// <summary>
@@ -224,6 +242,55 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     internal string? ApiKey => _apiKey;
     internal IPluginLocalization? Loc => _host?.Localization;
 
+    internal static IReadOnlyList<SonioxRegion> AvailableRegions => Regions;
+
+    /// <summary>Gets the currently selected Soniox data-residency region id.</summary>
+    internal string RegionId => _region;
+
+    /// <summary>Persists the selected Soniox region. Unknown ids fall back to the default (US).</summary>
+    internal void SetRegion(string regionId)
+    {
+        var normalized = NormalizeRegionId(regionId);
+        if (string.Equals(_region, normalized, StringComparison.Ordinal))
+            return;
+
+        _region = normalized;
+        _host?.SetSetting(RegionSettingKey, normalized);
+    }
+
+    /// <summary>
+    /// Probes each regional endpoint with the key and returns the region id it authenticates
+    /// against, or null if none accept it. Region is bound to the key's project, not the
+    /// user's location, so probing detects the correct region reliably.
+    /// </summary>
+    internal async Task<string?> DetectRegionAsync(string apiKey, CancellationToken ct = default)
+    {
+        var normalized = NormalizeApiKey(apiKey);
+        if (normalized is null)
+            return null;
+
+        foreach (var region in Regions)
+        {
+            // Bound the probe so an unreachable region fails fast instead of blocking on the
+            // full HttpClient timeout; a probe timeout skips to the next region, while a real
+            // caller cancellation still propagates.
+            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            probeCts.CancelAfter(RegionProbeTimeout);
+
+            try
+            {
+                if (await ProbeModelsAsync(region.BaseUrl, normalized, probeCts.Token))
+                    return region.Id;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // This region's probe timed out; try the next region.
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Best-effort cleanup task from the most recent successful transcription.
     /// Exposed so tests can await background cleanup deterministically.
@@ -273,10 +340,15 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         if (normalized is null)
             return false;
 
+        return await ProbeModelsAsync(BaseUrl, normalized, ct);
+    }
+
+    private async Task<bool> ProbeModelsAsync(string baseUrl, string apiKey, CancellationToken ct)
+    {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
-            AddAuthorization(request, normalized);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/v1/models");
+            AddAuthorization(request, apiKey);
             using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
@@ -698,6 +770,13 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
                 : trimmed;
     }
 
+    private static string NormalizeRegionId(string? regionId) => ResolveRegion(regionId).Id;
+
+    private static SonioxRegion ResolveRegion(string? regionId) =>
+        Regions.FirstOrDefault(region =>
+            string.Equals(region.Id, regionId?.Trim(), StringComparison.OrdinalIgnoreCase))
+        ?? Regions[0];
+
     private static string? GetString(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var property)
         && property.ValueKind == JsonValueKind.String
@@ -720,6 +799,9 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromMinutes(5) };
 
     private sealed record SonioxTimedToken(string Text, double Start, double End);
+
+    /// <summary>A Soniox data-residency region and its REST base URL.</summary>
+    internal sealed record SonioxRegion(string Id, string DisplayName, string BaseUrl);
 
     /// <summary>
     /// Releases resources held by the instance.
