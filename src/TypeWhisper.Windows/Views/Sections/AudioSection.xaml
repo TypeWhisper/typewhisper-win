@@ -339,6 +339,7 @@
                                     <Button DockPanel.Dock="Right"
                                             Margin="8,0,0,0"
                                             Padding="14,6"
+                                            Style="{StaticResource SecondaryButtonStyle}"
                                             Command="{Binding Settings.AddLanguageHintCommand}"
                                             Content="{loc:Str Dictation.AddLanguage}"/>
                                     <ComboBox ItemsSource="{Binding Settings.AvailableLanguageHints}"
@@ -364,16 +365,19 @@
                                                 <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}"/>
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                     <Button Margin="2,0" Padding="8,3" Content="↑"
+                                                            Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.MoveLanguageEarlier}"
                                                             AutomationProperties.Name="{loc:Str Dictation.MoveLanguageEarlier}"
                                                             Command="{Binding DataContext.Settings.MoveLanguageHintEarlierCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Margin="2,0" Padding="8,3" Content="↓"
+                                                            Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.MoveLanguageLater}"
                                                             AutomationProperties.Name="{loc:Str Dictation.MoveLanguageLater}"
                                                             Command="{Binding DataContext.Settings.MoveLanguageHintLaterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Margin="2,0" Padding="8,3" Content="×"
+                                                            Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.RemoveLanguage}"
                                                             AutomationProperties.Name="{loc:Str Dictation.RemoveLanguage}"
                                                             Command="{Binding DataContext.Settings.RemoveLanguageHintCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

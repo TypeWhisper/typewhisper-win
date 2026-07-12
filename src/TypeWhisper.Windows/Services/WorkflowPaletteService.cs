@@ -225,9 +225,6 @@ public sealed class WorkflowPaletteService
             _ => Loc.Instance["Status.Done"]
         };
 
-    private static string? NormalizeConfiguredLanguage(string? language) =>
-        string.Equals(language, "auto", StringComparison.OrdinalIgnoreCase) ? null : language;
-
     private void ReportError(Exception ex) =>
         FeedbackRequested?.Invoke(Loc.Instance.GetString("Status.ErrorFormat", ex.Message), true);
 }
