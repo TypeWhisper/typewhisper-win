@@ -671,6 +671,8 @@
   "Status.Done": "Готово",
   "Status.ActionFormat": "Выполняется {0}…",
   "Status.Cancelled": "Отменено",
+  "Status.CancelRecordingConfirm": "Нажмите Esc ещё раз, чтобы отменить запись",
+  "Status.CancelTranscriptionConfirm": "Нажмите Esc ещё раз, чтобы отменить расшифровку",
   "Status.NoMicrophone": "Микрофон не подключён",
   "Status.MicrophoneRestored": "Микрофон подключён",
   "Status.ErrorFormat": "Ошибка: {0}",

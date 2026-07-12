@@ -122,6 +122,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private int _feedbackAutoHideMilliseconds = 2000;
     private bool _isRecording;
     private bool _isStoppingRecording;
+    private DictationState? _cancelConfirmationState;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
     private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
@@ -176,6 +177,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     [ObservableProperty] private string? _feedbackActionText;
     [ObservableProperty] private string? _lastTranscribedText;
     [ObservableProperty] private string? _lastTranscriptionLanguage;
+    [ObservableProperty] private string? _cancelWarningText;
 
     /// <summary>
     /// Returns whether read back last transcription.
@@ -300,8 +302,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             }
         });
 
-        _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
-            await AbortActiveOperation());
+        _hotkey.CancelRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(HandleCancelRequested);
         _hotkey.RecentTranscriptionsRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(ShowRecentTranscriptionsPalette);
         _hotkey.CopyLastTranscriptionRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
             await CopyLastTranscriptionToClipboardAsync());
@@ -1226,6 +1227,50 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
 
         return Task.CompletedTask;
+    }
+
+    internal async Task HandleCancelRequested()
+    {
+        if (State is not (DictationState.Recording or DictationState.Processing))
+            return;
+
+        if (ConfirmCancel(State, ref _cancelConfirmationState))
+        {
+            CancelWarningText = null;
+            await AbortActiveOperation();
+            return;
+        }
+
+        CancelWarningText = State == DictationState.Recording
+            ? Loc.Instance["Status.CancelRecordingConfirm"]
+            : Loc.Instance["Status.CancelTranscriptionConfirm"];
+    }
+
+    partial void OnStateChanged(DictationState value)
+    {
+        ResetCancelConfirmation(value, ref _cancelConfirmationState);
+        if (_cancelConfirmationState is null)
+            CancelWarningText = null;
+    }
+
+    internal static bool ConfirmCancel(DictationState state, ref DictationState? confirmationState)
+    {
+        if (confirmationState != state)
+        {
+            confirmationState = state;
+            return false;
+        }
+
+        confirmationState = null;
+        return true;
+    }
+
+    internal static void ResetCancelConfirmation(
+        DictationState state,
+        ref DictationState? confirmationState)
+    {
+        if (confirmationState != state)
+            confirmationState = null;
     }
 
     private async Task ProcessJobsAsync(CancellationToken ct)

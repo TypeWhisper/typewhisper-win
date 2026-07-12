@@ -684,6 +684,8 @@
   "Status.Done": "Done",
   "Status.ActionFormat": "Running {0}...",
   "Status.Cancelled": "Cancelled",
+  "Status.CancelRecordingConfirm": "Press Esc again to cancel recording",
+  "Status.CancelTranscriptionConfirm": "Press Esc again to cancel transcription",
   "Status.NoMicrophone": "No microphone connected",
   "Status.MicrophoneRestored": "Microphone connected",
   "Status.ErrorFormat": "Error: {0}",

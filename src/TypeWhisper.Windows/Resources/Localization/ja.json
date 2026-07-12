@@ -671,6 +671,8 @@
   "Status.Done": "完了",
   "Status.ActionFormat": "{0}を実行中...",
   "Status.Cancelled": "キャンセルしました",
+  "Status.CancelRecordingConfirm": "Escを再度押して録音をキャンセル",
+  "Status.CancelTranscriptionConfirm": "Escを再度押して文字起こしをキャンセル",
   "Status.NoMicrophone": "マイクが接続されていません",
   "Status.MicrophoneRestored": "マイクが接続されました",
   "Status.ErrorFormat": "エラー: {0}",
