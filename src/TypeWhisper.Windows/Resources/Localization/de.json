@@ -684,6 +684,8 @@
   "Status.Done": "Fertig",
   "Status.ActionFormat": "{0} wird ausgeführt...",
   "Status.Cancelled": "Abgebrochen",
+  "Status.CancelRecordingConfirm": "Drücke Esc erneut, um die Aufnahme abzubrechen",
+  "Status.CancelTranscriptionConfirm": "Drücke Esc erneut, um die Transkription abzubrechen",
   "Status.NoMicrophone": "Kein Mikrofon angeschlossen",
   "Status.MicrophoneRestored": "Mikrofon verbunden",
   "Status.ErrorFormat": "Fehler: {0}",

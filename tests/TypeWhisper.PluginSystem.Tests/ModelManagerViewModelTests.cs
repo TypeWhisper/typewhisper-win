@@ -534,7 +534,7 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
-    public async Task DictationAbortActiveOperation_WhileRecording_PublishesTerminalPluginEvents()
+    public async Task DictationCancel_WhileRecording_RequiresConfirmationAndPublishesTerminalPluginEvents()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";
         const string modelId = "parakeet";
@@ -639,7 +639,16 @@ public class ModelManagerViewModelTests
         lock (startedEvents)
             recordingId = Assert.Single(startedEvents).RecordingId;
 
-        await InvokeAbortActiveOperationAsync(sut);
+        await sut.HandleCancelRequested();
+
+        Assert.True(sut.IsRecording);
+        Assert.Equal(Loc.Instance["Status.CancelRecordingConfirm"], sut.CancelWarningText);
+        lock (stoppedEvents)
+            Assert.Empty(stoppedEvents);
+        lock (failedEvents)
+            Assert.Empty(failedEvents);
+
+        await sut.HandleCancelRequested();
 
         Assert.True(await WaitForConditionAsync(
             () =>
@@ -924,16 +933,6 @@ public class ModelManagerViewModelTests
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
         field.SetValue(target, value);
-    }
-
-    private static Task InvokeAbortActiveOperationAsync(DictationViewModel target)
-    {
-        var method = typeof(DictationViewModel).GetMethod(
-            "AbortActiveOperation",
-            BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new MissingMethodException(nameof(DictationViewModel), "AbortActiveOperation");
-
-        return (Task)method.Invoke(target, null)!;
     }
 
     private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
