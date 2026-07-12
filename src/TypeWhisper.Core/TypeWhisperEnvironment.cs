@@ -31,7 +31,7 @@ public static class TypeWhisperEnvironment
         IsDevelopmentBuild ? "TypeWhisper-DevUserData" : "TypeWhisper-UserData");
 
     /// <summary>
-    /// Gets the base path.
+    /// Gets the canonical base path for persistent user data.
     /// </summary>
     public static string BasePath => _basePath;
     /// <summary>

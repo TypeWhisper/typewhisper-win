@@ -5,7 +5,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class UserDataMigrationServiceTests : IDisposable
 {
-    private readonly string _root = Path.Join(Path.GetTempPath(), $"tw_audio_migration_{Guid.NewGuid():N}");
+    private readonly string _root = Path.Join(Path.GetTempPath(), $"tw_user_data_migration_{Guid.NewGuid():N}");
 
     [Fact]
     public void MigrateLegacyAudioIfNeeded_MovesLegacyAudioContentsToUserDataAudioPath()

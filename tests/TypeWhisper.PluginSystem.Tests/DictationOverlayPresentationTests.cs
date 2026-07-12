@@ -82,7 +82,9 @@ public class DictationOverlayPresentationTests
         Assert.Contains("_errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyTransientIdleFeedback(feedback, feedbackIsError: true);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId);", startRecording, StringComparison.Ordinal);
-        Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId, ex);", startRecording, StringComparison.Ordinal);
+        Assert.Equal(4, TestFile.CountOccurrences(
+            startRecording,
+            "ApplyModelUnavailableFeedback(desiredModelId, ex);"));
     }
 
     [Fact]

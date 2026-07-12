@@ -71,6 +71,18 @@ public sealed class UninstallUserDataProtectorTests : IDisposable
         Assert.Contains("UninstallUserDataProtector.ProtectLegacyAudioDirectory()", source);
     }
 
+    [Fact]
+    public void Program_AcquiresSingleInstanceBeforeMigratingUserData()
+    {
+        var source = TestFile.ReadProjectFile("src", "TypeWhisper.Windows", "Program.cs");
+
+        var mutexIndex = source.IndexOf("new Mutex(true, \"TypeWhisper-SingleInstance\"", StringComparison.Ordinal);
+        var migrationIndex = source.IndexOf("UserDataMigrationService.MigrateLegacyDataIfNeeded()", StringComparison.Ordinal);
+
+        Assert.True(mutexIndex >= 0);
+        Assert.True(migrationIndex > mutexIndex);
+    }
+
     public void Dispose()
     {
         try
