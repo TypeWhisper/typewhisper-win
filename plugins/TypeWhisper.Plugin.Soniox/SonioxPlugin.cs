@@ -17,14 +17,20 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private const string BaseUrl = "https://api.soniox.com";
     private const string ApiKeySecretName = "api-key";
-    private const string SonioxAsyncModelId = "stt-async-v4";
+    private const string SonioxAsyncModelId = "stt-async-v5";
     private const int DefaultMaxPollAttempts = 3600;
     private const int MaxSubtitleSegmentCharacters = 84;
     private const int MinSentenceSegmentCharacters = 20;
     private const double MaxSubtitleSegmentDurationSeconds = 6.0;
     private const double SubtitleSegmentPauseSplitSeconds = 0.75;
 
-    private static readonly TimeSpan DefaultPollDelay = TimeSpan.FromSeconds(1);
+    private const double PollBackoffFactor = 1.5;
+
+    // Async transcription completion is polled. Start with a short delay so brief dictation
+    // clips (which finish in well under a second) are picked up quickly, then exponentially
+    // back off toward a cap so long recordings do not hammer the API.
+    private static readonly TimeSpan DefaultInitialPollDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan DefaultMaxPollDelay = TimeSpan.FromSeconds(2);
 
     private static readonly IReadOnlyList<PluginModelInfo> Models =
     [
@@ -35,13 +41,15 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     ];
 
     private readonly HttpClient _httpClient;
-    private readonly TimeSpan _pollDelay;
+    private readonly TimeSpan _initialPollDelay;
+    private readonly TimeSpan _maxPollDelay;
     private readonly int _maxPollAttempts;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
 
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string _selectedModelId = DefaultModelId;
+    private Task _lastCleanupTask = Task.CompletedTask;
 
     /// <summary>
     /// Initializes a new instance of the SonioxPlugin class.
@@ -60,7 +68,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             throw new ArgumentOutOfRangeException(nameof(maxPollAttempts), "Poll attempts must be positive.");
 
         _httpClient = httpClient;
-        _pollDelay = pollDelay ?? DefaultPollDelay;
+        // A caller-supplied pollDelay (used by tests for determinism) pins both bounds to a
+        // fixed interval; otherwise poll with an adaptive initial delay that backs off to a cap.
+        _initialPollDelay = pollDelay ?? DefaultInitialPollDelay;
+        _maxPollDelay = pollDelay ?? DefaultMaxPollDelay;
         _maxPollAttempts = maxPollAttempts;
     }
 
@@ -193,11 +204,18 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             transcriptionId = await CreateTranscriptionAsync(fileId, normalizedLanguageHints, apiKey, ct);
             var completedDetails = await WaitUntilCompletedAsync(transcriptionId, apiKey, ct);
             var transcriptJson = await FetchTranscriptAsync(transcriptionId, apiKey, ct);
-            return ParseTranscript(transcriptJson, completedDetails, normalizedLanguageHints.FirstOrDefault());
+            var result = ParseTranscript(transcriptJson, completedDetails, normalizedLanguageHints.FirstOrDefault());
+
+            // Deleting the uploaded file and the transcription is best-effort housekeeping the
+            // caller does not need to wait for. Run it off the critical path so the two extra
+            // round-trips do not add to perceived dictation latency.
+            _lastCleanupTask = CleanupInBackgroundAsync(transcriptionId, fileId, apiKey);
+            return result;
         }
-        finally
+        catch
         {
             await CleanupAsync(transcriptionId, fileId, apiKey);
+            throw;
         }
     }
 
@@ -205,6 +223,12 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     internal string? ApiKey => _apiKey;
     internal IPluginLocalization? Loc => _host?.Localization;
+
+    /// <summary>
+    /// Best-effort cleanup task from the most recent successful transcription.
+    /// Exposed so tests can await background cleanup deterministically.
+    /// </summary>
+    internal Task LastCleanupTask => _lastCleanupTask;
 
     internal async Task SetApiKeyAsync(string apiKey)
     {
@@ -318,6 +342,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private async Task<JsonElement> WaitUntilCompletedAsync(string transcriptionId, string apiKey, CancellationToken ct)
     {
+        var delay = _initialPollDelay;
         for (var attempt = 0; attempt < _maxPollAttempts; attempt++)
         {
             ct.ThrowIfCancellationRequested();
@@ -336,8 +361,13 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Soniox transcription failed: {ExtractApiError(root)}");
 
-            if (attempt < _maxPollAttempts - 1 && _pollDelay > TimeSpan.Zero)
-                await Task.Delay(_pollDelay, ct);
+            if (attempt < _maxPollAttempts - 1 && delay > TimeSpan.Zero)
+            {
+                await Task.Delay(delay, ct);
+                delay = TimeSpan.FromTicks(Math.Min(
+                    (long)(delay.Ticks * PollBackoffFactor),
+                    _maxPollDelay.Ticks));
+            }
         }
 
         throw new TimeoutException(
@@ -375,6 +405,21 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
         if (fileId is not null)
             await DeleteBestEffortAsync($"{BaseUrl}/v1/files/{fileId}", "file", apiKey);
+    }
+
+    private async Task CleanupInBackgroundAsync(string? transcriptionId, string? fileId, string apiKey)
+    {
+        // Yield so the transcript is returned to the caller before cleanup round-trips run.
+        await Task.Yield();
+
+        try
+        {
+            await CleanupAsync(transcriptionId, fileId, apiKey);
+        }
+        catch (Exception ex)
+        {
+            _host?.Log(PluginLogLevel.Warning, $"Soniox background cleanup failed: {ex.Message}");
+        }
     }
 
     private async Task DeleteBestEffortAsync(string uri, string resourceName, string apiKey)
