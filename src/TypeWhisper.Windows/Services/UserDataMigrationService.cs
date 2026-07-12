@@ -4,18 +4,65 @@ using TypeWhisper.Core;
 
 namespace TypeWhisper.Windows.Services;
 
-internal static class UserAudioMigrationService
+internal static class UserDataMigrationService
 {
-    public static void MigrateLegacyAudioIfNeeded()
+    private static readonly string[] DirectoryNames = ["Data", "Logs", "Models", "Plugins", "PluginData"];
+    private static readonly string[] FileNames = ["settings.json", "settings.json.bak", "api-token"];
+
+    public static void MigrateLegacyDataIfNeeded() =>
+        MigrateLegacyData(TypeWhisperEnvironment.LegacyBasePath, TypeWhisperEnvironment.BasePath);
+
+    internal static void MigrateLegacyData(string legacyBasePath, string userDataBasePath)
     {
-        try
+        var legacyRoot = Normalize(legacyBasePath);
+        var userDataRoot = Normalize(userDataBasePath);
+
+        if (PathsEqual(legacyRoot, userDataRoot) || !Directory.Exists(legacyRoot))
+            return;
+
+        Directory.CreateDirectory(userDataRoot);
+
+        foreach (var name in DirectoryNames)
+            MoveWithoutOverwrite(Path.Join(legacyRoot, name), Path.Join(userDataRoot, name));
+
+        foreach (var name in FileNames)
+            MoveWithoutOverwrite(Path.Join(legacyRoot, name), Path.Join(userDataRoot, name));
+
+        MigrateLegacyAudio(Path.Join(legacyRoot, "Audio"), Path.Join(userDataRoot, "Audio"));
+    }
+
+    private static void MoveWithoutOverwrite(string source, string target)
+    {
+        if (File.Exists(source))
         {
-            MigrateLegacyAudio(TypeWhisperEnvironment.LegacyAudioPath, TypeWhisperEnvironment.AudioPath);
+            if (!File.Exists(target) && !Directory.Exists(target))
+                File.Move(source, target);
+
+            return;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+
+        if (!Directory.Exists(source) || File.Exists(target))
+            return;
+
+        if (!Directory.Exists(target))
         {
-            Trace.TraceWarning("Could not migrate legacy audio directory: {0}", ex.Message);
+            Directory.Move(source, target);
+            return;
         }
+
+        foreach (var entry in Directory.GetFileSystemEntries(source))
+        {
+            var destination = GetSafeChildPath(target, entry);
+            if (File.Exists(destination) || Directory.Exists(destination))
+                continue;
+
+            if (Directory.Exists(entry))
+                Directory.Move(entry, destination);
+            else
+                File.Move(entry, destination);
+        }
+
+        TryDeleteDirectoryIfEmpty(source);
     }
 
     internal static void MigrateLegacyAudio(string legacyAudioPath, string audioPath)
@@ -85,7 +132,7 @@ internal static class UserAudioMigrationService
     {
         var safeName = Path.GetFileName(value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrWhiteSpace(safeName) || safeName is "." or "..")
-            throw new InvalidOperationException("Invalid audio path segment.");
+            throw new InvalidOperationException("Invalid user data path segment.");
 
         return safeName;
     }
@@ -105,7 +152,7 @@ internal static class UserAudioMigrationService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Trace.TraceWarning("Could not delete empty legacy audio directory '{0}': {1}", path, ex.Message);
+            Trace.TraceWarning("Could not delete empty legacy user data directory '{0}': {1}", path, ex.Message);
         }
     }
 }

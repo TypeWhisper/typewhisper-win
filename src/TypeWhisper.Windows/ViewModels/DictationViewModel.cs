@@ -879,12 +879,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         CurrentHotkeyMode = null;
     }
 
-    private void ApplyModelLoadFailureFeedback(Exception ex)
+    private void ApplyModelUnavailableFeedback(string? modelId, Exception? error = null)
     {
         _isRecording = false;
-        ApplyTransientIdleFeedback(
-            Loc.Instance.GetString("Status.ModelErrorFormat", ex.Message),
-            feedbackIsError: true);
+        var feedback = error is null
+            ? Loc.Instance["Status.NoModelLoaded"]
+            : Loc.Instance.GetString("Status.ModelErrorFormat", error.Message);
+        var diagnostic = string.IsNullOrWhiteSpace(modelId)
+            ? feedback
+            : $"{feedback} ({modelId})";
+
+        _errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);
+        ApplyTransientIdleFeedback(feedback, feedbackIsError: true);
     }
 
     private async Task StartRecording()
@@ -915,8 +921,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         var desiredModelId = EffectiveModelId ?? _settings.Current.SelectedModelId;
         if (string.IsNullOrWhiteSpace(desiredModelId))
         {
-            StatusText = Loc.Instance["Status.NoModelLoaded"];
-            _isRecording = false;
+            ApplyModelUnavailableFeedback(desiredModelId);
             return;
         }
 
@@ -924,8 +929,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
             {
-                StatusText = Loc.Instance["Status.NoModelLoaded"];
-                _isRecording = false;
+                ApplyModelUnavailableFeedback(desiredModelId);
                 return;
             }
         }
@@ -936,29 +940,28 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
         catch (InvalidOperationException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (IOException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (ArgumentException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
         catch (UnauthorizedAccessException ex)
         {
-            ApplyModelLoadFailureFeedback(ex);
+            ApplyModelUnavailableFeedback(desiredModelId, ex);
             return;
         }
 
         if (!_modelManager.Engine.IsModelLoaded)
         {
-            _isRecording = false;
-            ApplyTransientIdleFeedback(Loc.Instance["Status.NoModelLoaded"], feedbackIsError: true);
+            ApplyModelUnavailableFeedback(desiredModelId);
             return;
         }
 

@@ -3,9 +3,9 @@ using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
-public sealed class UserAudioMigrationServiceTests : IDisposable
+public sealed class UserDataMigrationServiceTests : IDisposable
 {
-    private readonly string _root = Path.Join(Path.GetTempPath(), $"tw_audio_migration_{Guid.NewGuid():N}");
+    private readonly string _root = Path.Join(Path.GetTempPath(), $"tw_user_data_migration_{Guid.NewGuid():N}");
 
     [Fact]
     public void MigrateLegacyAudioIfNeeded_MovesLegacyAudioContentsToUserDataAudioPath()
@@ -17,7 +17,7 @@ public sealed class UserAudioMigrationServiceTests : IDisposable
         File.WriteAllText(Path.Join(legacyAudio, "transcript.txt"), "txt");
         File.WriteAllText(Path.Join(legacyAudio, "nested", "clip.m4a"), "m4a");
 
-        UserAudioMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
+        UserDataMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
 
         Assert.Equal("wav", File.ReadAllText(Path.Join(userAudio, "recording.wav")));
         Assert.Equal("txt", File.ReadAllText(Path.Join(userAudio, "transcript.txt")));
@@ -36,7 +36,7 @@ public sealed class UserAudioMigrationServiceTests : IDisposable
         File.WriteAllText(Path.Join(userAudio, "recording.wav"), "existing");
         File.WriteAllText(Path.Join(userAudio, "recording-1.wav"), "existing-one");
 
-        UserAudioMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
+        UserDataMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
 
         Assert.Equal("existing", File.ReadAllText(Path.Join(userAudio, "recording.wav")));
         Assert.Equal("existing-one", File.ReadAllText(Path.Join(userAudio, "recording-1.wav")));
@@ -50,7 +50,7 @@ public sealed class UserAudioMigrationServiceTests : IDisposable
         var legacyAudio = Path.Join(_root, "missing");
         var userAudio = Path.Join(_root, "user");
 
-        UserAudioMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
+        UserDataMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
 
         Assert.False(Directory.Exists(userAudio));
     }
@@ -62,10 +62,50 @@ public sealed class UserAudioMigrationServiceTests : IDisposable
         var userAudio = Path.Join(_root, "user");
         Directory.CreateDirectory(legacyAudio);
 
-        UserAudioMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
+        UserDataMigrationService.MigrateLegacyAudio(legacyAudio, userAudio);
 
         Assert.False(Directory.Exists(legacyAudio));
         Assert.False(Directory.Exists(userAudio));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_MovesPersistentFilesAndDirectories()
+    {
+        var legacy = Path.Join(_root, "TypeWhisper");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+        Directory.CreateDirectory(Path.Join(legacy, "Plugins", "com.test.plugin"));
+        Directory.CreateDirectory(Path.Join(legacy, "Data"));
+        File.WriteAllText(Path.Join(legacy, "settings.json"), "settings");
+        File.WriteAllText(Path.Join(legacy, "api-token"), "token");
+        File.WriteAllText(Path.Join(legacy, "Plugins", "com.test.plugin", "manifest.json"), "plugin");
+        File.WriteAllText(Path.Join(legacy, "Data", "typewhisper.db"), "database");
+
+        UserDataMigrationService.MigrateLegacyData(legacy, userData);
+
+        Assert.Equal("settings", File.ReadAllText(Path.Join(userData, "settings.json")));
+        Assert.Equal("token", File.ReadAllText(Path.Join(userData, "api-token")));
+        Assert.Equal("plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.test.plugin", "manifest.json")));
+        Assert.Equal("database", File.ReadAllText(Path.Join(userData, "Data", "typewhisper.db")));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_DoesNotOverwriteCanonicalData()
+    {
+        var legacy = Path.Join(_root, "TypeWhisper");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+        Directory.CreateDirectory(Path.Join(legacy, "Plugins", "com.legacy.plugin"));
+        Directory.CreateDirectory(Path.Join(userData, "Plugins", "com.current.plugin"));
+        File.WriteAllText(Path.Join(legacy, "settings.json"), "legacy");
+        File.WriteAllText(Path.Join(userData, "settings.json"), "current");
+        File.WriteAllText(Path.Join(legacy, "Plugins", "com.legacy.plugin", "manifest.json"), "legacy-plugin");
+        File.WriteAllText(Path.Join(userData, "Plugins", "com.current.plugin", "manifest.json"), "current-plugin");
+
+        UserDataMigrationService.MigrateLegacyData(legacy, userData);
+
+        Assert.Equal("current", File.ReadAllText(Path.Join(userData, "settings.json")));
+        Assert.Equal("legacy", File.ReadAllText(Path.Join(legacy, "settings.json")));
+        Assert.Equal("current-plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.current.plugin", "manifest.json")));
+        Assert.Equal("legacy-plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.legacy.plugin", "manifest.json")));
     }
 
     public void Dispose()
