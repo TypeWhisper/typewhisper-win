@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.ViewModels;
 
@@ -52,6 +53,52 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.Equal(SupporterTier.Bronze, LicenseService.DetectSupporterTier("legacy", "Bronze supporter"));
         Assert.Equal(SupporterTier.Silver, LicenseService.DetectSupporterTier("legacy", "Silver supporter"));
         Assert.Equal(SupporterTier.Gold, LicenseService.DetectSupporterTier("legacy", "Gold supporter"));
+    }
+
+    [Fact]
+    public void CheckoutUrlBuilder_AddsWindowsPolarAttribution()
+    {
+        var url = new Uri(PolarCheckoutUrlBuilder.BuildAppCheckoutUrl(
+            "https://buy.polar.sh/example",
+            "settings_individual_monthly"));
+
+        Assert.Contains("utm_source=typewhisper_windows", url.Query);
+        Assert.Contains("utm_medium=app", url.Query);
+        Assert.Contains("utm_content=windows_settings_individual_monthly", url.Query);
+    }
+
+    [Theory]
+    [InlineData(AppDistributionKind.Direct, "direct")]
+    [InlineData(AppDistributionKind.Store, "store")]
+    public async Task ActivationPayload_IncludesPlatformVersionAndDistribution(
+        AppDistributionKind distributionKind,
+        string expectedDistribution)
+    {
+        string? activationBody = null;
+        var service = CreateService(
+            (request, body) =>
+            {
+                if (request.RequestUri?.AbsolutePath == "/v1/customer-portal/license-keys/activate")
+                    activationBody = body;
+
+                return request.RequestUri?.AbsolutePath switch
+                {
+                    "/v1/customer-portal/license-keys/activate" => Json(HttpStatusCode.OK, """{"id":"activation-123"}"""),
+                    "/v1/customer-portal/license-keys/validate" => Json(HttpStatusCode.OK, """{"id":"activation-123","status":"granted","expires_at":null,"benefit_id":"40b82917-f74e-4cc3-8165-937f1f47b294"}"""),
+                    _ => Json(HttpStatusCode.InternalServerError, """{"detail":"unexpected"}"""),
+                };
+            },
+            distributionKind,
+            "9.8.7-test");
+
+        await service.ActivateAnyLicenseKeyAsync("TYPEWHISPER-COM-123");
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(activationBody));
+        var root = payload.RootElement;
+        Assert.Equal(Environment.MachineName, root.GetProperty("label").GetString());
+        Assert.Equal("windows", root.GetProperty("meta").GetProperty("platform").GetString());
+        Assert.Equal("9.8.7-test", root.GetProperty("meta").GetProperty("app_version").GetString());
+        Assert.Equal(expectedDistribution, root.GetProperty("meta").GetProperty("distribution").GetString());
     }
 
     [Fact]
@@ -466,13 +513,18 @@ public sealed class LicenseServiceTests : IDisposable
         }
     }
 
-    private LicenseService CreateService(Func<HttpRequestMessage, string, HttpResponseMessage> responder)
+    private LicenseService CreateService(
+        Func<HttpRequestMessage, string, HttpResponseMessage> responder,
+        AppDistributionKind? distributionKind = null,
+        string? appVersion = null)
     {
         var tempDir = CreateTempDir();
 
         return new LicenseService(
             new HttpClient(new CapturingHandler(responder)) { Timeout = TimeSpan.FromSeconds(5) },
-            tempDir);
+            tempDir,
+            distributionKind,
+            appVersion);
     }
 
     private SupporterDiscordService CreateDiscordService(Func<HttpRequestMessage, string, HttpResponseMessage>? responder = null)
