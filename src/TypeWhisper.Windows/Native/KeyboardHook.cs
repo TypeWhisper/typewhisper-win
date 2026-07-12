@@ -42,7 +42,7 @@ public sealed class KeyboardHook : IDisposable
     /// <summary>
     /// Sets hotkey.
     /// </summary>
-    public void SetHotkey(string hotkeyString)
+    public void SetHotkey(string hotkeyString, bool activateModifierOnlyOnKeyDown = false)
     {
         _stateMachine.Reset();
         _mouseStateMachine.Reset();
@@ -53,7 +53,7 @@ public sealed class KeyboardHook : IDisposable
             if (parsed.Kind == HotkeyTargetKind.Mouse)
                 _mouseStateMachine.SetHotkey(parsed.Modifiers, parsed.MouseButton);
             else
-                _stateMachine.SetHotkey(parsed.Modifiers, parsed.Code);
+                _stateMachine.SetHotkey(parsed.Modifiers, parsed.Code, activateModifierOnlyOnKeyDown);
         }
     }
 
@@ -386,6 +386,7 @@ internal sealed class HotkeyMatchStateMachine
     private uint _pendingSuppressedWinKey;
     private uint _targetModifiers;
     private uint _targetVk;
+    private bool _activateModifierOnlyOnKeyDown;
     private bool _isPressed;
     private bool _winPassThroughActive;
     private bool _modifierOnlyReady;
@@ -399,10 +400,11 @@ internal sealed class HotkeyMatchStateMachine
     /// <summary>
     /// Sets hotkey.
     /// </summary>
-    public void SetHotkey(uint modifiers, uint vk)
+    public void SetHotkey(uint modifiers, uint vk, bool activateModifierOnlyOnKeyDown = false)
     {
         _targetModifiers = modifiers;
         _targetVk = vk;
+        _activateModifierOnlyOnKeyDown = activateModifierOnlyOnKeyDown;
         ResetRuntimeState();
     }
 
@@ -413,6 +415,7 @@ internal sealed class HotkeyMatchStateMachine
     {
         _targetModifiers = 0;
         _targetVk = 0;
+        _activateModifierOnlyOnKeyDown = false;
         ResetRuntimeState();
     }
 
@@ -424,7 +427,7 @@ internal sealed class HotkeyMatchStateMachine
         if (!HasHotkey || (!isKeyDown && !isKeyUp))
             return default;
 
-        if (IsModifierOnly)
+        if (IsModifierOnly && !_activateModifierOnlyOnKeyDown)
             return ProcessModifierOnlyKeyEvent(vkCode, isKeyDown, isKeyUp);
 
         var swallow = false;
