@@ -133,7 +133,9 @@ public sealed class HotkeyService : IDisposable
         {
             var hook = new KeyboardHook();
             AttachAppHotkeyHandler(hook, binding.Action);
-            hook.SetHotkey(binding.Hotkey);
+            hook.SetHotkey(
+                binding.Hotkey,
+                activateModifierOnlyOnKeyDown: binding.Action == AppHotkeyAction.MainDictation);
             hook.Start();
             _appHotkeyHooks.Add(hook);
         }

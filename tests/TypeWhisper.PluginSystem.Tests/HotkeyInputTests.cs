@@ -193,6 +193,25 @@ public class HotkeyInputTests
     }
 
     [Fact]
+    public void ModifierOnly_CtrlShift_CanTriggerOnPressForHybridBehavior()
+    {
+        var sut = CreateStateMachine(
+            NativeMethods.MOD_CONTROL | NativeMethods.MOD_SHIFT,
+            activateModifierOnlyOnKeyDown: true);
+
+        var ctrlDown = sut.ProcessKeyEvent(NativeMethods.VK_LCONTROL, isKeyDown: true, isKeyUp: false);
+        Assert.Equal(default, ctrlDown);
+
+        var shiftDown = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: true, isKeyUp: false);
+        Assert.True(shiftDown.RaiseKeyDown);
+        Assert.True(shiftDown.Swallow);
+
+        var shiftUp = sut.ProcessKeyEvent(NativeMethods.VK_LSHIFT, isKeyDown: false, isKeyUp: true);
+        Assert.True(shiftUp.RaiseKeyUp);
+        Assert.True(shiftUp.Swallow);
+    }
+
+    [Fact]
     public void ModifierOnly_CtrlWin_WhenCtrlIsPressedFirst_SuppressesWinActivationKey()
     {
         var sut = CreateStateMachine(NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL);
@@ -664,10 +683,13 @@ public class HotkeyInputTests
         Assert.False(rightCtrlUp.Swallow);
     }
 
-    private static HotkeyMatchStateMachine CreateStateMachine(uint modifiers, uint vk = 0)
+    private static HotkeyMatchStateMachine CreateStateMachine(
+        uint modifiers,
+        uint vk = 0,
+        bool activateModifierOnlyOnKeyDown = false)
     {
         var sut = new HotkeyMatchStateMachine();
-        sut.SetHotkey(modifiers, vk);
+        sut.SetHotkey(modifiers, vk, activateModifierOnlyOnKeyDown);
         return sut;
     }
 }
