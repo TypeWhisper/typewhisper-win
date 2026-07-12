@@ -131,6 +131,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<ProviderOption> AvailableProviders { get; } = [];
     /// <summary>
+    /// Gets the providers available to workflow overrides.
+    /// </summary>
+    public ObservableCollection<ProviderOption> AvailableEditProviders { get; } = [];
+    /// <summary>
     /// Gets the action plugin options.
     /// </summary>
     public ObservableCollection<ActionPluginOption> ActionPluginOptions { get; } = [];
@@ -295,10 +299,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// </summary>
     public ProviderOption? SelectedEditProvider
     {
-        get => AvailableProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
-            ?? AvailableProviders.FirstOrDefault();
+        get => AvailableEditProviders.FirstOrDefault(option => option.Value == EditProviderOverride)
+            ?? AvailableEditProviders.FirstOrDefault();
         set
         {
+            if (_isRefreshingProviders)
+                return;
+
             if (string.Equals(EditProviderOverride, value?.Value, StringComparison.Ordinal))
                 return;
 
@@ -794,11 +801,6 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         if (EditTemplate == WorkflowTemplate.Translation && string.IsNullOrWhiteSpace(EditTranslationTargetLanguage))
             return Loc.Instance["Workflows.ValidationTranslation"];
 
-        if (EditTemplate == WorkflowTemplate.Custom
-            && string.IsNullOrWhiteSpace(EditCustomInstruction)
-            && string.IsNullOrWhiteSpace(EditFineTuning))
-            return Loc.Instance["Workflows.ValidationCustom"];
-
         return null;
     }
 
@@ -1026,11 +1028,18 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         _isRefreshingProviders = true;
         AvailableProviders.Clear();
-        AvailableProviders.Add(new ProviderOption(null, GetDefaultProviderLabel(explicitOptions)));
+        AvailableEditProviders.Clear();
+        var defaultOption = new ProviderOption(null, GetDefaultProviderLabel(explicitOptions));
+        AvailableProviders.Add(defaultOption);
+        AvailableEditProviders.Add(new ProviderOption("none", Loc.Instance["Workflows.NoPostProcessingProvider"]));
+        AvailableEditProviders.Add(defaultOption);
         foreach (var option in explicitOptions)
+        {
             AvailableProviders.Add(option);
-        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider);
-        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride);
+            AvailableEditProviders.Add(option);
+        }
+        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider, AvailableProviders);
+        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride, AvailableEditProviders);
         _isRefreshingProviders = false;
         if (clearDefaultProvider)
             DefaultLlmProvider = null;
@@ -1040,9 +1049,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedEditProvider));
     }
 
-    private bool IsStaleProviderSelection(string? value) =>
+    private static bool IsStaleProviderSelection(string? value, IEnumerable<ProviderOption> options) =>
         !string.IsNullOrWhiteSpace(value)
-        && !AvailableProviders.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
+        && !options.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
 
     private string GetDefaultProviderLabel(IReadOnlyList<ProviderOption> explicitOptions)
     {

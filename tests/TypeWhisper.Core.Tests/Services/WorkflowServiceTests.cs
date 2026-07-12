@@ -285,6 +285,17 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void SystemPrompt_NoneProviderDisablesPostProcessing()
+    {
+        var workflow = NewWorkflow("Raw transcript", WorkflowTrigger.Hotkey("Ctrl+Alt+1")) with
+        {
+            Behavior = new WorkflowBehavior { ProviderOverride = "none" }
+        };
+
+        Assert.Null(workflow.SystemPrompt());
+    }
+
+    [Fact]
     public void SystemPrompt_UsesWorkflowBehaviorAndOutput()
     {
         var workflow = NewWorkflow("Translate", WorkflowTrigger.App("slack")) with

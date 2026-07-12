@@ -973,6 +973,7 @@
   "Workflows.TaskTranscribe": "Transcribe",
   "Workflows.TaskTranslate": "Translate",
   "Workflows.GlobalDefault": "Global (Default)",
+  "Workflows.NoPostProcessingProvider": "None (no post-processing)",
   "Workflows.DefaultProviderLabelNone": "Default AI provider: none configured",
   "Workflows.DefaultProviderLabelFormat": "Default AI provider: {0}",
   "Workflows.DefaultProviderLabelAutoFormat": "Default AI provider: {0} (auto)",
@@ -1025,7 +1026,6 @@
   "Workflows.ValidationHotkeyWorkflowConflictFormat": "{0} is already used by workflow \"{1}\".",
   "Workflows.ValidationHotkeyAppConflictFormat": "{0} is already used by {1}.",
   "Workflows.ValidationTranslation": "Translation workflows need a target language.",
-  "Workflows.ValidationCustom": "Custom workflows need an instruction or fine-tuning text.",
 
   "Update.BalloonTitle": "Update available",
   "Update.BalloonMessage": "Version {0} is available. Click here to update.",

@@ -973,6 +973,7 @@
   "Workflows.TaskTranscribe": "Transkribieren",
   "Workflows.TaskTranslate": "Übersetzen",
   "Workflows.GlobalDefault": "Global (Standard)",
+  "Workflows.NoPostProcessingProvider": "Keine (keine Nachbearbeitung)",
   "Workflows.DefaultProviderLabelNone": "Standard-KI-Anbieter: keiner eingerichtet",
   "Workflows.DefaultProviderLabelFormat": "Standard-KI-Anbieter: {0}",
   "Workflows.DefaultProviderLabelAutoFormat": "Standard-KI-Anbieter: {0} (automatisch)",
@@ -1025,7 +1026,6 @@
   "Workflows.ValidationHotkeyWorkflowConflictFormat": "{0} wird bereits vom Workflow \"{1}\" genutzt.",
   "Workflows.ValidationHotkeyAppConflictFormat": "{0} wird bereits von {1} genutzt.",
   "Workflows.ValidationTranslation": "Übersetzungs-Workflows brauchen eine Zielsprache.",
-  "Workflows.ValidationCustom": "Eigene Workflows brauchen eine Anweisung oder Feinabstimmung.",
 
   "Update.BalloonTitle": "Update verf\u00fcgbar",
   "Update.BalloonMessage": "Version {0} ist verf\u00fcgbar. Klicken Sie hier zum Aktualisieren.",

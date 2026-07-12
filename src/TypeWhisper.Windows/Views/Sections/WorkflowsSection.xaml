@@ -1184,7 +1184,7 @@
 
                                     <TextBlock Text="{loc:Str Workflows.AiRouting}" Style="{StaticResource WorkflowPanelTitleStyle}" Margin="0,2,0,4"/>
                                     <TextBlock Text="{loc:Str Workflows.AiRoutingHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,8"/>
-                                    <ComboBox ItemsSource="{Binding Workflows.AvailableProviders}"
+                                    <ComboBox ItemsSource="{Binding Workflows.AvailableEditProviders}"
                                               SelectedItem="{Binding Workflows.SelectedEditProvider}"
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource WorkflowComboBoxStyle}"
