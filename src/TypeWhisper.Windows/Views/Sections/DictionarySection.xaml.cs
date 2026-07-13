@@ -15,15 +15,6 @@ public partial class DictionarySection : UserControl
     /// </summary>
     public DictionarySection() => InitializeComponent();
 
-    private void Tab_Checked(object sender, RoutedEventArgs e)
-    {
-        if (sender is RadioButton rb && rb.Tag is string tagStr && int.TryParse(tagStr, out var tab))
-        {
-            if (DataContext is SettingsWindowViewModel vm)
-                vm.Dictionary.SelectedTab = tab;
-        }
-    }
-
     private void PrepareAlias_Click(object sender, RoutedEventArgs e)
     {
         OriginalBox.Focus();
@@ -39,6 +30,9 @@ public partial class DictionarySection : UserControl
         }
     }
 
+    private void OpenTraining_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(TrainingTargetBox.Focus);
+
     private void EditOverlay_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
@@ -50,6 +44,15 @@ public partial class DictionarySection : UserControl
         if (e.Key == Key.Escape && DataContext is SettingsWindowViewModel vm)
         {
             vm.Dictionary.CancelEditCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void TrainingOverlay_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && DataContext is SettingsWindowViewModel vm)
+        {
+            vm.Dictionary.Training?.CancelCommand.Execute(null);
             e.Handled = true;
         }
     }

@@ -67,6 +67,26 @@ public sealed class LocalizedFormatConverter : IMultiValueConverter
 }
 
 /// <summary>
+/// Compares an integer binding value with a converter parameter.
+/// </summary>
+public sealed class IntegerEqualsConverter : IValueConverter
+{
+    /// <summary>
+    /// Returns whether the value equals the integer parameter.
+    /// </summary>
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is int current && int.TryParse(parameter?.ToString(), out var expected) && current == expected;
+
+    /// <summary>
+    /// Returns the parameter when the radio button becomes selected.
+    /// </summary>
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true && int.TryParse(parameter?.ToString(), out var expected)
+            ? expected
+            : Binding.DoNothing;
+}
+
+/// <summary>
 /// Provides audio level scale converter behavior.
 /// </summary>
 public sealed class AudioLevelScaleConverter : IValueConverter
