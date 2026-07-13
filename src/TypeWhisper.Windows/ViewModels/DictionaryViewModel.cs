@@ -499,6 +499,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
+        NotifyResetStateChanged();
         InitializePacks();
     }
 
@@ -521,7 +522,10 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
             _dictionary.DeactivatePack(packId);
 
         if (allowedIds.Length != currentIds.Length)
+        {
             _settings.Save(_settings.Current with { EnabledPackIds = allowedIds });
+            NotifyResetStateChanged();
+        }
     }
 
     private void OnLicenseChanged(object? sender, PropertyChangedEventArgs args)

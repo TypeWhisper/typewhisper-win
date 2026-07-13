@@ -80,9 +80,9 @@ public sealed class TypeWhisperUserDataSyncStoreTests : IDisposable
 
         Assert.Equal(DictionaryEntrySource.AutoLearned, synced.Source);
 
-        var targetPath = Path.Combine(_tempDir, "target-dictionary.json");
+        var targetPath = Path.Join(_tempDir, "target-dictionary.json");
         var target = new DictionaryService(targetPath);
-        new TypeWhisperUserDataSyncStore(target, new SnippetService(Path.Combine(_tempDir, "target-snippets.json")))
+        new TypeWhisperUserDataSyncStore(target, new SnippetService(Path.Join(_tempDir, "target-snippets.json")))
             .Apply([new UserDataSyncMutation.UpsertDictionary(synced)]);
 
         Assert.Equal(DictionaryEntrySource.AutoLearned, Assert.Single(target.Entries).Source);

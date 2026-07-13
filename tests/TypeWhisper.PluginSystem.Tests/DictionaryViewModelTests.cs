@@ -1,8 +1,11 @@
+using System.IO;
+using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
@@ -173,6 +176,45 @@ public sealed class DictionaryViewModelTests
         Assert.False(viewModel.ClearAutoLearnedCorrectionsCommand.CanExecute(null));
         Assert.False(viewModel.ResetCustomDictionaryCommand.CanExecute(null));
         Assert.False(viewModel.DeactivateAllTermPacksCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ApplyingIndustryPreset_NotifiesPackResetStateAfterSavingEnabledPack()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default);
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir)
+            {
+                CommercialStatus = LicenseStatus.Active
+            };
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+            var remotePacksField = typeof(DictionaryViewModel).GetField(
+                "_remotePacks",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(remotePacksField);
+            remotePacksField.SetValue(viewModel, new[]
+            {
+                new TermPack("real-estate", "Real estate", "", [], RequiresCommercialLicense: true)
+            });
+            var notifiedWithEnabledPack = false;
+            viewModel.DeactivateAllTermPacksCommand.CanExecuteChanged += (_, _) =>
+                notifiedWithEnabledPack |= viewModel.EnabledPackCount == 1;
+
+            viewModel.ApplyIndustryPreset("real-estate");
+
+            Assert.True(notifiedWithEnabledPack);
+            Assert.True(viewModel.DeactivateAllTermPacksCommand.CanExecute(null));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
     }
 
     [Fact]
