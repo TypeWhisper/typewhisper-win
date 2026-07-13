@@ -10,27 +10,28 @@
     </UserControl.Resources>
 
     <Border x:Name="DockBorder"
-            Background="#E6101824"
-            BorderBrush="#2B7EC8FF"
+            Background="#EE11161D"
+            BorderBrush="#24FFFFFF"
             BorderThickness="1"
             HorizontalAlignment="Center"
             MinWidth="360"
+            MinHeight="40"
             MaxWidth="620"
-            Padding="9,6">
+            Padding="14,8">
         <Border.Style>
             <Style TargetType="Border">
-                <Setter Property="CornerRadius" Value="0,0,9,9"/>
+                <Setter Property="CornerRadius" Value="0,0,12,12"/>
                 <Setter Property="Margin" Value="0"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding OverlayPosition}" Value="{x:Static models:OverlayPosition.Bottom}">
-                        <Setter Property="CornerRadius" Value="9,9,0,0"/>
+                        <Setter Property="CornerRadius" Value="12,12,0,0"/>
                         <Setter Property="Margin" Value="0"/>
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
         </Border.Style>
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="16" Opacity="0.42" ShadowDepth="0"/>
+            <DropShadowEffect Color="Black" BlurRadius="14" Opacity="0.32" ShadowDepth="3"/>
         </Border.Effect>
 
         <DockPanel LastChildFill="False">
@@ -50,7 +51,7 @@
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding StatusText}"
-                           Foreground="#D8FFFFFF"
+                           Foreground="#E8FFFFFF"
                            FontSize="12"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
@@ -63,35 +64,6 @@
                     VerticalAlignment="Center"
                     Margin="8,0,0,0"/>
             </Grid>
-
-            <Border x:Name="PartialPreviewBorder"
-                    ClipToBounds="True"
-                    Height="0"
-                    Opacity="0"
-                    Margin="0"
-                    DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
-                    RenderTransformOrigin="0.5,0.5">
-                <Border.RenderTransform>
-                    <TranslateTransform x:Name="PartialPreviewTransform"/>
-                </Border.RenderTransform>
-                <ScrollViewer x:Name="PartialPreviewScrollViewer"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <TextBlock x:Name="PartialTextBlock"
-                               Text="{Binding PartialText, NotifyOnTargetUpdated=True}"
-                               TargetUpdated="OnPartialTextTargetUpdated"
-                               TextWrapping="Wrap"
-                               MaxWidth="560"
-                               Foreground="#92FFFFFF"
-                               FontSize="{Binding LiveTranscriptionFontSize}"
-                               TextAlignment="Center"
-                               RenderTransformOrigin="0.5,0.5">
-                        <TextBlock.RenderTransform>
-                            <TranslateTransform x:Name="PartialTextTransform"/>
-                        </TextBlock.RenderTransform>
-                    </TextBlock>
-                </ScrollViewer>
-            </Border>
 
             <Border CornerRadius="8"
                     Padding="12,6"

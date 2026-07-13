@@ -6,29 +6,29 @@
     <UserControl.Resources>
         <conv:AudioLevelScaleConverter x:Key="AudioLevelScale"/>
     </UserControl.Resources>
-    <Ellipse Width="10"
-             Height="10"
+    <Ellipse Width="9"
+             Height="9"
              VerticalAlignment="Center"
              RenderTransformOrigin="0.5,0.5">
         <Ellipse.RenderTransform>
-            <ScaleTransform ScaleX="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.32}"
-                            ScaleY="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.32}"/>
+            <ScaleTransform ScaleX="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.22}"
+                            ScaleY="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.22}"/>
         </Ellipse.RenderTransform>
         <Ellipse.Style>
             <Style TargetType="Ellipse">
-                <Setter Property="Fill" Value="#888"/>
+                <Setter Property="Fill" Value="#66717C88"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Recording}">
-                        <Setter Property="Fill" Value="#FF4444"/>
+                        <Setter Property="Fill" Value="#6FB6FF"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Processing}">
-                        <Setter Property="Fill" Value="#FFaa00"/>
+                        <Setter Property="Fill" Value="#F5B84B"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Inserting}">
-                        <Setter Property="Fill" Value="#44cc44"/>
+                        <Setter Property="Fill" Value="#59D98E"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Error}">
-                        <Setter Property="Fill" Value="#FF0000"/>
+                        <Setter Property="Fill" Value="#FF6B6B"/>
                     </DataTrigger>
                 </Style.Triggers>
             </Style>

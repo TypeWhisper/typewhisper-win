@@ -10,15 +10,16 @@
     </UserControl.Resources>
 
     <Border x:Name="IslandBorder"
-            CornerRadius="17"
-            Background="#E6121822"
-            BorderBrush="#22507BAA"
+            CornerRadius="22"
+            Background="#EE11161D"
+            BorderBrush="#24FFFFFF"
             BorderThickness="1"
             HorizontalAlignment="Center"
-            MinWidth="172"
-            Padding="10,7">
+            MinWidth="220"
+            MinHeight="44"
+            Padding="14,9">
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="12" Opacity="0.5" ShadowDepth="0"/>
+            <DropShadowEffect Color="Black" BlurRadius="14" Opacity="0.32" ShadowDepth="3"/>
         </Border.Effect>
 
         <DockPanel LastChildFill="False">
@@ -38,7 +39,7 @@
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding StatusText}"
-                           Foreground="#CCFFFFFF"
+                           Foreground="#E8FFFFFF"
                            FontSize="12"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
@@ -51,30 +52,6 @@
                     VerticalAlignment="Center"
                     Margin="9,0,0,0"/>
             </Grid>
-
-            <Border x:Name="DownwardPartialPreview"
-                    CornerRadius="0"
-                    Background="Transparent"
-                    ClipToBounds="True"
-                    DockPanel.Dock="{Binding OverlayPosition, Converter={StaticResource EdgeDockStatusDock}}"
-                    Height="0"
-                    Opacity="0"
-                    Padding="0"
-                    RenderTransformOrigin="0.5,0">
-                <Border.RenderTransform>
-                    <TranslateTransform x:Name="PartialPreviewTransform" Y="-5"/>
-                </Border.RenderTransform>
-                <TextBlock x:Name="PartialTextBlock"
-                           Text="{Binding PartialText}"
-                           Foreground="#8EFFFFFF"
-                           FontSize="{Binding LiveTranscriptionFontSize}"
-                           TextWrapping="Wrap"
-                           RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <TranslateTransform x:Name="PartialTextTransform"/>
-                    </TextBlock.RenderTransform>
-                </TextBlock>
-            </Border>
 
             <Border CornerRadius="0,0,22,22"
                     Padding="16,6,16,2"

@@ -95,12 +95,11 @@ public sealed class MainWindowLayoutTests
         Assert.Contains("_lastPublishedValues", code);
         Assert.Contains("PublishIfChanged(nameof(IsOverlayVisible), IsOverlayVisible)", code);
         Assert.Contains("PublishIfChanged(nameof(AudioLevel), AudioLevel)", code);
-        Assert.Contains("PublishIfChanged(nameof(PartialText), PartialText)", code);
-        Assert.Contains("PublishIfChanged(nameof(ShowBuiltInPartialPreview), ShowBuiltInPartialPreview)", code);
+        Assert.DoesNotContain("PublishIfChanged(nameof(PartialText), PartialText)", code);
+        Assert.DoesNotContain("ShowBuiltInPartialPreview", code);
         Assert.Contains("UseDictation && _dictation.ShowInlineFeedback", code);
         Assert.Contains("UseDictation && _dictation.ShowDetachedFeedback", code);
         Assert.DoesNotContain("OnPropertyChanged(nameof(PartialText))", code);
-        Assert.DoesNotContain("OnPropertyChanged(nameof(ShowBuiltInPartialPreview))", code);
         Assert.DoesNotContain("? _dictation.ShowInlineFeedback : false", code);
         Assert.DoesNotContain("? _dictation.ShowDetachedFeedback : false", code);
     }

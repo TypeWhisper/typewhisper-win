@@ -102,7 +102,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty] private ReleaseChannel _selectedUpdateChannel;
     [ObservableProperty] private float _audioLevel = 0.18f;
     [ObservableProperty] private double _recordingSeconds;
-    [ObservableProperty] private string _partialText = "";
 
     /// <summary>
     /// Gets the current app version.
@@ -166,14 +165,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// </summary>
     public OverlayWidget RightWidget => Settings.OverlayRightWidget;
     /// <summary>
-    /// Gets the live transcription enabled.
-    /// </summary>
-    public bool LiveTranscriptionEnabled => Settings.LiveTranscriptionEnabled;
-    /// <summary>
-    /// Gets the live transcription font size in device-independent pixels.
-    /// </summary>
-    public double LiveTranscriptionFontSize => Settings.LiveTranscriptionFontSize;
-    /// <summary>
     /// Gets the state.
     /// </summary>
     public DictationState State => DictationState.Recording;
@@ -205,13 +196,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Gets the feedback is error.
     /// </summary>
     public bool FeedbackIsError => false;
-    /// <summary>
-    /// Gets whether show built in partial preview.
-    /// </summary>
-    public bool ShowBuiltInPartialPreview =>
-        AppearanceIndicatorPreviewPresentation.ShouldShowPartialText(
-            LiveTranscriptionEnabled,
-            IndicatorStyle);
     /// <summary>
     /// Gets whether show supporter premium notice.
     /// </summary>
@@ -626,19 +610,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SettingsViewModel.IndicatorStyle))
-        {
             OnPropertyChanged(nameof(IndicatorStyle));
-            OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
-        }
-
-        if (e.PropertyName == nameof(SettingsViewModel.LiveTranscriptionEnabled))
-        {
-            OnPropertyChanged(nameof(LiveTranscriptionEnabled));
-            OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
-        }
-
-        if (e.PropertyName == nameof(SettingsViewModel.LiveTranscriptionFontSize))
-            OnPropertyChanged(nameof(LiveTranscriptionFontSize));
 
         if (e.PropertyName == nameof(SettingsViewModel.OverlayPosition))
             OnPropertyChanged(nameof(OverlayPosition));
@@ -711,7 +683,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
     private void RefreshIndicatorPreviewText()
     {
-        PartialText = Loc.Instance["Appearance.PreviewLiveSample"];
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ActiveWorkflowName));
     }

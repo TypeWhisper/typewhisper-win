@@ -5,10 +5,10 @@
     <UserControl.Resources>
         <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVis"/>
     </UserControl.Resources>
-    <Border Background="#333" CornerRadius="6" Padding="5,2"
+    <Border Background="#16FFFFFF" BorderBrush="#1FFFFFFF" BorderThickness="1" CornerRadius="7" Padding="6,2"
             Visibility="{Binding ActiveProcessName, Converter={StaticResource NonEmptyToVis}}">
         <TextBlock Text="{Binding ActiveProcessName, FallbackValue='App', TargetNullValue='App'}"
-                   Foreground="#AAA" FontSize="10"
+                   Foreground="#D9FFFFFF" FontSize="10" FontWeight="Medium"
                    MaxWidth="80" TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center"/>
     </Border>

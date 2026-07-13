@@ -54,6 +54,21 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
+    public void Window_UsesRecordingOverlayDesignFamily()
+    {
+        var path = Path.GetFullPath(Path.Join(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "plugins", "TypeWhisper.Plugin.LiveTranscript", "LiveTranscriptWindow.xaml"));
+        var xaml = File.ReadAllText(path);
+
+        Assert.Contains("Background=\"#EE11161D\"", xaml);
+        Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
+        Assert.Contains("Foreground=\"#E8FFFFFF\"", xaml);
+        Assert.DoesNotContain("#1E1E2E", xaml);
+    }
+
+    [Fact]
     public void FontSize_DefaultsTo16_WhenNoSettingStored()
     {
         var sut = CreatePlugin();

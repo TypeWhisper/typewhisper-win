@@ -7,20 +7,20 @@
         Topmost="True"
         ShowInTaskbar="False"
         SizeToContent="Height"
-        Width="500"
+        Width="460"
         ResizeMode="NoResize"
         Loaded="Window_Loaded">
     <Border CornerRadius="12"
             Margin="8"
-            Padding="16,12"
+            Padding="14,10"
+            Background="#EE11161D"
+            BorderBrush="#24FFFFFF"
+            BorderThickness="1"
             x:Name="RootBorder">
-        <Border.Background>
-            <SolidColorBrush Color="#1E1E2E" />
-        </Border.Background>
         <Border.Effect>
-            <DropShadowEffect BlurRadius="16"
-                              ShadowDepth="2"
-                              Opacity="0.5"
+            <DropShadowEffect BlurRadius="18"
+                              ShadowDepth="0"
+                              Opacity="0.4"
                               Color="Black" />
         </Border.Effect>
         <Grid>
@@ -30,16 +30,16 @@
             </Grid.RowDefinitions>
 
             <Grid x:Name="DragHandle"
-                  Height="12"
-                  Margin="0,0,0,6"
+                  Height="8"
+                  Margin="0,0,0,4"
                   Cursor="SizeAll"
                   MouseLeftButtonDown="DragHandle_MouseLeftButtonDown">
-                <Border Width="34"
-                        Height="4"
+                <Border Width="28"
+                        Height="3"
                         CornerRadius="2"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Background="#35FFFFFF" />
+                        Background="#24FFFFFF" />
             </Grid>
 
             <ScrollViewer x:Name="TranscriptScroller"
@@ -48,10 +48,12 @@
                           MaxHeight="200"
                           HorizontalScrollBarVisibility="Disabled">
                 <TextBlock x:Name="TranscriptText"
-                           Foreground="#CCDDDDDD"
+                           Foreground="#E8FFFFFF"
                            FontSize="16"
                            TextWrapping="Wrap"
                            FontFamily="Segoe UI"
+                           LineHeight="20"
+                           TextOptions.TextFormattingMode="Display"
                            Text="Listening..." />
             </ScrollViewer>
         </Grid>

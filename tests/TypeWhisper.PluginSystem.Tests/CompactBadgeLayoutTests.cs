@@ -3,39 +3,35 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class CompactBadgeLayoutTests
 {
     [Fact]
-    public void CompactBadge_ShowsOnlyTheRecordIndicator()
+    public void CompactBadge_UsesWaveformForRecordingAndStatusForOtherStates()
     {
         var xaml = TestFile.ReadProjectFile(
-            "src",
-            "TypeWhisper.Windows",
-            "Controls",
-            "Overlay",
-            "CompactBadgeIndicatorView.xaml");
+            "src", "TypeWhisper.Windows", "Controls", "Overlay", "CompactBadgeIndicatorView.xaml");
 
+        Assert.Contains("x:Name=\"BadgeBorder\"", xaml);
+        Assert.Contains("Background=\"#EE11161D\"", xaml);
+        Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
+        Assert.Contains("CornerRadius=\"21\"", xaml);
+        Assert.Contains("Width=\"42\"", xaml);
+        Assert.Contains("Height=\"42\"", xaml);
+        Assert.Contains("<overlay:WaveformWidget", xaml);
         Assert.Contains("<overlay:IndicatorWidget", xaml);
-        Assert.Contains("MinWidth=\"34\"", xaml);
-        Assert.Contains("MinHeight=\"34\"", xaml);
+        Assert.Contains("DictationState.Recording", xaml);
+        Assert.DoesNotContain("<Border.RenderTransform>", xaml);
         Assert.DoesNotContain("Text=\"{Binding StatusText}\"", xaml);
-        Assert.DoesNotContain("WidgetType=\"{Binding RightWidget}\"", xaml);
         Assert.DoesNotContain("Text=\"{Binding FeedbackText}\"", xaml);
     }
 
     [Fact]
-    public void AppearanceSection_CompactBadgePreviewShowsOnlyTheRecordIndicator()
+    public void AppearanceSection_CompactBadgePreviewUsesWaveform()
     {
         var xaml = TestFile.ReadProjectFile(
-            "src",
-            "TypeWhisper.Windows",
-            "Views",
-            "Sections",
-            "AppearanceSection.xaml");
+            "src", "TypeWhisper.Windows", "Views", "Sections", "AppearanceSection.xaml");
+        var tile = TestFile.ExtractBlock(
+            xaml, "ConverterParameter={x:Static models:IndicatorStyle.CompactBadge}", 1600);
 
-        var tileBlock = TestFile.ExtractBlock(xaml, "ConverterParameter={x:Static models:IndicatorStyle.CompactBadge}", 1400);
-        var previewBlock = TestFile.ExtractBlock(xaml, "Value=\"{x:Static models:IndicatorStyle.CompactBadge}\"", 1400);
-
-        Assert.DoesNotContain("Appearance.PreviewStatus", tileBlock);
-        Assert.DoesNotContain("Settings.OverlayRightWidget", tileBlock);
-        Assert.DoesNotContain("Appearance.PreviewStatus", previewBlock);
-        Assert.DoesNotContain("Settings.OverlayRightWidget", previewBlock);
+        Assert.Contains("<overlay:WaveformWidget", tile);
+        Assert.DoesNotContain("Appearance.PreviewStatus", tile);
+        Assert.DoesNotContain("Settings.OverlayRightWidget", tile);
     }
 }

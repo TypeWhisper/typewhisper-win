@@ -11,7 +11,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
             <conv:EnumEqualsConverter x:Key="EnumEquals"/>
 
             <Style x:Key="IndicatorStyleTileStyle" TargetType="RadioButton">
@@ -84,44 +83,36 @@
                                                     ClipToBounds="True"
                                                     Padding="10"
                                                     Margin="0,0,0,12">
-                                                <Border Background="#E6121822"
-                                                        BorderBrush="#22507BAA"
+                                                <Border Background="#EE11161D"
+                                                        BorderBrush="#24FFFFFF"
                                                         BorderThickness="1"
-                                                        CornerRadius="17"
-                                                        Padding="10,7"
+                                                        CornerRadius="22"
+                                                        Padding="12,9"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
-                                                        MinWidth="172">
-                                                    <StackPanel>
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <overlay:OverlayWidgetHost WidgetType="{Binding Settings.OverlayLeftWidget}"
-                                                                                       VerticalAlignment="Center"
-                                                                                       Margin="0,0,9,0"/>
-                                                            <TextBlock Grid.Column="1"
-                                                                       Text="{loc:Str Appearance.PreviewStatus}"
-                                                                       Foreground="{StaticResource TextBrush}"
-                                                                       FontSize="10.5"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"/>
-                                                            <overlay:OverlayWidgetHost Grid.Column="2"
-                                                                                       WidgetType="{Binding Settings.OverlayRightWidget}"
-                                                                                       VerticalAlignment="Center"
-                                                                                       Margin="9,0,0,0"/>
-                                                        </Grid>
-                                                        <TextBlock Text="{loc:Str Appearance.PreviewLiveText}"
-                                                                   Foreground="{StaticResource HintBrush}"
-                                                                   FontSize="{Binding Settings.LiveTranscriptionFontSize}"
-                                                                   TextAlignment="Center"
-                                                                   TextWrapping="NoWrap"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   Margin="0,5,0,0"
-                                                                   Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"/>
-                                                    </StackPanel>
+                                                        MinWidth="180"
+                                                        MinHeight="44">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <overlay:OverlayWidgetHost WidgetType="{Binding Settings.OverlayLeftWidget}"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Margin="0,0,9,0"/>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{loc:Str Appearance.PreviewStatus}"
+                                                                   Foreground="#E8FFFFFF"
+                                                                   FontSize="10.5"
+                                                                   FontWeight="SemiBold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                        <overlay:OverlayWidgetHost Grid.Column="2"
+                                                                                   WidgetType="{Binding Settings.OverlayRightWidget}"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Margin="9,0,0,0"/>
+                                                    </Grid>
                                                 </Border>
                                             </Border>
                                             <TextBlock Text="{loc:Str Appearance.StyleStatusIsland}"
@@ -149,12 +140,12 @@
                                                     Margin="0,0,0,12">
                                                 <DockPanel LastChildFill="False">
                                                     <Border DockPanel.Dock="Top"
-                                                            Background="#E6101824"
-                                                            BorderBrush="#2B7EC8FF"
+                                                            Background="#EE11161D"
+                                                            BorderBrush="#24FFFFFF"
                                                             BorderThickness="0,0,0,1"
-                                                            CornerRadius="0,0,9,9"
-                                                            Padding="9,6"
-                                                            MinHeight="30">
+                                                            CornerRadius="0,0,12,12"
+                                                            Padding="12,8"
+                                                            MinHeight="40">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
@@ -167,8 +158,9 @@
                                                                                        Margin="0,0,8,0"/>
                                                             <TextBlock Grid.Column="1"
                                                                        Text="{loc:Str Appearance.PreviewStatus}"
-                                                                       Foreground="{StaticResource TextBrush}"
+                                                                       Foreground="#E8FFFFFF"
                                                                        FontSize="10.5"
+                                                                       FontWeight="SemiBold"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Center"/>
                                                             <overlay:OverlayWidgetHost Grid.Column="2"
@@ -177,14 +169,6 @@
                                                                                        Margin="8,0,0,0"/>
                                                         </Grid>
                                                     </Border>
-                                                    <TextBlock DockPanel.Dock="Top"
-                                                               Text="{loc:Str Appearance.PreviewLiveText}"
-                                                               Foreground="{StaticResource HintBrush}"
-                                                               FontSize="{Binding Settings.LiveTranscriptionFontSize}"
-                                                               TextAlignment="Center"
-                                                               Margin="8,5,8,0"
-                                                               Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"
-                                                               TextTrimming="CharacterEllipsis"/>
                                                 </DockPanel>
                                             </Border>
                                             <TextBlock Text="{loc:Str Appearance.StyleEdgeDock}"
@@ -210,19 +194,17 @@
                                                     CornerRadius="6"
                                                     Padding="10"
                                                     Margin="0,0,0,12">
-                                                <Border Background="#E6181818"
-                                                        BorderBrush="#2AFFFFFF"
+                                                <Border Background="#EE11161D"
+                                                        BorderBrush="#24FFFFFF"
                                                         BorderThickness="1"
-                                                        CornerRadius="16"
-                                                        Padding="10"
-                                                        MinWidth="34"
-                                                        MinHeight="34"
+                                                        CornerRadius="21"
+                                                        Padding="8"
+                                                        Width="42"
+                                                        Height="42"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center">
-                                                    <Ellipse Width="8"
-                                                             Height="8"
-                                                             Fill="#FF4444"
-                                                             VerticalAlignment="Center"/>
+                                                    <overlay:WaveformWidget HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center"/>
                                                 </Border>
                                             </Border>
                                             <TextBlock Text="{loc:Str Appearance.StyleCompactBadge}"
@@ -262,18 +244,7 @@
                                                      VerticalAlignment="Center"/>
                                 </Grid>
 
-                                <Grid x:Name="LiveTextSizeSettingsRow">
-                                    <Grid.Style>
-                                        <Style TargetType="{x:Type Grid}">
-                                            <Setter Property="Margin" Value="0,16,0,0"/>
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Settings.IndicatorStyle}" Value="{x:Static models:IndicatorStyle.CompactBadge}">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Grid.Style>
+                                <Grid x:Name="LiveTextSizeSettingsRow" Margin="0,16,0,0">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
@@ -465,232 +436,6 @@
                 </Border>
             </StackPanel>
 
-            <StackPanel Style="{StaticResource SettingsSectionStyle}" Visibility="Collapsed">
-                <TextBlock Text="{loc:Str Appearance.PreviewTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
-                <Border Style="{StaticResource SettingsGroupPanelStyle}">
-                    <StackPanel Margin="16">
-                        <Border Background="#120C1118" CornerRadius="14" Padding="24" MinHeight="190" Margin="0,0,0,18" Visibility="Collapsed">
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="{loc:Str Appearance.PreviewTitle}"
-                                           Foreground="{StaticResource HintBrush}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,0,0,16"/>
-
-                                <Grid Height="118" ClipToBounds="True">
-                                    <Viewbox Stretch="Uniform"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center"
-                                             MaxWidth="660"
-                                             MaxHeight="112">
-                                        <Border Width="660"
-                                                MinHeight="118"
-                                                Background="Transparent"
-                                                Padding="12">
-                                            <overlay:IndicatorStyleHost HorizontalAlignment="Center"
-                                                                        VerticalAlignment="Center"/>
-                                        </Border>
-                                    </Viewbox>
-                                </Grid>
-
-                                <TextBlock Text="{loc:Str Appearance.PreviewHint}"
-                                           Foreground="{StaticResource HintBrush}"
-                                           FontSize="11"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"
-                                           MaxWidth="420"
-                                           Margin="0,16,0,0"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Background="#120C1118" CornerRadius="14" Padding="28" MinHeight="210" Margin="0,0,0,18" Visibility="Collapsed">
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="{loc:Str Appearance.PreviewTitle}"
-                                           Foreground="{StaticResource HintBrush}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,0,0,14"/>
-
-                                <Grid MinHeight="118">
-                                    <Border Background="#E6121822"
-                                            BorderBrush="#22507BAA"
-                                            BorderThickness="1"
-                                            CornerRadius="26"
-                                            Padding="16,12"
-                                            HorizontalAlignment="Center"
-                                            MinWidth="340">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Settings.IndicatorStyle}" Value="{x:Static models:IndicatorStyle.StatusIsland}">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str Appearance.PreviewLiveText}"
-                                                       Foreground="{StaticResource HintBrush}"
-                                                       FontSize="11"
-                                                       TextAlignment="Center"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,0,0,8"
-                                                       Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"/>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <overlay:OverlayWidgetHost Grid.Column="0"
-                                                                           WidgetType="{Binding Settings.OverlayLeftWidget}"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="0,0,12,0"/>
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{loc:Str Appearance.PreviewStatus}"
-                                                           Foreground="{StaticResource TextBrush}"
-                                                           FontSize="14"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                                <overlay:OverlayWidgetHost Grid.Column="2"
-                                                                           WidgetType="{Binding Settings.OverlayRightWidget}"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="12,0,0,0"/>
-                                            </Grid>
-                                            <TextBlock Text="{loc:Str Appearance.PreviewLiveTextTail}"
-                                                       Foreground="{StaticResource HintBrush}"
-                                                       FontSize="11"
-                                                       TextAlignment="Center"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,8,0,0"
-                                                       Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Background="#E6101824"
-                                            BorderBrush="#2B7EC8FF"
-                                            BorderThickness="1"
-                                            CornerRadius="0,0,18,18"
-                                            Padding="16,12"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Top"
-                                            MinWidth="430">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Settings.IndicatorStyle}" Value="{x:Static models:IndicatorStyle.EdgeDock}">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str Appearance.PreviewLiveText}"
-                                                       Foreground="{StaticResource HintBrush}"
-                                                       FontSize="11"
-                                                       TextAlignment="Center"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,0,0,8"
-                                                       Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"/>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <overlay:OverlayWidgetHost Grid.Column="0"
-                                                                           WidgetType="{Binding Settings.OverlayLeftWidget}"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="0,0,12,0"/>
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{loc:Str Appearance.PreviewStatus}"
-                                                           Foreground="{StaticResource TextBrush}"
-                                                           FontSize="14"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                                <overlay:OverlayWidgetHost Grid.Column="2"
-                                                                           WidgetType="{Binding Settings.OverlayRightWidget}"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="12,0,0,0"/>
-                                            </Grid>
-                                            <TextBlock Text="{loc:Str Appearance.PreviewLiveTextTail}"
-                                                       Foreground="{StaticResource HintBrush}"
-                                                       FontSize="11"
-                                                       TextAlignment="Center"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,8,0,0"
-                                                       Visibility="{Binding Settings.LiveTranscriptionEnabled, Converter={StaticResource BoolToVis}}"/>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Background="#E6181818"
-                                            BorderBrush="#2AFFFFFF"
-                                            BorderThickness="1"
-                                            CornerRadius="18"
-                                            Padding="10"
-                                            MinWidth="34"
-                                            MinHeight="34"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Settings.IndicatorStyle}" Value="{x:Static models:IndicatorStyle.CompactBadge}">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <overlay:IndicatorWidget HorizontalAlignment="Center"
-                                                                 VerticalAlignment="Center"/>
-                                    </Border>
-                                </Grid>
-
-                                <TextBlock Text="{loc:Str Appearance.PreviewHint}"
-                                           Foreground="{StaticResource HintBrush}"
-                                           FontSize="11"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"
-                                           MaxWidth="360"
-                                           Margin="0,14,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Grid Margin="10,0,10,8">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{loc:Str Appearance.AutoHideDelay}"
-                                       Style="{StaticResource SettingsRowLabelStyle}"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding Settings.PreviewBubbleAutoHideSecondsText}"
-                                       Foreground="{StaticResource HintBrush}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"/>
-                            <Slider Grid.Row="1"
-                                    Grid.ColumnSpan="2"
-                                    Minimum="0"
-                                    Maximum="5"
-                                    SmallChange="0.25"
-                                    LargeChange="0.5"
-                                    TickFrequency="0.25"
-                                    IsSnapToTickEnabled="True"
-                                    IsMoveToPointEnabled="True"
-                                    Value="{Binding Settings.PreviewBubbleAutoHideSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    Style="{StaticResource SettingsSliderStyle}"
-                                    Margin="0,12,0,0"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
