@@ -193,7 +193,7 @@ public sealed class PluginRegistryService
                     progress?.Report(totalBytes > 0 ? (double)bytesRead / totalBytes : 0);
                 }
             }
-            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && downloadCts.IsCancellationRequested)
             {
                 throw new TimeoutException(
                     "Plugin download timed out because no data was received. Check your internet connection and try again.",

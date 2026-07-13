@@ -552,6 +552,26 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallPluginAsync_HttpClientTimeoutIsNotReportedAsInactivity()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.http-timeout", "1.0.2");
+        var httpClient = TrackDisposable(new HttpClient(new StalledHttpMessageHandler())
+        {
+            Timeout = TimeSpan.FromMilliseconds(50)
+        });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            _pluginsRoot,
+            downloadInactivityTimeout: TimeSpan.FromSeconds(5));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.InstallPluginAsync(registryPlugin));
+    }
+
+    [Fact]
     public async Task InstallPluginAsync_DownloadFailure_LeavesExistingPluginDirectoryUntouched()
     {
         var manager = CreateManager();
