@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -9,6 +10,162 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public sealed class DictionaryViewModelTests
 {
+    [Fact]
+    public void Corrections_WithExactReplacement_AreGroupedInSourceOrder()
+    {
+        var first = Correction("1", "recieve", "receive");
+        var term = Term("2", "TypeWhisper");
+        var second = Correction("3", "receeve", "receive", isEnabled: false, caseSensitive: true);
+        var viewModel = CreateViewModel(CreateDictionaryMock([first, term, second]).Object);
+
+        Assert.Equal(2, viewModel.VisibleDisplayItems.Count);
+        var group = viewModel.VisibleDisplayItems[0];
+        Assert.True(group.IsGroupedCorrection);
+        Assert.Equal([first, second], group.Entries);
+        Assert.Same(term, viewModel.VisibleDisplayItems[1].PrimaryEntry);
+        Assert.Equal(3, viewModel.EntryCount);
+        Assert.False(group.IsExpanded);
+        Assert.False(group.Entries[1].IsEnabled);
+        Assert.True(group.Entries[1].CaseSensitive);
+    }
+
+    [Fact]
+    public void Corrections_WithDifferentReplacementCasing_OrEmptyReplacement_StaySeparate()
+    {
+        var entries = new[]
+        {
+            Correction("1", "type whisper", "TypeWhisper"),
+            Correction("2", "typewhisper", "typewhisper"),
+            Correction("3", "empty-one", ""),
+            Correction("4", "empty-two", "")
+        };
+        var viewModel = CreateViewModel(CreateDictionaryMock(entries).Object);
+
+        Assert.Equal(4, viewModel.VisibleDisplayItems.Count);
+        Assert.All(viewModel.VisibleDisplayItems, item => Assert.False(item.IsGroupedCorrection));
+    }
+
+    [Fact]
+    public void SearchByAlias_ShowsAndExpandsTheCompleteGroup()
+    {
+        var first = Correction("1", "recieve", "receive");
+        var second = Correction("2", "receeve", "receive");
+        var unrelated = Correction("3", "teh", "the");
+        var viewModel = CreateViewModel(CreateDictionaryMock([first, second, unrelated]).Object);
+
+        viewModel.SearchText = "recieve";
+
+        var group = Assert.Single(viewModel.VisibleDisplayItems);
+        Assert.Equal([first, second], group.Entries);
+        Assert.True(group.IsExpanded);
+        Assert.Equal(2, viewModel.EntryCount);
+
+        viewModel.SearchText = "receive";
+
+        group = Assert.Single(viewModel.VisibleDisplayItems);
+        Assert.False(group.IsExpanded);
+    }
+
+    [Fact]
+    public void Tabs_FilterTermsAndCorrectionGroups()
+    {
+        var term = Term("1", "TypeWhisper");
+        var first = Correction("2", "recieve", "receive");
+        var second = Correction("3", "receeve", "receive");
+        var viewModel = CreateViewModel(CreateDictionaryMock([term, first, second]).Object);
+
+        viewModel.SelectedTab = 1;
+        Assert.Same(term, Assert.Single(viewModel.VisibleDisplayItems).PrimaryEntry);
+
+        viewModel.SelectedTab = 2;
+        var group = Assert.Single(viewModel.VisibleDisplayItems);
+        Assert.Equal([first, second], group.Entries);
+    }
+
+    [Fact]
+    public void PrepareAlias_ReusesTheExistingAddFlow()
+    {
+        var existing = Correction("1", "recieve", "receive");
+        DictionaryEntry? added = null;
+        var dictionary = CreateDictionaryMock([existing]);
+        dictionary
+            .Setup(service => service.AddEntry(It.IsAny<DictionaryEntry>()))
+            .Callback<DictionaryEntry>(entry => added = entry);
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.NewOriginal = "old";
+        viewModel.NewCaseSensitive = true;
+        viewModel.PrepareAliasCommand.Execute(viewModel.VisibleDisplayItems[0].Replacement);
+
+        Assert.Equal(DictionaryEntryType.Correction, viewModel.NewEntryType);
+        Assert.Equal("", viewModel.NewOriginal);
+        Assert.Equal("receive", viewModel.NewReplacement);
+        Assert.False(viewModel.NewCaseSensitive);
+
+        viewModel.NewOriginal = "receeve";
+        viewModel.AddEntryCommand.Execute(null);
+
+        Assert.NotNull(added);
+        Assert.Equal("receeve", added.Original);
+        Assert.Equal("receive", added.Replacement);
+    }
+
+    [Fact]
+    public void AliasActions_TargetOnlyTheSelectedEntry()
+    {
+        var first = Correction("1", "recieve", "receive");
+        var second = Correction("2", "receeve", "receive", isEnabled: false);
+        var dictionary = CreateDictionaryMock([first, second]);
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.StartEditCommand.Execute(second);
+        viewModel.ToggleEnabledCommand.Execute(second);
+        viewModel.DeleteEntryCommand.Execute(second);
+
+        Assert.Same(second, viewModel.EditEntry);
+        dictionary.Verify(service => service.UpdateEntry(
+            It.Is<DictionaryEntry>(entry => entry.Id == second.Id && entry.IsEnabled)), Times.Once);
+        dictionary.Verify(service => service.DeleteEntry(second.Id), Times.Once);
+        dictionary.Verify(service => service.DeleteEntry(first.Id), Times.Never);
+    }
+
+    [Fact]
+    public void DictionarySection_RendersGroupedAndSingleCorrections()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "DictionarySection.xaml");
+
+        Assert.Contains("ItemsSource=\"{Binding Dictionary.VisibleEntries}\"", xaml);
+        Assert.Contains("IsExpanded=\"{Binding IsExpanded, Mode=TwoWay}\"", xaml);
+        Assert.Contains("ItemsSource=\"{Binding Entries}\"", xaml);
+        Assert.Contains("Command=\"{Binding DataContext.Dictionary.PrepareAliasCommand", xaml);
+        Assert.Contains("Click=\"PrepareAlias_Click\"", xaml);
+        Assert.Contains("DataContext=\"{Binding PrimaryEntry}\"", xaml);
+        Assert.DoesNotContain("Dictionary.FilteredEntries", xaml);
+    }
+
+    [Fact]
+    public void AddAlias_IsLocalizedInEverySupportedLanguage()
+    {
+        foreach (var language in new[] { "en", "de", "ja", "ru" })
+        {
+            var json = TestFile.ReadProjectFile(
+                "src",
+                "TypeWhisper.Windows",
+                "Resources",
+                "Localization",
+                $"{language}.json");
+            using var document = JsonDocument.Parse(json);
+
+            Assert.False(string.IsNullOrWhiteSpace(
+                document.RootElement.GetProperty("Dictionary.AddAlias").GetString()));
+        }
+    }
+
     [Fact]
     public void AddEntry_PreservesEmptyCorrectionReplacement()
     {
@@ -86,6 +243,28 @@ public sealed class DictionaryViewModelTests
             .Returns(entries ?? Array.Empty<DictionaryEntry>());
         return dictionary;
     }
+
+    private static DictionaryEntry Correction(
+        string id,
+        string original,
+        string replacement,
+        bool isEnabled = true,
+        bool caseSensitive = false) => new()
+        {
+            Id = id,
+            EntryType = DictionaryEntryType.Correction,
+            Original = original,
+            Replacement = replacement,
+            IsEnabled = isEnabled,
+            CaseSensitive = caseSensitive
+        };
+
+    private static DictionaryEntry Term(string id, string original) => new()
+    {
+        Id = id,
+        EntryType = DictionaryEntryType.Term,
+        Original = original
+    };
 
     private static IReadOnlyList<Delegate> GetLanguageChangedSubscribers()
     {

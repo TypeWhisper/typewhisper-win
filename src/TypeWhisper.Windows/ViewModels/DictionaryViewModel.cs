@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
@@ -78,7 +77,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Performs entry count.
     /// </summary>
-    public int EntryCount => FilteredEntries.Cast<object>().Count();
+    public int EntryCount => _visibleEntries.Sum(item => item.Entries.Count);
     /// <summary>
     /// Performs active boosting term count.
     /// </summary>
@@ -96,9 +95,11 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     /// </summary>
     public ObservableCollection<DictionaryEntry> Entries { get; } = [];
     /// <summary>
-    /// Gets the filtered entries.
+    /// Gets the visible dictionary presentation items.
     /// </summary>
-    public ICollectionView FilteredEntries { get; }
+    public System.Collections.IEnumerable VisibleEntries => _visibleEntries;
+    internal ObservableCollection<DictionaryDisplayItem> VisibleDisplayItems => _visibleEntries;
+    private readonly ObservableCollection<DictionaryDisplayItem> _visibleEntries = [];
     /// <summary>
     /// Gets the packs.
     /// </summary>
@@ -126,9 +127,6 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         _vocabularyBoostingEnabled = _settings.Current.VocabularyBoostingEnabled;
         _selectedIndustryPresetId = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId).Id;
 
-        FilteredEntries = CollectionViewSource.GetDefaultView(Entries);
-        FilteredEntries.Filter = FilterByTab;
-
         _dictionary.EntriesChanged += RefreshEntries;
         if (_license is not null)
             _license.PropertyChanged += OnLicenseChanged;
@@ -153,15 +151,13 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedTabChanged(int value)
     {
-        FilteredEntries.Refresh();
-        OnPropertyChanged(nameof(EntryCount));
+        RefreshVisibleEntries();
     }
 
     partial void OnSearchTextChanged(string value)
     {
         OnPropertyChanged(nameof(HasSearchText));
-        FilteredEntries.Refresh();
-        OnPropertyChanged(nameof(EntryCount));
+        RefreshVisibleEntries();
     }
 
     partial void OnVocabularyBoostingEnabledChanged(bool value)
@@ -184,28 +180,51 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ClearSearch() => SearchText = "";
 
-    private bool FilterByTab(object obj)
+    private bool MatchesSelectedTab(DictionaryEntry entry)
     {
-        if (obj is not DictionaryEntry entry) return false;
-
-        // Tab filter
-        var tabMatch = SelectedTab switch
+        return SelectedTab switch
         {
             1 => entry.EntryType == DictionaryEntryType.Term,
             2 => entry.EntryType == DictionaryEntryType.Correction,
             _ => true // 0=Alle, 3=Packs (entries hidden, packs shown)
         };
-        if (!tabMatch) return false;
+    }
 
-        // Search filter
-        if (!string.IsNullOrWhiteSpace(SearchText))
+    private void RefreshVisibleEntries()
+    {
+        var candidates = Entries.Where(MatchesSelectedTab).ToArray();
+        var correctionGroups = candidates
+            .Where(entry => entry.EntryType == DictionaryEntryType.Correction &&
+                entry.Replacement is { Length: > 0 })
+            .GroupBy(entry => entry.Replacement!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        var emittedReplacements = new HashSet<string>(StringComparer.Ordinal);
+        var search = SearchText.Trim();
+
+        _visibleEntries.Clear();
+        foreach (var entry in candidates)
         {
-            var search = SearchText.Trim();
-            return entry.Original.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || (entry.Replacement?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+            IReadOnlyList<DictionaryEntry> entries = [entry];
+            if (entry.EntryType == DictionaryEntryType.Correction &&
+                entry.Replacement is { Length: > 0 } replacement)
+            {
+                if (!emittedReplacements.Add(replacement))
+                    continue;
+
+                entries = correctionGroups[replacement];
+            }
+
+            var replacementMatch = search.Length > 0 &&
+                entries[0].Replacement?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
+            var aliasMatch = search.Length > 0 &&
+                entries.Any(candidate => candidate.Original.Contains(search, StringComparison.OrdinalIgnoreCase));
+            if (search.Length > 0 && !replacementMatch && !aliasMatch)
+                continue;
+
+            _visibleEntries.Add(new DictionaryDisplayItem(entries, aliasMatch && entries.Count > 1));
         }
 
-        return true;
+        OnPropertyChanged(nameof(EntryCount));
     }
 
     [RelayCommand]
@@ -224,6 +243,18 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
 
         NewOriginal = "";
         NewReplacement = "";
+        NewCaseSensitive = false;
+    }
+
+    [RelayCommand]
+    private void PrepareAlias(string? replacement)
+    {
+        if (replacement is not { Length: > 0 })
+            return;
+
+        NewEntryType = DictionaryEntryType.Correction;
+        NewOriginal = "";
+        NewReplacement = replacement;
         NewCaseSensitive = false;
     }
 
@@ -482,10 +513,24 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         Entries.Clear();
         foreach (var e in _dictionary.Entries)
             Entries.Add(e);
-        FilteredEntries.Refresh();
-        OnPropertyChanged(nameof(EntryCount));
+        RefreshVisibleEntries();
         OnPropertyChanged(nameof(ActiveBoostingTermCount));
         OnPropertyChanged(nameof(VocabularyBoostingStatusText));
+    }
+}
+
+internal sealed class DictionaryDisplayItem
+{
+    public IReadOnlyList<DictionaryEntry> Entries { get; }
+    public DictionaryEntry PrimaryEntry => Entries[0];
+    public string? Replacement => PrimaryEntry.Replacement;
+    public bool IsGroupedCorrection => Entries.Count > 1;
+    public bool IsExpanded { get; set; }
+
+    public DictionaryDisplayItem(IReadOnlyList<DictionaryEntry> entries, bool isExpanded = false)
+    {
+        Entries = entries;
+        IsExpanded = isExpanded;
     }
 }
 

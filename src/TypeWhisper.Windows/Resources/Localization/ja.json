@@ -382,6 +382,7 @@
   "Dictionary.Term": "用語",
   "Dictionary.ReplacementPlaceholder": "置換（オプション）",
   "Dictionary.Add": "追加",
+  "Dictionary.AddAlias": "別表記を追加",
   "Dictionary.UsageCount": "{0}回使用",
   "Dictionary.PackTerms": "用語",
   "Dictionary.EditEntry": "エントリを編集",
