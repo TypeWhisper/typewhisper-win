@@ -29,7 +29,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     private readonly TermPackRegistryService? _termPackRegistry;
     private IReadOnlyList<TermPack> _remotePacks = [];
 
-    // Tab: 0=Alle, 1=Begriffe, 2=Korrekturen, 3=Packs
+    // Tab: 0=Alle, 1=Begriffe, 2=Korrekturen, 3=Automatisch gelernt, 4=Packs
     [ObservableProperty] private int _selectedTab;
 
     // Search
@@ -84,6 +84,24 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     public int ActiveBoostingTermCount => _dictionary.Entries.Count(entry =>
         entry.IsEnabled && entry.EntryType == DictionaryEntryType.Term);
     /// <summary>
+    /// Gets the number of automatically learned corrections.
+    /// </summary>
+    public int AutoLearnedCorrectionCount => _dictionary.Entries.Count(entry =>
+        entry.EntryType == DictionaryEntryType.Correction &&
+        entry.Source == DictionaryEntrySource.AutoLearned);
+    /// <summary>
+    /// Gets the number of entries created outside term packs.
+    /// </summary>
+    public int CustomDictionaryEntryCount => _dictionary.Entries.Count(entry => !IsPackEntry(entry));
+    /// <summary>
+    /// Gets the number of currently enabled term packs.
+    /// </summary>
+    public int EnabledPackCount => _settings.Current.EnabledPackIds.Distinct(StringComparer.OrdinalIgnoreCase).Count();
+    /// <summary>
+    /// Gets the number of entries installed by term packs.
+    /// </summary>
+    public int InstalledPackEntryCount => _dictionary.Entries.Count(IsPackEntry);
+    /// <summary>
     /// Gets the vocabulary boosting status text.
     /// </summary>
     public string VocabularyBoostingStatusText => ActiveBoostingTermCount == 0
@@ -110,6 +128,9 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets { get; } = [];
 
     [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
+
+    internal Func<string, string, bool> ConfirmReset { get; set; } = static (message, title) =>
+        MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
 
     /// <summary>
     /// Initializes a new instance of the DictionaryViewModel class.
@@ -180,13 +201,88 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ClearSearch() => SearchText = "";
 
+    [RelayCommand(CanExecute = nameof(CanClearAutoLearnedCorrections))]
+    private void ClearAutoLearnedCorrections()
+    {
+        var entries = _dictionary.Entries
+            .Where(entry => entry.EntryType == DictionaryEntryType.Correction &&
+                entry.Source == DictionaryEntrySource.AutoLearned)
+            .ToArray();
+        if (entries.Length == 0 || !ConfirmReset(
+                Loc.Instance.GetString("Dictionary.ClearAutoLearnedConfirm", entries.Length),
+                Loc.Instance["Dictionary.ResetConfirmTitle"]))
+        {
+            return;
+        }
+
+        _dictionary.DeleteEntries(entries.Select(entry => entry.Id));
+    }
+
+    private bool CanClearAutoLearnedCorrections() => AutoLearnedCorrectionCount > 0;
+
+    [RelayCommand(CanExecute = nameof(CanResetCustomDictionary))]
+    private void ResetCustomDictionary()
+    {
+        var entries = _dictionary.Entries.Where(entry => !IsPackEntry(entry)).ToArray();
+        if (entries.Length == 0)
+            return;
+
+        var termCount = entries.Count(entry => entry.EntryType == DictionaryEntryType.Term);
+        var autoLearnedCount = entries.Count(entry =>
+            entry.EntryType == DictionaryEntryType.Correction &&
+            entry.Source == DictionaryEntrySource.AutoLearned);
+        var manualCorrectionCount = entries.Length - termCount - autoLearnedCount;
+        if (!ConfirmReset(
+                Loc.Instance.GetString(
+                    "Dictionary.ResetCustomDictionaryConfirm",
+                    termCount,
+                    manualCorrectionCount,
+                    autoLearnedCount),
+                Loc.Instance["Dictionary.ResetConfirmTitle"]))
+        {
+            return;
+        }
+
+        _dictionary.DeleteEntries(entries.Select(entry => entry.Id));
+    }
+
+    private bool CanResetCustomDictionary() => CustomDictionaryEntryCount > 0;
+
+    [RelayCommand(CanExecute = nameof(CanDeactivateAllTermPacks))]
+    private void DeactivateAllTermPacks()
+    {
+        var packEntries = _dictionary.Entries.Where(IsPackEntry).ToArray();
+        var enabledPackCount = EnabledPackCount;
+        if ((packEntries.Length == 0 && enabledPackCount == 0) || !ConfirmReset(
+                Loc.Instance.GetString(
+                    "Dictionary.DeactivateAllPacksConfirm",
+                    enabledPackCount,
+                    packEntries.Length),
+                Loc.Instance["Dictionary.ResetConfirmTitle"]))
+        {
+            return;
+        }
+
+        if (packEntries.Length > 0)
+            _dictionary.DeleteEntries(packEntries.Select(entry => entry.Id));
+
+        _settings.Save(_settings.Current with { EnabledPackIds = [] });
+        foreach (var pack in Packs)
+            pack.IsEnabled = false;
+        NotifyResetStateChanged();
+    }
+
+    private bool CanDeactivateAllTermPacks() => EnabledPackCount > 0 || InstalledPackEntryCount > 0;
+
     private bool MatchesSelectedTab(DictionaryEntry entry)
     {
         return SelectedTab switch
         {
             1 => entry.EntryType == DictionaryEntryType.Term,
             2 => entry.EntryType == DictionaryEntryType.Correction,
-            _ => true // 0=Alle, 3=Packs (entries hidden, packs shown)
+            3 => entry.EntryType == DictionaryEntryType.Correction &&
+                entry.Source == DictionaryEntrySource.AutoLearned,
+            _ => true // 0=Alle, 4=Packs (entries hidden, packs shown)
         };
     }
 
@@ -337,6 +433,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
+        NotifyResetStateChanged();
     }
 
     private void InitializePacks()
@@ -516,7 +613,22 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         RefreshVisibleEntries();
         OnPropertyChanged(nameof(ActiveBoostingTermCount));
         OnPropertyChanged(nameof(VocabularyBoostingStatusText));
+        NotifyResetStateChanged();
     }
+
+    private void NotifyResetStateChanged()
+    {
+        OnPropertyChanged(nameof(AutoLearnedCorrectionCount));
+        OnPropertyChanged(nameof(CustomDictionaryEntryCount));
+        OnPropertyChanged(nameof(EnabledPackCount));
+        OnPropertyChanged(nameof(InstalledPackEntryCount));
+        ClearAutoLearnedCorrectionsCommand.NotifyCanExecuteChanged();
+        ResetCustomDictionaryCommand.NotifyCanExecuteChanged();
+        DeactivateAllTermPacksCommand.NotifyCanExecuteChanged();
+    }
+
+    private static bool IsPackEntry(DictionaryEntry entry) =>
+        entry.Id.StartsWith("pack:", StringComparison.Ordinal);
 }
 
 internal sealed partial class DictionaryDisplayItem : ObservableObject

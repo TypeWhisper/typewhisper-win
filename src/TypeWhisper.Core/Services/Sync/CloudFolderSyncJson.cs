@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.Core.Services.Sync;
 
@@ -33,6 +34,7 @@ public static class CloudFolderSyncJson
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = writeIndented
         };
+        options.Converters.Add(new DictionaryEntrySourceJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         options.Converters.Add(new CloudFolderSyncDateTimeConverter());
         return options;

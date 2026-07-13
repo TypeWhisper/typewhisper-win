@@ -153,8 +153,10 @@
                          Checked="Tab_Checked" Tag="1" Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabCorrections}" GroupName="DictTab"
                          Checked="Tab_Checked" Tag="2" Style="{StaticResource TabRadioStyle}"/>
-            <RadioButton Content="{loc:Str Dictionary.TabPacks}" GroupName="DictTab"
+            <RadioButton Content="{loc:Str Dictionary.TabAutoLearned}" GroupName="DictTab"
                          Checked="Tab_Checked" Tag="3" Style="{StaticResource TabRadioStyle}"/>
+            <RadioButton Content="{loc:Str Dictionary.TabPacks}" GroupName="DictTab"
+                         Checked="Tab_Checked" Tag="4" Style="{StaticResource TabRadioStyle}"/>
         </StackPanel>
 
         <!-- Search Bar (hidden on Packs tab) -->
@@ -163,7 +165,7 @@
                 <Style TargetType="Grid">
                     <Setter Property="Visibility" Value="Visible"/>
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="4">
                             <Setter Property="Visibility" Value="Collapsed"/>
                         </DataTrigger>
                     </Style.Triggers>
@@ -232,7 +234,7 @@
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Visible"/>
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="4">
                             <Setter Property="Visibility" Value="Collapsed"/>
                         </DataTrigger>
                     </Style.Triggers>
@@ -343,7 +345,7 @@
 
         <!-- Edit Overlay + Lists -->
         <Grid>
-            <!-- Entries List (Tabs 0-2) -->
+            <!-- Entries List (Tabs 0-3) -->
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ScrollViewer.Resources>
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
@@ -352,7 +354,7 @@
                     <Style TargetType="ScrollViewer" BasedOn="{StaticResource TouchScrollViewerStyle}">
                         <Setter Property="Visibility" Value="Visible"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                            <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="4">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                         </Style.Triggers>
@@ -387,6 +389,9 @@
                                         <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="2">
                                             <Setter Property="Text" Value="&#xE8AC;"/>
                                         </DataTrigger>
+                                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                                            <Setter Property="Text" Value="&#xE7C3;"/>
+                                        </DataTrigger>
                                         <DataTrigger Binding="{Binding Dictionary.HasSearchText}" Value="True">
                                             <Setter Property="Text" Value="&#xE721;"/>
                                         </DataTrigger>
@@ -407,6 +412,9 @@
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="2">
                                             <Setter Property="Text" Value="{loc:Str Dictionary.EmptyCorrectionsTitle}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                                            <Setter Property="Text" Value="{loc:Str Dictionary.EmptyAutoLearnedTitle}"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Dictionary.HasSearchText}" Value="True">
                                             <Setter Property="Text" Value="{loc:Str Dictionary.EmptySearchTitle}"/>
@@ -429,6 +437,9 @@
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="2">
                                             <Setter Property="Text" Value="{loc:Str Dictionary.EmptyCorrectionsSubtitle}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                                            <Setter Property="Text" Value="{loc:Str Dictionary.EmptyAutoLearnedSubtitle}"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Dictionary.HasSearchText}" Value="True">
                                             <Setter Property="Text" Value="{loc:Str Dictionary.EmptySearchSubtitle}"/>
@@ -525,6 +536,20 @@
                                                                         Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
                                                                     <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
                                                                                ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
+                                                                </Border>
+                                                                <Border CornerRadius="3" Padding="5,1" Margin="8,0,0,0"
+                                                                        Background="#183B35" VerticalAlignment="Center">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding Source}" Value="AutoLearned">
+                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock Text="{loc:Str Dictionary.AutoLearned}" FontSize="10" Foreground="#70C1AE"/>
                                                                 </Border>
                                                             </StackPanel>
                                                             <TextBlock FontSize="11" Foreground="{StaticResource HintBrush}" Margin="0,2,0,0">
@@ -665,6 +690,20 @@
                                                                         <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
                                                                                    ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
                                                                     </Border>
+                                                                    <Border CornerRadius="3" Padding="5,1" Margin="8,0,0,0"
+                                                                            Background="#183B35" VerticalAlignment="Center">
+                                                                        <Border.Style>
+                                                                            <Style TargetType="Border">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Source}" Value="AutoLearned">
+                                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Border.Style>
+                                                                        <TextBlock Text="{loc:Str Dictionary.AutoLearned}" FontSize="10" Foreground="#70C1AE"/>
+                                                                    </Border>
                                                                 </StackPanel>
                                                                 <TextBlock FontSize="11" Foreground="{StaticResource HintBrush}" Margin="0,2,0,0">
                                                                     <TextBlock.Style>
@@ -713,10 +752,59 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <Border Margin="0,18,0,0" Padding="14,12"
+                            Background="{StaticResource InputBackgroundBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Dictionary.DataManagement}" Foreground="{StaticResource TextBrush}"
+                                       FontSize="14" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str Dictionary.DataManagementDescription}" Foreground="{StaticResource HintBrush}"
+                                       FontSize="12" TextWrapping="Wrap" Margin="0,3,0,12"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Dictionary.ClearAutoLearned}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
+                                    <TextBlock Text="{loc:Str Dictionary.ClearAutoLearnedDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="{loc:Str Dictionary.ClearAction}" Margin="12,0,0,0"
+                                        Command="{Binding Dictionary.ClearAutoLearnedCorrectionsCommand}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Dictionary.ResetCustomDictionary}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
+                                    <TextBlock Text="{loc:Str Dictionary.ResetCustomDictionaryDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="{loc:Str Dictionary.ResetAction}" Margin="12,0,0,0"
+                                        Command="{Binding Dictionary.ResetCustomDictionaryCommand}"/>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str Dictionary.DeactivateAllPacks}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
+                                    <TextBlock Text="{loc:Str Dictionary.DeactivateAllPacksDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="{loc:Str Dictionary.DeactivateAction}" Margin="12,0,0,0"
+                                        Command="{Binding Dictionary.DeactivateAllTermPacksCommand}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Packs Tab (Tab 3) -->
+            <!-- Packs Tab (Tab 4) -->
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ScrollViewer.Resources>
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
@@ -725,7 +813,7 @@
                     <Style TargetType="ScrollViewer" BasedOn="{StaticResource TouchScrollViewerStyle}">
                         <Setter Property="Visibility" Value="Collapsed"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="3">
+                            <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="4">
                                 <Setter Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </Style.Triggers>

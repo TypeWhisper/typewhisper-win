@@ -83,6 +83,99 @@ public sealed class DictionaryViewModelTests
     }
 
     [Fact]
+    public void AutoLearnedTab_ShowsOnlyAutoLearnedCorrections()
+    {
+        var manual = Correction("1", "teh", "the");
+        var automatic = Correction("2", "recieve", "receive", source: DictionaryEntrySource.AutoLearned);
+        var term = Term("3", "TypeWhisper");
+        var viewModel = CreateViewModel(CreateDictionaryMock([manual, automatic, term]).Object);
+
+        viewModel.SelectedTab = 3;
+
+        Assert.Same(automatic, Assert.Single(viewModel.VisibleDisplayItems).PrimaryEntry);
+        Assert.Equal(1, viewModel.EntryCount);
+    }
+
+    [Fact]
+    public void ClearAutoLearnedCorrections_DeletesOnlyAutomaticCorrections()
+    {
+        var manual = Correction("manual", "teh", "the");
+        var automatic = Correction("automatic", "recieve", "receive", source: DictionaryEntrySource.AutoLearned);
+        var pack = Term("pack:test:React", "React");
+        var dictionary = CreateDictionaryMock([manual, automatic, pack]);
+        var viewModel = CreateViewModel(dictionary.Object);
+        viewModel.ConfirmReset = (_, _) => true;
+
+        viewModel.ClearAutoLearnedCorrectionsCommand.Execute(null);
+
+        dictionary.Verify(service => service.DeleteEntries(
+            It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { automatic.Id }))), Times.Once);
+    }
+
+    [Fact]
+    public void ResetCustomDictionary_PreservesPackEntries()
+    {
+        var term = Term("term", "TypeWhisper");
+        var manual = Correction("manual", "teh", "the");
+        var automatic = Correction("automatic", "recieve", "receive", source: DictionaryEntrySource.AutoLearned);
+        var pack = Term("pack:test:React", "React");
+        var dictionary = CreateDictionaryMock([term, manual, automatic, pack]);
+        var viewModel = CreateViewModel(dictionary.Object);
+        viewModel.ConfirmReset = (_, _) => true;
+
+        viewModel.ResetCustomDictionaryCommand.Execute(null);
+
+        dictionary.Verify(service => service.DeleteEntries(
+            It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { term.Id, manual.Id, automatic.Id }))), Times.Once);
+    }
+
+    [Fact]
+    public void DeactivateAllTermPacks_PreservesCustomEntriesAndClearsPackState()
+    {
+        var manual = Term("manual", "TypeWhisper");
+        var packEntry = Term("pack:test:React", "React");
+        var dictionary = CreateDictionaryMock([manual, packEntry]);
+        var settings = CreateSettingsMock(AppSettings.Default with { EnabledPackIds = ["test"] });
+        var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object);
+        viewModel.ConfirmReset = (_, _) => true;
+
+        viewModel.DeactivateAllTermPacksCommand.Execute(null);
+
+        dictionary.Verify(service => service.DeleteEntries(
+            It.Is<IEnumerable<string>>(ids => ids.SequenceEqual(new[] { packEntry.Id }))), Times.Once);
+        settings.Verify(service => service.Save(
+            It.Is<AppSettings>(candidate => candidate.EnabledPackIds.Length == 0)), Times.Once);
+    }
+
+    [Fact]
+    public void CancellingResetActions_ChangesNothing()
+    {
+        var automatic = Correction("automatic", "recieve", "receive", source: DictionaryEntrySource.AutoLearned);
+        var pack = Term("pack:test:React", "React");
+        var dictionary = CreateDictionaryMock([automatic, pack]);
+        var settings = CreateSettingsMock(AppSettings.Default with { EnabledPackIds = ["test"] });
+        var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object);
+        viewModel.ConfirmReset = (_, _) => false;
+
+        viewModel.ClearAutoLearnedCorrectionsCommand.Execute(null);
+        viewModel.ResetCustomDictionaryCommand.Execute(null);
+        viewModel.DeactivateAllTermPacksCommand.Execute(null);
+
+        dictionary.Verify(service => service.DeleteEntries(It.IsAny<IEnumerable<string>>()), Times.Never);
+        settings.Verify(service => service.Save(It.IsAny<AppSettings>()), Times.Never);
+    }
+
+    [Fact]
+    public void EmptyResetCategories_DisableTheirCommands()
+    {
+        var viewModel = CreateViewModel();
+
+        Assert.False(viewModel.ClearAutoLearnedCorrectionsCommand.CanExecute(null));
+        Assert.False(viewModel.ResetCustomDictionaryCommand.CanExecute(null));
+        Assert.False(viewModel.DeactivateAllTermPacksCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void PrepareAlias_ReusesTheExistingAddFlow()
     {
         var existing = Correction("1", "recieve", "receive");
@@ -149,10 +242,14 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("DataContext=\"{Binding PrimaryEntry}\"", xaml);
         Assert.DoesNotContain("<ui:CardExpander", xaml);
         Assert.DoesNotContain("Dictionary.FilteredEntries", xaml);
+        Assert.Contains("Dictionary.TabAutoLearned", xaml);
+        Assert.Contains("Dictionary.ClearAutoLearnedCorrectionsCommand", xaml);
+        Assert.Contains("Dictionary.ResetCustomDictionaryCommand", xaml);
+        Assert.Contains("Dictionary.DeactivateAllTermPacksCommand", xaml);
     }
 
     [Fact]
-    public void AddAlias_IsLocalizedInEverySupportedLanguage()
+    public void DictionaryPresentation_IsLocalizedInEverySupportedLanguage()
     {
         foreach (var language in new[] { "en", "de", "ja", "ru" })
         {
@@ -168,6 +265,18 @@ public sealed class DictionaryViewModelTests
                 document.RootElement.GetProperty("Dictionary.AddAlias").GetString()));
             Assert.False(string.IsNullOrWhiteSpace(
                 document.RootElement.GetProperty("Dictionary.ToggleAliases").GetString()));
+            foreach (var key in new[]
+            {
+                "Dictionary.TabAutoLearned",
+                "Dictionary.AutoLearned",
+                "Dictionary.ClearAutoLearned",
+                "Dictionary.ResetCustomDictionary",
+                "Dictionary.DeactivateAllPacks",
+                "Dictionary.ResetConfirmTitle"
+            })
+            {
+                Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()));
+            }
         }
     }
 
@@ -234,10 +343,19 @@ public sealed class DictionaryViewModelTests
 
     private static DictionaryViewModel CreateViewModel(IDictionaryService dictionary)
     {
-        var settings = new Mock<ISettingsService>();
-        settings.SetupGet(service => service.Current).Returns(AppSettings.Default);
+        var settings = CreateSettingsMock(AppSettings.Default);
 
         return new DictionaryViewModel(dictionary, settings.Object);
+    }
+
+    private static Mock<ISettingsService> CreateSettingsMock(AppSettings initial)
+    {
+        var current = initial;
+        var settings = new Mock<ISettingsService>();
+        settings.SetupGet(service => service.Current).Returns(() => current);
+        settings.Setup(service => service.Save(It.IsAny<AppSettings>()))
+            .Callback<AppSettings>(value => current = value);
+        return settings;
     }
 
     private static Mock<IDictionaryService> CreateDictionaryMock(IReadOnlyList<DictionaryEntry>? entries = null)
@@ -254,14 +372,16 @@ public sealed class DictionaryViewModelTests
         string original,
         string replacement,
         bool isEnabled = true,
-        bool caseSensitive = false) => new()
+        bool caseSensitive = false,
+        DictionaryEntrySource source = DictionaryEntrySource.Manual) => new()
         {
             Id = id,
             EntryType = DictionaryEntryType.Correction,
             Original = original,
             Replacement = replacement,
             IsEnabled = isEnabled,
-            CaseSensitive = caseSensitive
+            CaseSensitive = caseSensitive,
+            Source = source
         };
 
     private static DictionaryEntry Term(string id, string original) => new()
