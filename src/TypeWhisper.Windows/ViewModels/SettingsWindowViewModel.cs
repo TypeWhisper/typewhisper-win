@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -78,6 +80,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private readonly UpdateService _updateService;
     private readonly ISettingsService _settingsService;
     private readonly IErrorLogService _errorLog;
+    private readonly TargetAppCorrectionLearningService _targetAppCorrectionLearning;
     private readonly DevelopmentDataSeeder _developmentDataSeeder;
     private readonly DispatcherTimer _indicatorPreviewTimer = new(DispatcherPriority.Background);
     private readonly DateTime _indicatorPreviewStartedAt = DateTime.UtcNow;
@@ -250,6 +253,31 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             ? Loc.Instance["Premium.LearningOn"]
             : Loc.Instance["Premium.LearningOff"]
         : Loc.Instance["Premium.LearningRequiresCommercial"];
+    /// <summary>
+    /// Gets the localized outcome of the most recent correction learning attempt.
+    /// </summary>
+    public string TargetAppCorrectionLearningLastOutcome
+    {
+        get
+        {
+            var key = _targetAppCorrectionLearning.LastOutcome?.Outcome switch
+            {
+                TargetAppCorrectionLearningOutcomeKind.Learned => "Premium.LearningOutcomeLearned",
+                TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation => "Premium.LearningOutcomeUnsupported",
+                TargetAppCorrectionLearningOutcomeKind.NoEdit => "Premium.LearningOutcomeNoEdit",
+                TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit => "Premium.LearningOutcomeAmbiguous",
+                TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout => "Premium.LearningOutcomeNoCommit",
+                TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection => "Premium.LearningOutcomeDuplicate",
+                TargetAppCorrectionLearningOutcomeKind.Cancelled => "Premium.LearningOutcomeCancelled",
+                TargetAppCorrectionLearningOutcomeKind.Failed => "Premium.LearningOutcomeFailed",
+                _ => "Premium.LearningOutcomeNone"
+            };
+
+            return Loc.Instance.GetString(
+                "Premium.LearningLastOutcomeFormat",
+                Loc.Instance[key]);
+        }
+    }
 
     private readonly Dictionary<SettingsRoute, Func<UserControl>> _sectionFactories = [];
     private readonly Dictionary<SettingsRoute, UserControl> _sectionCache = [];
@@ -274,7 +302,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         UpdateService updateService,
         ISettingsService settingsService,
         IErrorLogService errorLog,
-        DevelopmentDataSeeder developmentDataSeeder)
+        DevelopmentDataSeeder developmentDataSeeder,
+        TargetAppCorrectionLearningService targetAppCorrectionLearning)
     {
         Settings = settings;
         ModelManager = modelManager;
@@ -291,6 +320,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         _updateService = updateService;
         _settingsService = settingsService;
         _errorLog = errorLog;
+        _targetAppCorrectionLearning = targetAppCorrectionLearning;
         _developmentDataSeeder = developmentDataSeeder;
         Plugins.PropertyChanged += OnPluginsPropertyChanged;
         Loc.Instance.LanguageChanged += (_, _) =>
@@ -305,6 +335,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
                 SyncNavigationSelection();
                 OnPropertyChanged(nameof(CurrentAppVersionDisplay));
                 OnPropertyChanged(nameof(SelectedUpdateChannelDescription));
+                OnPropertyChanged(nameof(TargetAppCorrectionLearningLastOutcome));
             });
         };
 
@@ -315,6 +346,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SyncPluginUpdateNavigationBadge();
         RefreshErrorLog();
         _errorLog.EntriesChanged += RefreshErrorLog;
+        _targetAppCorrectionLearning.LastOutcomeChanged += OnTargetAppCorrectionLearningOutcomeChanged;
         Settings.PropertyChanged += OnSettingsPropertyChanged;
         License.PropertyChanged += OnLicensePropertyChanged;
         _settingsService.SettingsChanged += OnSettingsServiceChanged;
@@ -426,9 +458,25 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         if (dialog.ShowDialog() == true)
         {
-            var json = _errorLog.ExportDiagnostics();
+            var json = AddTargetAppCorrectionLearningDiagnostics(
+                _errorLog.ExportDiagnostics(),
+                _targetAppCorrectionLearning.LastOutcome);
             System.IO.File.WriteAllText(dialog.FileName, json);
         }
+    }
+
+    internal static string AddTargetAppCorrectionLearningDiagnostics(
+        string diagnosticsJson,
+        TargetAppCorrectionLearningOutcome? outcome)
+    {
+        var root = JsonNode.Parse(diagnosticsJson)?.AsObject()
+            ?? throw new JsonException("Diagnostics root must be a JSON object.");
+        root["target_app_correction_learning"] = new JsonObject
+        {
+            ["outcome"] = outcome?.Code,
+            ["recorded_at_utc"] = outcome?.RecordedAtUtc.ToString("o")
+        };
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
     [RelayCommand]
@@ -618,6 +666,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         RaiseTargetAppCorrectionLearningProperties();
     }
 
+    private void OnTargetAppCorrectionLearningOutcomeChanged()
+        => DispatchToUi(() => OnPropertyChanged(nameof(TargetAppCorrectionLearningLastOutcome)));
+
     private void RaiseTargetAppCorrectionLearningProperties()
     {
         DispatchToUi(() =>
@@ -626,6 +677,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowTargetAppCorrectionLearningLocked));
             OnPropertyChanged(nameof(TargetAppCorrectionLearningEnabled));
             OnPropertyChanged(nameof(TargetAppCorrectionLearningStatus));
+            OnPropertyChanged(nameof(TargetAppCorrectionLearningLastOutcome));
         });
     }
 

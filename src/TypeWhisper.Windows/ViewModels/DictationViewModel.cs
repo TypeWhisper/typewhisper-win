@@ -1812,14 +1812,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (GetTargetAppCorrectionLearningSkipReason(activeWorkflow, insertedText) is not null ||
             insertResult != InsertionResult.Pasted ||
-            _targetAppTextObserver is null ||
             _targetAppCorrectionLearning is null)
         {
             return;
         }
 
-        var observer = _targetAppTextObserver;
         var learning = _targetAppCorrectionLearning;
+        var attemptId = learning.BeginAttempt();
+        if (_targetAppTextObserver is not { } observer)
+        {
+            learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
+            return;
+        }
+
         CancelTargetAppCorrectionLearning();
 
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
@@ -1850,7 +1855,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         cts.Token).ConfigureAwait(false);
 
                     if (baselineResult.Baseline is null)
+                    {
+                        learning.CompleteAttempt(
+                            attemptId,
+                            TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
                         return;
+                    }
 
                     trackingCts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
                     using (trackingCts)
@@ -1863,43 +1873,51 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                             _targetAppCorrectionLearningCts = trackingCts;
                         }
 
-                        var learned = await learning
+                        var result = await learning
                             .TrackInsertionAsync(insertedText, baselineResult.Baseline, trackingCts.Token)
                             .ConfigureAwait(false);
+                        learning.CompleteAttempt(attemptId, result.Outcome);
 
-                        if (learned.Count == 0 || trackingCts.IsCancellationRequested)
+                        if (result.LearnedCorrections.Count == 0 || trackingCts.IsCancellationRequested)
                             return;
 
-                        DispatchToUi(() => ShowLearnedCorrectionsFeedback(learned));
+                        DispatchToUi(() => ShowLearnedCorrectionsFeedback(result.LearnedCorrections));
                     }
                 }
                 catch (OperationCanceledException)
                 {
                     // Expected when the background capture times out or a newer recording starts.
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Cancelled);
                 }
                 catch (System.Windows.Automation.ElementNotAvailableException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 catch (ObjectDisposedException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 catch (InvalidOperationException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 catch (IOException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 catch (UnauthorizedAccessException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 catch (System.Runtime.InteropServices.COMException ex)
                 {
                     LogTargetAppCorrectionLearningFailure(ex);
+                    learning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
                 }
                 finally
                 {
@@ -1939,11 +1957,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         if (insertResult != InsertionResult.Pasted)
             return new TargetAppCorrectionLearningStartResult(false, "not_pasted");
 
-        if (_targetAppTextObserver is null)
-            return new TargetAppCorrectionLearningStartResult(false, "observer_unavailable");
-
         if (_targetAppCorrectionLearning is null)
             return new TargetAppCorrectionLearningStartResult(false, "learning_service_unavailable");
+
+        var attemptId = _targetAppCorrectionLearning.BeginAttempt();
+
+        if (_targetAppTextObserver is null)
+        {
+            _targetAppCorrectionLearning.CompleteAttempt(
+                attemptId,
+                TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
+            return new TargetAppCorrectionLearningStartResult(false, "observer_unavailable");
+        }
 
         TargetAppCorrectionBaselineResult baselineResult;
         try
@@ -1963,35 +1988,51 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
         catch (TimeoutException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(
+                attemptId,
+                TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
             return new TargetAppCorrectionLearningStartResult(false, "capture_timeout");
         }
         catch (OperationCanceledException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(
+                attemptId,
+                TargetAppCorrectionLearningOutcomeKind.Cancelled);
             return new TargetAppCorrectionLearningStartResult(false, "cancelled");
         }
         catch (System.Windows.Automation.ElementNotAvailableException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
         catch (InvalidOperationException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
         catch (IOException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
         catch (UnauthorizedAccessException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
         catch (System.Runtime.InteropServices.COMException)
         {
+            _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             return new TargetAppCorrectionLearningStartResult(false, "capture_error");
         }
 
         if (baselineResult.Baseline is null)
+        {
+            _targetAppCorrectionLearning.CompleteAttempt(
+                attemptId,
+                TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
             return new TargetAppCorrectionLearningStartResult(false, baselineResult.SkipReason ?? "capture_unavailable");
+        }
 
         CancelTargetAppCorrectionLearning();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_consumerCts.Token);
@@ -2004,42 +2045,50 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             try
             {
-                var learned = await _targetAppCorrectionLearning
+                var result = await _targetAppCorrectionLearning
                     .TrackInsertionAsync(insertedText, baselineResult.Baseline, cts.Token)
                     .ConfigureAwait(false);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, result.Outcome);
 
-                if (learned.Count == 0 || cts.IsCancellationRequested)
+                if (result.LearnedCorrections.Count == 0 || cts.IsCancellationRequested)
                     return;
 
-                DispatchToUi(() => ShowLearnedCorrectionsFeedback(learned));
+                DispatchToUi(() => ShowLearnedCorrectionsFeedback(result.LearnedCorrections));
             }
             catch (OperationCanceledException)
             {
                 // Expected when a new recording starts or processing is cancelled.
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Cancelled);
             }
             catch (System.Windows.Automation.ElementNotAvailableException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             catch (ObjectDisposedException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             catch (InvalidOperationException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             catch (IOException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             catch (UnauthorizedAccessException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             catch (System.Runtime.InteropServices.COMException ex)
             {
                 LogTargetAppCorrectionLearningFailure(ex);
+                _targetAppCorrectionLearning.CompleteAttempt(attemptId, TargetAppCorrectionLearningOutcomeKind.Failed);
             }
             finally
             {

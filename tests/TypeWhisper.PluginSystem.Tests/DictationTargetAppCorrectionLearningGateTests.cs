@@ -288,7 +288,7 @@ public class DictationTargetAppCorrectionLearningGateTests
         var captureBlock = TestFile.ExtractBlock(
             source,
             "private async Task<TargetAppCorrectionLearningStartResult> TryStartTargetAppCorrectionLearningAsync",
-            3200);
+            5200);
 
         Assert.Contains("catch (UnauthorizedAccessException)", captureBlock);
         Assert.Contains("return new TargetAppCorrectionLearningStartResult(false, \"capture_error\");", captureBlock);

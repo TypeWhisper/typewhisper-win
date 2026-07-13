@@ -84,31 +84,34 @@ public sealed class TargetAppTextObservationService : ITargetAppTextObserver
                 {
                     return captured;
                 }
-
-                return baseline.AllowElementKeyChangeOnCommit
-                    ? CaptureElementAtCursor(baseline.WindowHandle, baseline.MaxValueLength)
-                    : null;
             }
-
-            var element = AutomationElement.FocusedElement;
-            var currentKey = GetElementKey(element);
-            if (!string.Equals(currentKey, baseline.ElementKey, StringComparison.Ordinal))
-                return null;
-
-            return CaptureElement(element, baseline.WindowHandle, baseline.MaxValueLength);
+            else
+            {
+                var element = AutomationElement.FocusedElement;
+                var currentKey = GetElementKey(element);
+                if (string.Equals(currentKey, baseline.ElementKey, StringComparison.Ordinal) &&
+                    CaptureElement(element, baseline.WindowHandle, baseline.MaxValueLength) is { } captured)
+                {
+                    return captured;
+                }
+            }
         }
         catch (ElementNotAvailableException)
         {
-            return null;
         }
         catch (InvalidOperationException)
         {
-            return null;
         }
         catch (COMException)
         {
-            return null;
         }
+
+        if (!baseline.AllowElementKeyChangeOnCommit)
+            return null;
+
+        var observableWindow = ResolveObservableWindow(baseline.WindowHandle);
+        return CaptureFocusedElement(observableWindow, baseline.MaxValueLength)
+            ?? CaptureElementAtCursor(observableWindow, baseline.MaxValueLength);
     }
 
     /// <summary>

@@ -97,6 +97,9 @@
                                     <TextBlock Text="{Binding TargetAppCorrectionLearningStatus}"
                                                Style="{StaticResource HintStyle}"
                                                Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding TargetAppCorrectionLearningLastOutcome}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,2,0,0"/>
                                 </StackPanel>
 
                                 <ui:ToggleSwitch Grid.Column="1"
