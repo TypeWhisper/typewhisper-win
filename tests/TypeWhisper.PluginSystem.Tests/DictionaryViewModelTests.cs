@@ -246,6 +246,8 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("Dictionary.ClearAutoLearnedCorrectionsCommand", xaml);
         Assert.Contains("Dictionary.ResetCustomDictionaryCommand", xaml);
         Assert.Contains("Dictionary.DeactivateAllTermPacksCommand", xaml);
+        Assert.Contains("Click=\"DataManagement_Click\"", xaml);
+        Assert.DoesNotContain("Dictionary.DataManagementDescription", xaml);
     }
 
     [Fact]

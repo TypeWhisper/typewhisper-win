@@ -174,6 +174,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <!-- Search field with icon -->
@@ -223,6 +224,21 @@
                 <Run Text="{Binding Dictionary.EntryCount, Mode=OneWay}"/>
                 <Run Text="{loc:Str Dictionary.EntryCount}"/>
             </TextBlock>
+
+            <Button Grid.Column="2" Content="{loc:Str Dictionary.DataManagement}"
+                    Margin="10,0,0,0" Padding="10,5" Click="DataManagement_Click">
+                <Button.ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="{loc:Str Dictionary.ClearAutoLearned}"
+                                  Command="{Binding Dictionary.ClearAutoLearnedCorrectionsCommand}"/>
+                        <MenuItem Header="{loc:Str Dictionary.ResetCustomDictionary}"
+                                  Command="{Binding Dictionary.ResetCustomDictionaryCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="{loc:Str Dictionary.DeactivateAllPacks}"
+                                  Command="{Binding Dictionary.DeactivateAllTermPacksCommand}"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
         </Grid>
 
         <!-- Add Entry Form (hidden on Packs tab) -->
@@ -753,54 +769,6 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <Border Margin="0,18,0,0" Padding="14,12"
-                            Background="{StaticResource InputBackgroundBrush}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Dictionary.SelectedTab}" Value="0">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel>
-                            <TextBlock Text="{loc:Str Dictionary.DataManagement}" Foreground="{StaticResource TextBrush}"
-                                       FontSize="14" FontWeight="SemiBold"/>
-                            <TextBlock Text="{loc:Str Dictionary.DataManagementDescription}" Foreground="{StaticResource HintBrush}"
-                                       FontSize="12" TextWrapping="Wrap" Margin="0,3,0,12"/>
-
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str Dictionary.ClearAutoLearned}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
-                                    <TextBlock Text="{loc:Str Dictionary.ClearAutoLearnedDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="{loc:Str Dictionary.ClearAction}" Margin="12,0,0,0"
-                                        Command="{Binding Dictionary.ClearAutoLearnedCorrectionsCommand}"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str Dictionary.ResetCustomDictionary}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
-                                    <TextBlock Text="{loc:Str Dictionary.ResetCustomDictionaryDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="{loc:Str Dictionary.ResetAction}" Margin="12,0,0,0"
-                                        Command="{Binding Dictionary.ResetCustomDictionaryCommand}"/>
-                            </Grid>
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str Dictionary.DeactivateAllPacks}" Foreground="{StaticResource TextBrush}" FontSize="13"/>
-                                    <TextBlock Text="{loc:Str Dictionary.DeactivateAllPacksDescription}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="{loc:Str Dictionary.DeactivateAction}" Margin="12,0,0,0"
-                                        Command="{Binding Dictionary.DeactivateAllTermPacksCommand}"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
