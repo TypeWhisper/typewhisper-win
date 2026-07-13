@@ -112,6 +112,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
+    <Grid>
     <DockPanel Margin="24">
         <TextBlock DockPanel.Dock="Top" Text="{loc:Str Dictionary.Title}" Style="{StaticResource SectionHeaderStyle}"/>
 
@@ -175,6 +176,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <!-- Search field with icon -->
@@ -225,7 +227,17 @@
                 <Run Text="{loc:Str Dictionary.EntryCount}"/>
             </TextBlock>
 
-            <Button Grid.Column="2" Content="{loc:Str Dictionary.DataManagement}"
+            <ui:Button Grid.Column="2" Command="{Binding Dictionary.Training.OpenCommand}"
+                       Click="OpenTraining_Click" Appearance="Secondary"
+                       Margin="10,0,0,0" Padding="10,5">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="{loc:Str Dictionary.TrainingOpen}"/>
+                </StackPanel>
+            </ui:Button>
+
+            <Button Grid.Column="3" Content="{loc:Str Dictionary.DataManagement}"
                     Margin="10,0,0,0" Padding="10,5" Click="DataManagement_Click">
                 <Button.ContextMenu>
                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
@@ -964,6 +976,201 @@
                     </StackPanel>
                 </Border>
             </Border>
+
         </Grid>
     </DockPanel>
+
+            <!-- Guided microphone correction trainer -->
+            <Border Panel.ZIndex="20" Background="#EE101318"
+                    Visibility="{Binding Dictionary.Training.IsOpen, Converter={StaticResource BoolToVis}}"
+                    KeyDown="TrainingOverlay_KeyDown" Focusable="True">
+                <Border Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource AccentBrush}"
+                        BorderThickness="1" CornerRadius="12"
+                        Padding="18" Margin="12"
+                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <Border.Effect>
+                        <DropShadowEffect Color="{StaticResource AccentColor}"
+                                          BlurRadius="24" ShadowDepth="0" Opacity="0.2"/>
+                    </Border.Effect>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Dictionary.TrainingTitle}"
+                                       Foreground="{StaticResource TextBrush}"
+                                       FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                            <Border Background="#3A2518" CornerRadius="6" Padding="10,8" Margin="0,6,0,12"
+                                    Visibility="{Binding Dictionary.Training.HasError, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding Dictionary.Training.ErrorText}"
+                                           Foreground="#E9A06F" TextWrapping="Wrap"/>
+                            </Border>
+
+                            <!-- Setup -->
+                            <StackPanel Visibility="{Binding Dictionary.Training.IsSetup, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{loc:Str Dictionary.TrainingIntro}"
+                                           Foreground="{StaticResource HintBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                                <TextBlock Text="{loc:Str Dictionary.TrainingTargetWord}" Style="{StaticResource LabelStyle}"/>
+                                <TextBox x:Name="TrainingTargetBox"
+                                         Text="{Binding Dictionary.Training.TargetWord, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,14"/>
+                                <Grid Margin="0,0,0,18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                        <TextBlock Text="{loc:Str Dictionary.TrainingEngine}" Style="{StaticResource LabelStyle}"/>
+                                        <TextBlock Text="{Binding Dictionary.Training.EngineDisplayName}"
+                                                   Foreground="{StaticResource TextBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                        <TextBlock Text="{loc:Str Dictionary.TrainingModel}" Style="{StaticResource LabelStyle}"/>
+                                        <TextBlock Text="{Binding Dictionary.Training.ModelDisplayName}"
+                                                   Foreground="{StaticResource TextBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <ui:Button Content="{loc:Str Dictionary.Cancel}"
+                                               Command="{Binding Dictionary.Training.CancelCommand}"
+                                               Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Dictionary.TrainingContinue}"
+                                               Command="{Binding Dictionary.Training.BeginCommand}"
+                                               Appearance="Primary" Padding="16,8"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Samples -->
+                            <StackPanel Visibility="{Binding Dictionary.Training.IsSampling, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{loc:Str Dictionary.TrainingSamplesHint}"
+                                           Foreground="{StaticResource HintBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <ItemsControl ItemsSource="{Binding Dictionary.Training.Samples}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                                    CornerRadius="8" Padding="10" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource TextBrush}"
+                                                                   VerticalAlignment="Center">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                                                    <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.TrainingSampleFormat]"/>
+                                                                    <Binding Path="Number"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                        <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                                                                   Foreground="{StaticResource HintBrush}"
+                                                                   VerticalAlignment="Center" TextWrapping="Wrap"
+                                                                   Margin="12,0"/>
+                                                        <ui:Button Grid.Column="2" Content="{Binding ActionText}"
+                                                                   Command="{Binding DataContext.Dictionary.Training.ToggleSampleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   CommandParameter="{Binding}" Padding="12,5"/>
+                                                    </Grid>
+                                                    <TextBox Text="{Binding Sentence, UpdateSourceTrigger=PropertyChanged}"
+                                                             Style="{StaticResource InputTextBoxStyle}"
+                                                             Padding="6,2" Margin="0,6,0,0"/>
+                                                    <Border Background="#242A32" CornerRadius="6" Padding="8,5" Margin="0,6,0,0"
+                                                            Visibility="{Binding HasRawTranscript, Converter={StaticResource BoolToVis}}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{loc:Str Dictionary.TrainingRawTranscript}"
+                                                                       Foreground="{StaticResource HintBrush}" FontSize="11"
+                                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                            <TextBlock Grid.Column="1" Text="{Binding RawTranscript}"
+                                                                       Foreground="{StaticResource TextBrush}"
+                                                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
+                                    <ui:Button Content="{loc:Str Dictionary.Cancel}"
+                                               Command="{Binding Dictionary.Training.CancelCommand}"
+                                               Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Dictionary.TrainingReview}"
+                                               Command="{Binding Dictionary.Training.ReviewCommand}"
+                                               Appearance="Primary" Padding="16,8"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Review -->
+                            <StackPanel Visibility="{Binding Dictionary.Training.IsReviewing, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{loc:Str Dictionary.TrainingReviewTitle}"
+                                           Foreground="{StaticResource TextBrush}" FontSize="15" FontWeight="SemiBold"/>
+                                <TextBlock Foreground="{StaticResource HintBrush}" TextWrapping="Wrap" Margin="0,6,0,14">
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                            <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.TrainingReviewHint]"/>
+                                            <Binding Path="Dictionary.Training.EngineDisplayName"/>
+                                            <Binding Path="Dictionary.Training.ModelDisplayName"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <Border Background="#243029" CornerRadius="6" Padding="10,8" Margin="0,0,0,12"
+                                        Visibility="{Binding Dictionary.Training.HasNoCandidates, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{loc:Str Dictionary.TrainingNoCandidates}"
+                                               Foreground="{StaticResource HintBrush}" TextWrapping="Wrap"/>
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding Dictionary.Training.Candidates}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                                    CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsApproved}"
+                                                                  IsEnabled="{Binding CanApprove}"
+                                                                  VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                        <TextBox Grid.Column="1" Text="{Binding Original, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Style="{StaticResource InputTextBoxStyle}"/>
+                                                        <TextBlock Grid.Column="2" Text="→" Foreground="{StaticResource HintBrush}"
+                                                                   VerticalAlignment="Center" Margin="10,0"/>
+                                                        <TextBlock Grid.Column="3"
+                                                                   Text="{Binding DataContext.Dictionary.Training.TargetWord, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Message}" Foreground="#E9A06F"
+                                                               FontSize="11" TextWrapping="Wrap" Margin="28,6,0,0"
+                                                               Visibility="{Binding HasMessage, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <ui:Button Content="{loc:Str Dictionary.Cancel}"
+                                               Command="{Binding Dictionary.Training.CancelCommand}"
+                                               Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Dictionary.TrainingBackToSamples}"
+                                               Command="{Binding Dictionary.Training.BackToSamplesCommand}"
+                                               Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
+                                    <ui:Button Content="{loc:Str Dictionary.Save}"
+                                               Command="{Binding Dictionary.Training.SaveCommand}"
+                                               Appearance="Primary" Padding="16,8"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Border>
+    </Grid>
 </UserControl>

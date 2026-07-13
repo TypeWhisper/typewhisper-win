@@ -509,6 +509,7 @@ public partial class App : Application
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<ModelManagerViewModel>();
         services.AddSingleton<HistoryViewModel>();
+        services.AddSingleton<DictionaryTrainingViewModel>();
         services.AddSingleton<DictionaryViewModel>();
         services.AddSingleton<SnippetsViewModel>();
         services.AddSingleton<WorkflowsViewModel>();

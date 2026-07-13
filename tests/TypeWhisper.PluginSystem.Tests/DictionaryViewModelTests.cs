@@ -290,6 +290,9 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("Dictionary.DeactivateAllTermPacksCommand", xaml);
         Assert.Contains("Click=\"DataManagement_Click\"", xaml);
         Assert.DoesNotContain("Dictionary.DataManagementDescription", xaml);
+        Assert.Contains("Dictionary.Training.OpenCommand", xaml);
+        Assert.Contains("Dictionary.Training.ToggleSampleCommand", xaml);
+        Assert.Contains("Dictionary.Training.SaveCommand", xaml);
     }
 
     [Fact]
@@ -316,7 +319,13 @@ public sealed class DictionaryViewModelTests
                 "Dictionary.ClearAutoLearned",
                 "Dictionary.ResetCustomDictionary",
                 "Dictionary.DeactivateAllPacks",
-                "Dictionary.ResetConfirmTitle"
+                "Dictionary.ResetConfirmTitle",
+                "Dictionary.TrainingOpen",
+                "Dictionary.TrainingSentence1Format",
+                "Dictionary.TrainingSentence2Format",
+                "Dictionary.TrainingSentence3Format",
+                "Dictionary.TrainingReviewHint",
+                "Dictionary.TrainingConflictFormat"
             })
             {
                 Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()));

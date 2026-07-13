@@ -127,6 +127,11 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     /// </summary>
     public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets { get; } = [];
 
+    /// <summary>
+    /// Gets the guided microphone correction trainer when available.
+    /// </summary>
+    public DictionaryTrainingViewModel? Training { get; }
+
     [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
     internal Func<string, string, bool> ConfirmReset { get; set; } = static (message, title) =>
@@ -139,12 +144,14 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         IDictionaryService dictionary,
         ISettingsService settings,
         LicenseService? license = null,
-        TermPackRegistryService? termPackRegistry = null)
+        TermPackRegistryService? termPackRegistry = null,
+        DictionaryTrainingViewModel? training = null)
     {
         _dictionary = dictionary;
         _settings = settings;
         _license = license;
         _termPackRegistry = termPackRegistry;
+        Training = training;
         _vocabularyBoostingEnabled = _settings.Current.VocabularyBoostingEnabled;
         _selectedIndustryPresetId = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId).Id;
 
@@ -152,6 +159,8 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         if (_license is not null)
             _license.PropertyChanged += OnLicenseChanged;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
+        if (Training is not null)
+            Training.Completed += ShowTrainingResult;
         RefreshEntries();
         ReconcileCommercialPackAccess();
         InitializeIndustryPresets();
@@ -168,6 +177,8 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         if (_license is not null)
             _license.PropertyChanged -= OnLicenseChanged;
         Loc.Instance.LanguageChanged -= OnLanguageChanged;
+        if (Training is not null)
+            Training.Completed -= ShowTrainingResult;
     }
 
     partial void OnSelectedTabChanged(int value)
@@ -466,6 +477,12 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         }
 
         InitializeIndustryPresets();
+    }
+
+    private void ShowTrainingResult(string targetWord)
+    {
+        SelectedTab = 2;
+        SearchText = targetWord;
     }
 
     /// <summary>

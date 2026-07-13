@@ -39,6 +39,9 @@ public partial class DictionarySection : UserControl
         }
     }
 
+    private void OpenTraining_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(TrainingTargetBox.Focus);
+
     private void EditOverlay_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
@@ -50,6 +53,15 @@ public partial class DictionarySection : UserControl
         if (e.Key == Key.Escape && DataContext is SettingsWindowViewModel vm)
         {
             vm.Dictionary.CancelEditCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void TrainingOverlay_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && DataContext is SettingsWindowViewModel vm)
+        {
+            vm.Dictionary.Training?.CancelCommand.Execute(null);
             e.Handled = true;
         }
     }
