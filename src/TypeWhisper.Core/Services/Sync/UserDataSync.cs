@@ -50,6 +50,7 @@ public enum UserDataSyncDictionaryEntryType
 /// <param name="IsEnabled">Is enabled supplied to the member.</param>
 /// <param name="CreatedAt">Created at supplied to the member.</param>
 /// <param name="UpdatedAt">Updated at supplied to the member.</param>
+/// <param name="Source">Optional correction provenance supplied to the member.</param>
 public sealed record UserDataSyncDictionaryEntry(
     UserDataSyncDictionaryEntryType EntryType,
     string Original,
@@ -57,7 +58,8 @@ public sealed record UserDataSyncDictionaryEntry(
     bool CaseSensitive,
     bool IsEnabled,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    DictionaryEntrySource Source = DictionaryEntrySource.Manual);
 
 /// <summary>
 /// Represents user data sync snippet data.

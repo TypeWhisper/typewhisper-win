@@ -96,7 +96,8 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 entry.CaseSensitive,
                 entry.IsEnabled,
                 entry.CreatedAt,
-                entry.UpdatedAt))
+                entry.UpdatedAt,
+                entry.Source))
             .ToList();
 
     private IReadOnlyList<UserDataSyncSnippet> FallbackSnippetSnapshot() =>
@@ -146,6 +147,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
                 IsEnabled = synced.IsEnabled,
+                Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
             });
             return;
@@ -159,6 +161,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
             IsEnabled = synced.IsEnabled,
+            Source = synced.Source,
             CreatedAt = synced.CreatedAt,
             UpdatedAt = synced.UpdatedAt
         });

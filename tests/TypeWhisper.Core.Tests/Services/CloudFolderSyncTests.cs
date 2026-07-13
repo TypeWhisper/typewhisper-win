@@ -311,6 +311,7 @@ public sealed class CloudFolderSyncTests : IDisposable
                 entryType: UserDataSyncDictionaryEntryType.Correction,
                 original: "teh",
                 replacement: "",
+                source: DictionaryEntrySource.AutoLearned,
                 updatedAt: Date(10)),
             UserDataSyncIdentity.DictionaryItemId(UserDataSyncDictionaryEntryType.Correction, "teh"),
             "win-a",
@@ -325,6 +326,14 @@ public sealed class CloudFolderSyncTests : IDisposable
         Assert.Equal("upsert", root.GetProperty("kind").GetString());
         Assert.Equal("correction", root.GetProperty("dictionary").GetProperty("entryType").GetString());
         Assert.Equal("", root.GetProperty("dictionary").GetProperty("replacement").GetString());
+        Assert.Equal("autoLearned", root.GetProperty("dictionary").GetProperty("source").GetString());
+
+        var roundTrip = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(json);
+        Assert.Equal(DictionaryEntrySource.AutoLearned, roundTrip!.Dictionary!.Source);
+
+        var unknownSource = json.Replace("autoLearned", "futureValue", StringComparison.Ordinal);
+        roundTrip = CloudFolderSyncJson.Deserialize<CloudFolderSyncOperation>(unknownSource);
+        Assert.Equal(DictionaryEntrySource.Manual, roundTrip!.Dictionary!.Source);
     }
 
     private IReadOnlyList<string> OperationFiles(string deviceId)
@@ -339,7 +348,8 @@ public sealed class CloudFolderSyncTests : IDisposable
         string original,
         DateTime updatedAt,
         UserDataSyncDictionaryEntryType entryType = UserDataSyncDictionaryEntryType.Term,
-        string? replacement = null) =>
+        string? replacement = null,
+        DictionaryEntrySource source = DictionaryEntrySource.Manual) =>
         new(
             entryType,
             original,
@@ -347,7 +357,8 @@ public sealed class CloudFolderSyncTests : IDisposable
             CaseSensitive: false,
             IsEnabled: true,
             CreatedAt: Date(1),
-            updatedAt);
+            updatedAt,
+            source);
 
     private static UserDataSyncSnippet Snippet(string trigger, string replacement, DateTime updatedAt) =>
         new(
