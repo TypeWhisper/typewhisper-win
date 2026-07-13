@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.PluginsSection"
+             AutomationProperties.AutomationId="SettingsSection.Integrations"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -81,10 +82,14 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal">
-                    <Button x:Name="TabInstalled" Style="{StaticResource ActiveTabButtonStyle}" Click="OnInstalledTabClick">
+                    <Button x:Name="TabInstalled" Style="{StaticResource ActiveTabButtonStyle}" Click="OnInstalledTabClick"
+                            AutomationProperties.AutomationId="IntegrationsTabInstalled"
+                            AutomationProperties.Name="{loc:Str Plugins.Installed}">
                         <TextBlock><Run Text="&#x1F9E9;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Installed], Mode=OneWay}"/></TextBlock>
                     </Button>
-                    <Button x:Name="TabMarketplace" Style="{StaticResource TabButtonStyle}" Click="OnMarketplaceTabClick">
+                    <Button x:Name="TabMarketplace" Style="{StaticResource TabButtonStyle}" Click="OnMarketplaceTabClick"
+                            AutomationProperties.AutomationId="IntegrationsTabMarketplace"
+                            AutomationProperties.Name="{loc:Str Plugins.Marketplace}">
                         <TextBlock><Run Text="&#x1F6D2;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Marketplace], Mode=OneWay}"/></TextBlock>
                     </Button>
                 </StackPanel>
@@ -207,18 +212,23 @@
 
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:Button Appearance="Secondary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsUpdate.{0}}"
                                                            Content="{loc:Str Plugins.Update}"
                                                            Command="{Binding UpdateRegistryPluginCommand}"
                                                            Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVis}}"
                                                            Margin="0,0,8,0"/>
                                                 <ui:Button Appearance="Secondary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsUninstall.{0}}"
+                                                           AutomationProperties.Name="{loc:Str Plugins.Uninstall}"
                                                            ToolTip="{loc:Str Plugins.Uninstall}"
                                                            Command="{Binding UninstallCommand}"
                                                            Padding="6,4"
                                                            Margin="0,0,8,0">
                                                     <ui:SymbolIcon Symbol="Delete24"/>
                                                 </ui:Button>
-                                                <ui:ToggleSwitch IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"/>
+                                                <ui:ToggleSwitch IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
+                                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsEnabled.{0}}"
+                                                                 AutomationProperties.Name="{Binding Name}"/>
                                             </StackPanel>
                                         </Grid>
                                     </ui:CardExpander.Header>
@@ -267,6 +277,7 @@
                                 <TextBlock Text="{loc:Str Plugins.MarketplaceDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
                                 <WrapPanel Margin="0,10,0,0">
                                     <ui:Button Appearance="Secondary"
+                                               AutomationProperties.AutomationId="IntegrationsClearFilters"
                                                Content="{loc:Str Plugins.AllFunctions}"
                                                Command="{Binding Plugins.ClearMarketplaceCapabilityFiltersCommand}"
                                                Visibility="{Binding Plugins.HasActiveMarketplaceCapabilityFilters, Converter={StaticResource BoolToVis}}"
@@ -280,6 +291,8 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:MarketplaceCapabilityFilterViewModel}">
                                                 <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                          AutomationProperties.AutomationId="{Binding Key, StringFormat=IntegrationsFilter.{0}}"
+                                                          AutomationProperties.Name="{Binding DisplayName}"
                                                           Command="{Binding DataContext.Plugins.ToggleMarketplaceCapabilityFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                           CommandParameter="{Binding Key}"
                                                           Style="{StaticResource InputCheckBoxStyle}"
@@ -296,6 +309,7 @@
                                 </WrapPanel>
                             </StackPanel>
                             <ui:Button Grid.Column="1"
+                                       AutomationProperties.AutomationId="IntegrationsRefreshMarketplace"
                                        Appearance="Secondary"
                                        Content="{loc:Str Plugins.MarketplaceRefresh}"
                                        Command="{Binding Plugins.RefreshRegistryCommand}"
@@ -382,11 +396,13 @@
 
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                 <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsInstall.{0}}"
                                                            Content="{loc:Str Plugins.Install}"
                                                            Command="{Binding InstallCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=NotInstalled}"/>
                                                 <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsUpdateMarketplace.{0}}"
                                                            Content="{loc:Str Plugins.Update}"
                                                            Command="{Binding UpdateCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"

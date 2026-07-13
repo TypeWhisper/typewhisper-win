@@ -22,6 +22,31 @@ public class ApiServerControllerTests
     }
 
     [Fact]
+    public void Initialize_StartsServerInAutomationMode()
+    {
+        var settings = new FakeSettingsService(new AppSettings { ApiServerEnabled = false, ApiServerPort = 9901 });
+        var server = new FakeLocalApiServer();
+        var controller = new ApiServerController(server, settings, () => true);
+
+        controller.Initialize();
+
+        Assert.True(server.IsRunning);
+        Assert.Equal(9901, controller.ActivePort);
+    }
+
+    [Fact]
+    public void Initialize_CleansUpStaleServerStateWhenDisabled()
+    {
+        var settings = new FakeSettingsService(new AppSettings { ApiServerEnabled = false });
+        var server = new FakeLocalApiServer();
+        var controller = new ApiServerController(server, settings, () => false);
+
+        controller.Initialize();
+
+        Assert.Equal(1, server.StopCalls);
+    }
+
+    [Fact]
     public void SettingsChange_RestartsOnPortChangeAndStopsWhenDisabled()
     {
         var settings = new FakeSettingsService(new AppSettings { ApiServerEnabled = true, ApiServerPort = 9901 });
@@ -34,13 +59,13 @@ public class ApiServerControllerTests
         Assert.True(server.IsRunning);
         Assert.Equal(9902, server.Port);
         Assert.Equal(2, server.StartCalls);
-        Assert.Equal(1, server.StopCalls);
+        Assert.Equal(2, server.StopCalls);
 
         settings.Save(settings.Current with { ApiServerEnabled = false });
 
         Assert.False(server.IsRunning);
         Assert.Null(controller.ActivePort);
-        Assert.Equal(2, server.StopCalls);
+        Assert.Equal(3, server.StopCalls);
     }
 
     [Fact]
