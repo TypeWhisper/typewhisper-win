@@ -34,8 +34,10 @@ public partial class LiveTranscriptWindow : Window
     /// <summary>Shows the transcript with a short, restrained entrance motion.</summary>
     public void ShowAnimated()
     {
-        if (!IsVisible)
-            Show();
+        if (IsVisible)
+            return;
+
+        Show();
 
         if (!SystemParameters.ClientAreaAnimation)
             return;

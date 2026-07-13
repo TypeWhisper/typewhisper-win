@@ -74,6 +74,9 @@ public sealed class LiveTranscriptPluginTests
         Assert.Contains("PreviewMouseLeftButtonDown=\"Window_PreviewMouseLeftButtonDown\"", xaml);
         Assert.DoesNotContain("DragHandle", xaml);
         Assert.DoesNotContain("#1E1E2E", xaml);
+
+        var codeBehind = File.ReadAllText(path + ".cs");
+        Assert.Matches(@"if \(IsVisible\)\s+return;\s+Show\(\);", codeBehind);
     }
 
     [Fact]
