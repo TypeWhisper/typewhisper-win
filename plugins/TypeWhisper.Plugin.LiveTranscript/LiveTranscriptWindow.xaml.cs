@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 
 namespace TypeWhisper.Plugin.LiveTranscript;
 
@@ -10,6 +11,7 @@ namespace TypeWhisper.Plugin.LiveTranscript;
 public partial class LiveTranscriptWindow : Window
 {
     private const double FallbackHeight = 80;
+    private const double DefaultBottomOffset = 88;
     private double? _savedLeft;
     private double? _savedTop;
 
@@ -28,6 +30,55 @@ public partial class LiveTranscriptWindow : Window
 
     /// <summary>Gets the current displayed text.</summary>
     public string CurrentText => TranscriptText.Text;
+
+    /// <summary>Shows the transcript with a short, restrained entrance motion.</summary>
+    public void ShowAnimated()
+    {
+        if (!IsVisible)
+            Show();
+
+        if (!SystemParameters.ClientAreaAnimation)
+            return;
+
+        var targetOpacity = RootBorder.Opacity;
+        var duration = TimeSpan.FromMilliseconds(160);
+        var easing = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+        RootBorder.BeginAnimation(OpacityProperty, null);
+        RootBorder.Opacity = targetOpacity;
+        EntranceScale.ScaleX = 1;
+        EntranceScale.ScaleY = 1;
+        EntranceTranslate.Y = 0;
+
+        RootBorder.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(0, targetOpacity, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+        EntranceScale.BeginAnimation(
+            System.Windows.Media.ScaleTransform.ScaleXProperty,
+            new DoubleAnimation(0.97, 1, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+        EntranceScale.BeginAnimation(
+            System.Windows.Media.ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(0.97, 1, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+        EntranceTranslate.BeginAnimation(
+            System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(8, 0, duration)
+            {
+                EasingFunction = easing,
+                FillBehavior = FillBehavior.Stop
+            });
+    }
 
     /// <summary>Updates the displayed transcript text and scrolls to the bottom.</summary>
     public void UpdateText(string text)
@@ -94,7 +145,7 @@ public partial class LiveTranscriptWindow : Window
         var width = GetEffectiveWidth();
         var height = GetEffectiveHeight();
         Left = workArea.Left + (workArea.Width - width) / 2;
-        Top = workArea.Bottom - height - 40;
+        Top = workArea.Bottom - height - DefaultBottomOffset;
     }
 
     private void PositionWithinWorkArea(double left, double top)
@@ -120,7 +171,7 @@ public partial class LiveTranscriptWindow : Window
     private static double Clamp(double value, double min, double max) =>
         Math.Clamp(value, min, Math.Max(min, max));
 
-    private void DragHandle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ButtonState != MouseButtonState.Pressed)
             return;

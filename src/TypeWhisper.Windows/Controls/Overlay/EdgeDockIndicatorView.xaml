@@ -14,9 +14,8 @@
             BorderBrush="#24FFFFFF"
             BorderThickness="1"
             HorizontalAlignment="Center"
-            MinWidth="360"
+            Width="360"
             MinHeight="40"
-            MaxWidth="620"
             Padding="14,8">
         <Border.Style>
             <Style TargetType="Border">

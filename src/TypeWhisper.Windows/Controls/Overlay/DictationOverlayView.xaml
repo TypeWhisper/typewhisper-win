@@ -15,7 +15,7 @@
             BorderBrush="#24FFFFFF"
             BorderThickness="1"
             HorizontalAlignment="Center"
-            MinWidth="220"
+            Width="220"
             MinHeight="44"
             Padding="14,9">
         <Border.Effect>

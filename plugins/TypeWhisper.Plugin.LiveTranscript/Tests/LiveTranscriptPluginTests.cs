@@ -65,6 +65,14 @@ public sealed class LiveTranscriptPluginTests
         Assert.Contains("Background=\"#EE11161D\"", xaml);
         Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
         Assert.Contains("Foreground=\"#E8FFFFFF\"", xaml);
+        Assert.Contains("SizeToContent=\"WidthAndHeight\"", xaml);
+        Assert.Contains("MinWidth=\"220\"", xaml);
+        Assert.Contains("MaxWidth=\"620\"", xaml);
+        Assert.Contains("VerticalScrollBarVisibility=\"Hidden\"", xaml);
+        Assert.Contains("x:Name=\"EntranceScale\"", xaml);
+        Assert.Contains("x:Name=\"EntranceTranslate\"", xaml);
+        Assert.Contains("PreviewMouseLeftButtonDown=\"Window_PreviewMouseLeftButtonDown\"", xaml);
+        Assert.DoesNotContain("DragHandle", xaml);
         Assert.DoesNotContain("#1E1E2E", xaml);
     }
 

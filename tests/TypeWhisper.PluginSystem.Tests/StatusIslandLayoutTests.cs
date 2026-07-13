@@ -11,7 +11,8 @@ public sealed class StatusIslandLayoutTests
         Assert.Contains("CornerRadius=\"22\"", xaml);
         Assert.Contains("Background=\"#EE11161D\"", xaml);
         Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
-        Assert.Contains("MinWidth=\"220\"", xaml);
+        Assert.Contains("Width=\"220\"", xaml);
+        Assert.DoesNotContain("MinWidth=\"220\"", xaml);
         Assert.Contains("MinHeight=\"44\"", xaml);
         Assert.Contains("Padding=\"14,9\"", xaml);
         Assert.Contains("Foreground=\"#E8FFFFFF\"", xaml);

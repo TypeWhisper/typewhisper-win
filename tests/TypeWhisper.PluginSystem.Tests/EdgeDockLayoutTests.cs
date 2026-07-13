@@ -10,7 +10,9 @@ public sealed class EdgeDockLayoutTests
 
         Assert.Contains("Background=\"#EE11161D\"", xaml);
         Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
-        Assert.Contains("MinWidth=\"360\"", xaml);
+        Assert.Contains("Width=\"360\"", xaml);
+        Assert.DoesNotContain("MinWidth=\"360\"", xaml);
+        Assert.DoesNotContain("MaxWidth=\"620\"", xaml);
         Assert.Contains("MinHeight=\"40\"", xaml);
         Assert.Contains("Padding=\"14,8\"", xaml);
         Assert.Contains("<Setter Property=\"CornerRadius\" Value=\"0,0,12,12\"/>", xaml);
