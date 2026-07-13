@@ -54,4 +54,9 @@ public sealed class PremiumSettingsNavigationTests
         Assert.DoesNotContain("dictated", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("replacement", json, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Diagnostics_RejectNonObjectRoot()
+        => Assert.Throws<JsonException>(() =>
+            SettingsWindowViewModel.AddTargetAppCorrectionLearningDiagnostics("[]", null));
 }

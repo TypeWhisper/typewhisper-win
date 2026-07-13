@@ -163,6 +163,7 @@ internal sealed record TargetAppCorrectionLearningOutcome(
         TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout => "no_commit_before_timeout",
         TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection => "duplicate_correction",
         TargetAppCorrectionLearningOutcomeKind.Cancelled => "cancelled",
+        TargetAppCorrectionLearningOutcomeKind.Failed => "failed",
         _ => "failed"
     };
 }

@@ -469,8 +469,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         string diagnosticsJson,
         TargetAppCorrectionLearningOutcome? outcome)
     {
-        var root = JsonNode.Parse(diagnosticsJson)?.AsObject()
-            ?? throw new JsonException("Diagnostics root must be a JSON object.");
+        if (JsonNode.Parse(diagnosticsJson) is not JsonObject root)
+            throw new JsonException("Diagnostics root must be a JSON object.");
+
         root["target_app_correction_learning"] = new JsonObject
         {
             ["outcome"] = outcome?.Code,
