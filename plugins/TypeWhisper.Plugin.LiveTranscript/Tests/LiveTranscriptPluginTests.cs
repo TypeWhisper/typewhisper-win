@@ -54,6 +54,32 @@ public sealed class LiveTranscriptPluginTests
     }
 
     [Fact]
+    public void Window_UsesRecordingOverlayDesignFamily()
+    {
+        var path = Path.GetFullPath(Path.Join(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "plugins", "TypeWhisper.Plugin.LiveTranscript", "LiveTranscriptWindow.xaml"));
+        var xaml = File.ReadAllText(path);
+
+        Assert.Contains("Background=\"#EE11161D\"", xaml);
+        Assert.Contains("BorderBrush=\"#24FFFFFF\"", xaml);
+        Assert.Contains("Foreground=\"#E8FFFFFF\"", xaml);
+        Assert.Contains("SizeToContent=\"WidthAndHeight\"", xaml);
+        Assert.Contains("MinWidth=\"220\"", xaml);
+        Assert.Contains("MaxWidth=\"620\"", xaml);
+        Assert.Contains("VerticalScrollBarVisibility=\"Hidden\"", xaml);
+        Assert.Contains("x:Name=\"EntranceScale\"", xaml);
+        Assert.Contains("x:Name=\"EntranceTranslate\"", xaml);
+        Assert.Contains("PreviewMouseLeftButtonDown=\"Window_PreviewMouseLeftButtonDown\"", xaml);
+        Assert.DoesNotContain("DragHandle", xaml);
+        Assert.DoesNotContain("#1E1E2E", xaml);
+
+        var codeBehind = File.ReadAllText(path + ".cs");
+        Assert.Matches(@"if \(IsVisible\)\s+return;\s+Show\(\);", codeBehind);
+    }
+
+    [Fact]
     public void FontSize_DefaultsTo16_WhenNoSettingStored()
     {
         var sut = CreatePlugin();

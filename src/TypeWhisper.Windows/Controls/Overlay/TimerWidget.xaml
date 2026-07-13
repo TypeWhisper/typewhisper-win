@@ -6,6 +6,6 @@
         <conv:SecondsToTimerConverter x:Key="SecondsToTimer"/>
     </UserControl.Resources>
     <TextBlock Text="{Binding RecordingSeconds, Converter={StaticResource SecondsToTimer}, FallbackValue='0:00', TargetNullValue='0:00'}"
-               Foreground="#999" FontSize="11" FontFamily="Consolas"
+               Foreground="#99FFFFFF" FontSize="11" FontFamily="Segoe UI" FontWeight="Medium"
                VerticalAlignment="Center"/>
 </UserControl>

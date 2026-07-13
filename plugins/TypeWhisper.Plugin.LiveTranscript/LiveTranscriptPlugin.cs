@@ -201,7 +201,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
             EnsureWindow();
             _window!.SetSavedPosition(WindowLeft, WindowTop);
             _window!.UpdateText("Listening...");
-            _window.Show();
+            _window.ShowAnimated();
         });
 
         return Task.CompletedTask;
@@ -242,7 +242,7 @@ public sealed class LiveTranscriptPlugin : ITypeWhisperPlugin
             EnsureWindow();
             _window!.UpdateText(evt.PartialText);
             if (!_window.IsVisible)
-                _window.Show();
+                _window.ShowAnimated();
         });
 
         return Task.CompletedTask;

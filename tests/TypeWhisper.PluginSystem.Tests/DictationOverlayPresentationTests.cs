@@ -1,4 +1,3 @@
-using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -87,63 +86,4 @@ public class DictationOverlayPresentationTests
             "ApplyModelUnavailableFeedback(desiredModelId, ex);"));
     }
 
-    [Fact]
-    public void BuiltInPartialPreview_ShowsWhenExternalPreviewIsInactive()
-    {
-        Assert.True(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "confirmed live text",
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: true,
-            indicatorStyle: IndicatorStyle.StatusIsland));
-    }
-
-    [Fact]
-    public void BuiltInPartialPreview_HidesWhenExternalPreviewIsActive()
-    {
-        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "confirmed live text",
-            externalLivePreviewActive: true,
-            liveTranscriptionEnabled: true,
-            indicatorStyle: IndicatorStyle.StatusIsland));
-    }
-
-    [Fact]
-    public void BuiltInPartialPreview_HidesBlankText()
-    {
-        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "   ",
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: true,
-            indicatorStyle: IndicatorStyle.StatusIsland));
-    }
-
-    [Fact]
-    public void BuiltInPartialPreview_HidesWhenLiveTranscriptionIsDisabled()
-    {
-        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "confirmed live text",
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: false,
-            indicatorStyle: IndicatorStyle.StatusIsland));
-    }
-
-    [Fact]
-    public void BuiltInPartialPreview_ShowsForEdgeDock()
-    {
-        Assert.True(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "confirmed live text",
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: true,
-            indicatorStyle: IndicatorStyle.EdgeDock));
-    }
-
-    [Fact]
-    public void BuiltInPartialPreview_HidesForCompactBadge()
-    {
-        Assert.False(DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            "confirmed live text",
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: true,
-            indicatorStyle: IndicatorStyle.CompactBadge));
-    }
 }

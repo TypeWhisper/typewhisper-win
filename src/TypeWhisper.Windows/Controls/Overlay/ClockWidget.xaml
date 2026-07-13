@@ -1,6 +1,6 @@
 <UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.ClockWidget"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock x:Name="ClockText" Foreground="#999" FontSize="11"
-               FontFamily="Consolas" VerticalAlignment="Center"/>
+    <TextBlock x:Name="ClockText" Foreground="#99FFFFFF" FontSize="11"
+               FontFamily="Segoe UI" FontWeight="Medium" VerticalAlignment="Center"/>
 </UserControl>

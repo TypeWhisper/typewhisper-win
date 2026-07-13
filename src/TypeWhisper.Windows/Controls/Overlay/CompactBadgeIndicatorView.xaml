@@ -1,31 +1,48 @@
 <UserControl x:Class="TypeWhisper.Windows.Controls.Overlay.CompactBadgeIndicatorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
-             xmlns:overlay="clr-namespace:TypeWhisper.Windows.Controls.Overlay">
-    <UserControl.Resources>
-        <conv:AudioLevelScaleConverter x:Key="AudioLevelScale"/>
-    </UserControl.Resources>
+             xmlns:overlay="clr-namespace:TypeWhisper.Windows.Controls.Overlay"
+             xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels">
 
-    <Border CornerRadius="18"
-            Background="#F0181818"
-            BorderBrush="#2AFFFFFF"
+    <Border x:Name="BadgeBorder"
+            CornerRadius="21"
+            Background="#EE11161D"
+            BorderBrush="#24FFFFFF"
             BorderThickness="1"
             HorizontalAlignment="Center"
-            MinWidth="34"
-            MinHeight="34"
-            Padding="10"
-            RenderTransformOrigin="0.5,0.5">
-        <Border.RenderTransform>
-            <ScaleTransform ScaleX="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.026}"
-                            ScaleY="{Binding AudioLevel, Converter={StaticResource AudioLevelScale}, ConverterParameter=0.026}"/>
-        </Border.RenderTransform>
+            Width="42"
+            Height="42"
+            Padding="8">
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="10" Opacity="0.46" ShadowDepth="0"/>
+            <DropShadowEffect Color="Black" BlurRadius="14" Opacity="0.32" ShadowDepth="3"/>
         </Border.Effect>
 
-        <overlay:IndicatorWidget
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"/>
+        <Grid>
+            <overlay:WaveformWidget HorizontalAlignment="Center" VerticalAlignment="Center">
+                <overlay:WaveformWidget.Style>
+                    <Style TargetType="{x:Type overlay:WaveformWidget}">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Recording}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </overlay:WaveformWidget.Style>
+            </overlay:WaveformWidget>
+
+            <overlay:IndicatorWidget HorizontalAlignment="Center" VerticalAlignment="Center">
+                <overlay:IndicatorWidget.Style>
+                    <Style TargetType="{x:Type overlay:IndicatorWidget}">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding State}" Value="{x:Static vm:DictationState.Recording}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </overlay:IndicatorWidget.Style>
+            </overlay:IndicatorWidget>
+        </Grid>
     </Border>
 </UserControl>

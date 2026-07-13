@@ -6,13 +6,15 @@
     <UserControl.Resources>
         <conv:HotkeyModeLabelConverter x:Key="HotkeyModeLabel"/>
     </UserControl.Resources>
-    <Border CornerRadius="6" Padding="5,2">
+    <Border BorderThickness="1" CornerRadius="7" Padding="6,2">
         <Border.Style>
             <Style TargetType="Border">
-                <Setter Property="Background" Value="#333"/>
+                <Setter Property="Background" Value="#16FFFFFF"/>
+                <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding CurrentHotkeyMode}" Value="{x:Static svc:HotkeyMode.Toggle}">
-                        <Setter Property="Background" Value="#4DFFA500"/>
+                        <Setter Property="Background" Value="#24F5B84B"/>
+                        <Setter Property="BorderBrush" Value="#40F5B84B"/>
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
@@ -21,10 +23,10 @@
                    FontSize="9" FontWeight="SemiBold" VerticalAlignment="Center">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">
-                    <Setter Property="Foreground" Value="#AAA"/>
+                    <Setter Property="Foreground" Value="#BFFFFFFF"/>
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding CurrentHotkeyMode}" Value="{x:Static svc:HotkeyMode.Toggle}">
-                            <Setter Property="Foreground" Value="#FFA500"/>
+                            <Setter Property="Foreground" Value="#F5B84B"/>
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>

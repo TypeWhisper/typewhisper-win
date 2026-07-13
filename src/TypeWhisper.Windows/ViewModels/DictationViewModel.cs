@@ -125,7 +125,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private DictationState? _cancelConfirmationState;
     private int _pendingJobCount;
     private const int MaxTrackedApiDictationSessions = 50;
-    private const string ExternalLiveTranscriptPluginId = "com.typewhisper.live-transcript";
     private static readonly IReadOnlyList<TimeSpan> TargetAppCorrectionBaselineRetryDelays =
         Enumerable.Repeat(TimeSpan.FromMilliseconds(50), 10).ToArray();
     private static readonly TimeSpan TargetAppCorrectionBackgroundStartTimeout = TimeSpan.FromSeconds(3);
@@ -170,7 +169,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     [ObservableProperty] private string? _activeProcessName;
     [ObservableProperty] private string? _activeWorkflowName;
     [ObservableProperty] private string _partialText = "";
-    [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private string? _feedbackText;
     [ObservableProperty] private bool _feedbackIsError;
     [ObservableProperty] private bool _showFeedback;
@@ -281,8 +279,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             OnPropertyChanged(nameof(IndicatorStyle));
             OnPropertyChanged(nameof(OverlayPosition));
             OnPropertyChanged(nameof(LiveTranscriptionEnabled));
-            OnPropertyChanged(nameof(LiveTranscriptionFontSize));
-            RefreshPartialPreviewPresentation();
         };
         _hotkey.DictationStartRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () => await StartRecording());
         _hotkey.DictationStopRequested += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
@@ -319,7 +315,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
         _workflowPalette.FeedbackRequested += (message, isError) =>
             Application.Current?.Dispatcher.InvokeAsync(() => ShowRecentTranscriptionFeedback(message, isError));
-        _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
     /// <summary>
@@ -343,11 +338,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     /// </summary>
     public bool LiveTranscriptionEnabled => _settings.Current.LiveTranscriptionEnabled;
     /// <summary>
-    /// Gets the live transcription font size in device-independent pixels.
-    /// </summary>
-    public double LiveTranscriptionFontSize =>
-        AppSettings.NormalizeLiveTranscriptionFontSize(_settings.Current.LiveTranscriptionFontSize);
-    /// <summary>
     /// Gets whether show inline feedback.
     /// </summary>
     public bool ShowInlineFeedback =>
@@ -362,26 +352,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     /// </summary>
     public bool HasOverlayContentVisible =>
         DictationOverlayPresentation.HasVisibleContent(IsOverlayVisible, ShowFeedback);
-    /// <summary>
-    /// Gets the external live preview active.
-    /// </summary>
-    public bool ExternalLivePreviewActive =>
-        _modelManager.PluginManager.IsEnabled(ExternalLiveTranscriptPluginId);
-    /// <summary>
-    /// Gets whether show built in partial preview.
-    /// </summary>
-    public bool ShowBuiltInPartialPreview =>
-        DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            PartialText,
-            ExternalLivePreviewActive,
-            LiveTranscriptionEnabled,
-            IndicatorStyle);
-
-    partial void OnPartialTextChanged(string value)
-    {
-        RefreshPartialPreviewPresentation();
-    }
-
     partial void OnCurrentHotkeyModeChanged(HotkeyMode? value)
     {
         if (_isRecording)
@@ -427,24 +397,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         OnPropertyChanged(nameof(ShowFeedbackAction));
 
     partial void OnIsOverlayVisibleChanged(bool value) => RaiseOverlayPresentationChanged();
-
-    private void OnPluginStateChanged(object? sender, EventArgs e)
-    {
-        if (Application.Current is { } app)
-        {
-            app.Dispatcher.InvokeAsync(RefreshPartialPreviewPresentation);
-            return;
-        }
-
-        RefreshPartialPreviewPresentation();
-    }
-
-    private void RefreshPartialPreviewPresentation()
-    {
-        IsExpanded = ShowBuiltInPartialPreview;
-        OnPropertyChanged(nameof(ExternalLivePreviewActive));
-        OnPropertyChanged(nameof(ShowBuiltInPartialPreview));
-    }
 
     /// <summary>
     /// Reads back last transcription.
@@ -655,7 +607,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         _partialSegments.Clear();
         PartialText = "";
-        IsExpanded = false;
     }
 
     private int DecrementPendingJobCount()
@@ -2441,7 +2392,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _streamingHandler.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
-            _modelManager.PluginManager.PluginStateChanged -= OnPluginStateChanged;
             _audio.AudioLevelChanged -= OnAudioLevelChanged;
             _audio.SamplesAvailable -= OnSamplesAvailable;
             _disposed = true;

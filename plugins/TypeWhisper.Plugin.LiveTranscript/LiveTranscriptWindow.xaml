@@ -6,54 +6,49 @@
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
-        SizeToContent="Height"
-        Width="500"
+        SizeToContent="WidthAndHeight"
         ResizeMode="NoResize"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         Loaded="Window_Loaded">
-    <Border CornerRadius="12"
+    <Border CornerRadius="16"
             Margin="8"
-            Padding="16,12"
+            Padding="18,12"
+            MinWidth="220"
+            MaxWidth="620"
+            Background="#EE11161D"
+            BorderBrush="#24FFFFFF"
+            BorderThickness="1"
+            Cursor="SizeAll"
+            RenderTransformOrigin="0.5,0.5"
             x:Name="RootBorder">
-        <Border.Background>
-            <SolidColorBrush Color="#1E1E2E" />
-        </Border.Background>
+        <Border.RenderTransform>
+            <TransformGroup>
+                <ScaleTransform x:Name="EntranceScale"
+                                ScaleX="1"
+                                ScaleY="1" />
+                <TranslateTransform x:Name="EntranceTranslate" />
+            </TransformGroup>
+        </Border.RenderTransform>
         <Border.Effect>
-            <DropShadowEffect BlurRadius="16"
-                              ShadowDepth="2"
-                              Opacity="0.5"
+            <DropShadowEffect BlurRadius="18"
+                              ShadowDepth="0"
+                              Opacity="0.4"
                               Color="Black" />
         </Border.Effect>
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-
-            <Grid x:Name="DragHandle"
-                  Height="12"
-                  Margin="0,0,0,6"
-                  Cursor="SizeAll"
-                  MouseLeftButtonDown="DragHandle_MouseLeftButtonDown">
-                <Border Width="34"
-                        Height="4"
-                        CornerRadius="2"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="#35FFFFFF" />
-            </Grid>
-
-            <ScrollViewer x:Name="TranscriptScroller"
-                          Grid.Row="1"
-                          VerticalScrollBarVisibility="Auto"
-                          MaxHeight="200"
-                          HorizontalScrollBarVisibility="Disabled">
-                <TextBlock x:Name="TranscriptText"
-                           Foreground="#CCDDDDDD"
-                           FontSize="16"
-                           TextWrapping="Wrap"
-                           FontFamily="Segoe UI"
-                           Text="Listening..." />
-            </ScrollViewer>
-        </Grid>
+        <ScrollViewer x:Name="TranscriptScroller"
+                      VerticalScrollBarVisibility="Hidden"
+                      MaxHeight="112"
+                      HorizontalScrollBarVisibility="Disabled">
+            <TextBlock x:Name="TranscriptText"
+                       Foreground="#E8FFFFFF"
+                       FontSize="16"
+                       FontWeight="Medium"
+                       MaxWidth="584"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       FontFamily="Segoe UI"
+                       TextOptions.TextFormattingMode="Display"
+                       Text="Listening..." />
+        </ScrollViewer>
     </Border>
 </Window>

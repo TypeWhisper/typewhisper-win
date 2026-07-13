@@ -51,11 +51,6 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     /// </summary>
     public OverlayPosition OverlayPosition => _settings.Current.OverlayPosition;
     /// <summary>
-    /// Gets the live transcription font size.
-    /// </summary>
-    public double LiveTranscriptionFontSize =>
-        AppSettings.NormalizeLiveTranscriptionFontSize(_settings.Current.LiveTranscriptionFontSize);
-    /// <summary>
     /// Gets whether inline feedback is visible.
     /// </summary>
     public bool ShowInlineFeedback => UseDictation && _dictation.ShowInlineFeedback;
@@ -95,20 +90,6 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     public string StatusText => UseDictation
         ? _dictation.CancelWarningText ?? _dictation.StatusText
         : _recorder.StatusText;
-    /// <summary>
-    /// Gets the partial text.
-    /// </summary>
-    public string PartialText => UseDictation ? _dictation.PartialText : _recorder.PartialText;
-    /// <summary>
-    /// Gets whether built-in partial preview is visible.
-    /// </summary>
-    public bool ShowBuiltInPartialPreview => UseDictation
-        ? _dictation.ShowBuiltInPartialPreview
-        : DictationOverlayPresentation.ShowBuiltInPartialPreview(
-            _recorder.PartialText,
-            externalLivePreviewActive: false,
-            liveTranscriptionEnabled: _recorder.TranscriptionEnabled,
-            IndicatorStyle);
     /// <summary>
     /// Gets the current hotkey mode.
     /// </summary>
@@ -156,16 +137,13 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         PublishIfChanged(nameof(RightWidget), RightWidget);
         PublishIfChanged(nameof(IndicatorStyle), IndicatorStyle);
         PublishIfChanged(nameof(OverlayPosition), OverlayPosition);
-        PublishIfChanged(nameof(LiveTranscriptionFontSize), LiveTranscriptionFontSize);
         PublishIfChanged(nameof(ShowInlineFeedback), ShowInlineFeedback);
         PublishIfChanged(nameof(HasOverlayContentVisible), HasOverlayContentVisible);
         PublishIfChanged(nameof(ShowDetachedFeedback), ShowDetachedFeedback);
         PublishIfChanged(nameof(IsOverlayVisible), IsOverlayVisible);
-        PublishIfChanged(nameof(ShowBuiltInPartialPreview), ShowBuiltInPartialPreview);
         PublishIfChanged(nameof(AudioLevel), AudioLevel);
         PublishIfChanged(nameof(RecordingSeconds), RecordingSeconds);
         PublishIfChanged(nameof(StatusText), StatusText);
-        PublishIfChanged(nameof(PartialText), PartialText);
         PublishIfChanged(nameof(State), State);
         PublishIfChanged(nameof(CurrentHotkeyMode), CurrentHotkeyMode);
         PublishIfChanged(nameof(ActiveProcessName), ActiveProcessName);

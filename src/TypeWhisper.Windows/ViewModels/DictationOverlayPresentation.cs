@@ -1,5 +1,3 @@
-using TypeWhisper.Core.Models;
-
 namespace TypeWhisper.Windows.ViewModels;
 
 internal sealed record DictationResetOutcome(
@@ -28,19 +26,6 @@ internal static class DictationOverlayPresentation
     /// </summary>
     public static bool HasVisibleContent(bool isOverlayVisible, bool showFeedback) =>
         isOverlayVisible || ShowDetachedFeedback(isOverlayVisible, showFeedback);
-
-    /// <summary>
-    /// Shows built in partial preview.
-    /// </summary>
-    public static bool ShowBuiltInPartialPreview(
-        string? partialText,
-        bool externalLivePreviewActive,
-        bool liveTranscriptionEnabled,
-        IndicatorStyle indicatorStyle) =>
-        liveTranscriptionEnabled
-        && indicatorStyle is IndicatorStyle.StatusIsland or IndicatorStyle.EdgeDock
-        && !externalLivePreviewActive
-        && !string.IsNullOrWhiteSpace(partialText);
 
     /// <summary>
     /// Creates transient idle feedback.

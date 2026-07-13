@@ -11,11 +11,17 @@ namespace TypeWhisper.Windows.Controls.Overlay;
 /// </summary>
 public partial class WaveformWidget : UserControl, IDisposable
 {
-    private readonly Rectangle[] _bars = new Rectangle[5];
-    private readonly double[] _barTargets = new double[5];
-    private readonly double[] _barCurrents = new double[5];
-    private readonly Random _rng = new();
+    private const int BarCount = 5;
+    private const double MinimumBarHeight = 3;
+    private const double MaximumBarHeight = 17;
+    private const float NoiseGate = 0.02f;
+    private static readonly double[] BarWeights = [0.55, 0.82, 1.0, 0.82, 0.55];
+
+    private readonly Rectangle[] _bars = new Rectangle[BarCount];
+    private readonly double[] _barTargets = new double[BarCount];
+    private readonly double[] _barCurrents = new double[BarCount];
     private bool _isRendering;
+    private bool _isLoaded;
 
     /// <summary>
     /// Initializes a new instance of the WaveformWidget class.
@@ -24,24 +30,41 @@ public partial class WaveformWidget : UserControl, IDisposable
     {
         InitializeComponent();
 
-        var barWidth = 5.0;
-        for (int i = 0; i < 5; i++)
+        var brush = new SolidColorBrush(Color.FromRgb(0x6F, 0xB6, 0xFF));
+        brush.Freeze();
+
+        for (var i = 0; i < BarCount; i++)
         {
             _bars[i] = new Rectangle
             {
-                Width = barWidth,
-                Height = 4,
-                RadiusX = 2,
-                RadiusY = 2,
+                Width = 3,
+                Height = MinimumBarHeight,
+                RadiusX = 1.5,
+                RadiusY = 1.5,
                 VerticalAlignment = VerticalAlignment.Center,
-                Fill = new SolidColorBrush(Color.FromRgb(0x55, 0x99, 0xFF)),
+                Fill = brush,
                 Margin = new Thickness(i > 0 ? 2 : 0, 0, 0, 0)
             };
+            _barTargets[i] = MinimumBarHeight;
+            _barCurrents[i] = MinimumBarHeight;
             WavePanel.Children.Add(_bars[i]);
         }
 
         DataContextChanged += OnDataContextChanged;
-        Loaded += (_, _) => UpdateWaveTargets();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = true;
+        UpdateWaveTargets();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _isLoaded = false;
+        StopRendering();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -66,30 +89,41 @@ public partial class WaveformWidget : UserControl, IDisposable
         var state = ReadProperty("State")?.ToString();
         var audioLevel = ReadFloatProperty("AudioLevel");
 
-        var isActive = state is "Recording" or "Processing";
+        var isActive = _isLoaded && state == "Recording";
         if (isActive && !_isRendering)
         {
             _isRendering = true;
             CompositionTarget.Rendering += OnRendering;
         }
-        else if (!isActive && _isRendering)
+        else if (!isActive)
         {
-            _isRendering = false;
-            CompositionTarget.Rendering -= OnRendering;
-            for (int i = 0; i < 5; i++)
+            StopRendering();
+            for (var i = 0; i < BarCount; i++)
             {
-                _barTargets[i] = 4;
-                _barCurrents[i] = 4;
-                _bars[i].Height = 4;
+                _barTargets[i] = MinimumBarHeight;
+                _barCurrents[i] = MinimumBarHeight;
+                _bars[i].Height = MinimumBarHeight;
             }
         }
 
         if (isActive)
         {
-            var level = Math.Min(audioLevel * 5f, 1f);
-            for (int i = 0; i < 5; i++)
-                _barTargets[i] = 4 + level * 18 * (0.3 + _rng.NextDouble() * 0.7);
+            for (var i = 0; i < BarCount; i++)
+                _barTargets[i] = CalculateTargetHeight(audioLevel, i);
         }
+    }
+
+    internal static double CalculateTargetHeight(float level, int index)
+    {
+        if ((uint)index >= BarCount)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        var normalized = level <= NoiseGate
+            ? 0d
+            : Math.Clamp((level - NoiseGate) * 4d, 0d, 1d);
+        var easedLevel = Math.Sqrt(normalized);
+        return MinimumBarHeight
+            + easedLevel * (MaximumBarHeight - MinimumBarHeight) * BarWeights[index];
     }
 
     private object? ReadProperty(string propertyName) =>
@@ -108,11 +142,21 @@ public partial class WaveformWidget : UserControl, IDisposable
 
     private void OnRendering(object? sender, EventArgs e)
     {
-        for (int i = 0; i < 5; i++)
+        for (var i = 0; i < BarCount; i++)
         {
-            _barCurrents[i] += (_barTargets[i] - _barCurrents[i]) * 0.25;
-            _bars[i].Height = Math.Max(2, _barCurrents[i]);
+            var smoothing = _barTargets[i] > _barCurrents[i] ? 0.35 : 0.18;
+            _barCurrents[i] += (_barTargets[i] - _barCurrents[i]) * smoothing;
+            _bars[i].Height = Math.Clamp(_barCurrents[i], MinimumBarHeight, MaximumBarHeight);
         }
+    }
+
+    private void StopRendering()
+    {
+        if (!_isRendering)
+            return;
+
+        CompositionTarget.Rendering -= OnRendering;
+        _isRendering = false;
     }
 
     /// <summary>
@@ -120,13 +164,11 @@ public partial class WaveformWidget : UserControl, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_isRendering)
-        {
-            CompositionTarget.Rendering -= OnRendering;
-            _isRendering = false;
-        }
+        StopRendering();
         if (DataContext is INotifyPropertyChanged vm)
             vm.PropertyChanged -= OnViewModelPropertyChanged;
         DataContextChanged -= OnDataContextChanged;
+        Loaded -= OnLoaded;
+        Unloaded -= OnUnloaded;
     }
 }

@@ -3,7 +3,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class AppearanceSectionLayoutTests
 {
     [Fact]
-    public void AppearanceSection_StyleTilesRemainTheOverlayDesignSource()
+    public void AppearanceSection_StyleTilesUseQuietOverlayFamilyWithoutLiveText()
     {
         var xaml = TestFile.ReadProjectFile(
             "src",
@@ -12,17 +12,14 @@ public sealed class AppearanceSectionLayoutTests
             "Sections",
             "AppearanceSection.xaml");
 
-        Assert.DoesNotContain("<overlay:DictationOverlayView", xaml);
-        Assert.DoesNotContain("<overlay:EdgeDockIndicatorView", xaml);
-        Assert.DoesNotContain("<overlay:CompactBadgeIndicatorView", xaml);
-        Assert.Contains("Background=\"#E6121822\"", xaml);
-        Assert.Contains("BorderBrush=\"#22507BAA\"", xaml);
-        Assert.Contains("CornerRadius=\"17\"", xaml);
-        Assert.Contains("Background=\"#E6101824\"", xaml);
-        Assert.Contains("CornerRadius=\"0,0,9,9\"", xaml);
-        Assert.True(
-            TestFile.CountOccurrences(xaml, "FontSize=\"{Binding Settings.LiveTranscriptionFontSize}\"") >= 2,
-            "Status Island and Edge Dock preview live text should both bind to the live text size setting.");
+        Assert.DoesNotContain("<overlay:IndicatorStyleHost", xaml);
+        Assert.True(TestFile.CountOccurrences(xaml, "Background=\"#EE11161D\"") >= 3);
+        Assert.True(TestFile.CountOccurrences(xaml, "BorderBrush=\"#24FFFFFF\"") >= 3);
+        Assert.Contains("CornerRadius=\"22\"", xaml);
+        Assert.Contains("CornerRadius=\"0,0,12,12\"", xaml);
+        Assert.Contains("CornerRadius=\"21\"", xaml);
+        Assert.DoesNotContain("Appearance.PreviewLiveText", xaml);
+        Assert.DoesNotContain("Appearance.PreviewTitle", xaml);
     }
 
     [Fact]
@@ -72,7 +69,7 @@ public sealed class AppearanceSectionLayoutTests
     }
 
     [Fact]
-    public void AppearanceSection_HidesLiveTextSizeForCompactBadgeButKeepsPreviewToggle()
+    public void AppearanceSection_PluginControlsDoNotDependOnIndicatorStyle()
     {
         var xaml = TestFile.ReadProjectFile(
             "src",
@@ -89,7 +86,8 @@ public sealed class AppearanceSectionLayoutTests
 
         Assert.Contains("Settings.LiveTranscriptionEnabled", previewToggle);
         Assert.DoesNotContain("Value=\"{x:Static models:IndicatorStyle.CompactBadge}\"", previewToggle);
-        AssertWidgetSettingCollapsesForCompactBadge(liveTextSize);
+        Assert.DoesNotContain("Settings.IndicatorStyle", liveTextSize);
+        Assert.DoesNotContain("Visibility\" Value=\"Collapsed", liveTextSize);
     }
 
     [Fact]

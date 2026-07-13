@@ -9,15 +9,15 @@
     </UserControl.Resources>
     <Grid>
         <!-- Active profile -->
-        <Border Background="#1A3A6B" CornerRadius="6" Padding="5,2"
+        <Border Background="#1F6FB6FF" BorderBrush="#306FB6FF" BorderThickness="1" CornerRadius="7" Padding="6,2"
                 Visibility="{Binding ActiveWorkflowName, Converter={StaticResource NonEmptyToVis}}">
             <TextBlock Text="{Binding ActiveWorkflowName}"
-                       Foreground="#5B9FFF" FontSize="10"
+                       Foreground="#D9FFFFFF" FontSize="10" FontWeight="Medium"
                        MaxWidth="80" TextTrimming="CharacterEllipsis"
                        VerticalAlignment="Center"/>
         </Border>
         <!-- No profile -->
-        <Border Background="#282828" CornerRadius="6" Padding="5,2">
+        <Border Background="#16FFFFFF" BorderBrush="#1FFFFFFF" BorderThickness="1" CornerRadius="7" Padding="6,2">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Visible"/>
@@ -29,7 +29,7 @@
                 </Style>
             </Border.Style>
             <TextBlock Text="{loc:Str Workflows.NoActiveWorkflow}"
-                       Foreground="#555" FontSize="10"
+                       Foreground="#99FFFFFF" FontSize="10"
                        VerticalAlignment="Center"/>
         </Border>
     </Grid>
