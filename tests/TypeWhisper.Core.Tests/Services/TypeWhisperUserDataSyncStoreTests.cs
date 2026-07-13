@@ -69,6 +69,44 @@ public sealed class TypeWhisperUserDataSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public void SnapshotAndApplyPreserveAutoLearnedSource()
+    {
+        var dictionary = new DictionaryService(_dictionaryPath);
+        var snippets = new SnippetService(_snippetsPath);
+        dictionary.LearnCorrections([new CorrectionSuggestion("teh", "the")]);
+        var store = new TypeWhisperUserDataSyncStore(dictionary, snippets);
+
+        var synced = Assert.Single(store.Snapshot().DictionaryEntries);
+
+        Assert.Equal(DictionaryEntrySource.AutoLearned, synced.Source);
+
+        var targetPath = Path.Join(_tempDir, "target-dictionary.json");
+        var target = new DictionaryService(targetPath);
+        new TypeWhisperUserDataSyncStore(target, new SnippetService(Path.Join(_tempDir, "target-snippets.json")))
+            .Apply([new UserDataSyncMutation.UpsertDictionary(synced)]);
+
+        Assert.Equal(DictionaryEntrySource.AutoLearned, Assert.Single(target.Entries).Source);
+    }
+
+    [Fact]
+    public void LegacySyncEntryDefaultsToManual()
+    {
+        var dictionary = new DictionaryService(_dictionaryPath);
+        var store = new TypeWhisperUserDataSyncStore(dictionary, new SnippetService(_snippetsPath));
+
+        store.Apply([new UserDataSyncMutation.UpsertDictionary(new UserDataSyncDictionaryEntry(
+            UserDataSyncDictionaryEntryType.Correction,
+            "teh",
+            "the",
+            false,
+            true,
+            Date(1),
+            Date(2))) ]);
+
+        Assert.Equal(DictionaryEntrySource.Manual, Assert.Single(dictionary.Entries).Source);
+    }
+
+    [Fact]
     public void ApplyMergesDuplicateNaturalKeysAndPreservesRemoteTimestamps()
     {
         var dictionary = new DictionaryService(_dictionaryPath);

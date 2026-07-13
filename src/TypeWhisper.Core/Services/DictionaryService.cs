@@ -403,6 +403,7 @@ public sealed class DictionaryService : IDictionaryService
                 EntryType = DictionaryEntryType.Correction,
                 Original = original,
                 Replacement = replacement,
+                Source = DictionaryEntrySource.AutoLearned,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -559,7 +560,8 @@ public sealed class DictionaryService : IDictionaryService
                 entry.CaseSensitive,
                 entry.IsEnabled,
                 entry.CreatedAt,
-                entry.UpdatedAt))
+                entry.UpdatedAt,
+                entry.Source))
             .ToList();
     }
 
@@ -613,6 +615,7 @@ public sealed class DictionaryService : IDictionaryService
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
                 IsEnabled = synced.IsEnabled,
+                Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
             };
             return true;
@@ -626,6 +629,7 @@ public sealed class DictionaryService : IDictionaryService
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
             IsEnabled = synced.IsEnabled,
+            Source = synced.Source,
             CreatedAt = synced.CreatedAt,
             UpdatedAt = synced.UpdatedAt
         });
