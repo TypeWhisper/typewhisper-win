@@ -13,6 +13,7 @@
             <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
             <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
             <converters:LocalizedFormatConverter x:Key="LocalizedFormat"/>
+            <converters:IntegerEqualsConverter x:Key="IntegerEquals"/>
 
             <!-- Small icon button -->
             <Style x:Key="IconButtonStyle" TargetType="Button">
@@ -115,6 +116,16 @@
 
     <Grid>
     <DockPanel Margin="24">
+        <DockPanel.Style>
+            <Style TargetType="DockPanel">
+                <Setter Property="IsEnabled" Value="True"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Dictionary.Training.IsOpen}" Value="True">
+                        <Setter Property="IsEnabled" Value="False"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </DockPanel.Style>
         <TextBlock DockPanel.Dock="Top" Text="{loc:Str Dictionary.Title}" Style="{StaticResource SectionHeaderStyle}"/>
 
         <Border DockPanel.Dock="Top" Margin="0,0,0,12"
@@ -151,21 +162,26 @@
 
         <!-- Tabs -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <RadioButton Content="{loc:Str Dictionary.TabAll}" IsChecked="True" GroupName="DictTab"
+            <RadioButton Content="{loc:Str Dictionary.TabAll}" GroupName="DictTab"
+                         IsChecked="{Binding Dictionary.SelectedTab, Converter={StaticResource IntegerEquals}, ConverterParameter=0, Mode=TwoWay}"
                          AutomationProperties.AutomationId="DictionaryTabAll"
-                         Checked="Tab_Checked" Tag="0" Style="{StaticResource TabRadioStyle}"/>
+                         Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabTerms}" GroupName="DictTab"
+                         IsChecked="{Binding Dictionary.SelectedTab, Converter={StaticResource IntegerEquals}, ConverterParameter=1, Mode=TwoWay}"
                          AutomationProperties.AutomationId="DictionaryTabTerms"
-                         Checked="Tab_Checked" Tag="1" Style="{StaticResource TabRadioStyle}"/>
+                         Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabCorrections}" GroupName="DictTab"
+                         IsChecked="{Binding Dictionary.SelectedTab, Converter={StaticResource IntegerEquals}, ConverterParameter=2, Mode=TwoWay}"
                          AutomationProperties.AutomationId="DictionaryTabCorrections"
-                         Checked="Tab_Checked" Tag="2" Style="{StaticResource TabRadioStyle}"/>
+                         Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabAutoLearned}" GroupName="DictTab"
+                         IsChecked="{Binding Dictionary.SelectedTab, Converter={StaticResource IntegerEquals}, ConverterParameter=3, Mode=TwoWay}"
                          AutomationProperties.AutomationId="DictionaryTabAutoLearned"
-                         Checked="Tab_Checked" Tag="3" Style="{StaticResource TabRadioStyle}"/>
+                         Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabPacks}" GroupName="DictTab"
+                         IsChecked="{Binding Dictionary.SelectedTab, Converter={StaticResource IntegerEquals}, ConverterParameter=4, Mode=TwoWay}"
                          AutomationProperties.AutomationId="DictionaryTabPacks"
-                         Checked="Tab_Checked" Tag="4" Style="{StaticResource TabRadioStyle}"/>
+                         Style="{StaticResource TabRadioStyle}"/>
         </StackPanel>
 
         <!-- Search Bar (hidden on Packs tab) -->
@@ -241,6 +257,7 @@
 
             <ui:Button Grid.Column="2" Command="{Binding Dictionary.Training.OpenCommand}"
                        Click="OpenTraining_Click" Appearance="Secondary"
+                       Visibility="{Binding Dictionary.Training, Converter={StaticResource BoolToVis}}"
                        AutomationProperties.AutomationId="DictionaryTrainingOpen"
                        AutomationProperties.Name="{loc:Str Dictionary.TrainingOpen}"
                        Margin="10,0,0,0" Padding="10,5">
@@ -1044,7 +1061,10 @@
             <!-- Guided microphone correction trainer -->
             <Border Panel.ZIndex="20" Background="#EE101318"
                     Visibility="{Binding Dictionary.Training.IsOpen, Converter={StaticResource BoolToVis}}"
-                    KeyDown="TrainingOverlay_KeyDown" Focusable="True">
+                    KeyDown="TrainingOverlay_KeyDown" Focusable="True"
+                    FocusManager.IsFocusScope="True"
+                    KeyboardNavigation.TabNavigation="Cycle"
+                    KeyboardNavigation.ControlTabNavigation="Cycle">
                 <Border Background="{StaticResource InputBackgroundBrush}"
                         BorderBrush="{StaticResource AccentBrush}"
                         BorderThickness="1" CornerRadius="12"
@@ -1070,10 +1090,12 @@
                             <StackPanel Visibility="{Binding Dictionary.Training.IsSetup, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="{loc:Str Dictionary.TrainingIntro}"
                                            Foreground="{StaticResource HintBrush}" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                                <TextBlock Text="{loc:Str Dictionary.TrainingTargetWord}" Style="{StaticResource LabelStyle}"/>
+                                <TextBlock x:Name="TrainingTargetLabel"
+                                           Text="{loc:Str Dictionary.TrainingTargetWord}" Style="{StaticResource LabelStyle}"/>
                                 <TextBox x:Name="TrainingTargetBox"
                                          Text="{Binding Dictionary.Training.TargetWord, UpdateSourceTrigger=PropertyChanged}"
                                          AutomationProperties.AutomationId="DictionaryTrainingTarget"
+                                         AutomationProperties.LabeledBy="{Binding ElementName=TrainingTargetLabel}"
                                          Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,14"/>
                                 <Grid Margin="0,0,0,18">
                                     <Grid.ColumnDefinitions>
@@ -1119,7 +1141,7 @@
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" FontWeight="SemiBold"
+                                                        <TextBlock x:Name="TrainingSampleLabel" Grid.Column="0" FontWeight="SemiBold"
                                                                    Foreground="{StaticResource TextBrush}"
                                                                    VerticalAlignment="Center">
                                                             <TextBlock.Text>
@@ -1140,6 +1162,8 @@
                                                     </Grid>
                                                     <TextBox Text="{Binding Sentence, UpdateSourceTrigger=PropertyChanged}"
                                                              AutomationProperties.AutomationId="DictionaryTrainingSampleSentence"
+                                                             AutomationProperties.LabeledBy="{Binding ElementName=TrainingSampleLabel}"
+                                                             IsReadOnly="{Binding IsSentenceLocked}"
                                                              Style="{StaticResource InputTextBoxStyle}"
                                                              Padding="6,2" Margin="0,6,0,0"/>
                                                     <Border Background="#242A32" CornerRadius="6" Padding="8,5" Margin="0,6,0,0"
@@ -1208,7 +1232,14 @@
                                                         <CheckBox Grid.Column="0" IsChecked="{Binding IsApproved}"
                                                                   IsEnabled="{Binding CanApprove}"
                                                                   AutomationProperties.AutomationId="DictionaryTrainingCandidateApproved"
-                                                                  VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                                  VerticalAlignment="Center" Margin="0,0,8,0">
+                                                            <AutomationProperties.Name>
+                                                                <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                                                    <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.TrainingApproveCandidateFormat]"/>
+                                                                    <Binding Path="Original"/>
+                                                                </MultiBinding>
+                                                            </AutomationProperties.Name>
+                                                        </CheckBox>
                                                         <TextBox Grid.Column="1" Text="{Binding Original, UpdateSourceTrigger=PropertyChanged}"
                                                                  AutomationProperties.AutomationId="DictionaryTrainingCandidateOriginal"
                                                                  Style="{StaticResource InputTextBoxStyle}"/>

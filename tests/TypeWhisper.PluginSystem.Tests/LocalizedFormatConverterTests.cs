@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Windows.Data;
 using TypeWhisper.Windows.Converters;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -45,5 +46,16 @@ public sealed class LocalizedFormatConverterTests
         var result = converter.Convert([template!, 2], typeof(string), null!, CultureInfo.InvariantCulture);
 
         Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void IntegerEqualsConverter_SynchronizesSelectedValue()
+    {
+        var converter = new IntegerEqualsConverter();
+
+        Assert.True((bool)converter.Convert(2, typeof(bool), "2", CultureInfo.InvariantCulture));
+        Assert.False((bool)converter.Convert(1, typeof(bool), "2", CultureInfo.InvariantCulture));
+        Assert.Equal(2, converter.ConvertBack(true, typeof(int), "2", CultureInfo.InvariantCulture));
+        Assert.Same(Binding.DoNothing, converter.ConvertBack(false, typeof(int), "2", CultureInfo.InvariantCulture));
     }
 }

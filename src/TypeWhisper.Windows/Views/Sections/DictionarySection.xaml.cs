@@ -15,15 +15,6 @@ public partial class DictionarySection : UserControl
     /// </summary>
     public DictionarySection() => InitializeComponent();
 
-    private void Tab_Checked(object sender, RoutedEventArgs e)
-    {
-        if (sender is RadioButton rb && rb.Tag is string tagStr && int.TryParse(tagStr, out var tab))
-        {
-            if (DataContext is SettingsWindowViewModel vm)
-                vm.Dictionary.SelectedTab = tab;
-        }
-    }
-
     private void PrepareAlias_Click(object sender, RoutedEventArgs e)
     {
         OriginalBox.Focus();

@@ -481,7 +481,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
 
     private void ShowTrainingResult(string targetWord)
     {
-        SelectedTab = 2;
+        SelectedTab = 0;
         SearchText = targetWord;
     }
 

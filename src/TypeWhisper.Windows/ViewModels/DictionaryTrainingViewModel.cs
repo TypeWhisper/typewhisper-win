@@ -21,6 +21,7 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
     private readonly AudioRecordingService _audio;
     private readonly HotkeyService _hotkeys;
     private CancellationTokenSource? _sessionCts;
+    private long _sessionId;
     private DictionaryTrainingSampleViewModel? _recordingSample;
     private string? _modelId;
     private bool _restoreHotkeys;
@@ -85,6 +86,7 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
     private void Open()
     {
         CancelSession();
+        IsBusy = false;
         TargetWord = "";
         ErrorText = "";
         Samples.Clear();
@@ -160,13 +162,21 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
 
     private async Task StartSampleAsync(DictionaryTrainingSampleViewModel sample)
     {
+        var session = _sessionCts;
+        if (session is null)
+            return;
+
+        var sessionId = _sessionId;
         ErrorText = "";
         IsBusy = true;
         try
         {
-            var token = _sessionCts?.Token ?? CancellationToken.None;
-            if (string.IsNullOrWhiteSpace(_modelId) ||
-                !await _modelManager.EnsureModelLoadedAsync(_modelId, token))
+            var modelLoaded = !string.IsNullOrWhiteSpace(_modelId) &&
+                await _modelManager.EnsureModelLoadedAsync(_modelId, session.Token);
+            if (!OwnsSession(sessionId, session))
+                return;
+
+            if (!modelLoaded)
             {
                 SetSampleError(sample, Loc.Instance["Dictionary.TrainingNoModel"]);
                 return;
@@ -197,21 +207,28 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            if (IsOpen)
+            if (OwnsSession(sessionId, session))
                 SetSampleError(sample, Loc.Instance["Dictionary.TrainingCancelled"]);
         }
         catch (Exception ex)
         {
-            SetSampleError(sample, Loc.Instance.GetString("Dictionary.TrainingFailureFormat", ex.Message));
+            if (OwnsSession(sessionId, session))
+                SetSampleError(sample, Loc.Instance.GetString("Dictionary.TrainingFailureFormat", ex.Message));
         }
         finally
         {
-            IsBusy = false;
+            if (OwnsSession(sessionId, session))
+                IsBusy = false;
         }
     }
 
     private async Task StopAndTranscribeAsync(DictionaryTrainingSampleViewModel sample)
     {
+        var session = _sessionCts;
+        if (session is null)
+            return;
+
+        var sessionId = _sessionId;
         IsBusy = true;
         sample.Status = DictionaryTrainingSampleStatus.Processing;
         sample.StatusText = Loc.Instance["Dictionary.TrainingTranscribing"];
@@ -219,8 +236,10 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
 
         try
         {
-            var token = _sessionCts?.Token ?? CancellationToken.None;
-            var samples = await _audio.StopRecordingAsync(token);
+            var samples = await _audio.StopRecordingAsync(session.Token);
+            if (!OwnsSession(sessionId, session))
+                return;
+
             if (samples is not { Length: > 0 })
             {
                 SetSampleError(sample, Loc.Instance["Dictionary.TrainingNoSpeech"]);
@@ -233,7 +252,10 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
                 transcriptionSamples,
                 _settings.Current.GetLanguageHints(),
                 TranscriptionTask.Transcribe,
-                token);
+                session.Token);
+            if (!OwnsSession(sessionId, session))
+                return;
+
             var rawText = DictationFinalTextPolicy.SelectRawText(result.Text);
             if (string.IsNullOrWhiteSpace(rawText))
             {
@@ -247,21 +269,28 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            if (IsOpen)
+            if (OwnsSession(sessionId, session))
                 SetSampleError(sample, Loc.Instance["Dictionary.TrainingCancelled"]);
         }
         catch (Exception ex)
         {
-            SetSampleError(sample, Loc.Instance.GetString("Dictionary.TrainingFailureFormat", ex.Message));
+            if (OwnsSession(sessionId, session))
+                SetSampleError(sample, Loc.Instance.GetString("Dictionary.TrainingFailureFormat", ex.Message));
         }
         finally
         {
-            if (_audio.IsRecording)
-                _audio.StopRecording();
-            IsBusy = false;
-            ReviewCommand.NotifyCanExecuteChanged();
+            if (OwnsSession(sessionId, session))
+            {
+                if (_audio.IsRecording)
+                    _audio.StopRecording();
+                IsBusy = false;
+                ReviewCommand.NotifyCanExecuteChanged();
+            }
         }
     }
+
+    private bool OwnsSession(long sessionId, CancellationTokenSource session) =>
+        IsOpen && _sessionId == sessionId && ReferenceEquals(_sessionCts, session) && !session.IsCancellationRequested;
 
     private static void SetSampleError(DictionaryTrainingSampleViewModel sample, string message)
     {
@@ -337,6 +366,7 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
 
     private void CancelSession()
     {
+        _sessionId++;
         _sessionCts?.Cancel();
         _sessionCts?.Dispose();
         _sessionCts = null;
@@ -419,7 +449,7 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
     private static string NormalizeSentenceForDiff(string value) =>
         string.Join(" ", value
             .Split(null as char[], StringSplitOptions.RemoveEmptyEntries)
-            .Select(token => token.Trim('.', ',', '!', '?', ':', ';', '"', '(', ')', '[', ']', '{', '}'))
+            .Select(token => token.Trim('.', ',', '!', '?', ':', ';', '。', '"', '(', ')', '[', ']', '{', '}'))
             .Where(token => token.Length > 0));
 
     internal static bool IsTrainableWord(string value)
@@ -486,7 +516,7 @@ public sealed partial class DictionaryTrainingSampleViewModel : ObservableObject
     /// </summary>
     public int Number { get; }
 
-    [ObservableProperty] private string _sentence;
+    private string _sentence;
     [ObservableProperty] private string _rawTranscript = "";
     [ObservableProperty] private DictionaryTrainingSampleStatus _status;
     [ObservableProperty] private string _statusText = "";
@@ -500,6 +530,29 @@ public sealed partial class DictionaryTrainingSampleViewModel : ObservableObject
     /// Gets whether a raw transcript is available.
     /// </summary>
     public bool HasRawTranscript => !string.IsNullOrWhiteSpace(RawTranscript);
+
+    /// <summary>
+    /// Gets or sets the editable sentence. Changes invalidate an earlier recording.
+    /// </summary>
+    public string Sentence
+    {
+        get => _sentence;
+        set
+        {
+            if (IsSentenceLocked || !SetProperty(ref _sentence, value))
+                return;
+
+            RawTranscript = "";
+            Status = DictionaryTrainingSampleStatus.Ready;
+            StatusText = Loc.Instance["Dictionary.TrainingReady"];
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the sentence must remain unchanged during capture or transcription.
+    /// </summary>
+    public bool IsSentenceLocked => Status is
+        DictionaryTrainingSampleStatus.Recording or DictionaryTrainingSampleStatus.Processing;
 
     /// <summary>
     /// Gets the localized recording action.
@@ -522,6 +575,7 @@ public sealed partial class DictionaryTrainingSampleViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsRecording));
         OnPropertyChanged(nameof(ActionText));
+        OnPropertyChanged(nameof(IsSentenceLocked));
     }
 
     partial void OnRawTranscriptChanged(string value) => OnPropertyChanged(nameof(HasRawTranscript));

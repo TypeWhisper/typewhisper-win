@@ -302,25 +302,29 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("Dictionary.Training.OpenCommand", xaml);
         Assert.Contains("Dictionary.Training.ToggleSampleCommand", xaml);
         Assert.Contains("Dictionary.Training.SaveCommand", xaml);
+        Assert.Contains("Visibility=\"{Binding Dictionary.Training, Converter={StaticResource BoolToVis}}\"", xaml);
+        Assert.Contains("KeyboardNavigation.TabNavigation=\"Cycle\"", xaml);
+        Assert.Contains("AutomationProperties.LabeledBy=\"{Binding ElementName=TrainingTargetLabel}\"", xaml);
+        Assert.Contains("AutomationProperties.LabeledBy=\"{Binding ElementName=TrainingSampleLabel}\"", xaml);
+        Assert.Contains("Dictionary.TrainingApproveCandidateFormat", xaml);
+        Assert.Contains("ConverterParameter=0, Mode=TwoWay", xaml);
     }
 
     [Fact]
     public void DictionaryPresentation_IsLocalizedInEverySupportedLanguage()
     {
+        var english = ReadLocalization("en");
+        var englishTrainingKeys = english.Keys
+            .Where(key => key.StartsWith("Dictionary.Training", StringComparison.Ordinal))
+            .Order()
+            .ToArray();
+
         foreach (var language in new[] { "en", "de", "ja", "ru" })
         {
-            var json = TestFile.ReadProjectFile(
-                "src",
-                "TypeWhisper.Windows",
-                "Resources",
-                "Localization",
-                $"{language}.json");
-            using var document = JsonDocument.Parse(json);
+            var localized = ReadLocalization(language);
 
-            Assert.False(string.IsNullOrWhiteSpace(
-                document.RootElement.GetProperty("Dictionary.AddAlias").GetString()));
-            Assert.False(string.IsNullOrWhiteSpace(
-                document.RootElement.GetProperty("Dictionary.ToggleAliases").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(localized["Dictionary.AddAlias"]));
+            Assert.False(string.IsNullOrWhiteSpace(localized["Dictionary.ToggleAliases"]));
             foreach (var key in new[]
             {
                 "Dictionary.TabAutoLearned",
@@ -328,16 +332,21 @@ public sealed class DictionaryViewModelTests
                 "Dictionary.ClearAutoLearned",
                 "Dictionary.ResetCustomDictionary",
                 "Dictionary.DeactivateAllPacks",
-                "Dictionary.ResetConfirmTitle",
-                "Dictionary.TrainingOpen",
-                "Dictionary.TrainingSentence1Format",
-                "Dictionary.TrainingSentence2Format",
-                "Dictionary.TrainingSentence3Format",
-                "Dictionary.TrainingReviewHint",
-                "Dictionary.TrainingConflictFormat"
+                "Dictionary.ResetConfirmTitle"
             })
             {
-                Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty(key).GetString()));
+                Assert.False(string.IsNullOrWhiteSpace(localized[key]));
+            }
+
+            var localizedTrainingKeys = localized.Keys
+                .Where(key => key.StartsWith("Dictionary.Training", StringComparison.Ordinal))
+                .Order()
+                .ToArray();
+            Assert.Equal(englishTrainingKeys, localizedTrainingKeys);
+            foreach (var key in englishTrainingKeys)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(localized[key]));
+                Assert.Equal(GetPlaceholders(english[key]), GetPlaceholders(localized[key]));
             }
         }
     }
@@ -402,6 +411,24 @@ public sealed class DictionaryViewModelTests
     {
         return CreateViewModel(CreateDictionaryMock().Object);
     }
+
+    private static Dictionary<string, string> ReadLocalization(string language)
+    {
+        var json = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Resources",
+            "Localization",
+            $"{language}.json");
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value.GetString() ?? "");
+    }
+
+    private static string[] GetPlaceholders(string value) =>
+        System.Text.RegularExpressions.Regex.Matches(value, @"\{\d+\}")
+            .Select(match => match.Value)
+            .ToArray();
 
     private static DictionaryViewModel CreateViewModel(IDictionaryService dictionary)
     {

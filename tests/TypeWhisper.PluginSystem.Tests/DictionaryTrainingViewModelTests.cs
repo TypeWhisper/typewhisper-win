@@ -16,6 +16,7 @@ public sealed class DictionaryTrainingViewModelTests
     [InlineData("Today I use Kubernetes", "Today I use Kubernetes.", null)]
     [InlineData("Today I use kubernetes", "Today I use Kubernetes.", null)]
     [InlineData("Today we use Kubernets", "Today I use Kubernetes.", null)]
+    [InlineData("今日は Kubernets を使います", "今日は Kubernetes を使います。", "Kubernets")]
     [InlineData("", "Today I use Kubernetes.", null)]
     public void ExtractCandidate_IsConservativeAndIgnoresBoundaryPunctuation(
         string raw,
@@ -99,45 +100,56 @@ public sealed class DictionaryTrainingViewModelTests
     }
 
     [Fact]
+    public void EditingCompletedSentence_InvalidatesTranscript()
+    {
+        var sample = new DictionaryTrainingSampleViewModel(1, "Original sentence")
+        {
+            RawTranscript = "Old transcript",
+            Status = DictionaryTrainingSampleStatus.Completed,
+            StatusText = "Complete"
+        };
+
+        sample.Sentence = "Updated sentence";
+
+        Assert.Equal("Updated sentence", sample.Sentence);
+        Assert.Empty(sample.RawTranscript);
+        Assert.Equal(DictionaryTrainingSampleStatus.Ready, sample.Status);
+        Assert.Equal(Loc.Instance["Dictionary.TrainingReady"], sample.StatusText);
+    }
+
+    [Theory]
+    [InlineData(DictionaryTrainingSampleStatus.Recording)]
+    [InlineData(DictionaryTrainingSampleStatus.Processing)]
+    public void EditingActiveSentence_IsBlocked(DictionaryTrainingSampleStatus status)
+    {
+        var sample = new DictionaryTrainingSampleViewModel(1, "Original sentence") { Status = status };
+
+        sample.Sentence = "Updated sentence";
+
+        Assert.Equal("Original sentence", sample.Sentence);
+    }
+
+    [Fact]
     public async Task Sample_UsesSelectedEngineDirectlyWithGlobalLanguageHints()
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
-        var settings = SettingsMock(AppSettings.Default with
+        var appSettings = AppSettings.Default with
         {
             SelectedModelId = "plugin:training:test-model",
             LanguageHints = ["de", "en"]
-        });
+        };
         var plugin = new FakeTrainingPlugin { ResponseText = "Today I am working with Kubernets." };
-        var pluginManager = TestPluginManagerFactory.Create(settings.Object);
-        TestPluginManagerFactory.SetPrivateField(
-            pluginManager,
-            "_transcriptionEngines",
-            new List<ITranscriptionEnginePlugin> { plugin });
-        var modelManager = new ModelManagerService(pluginManager, settings.Object);
-        var captures = new FakeAudioInputCaptureFactory();
-        using var audio = new AudioRecordingService(
-            new FakeAudioInputDeviceProvider("Microphone"),
-            captures,
-            Timeout.InfiniteTimeSpan);
-        var workflows = new Mock<IWorkflowService>();
-        workflows.SetupGet(service => service.Workflows).Returns([]);
-        using var hotkeys = new HotkeyService(settings.Object, workflows.Object);
         var dictionary = DictionaryMock([]);
-        var viewModel = new DictionaryTrainingViewModel(
-            dictionary.Object,
-            settings.Object,
-            modelManager,
-            audio,
-            hotkeys);
-        viewModel.OpenCommand.Execute(null);
-        viewModel.TargetWord = "Kubernetes";
-        viewModel.BeginCommand.Execute(null);
-        var sample = viewModel.Samples[0];
+        using var fixture = CreateFixture(dictionary.Object, appSettings, plugin, hasMicrophone: true);
+        fixture.ViewModel.OpenCommand.Execute(null);
+        fixture.ViewModel.TargetWord = "Kubernetes";
+        fixture.ViewModel.BeginCommand.Execute(null);
+        var sample = fixture.ViewModel.Samples[0];
 
-        await viewModel.ToggleSampleCommand.ExecuteAsync(sample);
-        captures.Created.Single().RaiseData([0, 16, 0, 16], 4);
-        await viewModel.ToggleSampleCommand.ExecuteAsync(sample);
+        await fixture.ViewModel.ToggleSampleCommand.ExecuteAsync(sample);
+        fixture.Captures.Created.Single().RaiseData([0, 16, 0, 16], 4);
+        await fixture.ViewModel.ToggleSampleCommand.ExecuteAsync(sample);
 
         Assert.Equal(DictionaryTrainingSampleStatus.Completed, sample.Status);
         Assert.Equal(plugin.ResponseText, sample.RawTranscript);
@@ -146,20 +158,113 @@ public sealed class DictionaryTrainingViewModelTests
         dictionary.Verify(service => service.AddEntries(It.IsAny<IEnumerable<DictionaryEntry>>()), Times.Never);
     }
 
-    private static TrainingFixture CreateFixture(IDictionaryService dictionary)
+    [Fact]
+    public async Task ReopenDuringModelLoad_DoesNotStartOldRecording()
     {
-        var settings = SettingsMock(AppSettings.Default);
+        var pendingLoad = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new FakeTrainingPlugin { PendingModelLoad = pendingLoad };
+        var settings = AppSettings.Default with { SelectedModelId = "plugin:training:test-model" };
+        using var fixture = CreateFixture(DictionaryMock([]).Object, settings, plugin, hasMicrophone: true);
+        fixture.ViewModel.OpenCommand.Execute(null);
+        fixture.ViewModel.TargetWord = "Kubernetes";
+        fixture.ViewModel.BeginCommand.Execute(null);
+        var oldSample = fixture.ViewModel.Samples[0];
+
+        var oldStart = fixture.ViewModel.ToggleSampleCommand.ExecuteAsync(oldSample);
+        Assert.True(fixture.ViewModel.IsBusy);
+        fixture.ViewModel.CancelCommand.Execute(null);
+        fixture.ViewModel.OpenCommand.Execute(null);
+        fixture.ViewModel.TargetWord = "Reson8";
+        fixture.ViewModel.BeginCommand.Execute(null);
+        pendingLoad.SetResult();
+        await oldStart;
+
+        Assert.True(fixture.ViewModel.IsOpen);
+        Assert.False(fixture.ViewModel.IsBusy);
+        Assert.False(fixture.Audio.IsRecording);
+        Assert.Equal(DictionaryTrainingSampleStatus.Ready, oldSample.Status);
+        Assert.All(fixture.ViewModel.Samples, sample =>
+            Assert.Equal(DictionaryTrainingSampleStatus.Ready, sample.Status));
+    }
+
+    [Fact]
+    public async Task ReopenDuringTranscription_DoesNotCompleteOldSample()
+    {
+        var pendingTranscription = new TaskCompletionSource<PluginTranscriptionResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new FakeTrainingPlugin { PendingTranscription = pendingTranscription };
+        var settings = AppSettings.Default with { SelectedModelId = "plugin:training:test-model" };
+        using var fixture = CreateFixture(DictionaryMock([]).Object, settings, plugin, hasMicrophone: true);
+        fixture.ViewModel.OpenCommand.Execute(null);
+        fixture.ViewModel.TargetWord = "Kubernetes";
+        fixture.ViewModel.BeginCommand.Execute(null);
+        var oldSample = fixture.ViewModel.Samples[0];
+        await fixture.ViewModel.ToggleSampleCommand.ExecuteAsync(oldSample);
+        fixture.Captures.Created.Single().RaiseData([0, 16, 0, 16], 4);
+
+        var oldStop = fixture.ViewModel.ToggleSampleCommand.ExecuteAsync(oldSample);
+        await plugin.TranscriptionStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        fixture.ViewModel.CancelCommand.Execute(null);
+        fixture.ViewModel.OpenCommand.Execute(null);
+        fixture.ViewModel.TargetWord = "Reson8";
+        fixture.ViewModel.BeginCommand.Execute(null);
+        pendingTranscription.SetResult(new PluginTranscriptionResult("Kubernets", "en", 1));
+        await oldStop;
+
+        Assert.True(fixture.ViewModel.IsOpen);
+        Assert.False(fixture.ViewModel.IsBusy);
+        Assert.Equal(DictionaryTrainingSampleStatus.Processing, oldSample.Status);
+        Assert.Empty(oldSample.RawTranscript);
+        Assert.All(fixture.ViewModel.Samples, sample =>
+            Assert.Equal(DictionaryTrainingSampleStatus.Ready, sample.Status));
+    }
+
+    [Fact]
+    public void Save_ShowsTermOnlyResultOnAllTab()
+    {
+        var dictionary = DictionaryMock([]);
+        using var fixture = CreateFixture(dictionary.Object);
+        using var dictionaryViewModel = new DictionaryViewModel(
+            dictionary.Object,
+            fixture.Settings.Object,
+            training: fixture.ViewModel)
+        {
+            SelectedTab = 2
+        };
+        fixture.ViewModel.TargetWord = "Kubernetes";
+
+        fixture.ViewModel.SaveCommand.Execute(null);
+
+        Assert.Equal(0, dictionaryViewModel.SelectedTab);
+        Assert.Equal("Kubernetes", dictionaryViewModel.SearchText);
+    }
+
+    private static TrainingFixture CreateFixture(
+        IDictionaryService dictionary,
+        AppSettings? appSettings = null,
+        FakeTrainingPlugin? plugin = null,
+        bool hasMicrophone = false)
+    {
+        var settings = SettingsMock(appSettings ?? AppSettings.Default);
         var pluginManager = TestPluginManagerFactory.Create(settings.Object);
+        if (plugin is not null)
+        {
+            TestPluginManagerFactory.SetPrivateField(
+                pluginManager,
+                "_transcriptionEngines",
+                new List<ITranscriptionEnginePlugin> { plugin });
+        }
         var modelManager = new ModelManagerService(pluginManager, settings.Object);
+        var captures = new FakeAudioInputCaptureFactory();
         var audio = new AudioRecordingService(
-            new FakeAudioInputDeviceProvider(),
-            new FakeAudioInputCaptureFactory(),
+            hasMicrophone ? new FakeAudioInputDeviceProvider("Microphone") : new FakeAudioInputDeviceProvider(),
+            captures,
             Timeout.InfiniteTimeSpan);
         var workflows = new Mock<IWorkflowService>();
         workflows.SetupGet(service => service.Workflows).Returns([]);
         var hotkeys = new HotkeyService(settings.Object, workflows.Object);
         var viewModel = new DictionaryTrainingViewModel(dictionary, settings.Object, modelManager, audio, hotkeys);
-        return new TrainingFixture(viewModel, audio, hotkeys);
+        return new TrainingFixture(viewModel, audio, hotkeys, captures, settings);
     }
 
     private static Mock<IDictionaryService> DictionaryMock(IReadOnlyList<DictionaryEntry> entries)
@@ -179,7 +284,9 @@ public sealed class DictionaryTrainingViewModelTests
     private sealed record TrainingFixture(
         DictionaryTrainingViewModel ViewModel,
         AudioRecordingService Audio,
-        HotkeyService Hotkeys) : IDisposable
+        HotkeyService Hotkeys,
+        FakeAudioInputCaptureFactory Captures,
+        Mock<ISettingsService> Settings) : IDisposable
     {
         public void Dispose()
         {
@@ -192,6 +299,10 @@ public sealed class DictionaryTrainingViewModelTests
     private sealed class FakeTrainingPlugin : ITranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity
     {
         public string ResponseText { get; set; } = "";
+        public TaskCompletionSource? PendingModelLoad { get; init; }
+        public TaskCompletionSource<PluginTranscriptionResult>? PendingTranscription { get; init; }
+        public TaskCompletionSource<bool> TranscriptionStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public IReadOnlyList<string> LastLanguageHints { get; private set; } = [];
         public string? LastPrompt { get; private set; }
         public string PluginId => "training";
@@ -205,6 +316,10 @@ public sealed class DictionaryTrainingViewModelTests
             [new("test-model", "Test model")];
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
+        public bool SupportsModelDownload => PendingModelLoad is not null;
+        public bool IsModelDownloaded(string modelId) => true;
+        public Task LoadModelAsync(string modelId, CancellationToken ct) =>
+            PendingModelLoad?.Task ?? Task.CompletedTask;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -232,6 +347,11 @@ public sealed class DictionaryTrainingViewModelTests
         {
             LastLanguageHints = languageHints.ToArray();
             LastPrompt = prompt;
+            if (PendingTranscription is not null)
+            {
+                TranscriptionStarted.TrySetResult(true);
+                return PendingTranscription.Task;
+            }
             return Task.FromResult(new PluginTranscriptionResult(ResponseText, "de", 1));
         }
 
