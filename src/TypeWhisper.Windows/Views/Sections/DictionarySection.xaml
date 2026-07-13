@@ -576,38 +576,68 @@
                                         </Border>
                                     </Border>
 
-                                    <!-- Multi-alias corrections share one replacement heading. -->
-                                    <ui:CardExpander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
-                                                     Visibility="{Binding IsGroupedCorrection, Converter={StaticResource BoolToVis}}">
-                                        <ui:CardExpander.Header>
-                                            <Grid Margin="0,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Background="#3A2A1A" CornerRadius="4"
-                                                        Padding="6,2" Margin="0,0,8,0">
-                                                    <TextBlock Text="{loc:Str Dictionary.Correction}" Foreground="#D4915B"
-                                                               FontSize="11" FontWeight="Medium"/>
-                                                </Border>
-                                                <TextBlock Grid.Column="1" Text="{Binding Replacement}"
-                                                           Foreground="{StaticResource TextBrush}" FontSize="13"
-                                                           FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                                <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}"
-                                                        ToolTip="{loc:Str Dictionary.AddAlias}"
-                                                        Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding Replacement}"
-                                                        Click="PrepareAlias_Click">
-                                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
-                                                </Button>
-                                            </Grid>
-                                        </ui:CardExpander.Header>
-                                        <ItemsControl ItemsSource="{Binding Entries}" Margin="10,0,10,8">
+                                    <!-- Multi-alias corrections use the same compact card shape as single entries. -->
+                                    <Border Background="{StaticResource InputBackgroundBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1" CornerRadius="8" ClipToBounds="True"
+                                            Visibility="{Binding IsGroupedCorrection, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="3"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Background="#D4915B" CornerRadius="8,0,0,8"/>
+                                            <StackPanel Grid.Column="1">
+                                                <Grid Margin="12,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#3A2A1A" CornerRadius="4"
+                                                            Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Str Dictionary.Correction}" Foreground="#D4915B"
+                                                                   FontSize="11" FontWeight="Medium"/>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Replacement}"
+                                                               Foreground="{StaticResource TextBrush}" FontSize="13"
+                                                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                    <Border Grid.Column="2" Background="#252B33" CornerRadius="10"
+                                                            Padding="7,2" Margin="8,0,4,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Entries.Count}" Foreground="{StaticResource HintBrush}"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                    <Button Grid.Column="3" Style="{StaticResource IconButtonStyle}"
+                                                            ToolTip="{loc:Str Dictionary.AddAlias}"
+                                                            Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Replacement}"
+                                                            Click="PrepareAlias_Click">
+                                                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                                    </Button>
+                                                    <Button Grid.Column="4" Style="{StaticResource IconButtonStyle}"
+                                                            Command="{Binding ToggleCommand}">
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="12">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="&#xE70D;"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                            <Setter Property="Text" Value="&#xE70E;"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Button>
+                                                </Grid>
+                                                <ItemsControl ItemsSource="{Binding Entries}"
+                                                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
-                                                            Padding="4,8">
+                                                            Padding="12,8">
                                                         <Border.Style>
                                                             <Style TargetType="Border">
                                                                 <Setter Property="Opacity" Value="1"/>
@@ -674,7 +704,9 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                    </ui:CardExpander>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

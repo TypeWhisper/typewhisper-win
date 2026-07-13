@@ -140,11 +140,13 @@ public sealed class DictionaryViewModelTests
             "DictionarySection.xaml");
 
         Assert.Contains("ItemsSource=\"{Binding Dictionary.VisibleEntries}\"", xaml);
-        Assert.Contains("IsExpanded=\"{Binding IsExpanded, Mode=TwoWay}\"", xaml);
+        Assert.Contains("Command=\"{Binding ToggleCommand}\"", xaml);
+        Assert.Contains("Visibility=\"{Binding IsExpanded, Converter={StaticResource BoolToVis}}\"", xaml);
         Assert.Contains("ItemsSource=\"{Binding Entries}\"", xaml);
         Assert.Contains("Command=\"{Binding DataContext.Dictionary.PrepareAliasCommand", xaml);
         Assert.Contains("Click=\"PrepareAlias_Click\"", xaml);
         Assert.Contains("DataContext=\"{Binding PrimaryEntry}\"", xaml);
+        Assert.DoesNotContain("<ui:CardExpander", xaml);
         Assert.DoesNotContain("Dictionary.FilteredEntries", xaml);
     }
 

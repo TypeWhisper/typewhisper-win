@@ -519,19 +519,22 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     }
 }
 
-internal sealed class DictionaryDisplayItem
+internal sealed partial class DictionaryDisplayItem : ObservableObject
 {
     public IReadOnlyList<DictionaryEntry> Entries { get; }
     public DictionaryEntry PrimaryEntry => Entries[0];
     public string? Replacement => PrimaryEntry.Replacement;
     public bool IsGroupedCorrection => Entries.Count > 1;
-    public bool IsExpanded { get; set; }
+    [ObservableProperty] private bool _isExpanded;
 
     public DictionaryDisplayItem(IReadOnlyList<DictionaryEntry> entries, bool isExpanded = false)
     {
         Entries = entries;
-        IsExpanded = isExpanded;
+        _isExpanded = isExpanded;
     }
+
+    [RelayCommand]
+    private void Toggle() => IsExpanded = !IsExpanded;
 }
 
 /// <summary>
