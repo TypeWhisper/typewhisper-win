@@ -182,20 +182,20 @@
   {
     "id": "com.typewhisper.live-transcript",
     "name": "Live Transcript",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Floating window showing real-time transcription",
     "category": "utility",
-    "size": 12466,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.live-transcript-1.0.2.zip",
+    "size": 13323,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.live-transcript-1.0.3.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
     "categories": [
       "utility"
     ],
-    "sha256": "5ff63d00f7913d79cf60db5dfd0c4d6d7b76c77c9140fae846f343150bc1dc97"
+    "sha256": "cb5fe394a18dc3b5c077da8cf14b8b8c24e543fc57ad442f5ca0e1ca4dc9858f"
   },
   {
     "id": "com.typewhisper.granite-speech",
