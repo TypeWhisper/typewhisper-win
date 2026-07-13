@@ -530,6 +530,28 @@ public class PluginRegistryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallPluginAsync_StalledDownloadTimesOut()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.stalled-download", "1.0.2");
+        var httpClient = TrackDisposable(new HttpClient(new StalledHttpMessageHandler())
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            _pluginsRoot,
+            downloadInactivityTimeout: TimeSpan.FromMilliseconds(50));
+
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Contains("download timed out", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task InstallPluginAsync_DownloadFailure_LeavesExistingPluginDirectoryUntouched()
     {
         var manager = CreateManager();
@@ -1231,5 +1253,16 @@ public class PluginRegistryServiceTests : IDisposable
         }
 
         return stream.ToArray();
+    }
+
+    private sealed class StalledHttpMessageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
     }
 }

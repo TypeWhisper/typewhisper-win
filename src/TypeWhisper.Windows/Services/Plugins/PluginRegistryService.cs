@@ -23,6 +23,7 @@ public sealed class PluginRegistryService
     private const string StagingDirectoryName = ".staging";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(24);
+    private static readonly TimeSpan DefaultDownloadInactivityTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -40,6 +41,7 @@ public sealed class PluginRegistryService
     private readonly Func<string, string, CancellationToken, Task> _replaceActiveDirectoryAsync;
     private readonly Func<string, CancellationToken, Task> _deleteActiveDirectoryAsync;
     private readonly AppDistributionKind _distributionKind;
+    private readonly TimeSpan _downloadInactivityTimeout;
 
     private List<RegistryPlugin>? _cachedRegistry;
     private DateTime _cacheTimestamp;
@@ -57,13 +59,15 @@ public sealed class PluginRegistryService
         Func<string, string, CancellationToken, Task>? replaceActiveDirectoryAsync = null,
         Func<string, CancellationToken, Task>? deleteActiveDirectoryAsync = null,
         string? bundledPluginsPath = null,
-        AppDistributionKind? distributionKind = null)
+        AppDistributionKind? distributionKind = null,
+        TimeSpan? downloadInactivityTimeout = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
         _settings = settings;
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _distributionKind = distributionKind ?? AppDistribution.Current;
+        _downloadInactivityTimeout = downloadInactivityTimeout ?? DefaultDownloadInactivityTimeout;
         _pluginsPath = Path.GetFullPath(pluginsPath ?? TypeWhisperEnvironment.PluginsPath);
         _bundledPluginsPath = Path.GetFullPath(bundledPluginsPath ?? Path.Join(AppContext.BaseDirectory, "Plugins"));
         _pendingUpdatesPath = GetValidatedChildDirectory(_pluginsPath, PendingUpdatesDirectoryName, "pending updates directory");
@@ -160,26 +164,40 @@ public sealed class PluginRegistryService
         {
             Directory.CreateDirectory(stagingRoot);
 
-            using (var response = await _httpClient.GetAsync(
-                       registryPlugin.DownloadUrl,
-                       HttpCompletionOption.ResponseHeadersRead,
-                       ct))
+            using var downloadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            downloadCts.CancelAfter(_downloadInactivityTimeout);
+            try
             {
+                using var response = await _httpClient.GetAsync(
+                    registryPlugin.DownloadUrl,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    downloadCts.Token);
                 response.EnsureSuccessStatusCode();
 
                 var totalBytes = response.Content.Headers.ContentLength ?? registryPlugin.Size;
-                await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
+                await using var contentStream = await response.Content.ReadAsStreamAsync(downloadCts.Token);
                 await using var fileStream = File.Create(tempZip);
 
                 var buffer = new byte[8192];
                 long bytesRead = 0;
                 int read;
-                while ((read = await contentStream.ReadAsync(buffer, ct)) > 0)
+                while (true)
                 {
+                    downloadCts.CancelAfter(_downloadInactivityTimeout);
+                    read = await contentStream.ReadAsync(buffer, downloadCts.Token);
+                    if (read == 0)
+                        break;
+
                     await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
                     bytesRead += read;
                     progress?.Report(totalBytes > 0 ? (double)bytesRead / totalBytes : 0);
                 }
+            }
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    "Plugin download timed out because no data was received. Check your internet connection and try again.",
+                    ex);
             }
 
             VerifyDownloadedPackage(registryPlugin, tempZip);
