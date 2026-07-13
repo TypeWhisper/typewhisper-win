@@ -142,8 +142,12 @@
                                     </Border.Style>
                                     <Border.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="{loc:Str Snippets.ContextEdit}" Click="ContextEdit_Click"/>
-                                            <MenuItem Header="{loc:Str Snippets.ContextDelete}" Click="ContextDelete_Click"/>
+                                            <MenuItem AutomationProperties.AutomationId="{Binding Id, StringFormat=SnippetsContextEdit.{0}}"
+                                                      Header="{loc:Str Snippets.ContextEdit}"
+                                                      Click="ContextEdit_Click"/>
+                                            <MenuItem AutomationProperties.AutomationId="{Binding Id, StringFormat=SnippetsContextDelete.{0}}"
+                                                      Header="{loc:Str Snippets.ContextDelete}"
+                                                      Click="ContextDelete_Click"/>
                                         </ContextMenu>
                                     </Border.ContextMenu>
                                     <Grid>

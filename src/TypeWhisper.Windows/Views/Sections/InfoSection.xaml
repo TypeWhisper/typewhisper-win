@@ -149,7 +149,9 @@
                 </StackPanel>
 
                 <!-- Error entries list -->
-                <ListView Grid.Row="1" ItemsSource="{Binding ErrorLogEntries}"
+                <ListView Grid.Row="1"
+                          AutomationProperties.AutomationId="AboutErrorLog"
+                          ItemsSource="{Binding ErrorLogEntries}"
                           Visibility="{Binding HasErrorLogEntries, Converter={StaticResource BoolToVis}}"
                           Background="Transparent" BorderThickness="0"
                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"

@@ -91,7 +91,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewMainDictationHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddMainDictation"
+                                                                Hotkey="{Binding Settings.NewMainDictationHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddMainDictationHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -148,7 +149,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewToggleOnlyHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddToggleOnly"
+                                                                Hotkey="{Binding Settings.NewToggleOnlyHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddToggleOnlyHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -199,7 +201,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewHoldOnlyHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddHoldOnly"
+                                                                Hotkey="{Binding Settings.NewHoldOnlyHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddHoldOnlyHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -256,7 +259,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewRecentTranscriptionsHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddRecentTranscriptions"
+                                                                Hotkey="{Binding Settings.NewRecentTranscriptionsHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddRecentTranscriptionsHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -307,7 +311,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewCopyLastTranscriptionHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddCopyLast"
+                                                                Hotkey="{Binding Settings.NewCopyLastTranscriptionHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddCopyLastTranscriptionHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -358,7 +363,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewWorkflowPaletteHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddWorkflowPalette"
+                                                                Hotkey="{Binding Settings.NewWorkflowPaletteHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddWorkflowPaletteHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"
@@ -409,7 +415,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <controls:HotkeyRecorderControl Hotkey="{Binding Settings.NewRecorderToggleHotkey, Mode=TwoWay}"
+                                <controls:HotkeyRecorderControl AutomationProperties.AutomationId="ShortcutsAddRecorder"
+                                                                Hotkey="{Binding Settings.NewRecorderToggleHotkey, Mode=TwoWay}"
                                                                 RecordedCommand="{Binding Settings.AddRecorderToggleHotkeyCommand}"
                                                                 UseAddGlyph="True"
                                                                 ToolTip="{loc:Str Shortcuts.AddHotkey}"

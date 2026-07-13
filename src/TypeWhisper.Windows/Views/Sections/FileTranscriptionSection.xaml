@@ -171,7 +171,8 @@
                             </Grid>
                         </Border>
                         <Border Height="1" Background="#18FFFFFF"/>
-                        <ListBox ItemsSource="{Binding FileTranscription.Items}"
+                        <ListBox AutomationProperties.AutomationId="FileTranscriptionQueue"
+                                 ItemsSource="{Binding FileTranscription.Items}"
                                  SelectedItem="{Binding FileTranscription.SelectedItem, Mode=TwoWay}"
                                  Background="Transparent"
                                  BorderThickness="0"

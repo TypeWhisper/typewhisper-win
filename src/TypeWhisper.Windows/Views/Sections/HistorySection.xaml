@@ -96,7 +96,8 @@
         </TextBlock>
 
         <!-- Timeline (ListBox for real UI virtualization) -->
-        <ListBox ItemsSource="{Binding History.GroupedEntries}"
+        <ListBox AutomationProperties.AutomationId="HistoryTimeline"
+                 ItemsSource="{Binding History.GroupedEntries}"
                  Visibility="{Binding History.IsLoading, Converter={StaticResource InverseBoolToVis}}"
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"

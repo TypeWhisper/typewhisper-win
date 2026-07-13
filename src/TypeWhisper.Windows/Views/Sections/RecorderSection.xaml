@@ -146,7 +146,6 @@
 
                         <ui:Button Appearance="Primary"
                                    AutomationProperties.AutomationId="RecorderToggleRecording"
-                                   AutomationProperties.Name="{loc:Str Recorder.CaptureTitle}"
                                    Command="{Binding Recorder.ToggleRecordingCommand}"
                                    HorizontalAlignment="Stretch"
                                    Padding="18,12"

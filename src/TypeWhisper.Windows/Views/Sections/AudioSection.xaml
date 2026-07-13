@@ -282,7 +282,7 @@
                                                            VerticalAlignment="Center"
                                                            TextTrimming="CharacterEllipsis"/>
                                                 <ui:Button Grid.Column="2"
-                                                           AutomationProperties.AutomationId="{Binding Name, StringFormat=DictationRemoveMicrophone.{0}}"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=DictationRemoveMicrophone.{0}}"
                                                            Width="30"
                                                            Height="30"
                                                            Command="{Binding DataContext.Settings.RemoveMicrophonePriorityItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

@@ -479,13 +479,18 @@
                                                                            VerticalAlignment="Center"
                                                                            TextTrimming="CharacterEllipsis"/>
                                                                 <Button Style="{StaticResource WorkflowStatusToggleButtonStyle}"
-                                                                        AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkflowsEnabled.{0}}"
-                                                                        AutomationProperties.Name="{Binding Name}"
-                                                                        Command="{Binding DataContext.Workflows.ToggleWorkflowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        ToolTip="{Binding IsEnabled, Converter={StaticResource WorkflowToggleLabel}}"
-                                                                        Tag="{Binding IsEnabled}"
-                                                                        Margin="10,0,0,0">
+                                                                         AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkflowsEnabled.{0}}"
+                                                                         Command="{Binding DataContext.Workflows.ToggleWorkflowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                         CommandParameter="{Binding}"
+                                                                         ToolTip="{Binding IsEnabled, Converter={StaticResource WorkflowToggleLabel}}"
+                                                                         Tag="{Binding IsEnabled}"
+                                                                         Margin="10,0,0,0">
+                                                                    <AutomationProperties.Name>
+                                                                        <MultiBinding StringFormat="{}{0}: {1}">
+                                                                            <Binding Path="Name"/>
+                                                                            <Binding Path="IsEnabled" Converter="{StaticResource WorkflowEnabledLabel}"/>
+                                                                        </MultiBinding>
+                                                                    </AutomationProperties.Name>
                                                                     <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="&#x25CF;"
                                                                                    FontSize="8"
@@ -1183,7 +1188,8 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.NewHotkey, Mode=TwoWay}"
+                                        <controls:HotkeyRecorderControl AutomationProperties.AutomationId="WorkflowsAddHotkey"
+                                                                        Hotkey="{Binding Workflows.NewHotkey, Mode=TwoWay}"
                                                                         RecordedCommand="{Binding Workflows.AddHotkeyCommand}"
                                                                         UseAddGlyph="True"
                                                                         ToolTip="{loc:Str Workflows.AddHotkey}"

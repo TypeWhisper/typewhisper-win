@@ -354,7 +354,7 @@
                                                            Foreground="{StaticResource HintBrush}"
                                                            TextWrapping="Wrap"/>
                                                 <Button Grid.Column="1"
-                                                        AutomationProperties.AutomationId="{Binding Command, StringFormat=AdvancedCopyApiExample.{0}}"
+                                                        AutomationProperties.AutomationId="{Binding Key, StringFormat=AdvancedCopyApiExample.{0}}"
                                                         Content="{loc:Str Advanced.Copy}"
                                                         Margin="12,0,0,0"
                                                         Padding="10,4"
@@ -440,7 +440,7 @@
                                                            Foreground="{StaticResource HintBrush}"
                                                            TextWrapping="Wrap"/>
                                                 <Button Grid.Column="1"
-                                                        AutomationProperties.AutomationId="{Binding Command, StringFormat=AdvancedCopyCliExample.{0}}"
+                                                        AutomationProperties.AutomationId="{Binding Key, StringFormat=AdvancedCopyCliExample.{0}}"
                                                         Content="{loc:Str Advanced.Copy}"
                                                         Margin="12,0,0,0"
                                                         Padding="10,4"
