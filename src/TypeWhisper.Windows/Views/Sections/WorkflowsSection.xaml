@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.WorkflowsSection"
+             AutomationProperties.AutomationId="SettingsSection.Workflows"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -354,6 +355,8 @@
                 </StackPanel>
 
                 <Button Grid.Column="2"
+                        AutomationProperties.AutomationId="WorkflowsNew"
+                        AutomationProperties.Name="{loc:Str Workflows.New}"
                         Style="{StaticResource PrimaryButtonStyle}"
                         Command="{Binding Workflows.StartCreateCommand}"
                         Padding="14,7"
@@ -380,6 +383,8 @@
                                FontWeight="SemiBold"
                                Margin="0,0,0,5"/>
                     <ComboBox ItemsSource="{Binding Workflows.AvailableProviders}"
+                              AutomationProperties.AutomationId="WorkflowsDefaultAiProvider"
+                              AutomationProperties.Name="{loc:Str Workflows.DefaultAiProvider}"
                               SelectedItem="{Binding Workflows.SelectedDefaultProvider}"
                               DisplayMemberPath="DisplayName"
                               Style="{StaticResource WorkflowComboBoxStyle}"/>
@@ -402,6 +407,8 @@
 
                         <Grid Grid.Row="0" Margin="0,0,0,8">
                             <TextBox Text="{Binding Workflows.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     AutomationProperties.AutomationId="WorkflowsSearch"
+                                     AutomationProperties.Name="{loc:Str Workflows.Title}"
                                      Style="{StaticResource WorkflowSearchTextBoxStyle}"/>
                         </Grid>
 
@@ -429,6 +436,7 @@
                                                TextAlignment="Center"
                                                Margin="0,0,0,18"/>
                                     <Button Content="{loc:Str Workflows.CreateFirst}"
+                                            AutomationProperties.AutomationId="WorkflowsCreateFirst"
                                             Style="{StaticResource PrimaryButtonStyle}"
                                             Command="{Binding Workflows.StartCreateCommand}"
                                             Padding="14,7"
@@ -471,11 +479,18 @@
                                                                            VerticalAlignment="Center"
                                                                            TextTrimming="CharacterEllipsis"/>
                                                                 <Button Style="{StaticResource WorkflowStatusToggleButtonStyle}"
-                                                                        Command="{Binding DataContext.Workflows.ToggleWorkflowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        ToolTip="{Binding IsEnabled, Converter={StaticResource WorkflowToggleLabel}}"
-                                                                        Tag="{Binding IsEnabled}"
-                                                                        Margin="10,0,0,0">
+                                                                         AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkflowsEnabled.{0}}"
+                                                                         Command="{Binding DataContext.Workflows.ToggleWorkflowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                         CommandParameter="{Binding}"
+                                                                         ToolTip="{Binding IsEnabled, Converter={StaticResource WorkflowToggleLabel}}"
+                                                                         Tag="{Binding IsEnabled}"
+                                                                         Margin="10,0,0,0">
+                                                                    <AutomationProperties.Name>
+                                                                        <MultiBinding StringFormat="{}{0}: {1}">
+                                                                            <Binding Path="Name"/>
+                                                                            <Binding Path="IsEnabled" Converter="{StaticResource WorkflowEnabledLabel}"/>
+                                                                        </MultiBinding>
+                                                                    </AutomationProperties.Name>
                                                                     <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="&#x25CF;"
                                                                                    FontSize="8"
@@ -517,6 +532,8 @@
 
                                                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Style="{StaticResource WorkflowIconActionButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkflowsEdit.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Workflows.Edit}"
                                                                     Command="{Binding DataContext.Workflows.StartEditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}"
                                                                     ToolTip="{loc:Str Workflows.Edit}">
@@ -560,6 +577,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
+                                                    AutomationProperties.AutomationId="WorkflowsBack"
+                                                    AutomationProperties.Name="{loc:Str Workflows.Back}"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Command="{Binding Workflows.CancelEditorCommand}"
                                                     Padding="10,7"
@@ -604,10 +623,12 @@
                                                     </StackPanel>
                                                 </Border>
                                                 <CheckBox Content="{loc:Str Workflows.Enabled}"
+                                                          AutomationProperties.AutomationId="WorkflowsEditorEnabled"
                                                           IsChecked="{Binding Workflows.EditIsEnabled}"
                                                           VerticalAlignment="Center"
                                                           Margin="0,0,12,0"/>
                                                 <Button Content="{loc:Str Workflows.Delete}"
+                                                        AutomationProperties.AutomationId="WorkflowsDelete"
                                                         Style="{StaticResource LinkButtonStyle}"
                                                         Command="{Binding Workflows.DeleteWorkflowCommand}"
                                                         CommandParameter="{Binding Workflows.SelectedWorkflow}"
@@ -615,11 +636,13 @@
                                                         Margin="0,0,10,0"
                                                         VerticalAlignment="Center"/>
                                                 <Button Content="{loc:Str Workflows.Cancel}"
+                                                        AutomationProperties.AutomationId="WorkflowsCancel"
                                                         Style="{StaticResource SecondaryButtonStyle}"
                                                         Command="{Binding Workflows.CancelEditorCommand}"
                                                         Padding="12,7"
                                                         Margin="0,0,8,0"/>
                                                 <Button Content="{loc:Str Workflows.Save}"
+                                                        AutomationProperties.AutomationId="WorkflowsSave"
                                                         Style="{StaticResource PrimaryButtonStyle}"
                                                         Command="{Binding Workflows.SaveEditorCommand}"
                                                         Padding="15,7"/>
@@ -643,7 +666,9 @@
                     <StackPanel Margin="24,0,40,24">
 
                                     <TextBlock Text="{loc:Str Workflows.Name}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
-                                    <TextBox Text="{Binding Workflows.EditName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,14"/>
+                                    <TextBox Text="{Binding Workflows.EditName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,14"
+                                             AutomationProperties.AutomationId="WorkflowsName"
+                                             AutomationProperties.Name="{loc:Str Workflows.Name}"/>
 
                                     <TextBlock Text="{loc:Str Workflows.Template}" Style="{StaticResource WorkflowPanelTitleStyle}" Margin="0,4,0,4"/>
                                     <TextBlock Text="{loc:Str Workflows.TemplateHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,10"/>
@@ -657,6 +682,8 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Button Width="194"
+                                                        AutomationProperties.AutomationId="{Binding Template, StringFormat=WorkflowsTemplate.{0}}"
+                                                        AutomationProperties.Name="{Binding Name}"
                                                         MinHeight="104"
                                                         Style="{StaticResource WorkflowChoiceButtonStyle}"
                                                         Command="{Binding DataContext.Workflows.SelectTemplateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -712,6 +739,8 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Button Width="150"
+                                                        AutomationProperties.AutomationId="{Binding Mode, StringFormat=WorkflowsTriggerMode.{0}}"
+                                                        AutomationProperties.Name="{Binding DisplayName}"
                                                         MinHeight="70"
                                                         Style="{StaticResource WorkflowChoiceButtonStyle}"
                                                         Command="{Binding DataContext.Workflows.SelectTriggerModeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -750,14 +779,17 @@
                                                        Margin="0,0,0,10"/>
                                             <WrapPanel>
                                                 <CheckBox Content="{loc:Str Workflows.TriggerApp}"
+                                                          AutomationProperties.AutomationId="WorkflowsTriggerApp"
                                                           IsChecked="{Binding Workflows.EditAppTriggerEnabled}"
                                                           Foreground="{StaticResource TextBrush}"
                                                           Margin="0,0,18,8"/>
                                                 <CheckBox Content="{loc:Str Workflows.TriggerWebsite}"
+                                                          AutomationProperties.AutomationId="WorkflowsTriggerWebsite"
                                                           IsChecked="{Binding Workflows.EditWebsiteTriggerEnabled}"
                                                           Foreground="{StaticResource TextBrush}"
                                                           Margin="0,0,18,8"/>
                                                 <CheckBox Content="{loc:Str Workflows.TriggerHotkey}"
+                                                          AutomationProperties.AutomationId="WorkflowsTriggerHotkey"
                                                           IsChecked="{Binding Workflows.EditHotkeyTriggerEnabled}"
                                                           Foreground="{StaticResource TextBrush}"
                                                           Margin="0,0,18,8"/>
@@ -774,6 +806,8 @@
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding}" Foreground="#D6DEE9" FontSize="10.5"/>
                                                             <Button Style="{StaticResource WorkflowChipCloseButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding StringFormat=WorkflowsRemoveProcess.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Workflows.Remove}"
                                                                     Command="{Binding DataContext.Workflows.RemoveProcessNameChipCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Text="&#xE711;"
@@ -789,16 +823,21 @@
                                         <Grid Margin="0,0,0,10">
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                             <TextBox x:Name="ProcessNameInputBox"
+                                                     AutomationProperties.AutomationId="WorkflowsProcessName"
+                                                     AutomationProperties.Name="{loc:Str Workflows.TriggerApp}"
                                                      Text="{Binding Workflows.ProcessNameInput, UpdateSourceTrigger=PropertyChanged}"
                                                      Style="{StaticResource WorkflowInputTextBoxStyle}"
                                                      KeyDown="ProcessNameInputBox_KeyDown"/>
                                             <Button Grid.Column="1"
+                                                    AutomationProperties.AutomationId="WorkflowsAddProcess"
                                                     Content="{loc:Str Workflows.Add}"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Command="{Binding Workflows.AddProcessNameChipCommand}"
                                                     Margin="8,0,0,0"
                                                     Padding="12,6"/>
                                             <Button Grid.Column="2"
+                                                    AutomationProperties.AutomationId="WorkflowsOpenAppPicker"
+                                                    AutomationProperties.Name="{loc:Str Workflows.AppPickerOpen}"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Command="{Binding Workflows.OpenAppPickerCommand}"
                                                     Margin="8,0,0,0"
@@ -835,6 +874,8 @@
                                                                        Margin="0,0,8,0"
                                                                        VerticalAlignment="Center"/>
                                                             <TextBox Grid.Column="1"
+                                                                     AutomationProperties.AutomationId="WorkflowsAppPickerSearch"
+                                                                     AutomationProperties.Name="{loc:Str Workflows.TriggerApp}"
                                                                      Text="{Binding Workflows.AppPickerSearchText, UpdateSourceTrigger=PropertyChanged}"
                                                                      BorderThickness="0"
                                                                      Background="Transparent"
@@ -844,6 +885,8 @@
                                                         </Grid>
                                                     </Border>
                                                     <Button Grid.Column="1"
+                                                            AutomationProperties.AutomationId="WorkflowsRefreshAppPicker"
+                                                            AutomationProperties.Name="{loc:Str Workflows.AppPickerRefresh}"
                                                             Style="{StaticResource SecondaryButtonStyle}"
                                                             Command="{Binding Workflows.RefreshAppPickerCommand}"
                                                             Margin="8,0,0,0"
@@ -852,6 +895,8 @@
                                                         <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets"/>
                                                     </Button>
                                                     <Button Grid.Column="2"
+                                                            AutomationProperties.AutomationId="WorkflowsCloseAppPicker"
+                                                            AutomationProperties.Name="{loc:Str Workflows.AppPickerClose}"
                                                             Style="{StaticResource SecondaryButtonStyle}"
                                                             Command="{Binding Workflows.CloseAppPickerCommand}"
                                                             Margin="8,0,0,0"
@@ -871,6 +916,8 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Button Style="{StaticResource WorkflowPickerRowButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding ProcessName, StringFormat=WorkflowsAppPicker.{0}}"
+                                                                    AutomationProperties.Name="{Binding DisplayName}"
                                                                     Command="{Binding DataContext.Workflows.ToggleAppPickerOptionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}"
                                                                     Tag="{Binding IsSelected}">
@@ -955,6 +1002,8 @@
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding}" Foreground="#D6DEE9" FontSize="10.5"/>
                                                             <Button Style="{StaticResource WorkflowChipCloseButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding StringFormat=WorkflowsRemoveWebsite.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Workflows.Remove}"
                                                                     Command="{Binding DataContext.Workflows.RemoveWebsitePatternChipCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Text="&#xE711;"
@@ -970,16 +1019,21 @@
                                         <Grid Margin="0,0,0,10">
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                             <TextBox x:Name="WebsitePatternInputBox"
+                                                     AutomationProperties.AutomationId="WorkflowsWebsitePattern"
+                                                     AutomationProperties.Name="{loc:Str Workflows.TriggerWebsite}"
                                                      Text="{Binding Workflows.WebsitePatternInput, UpdateSourceTrigger=PropertyChanged}"
                                                      Style="{StaticResource WorkflowInputTextBoxStyle}"
                                                      KeyDown="WebsitePatternInputBox_KeyDown"/>
                                             <Button Grid.Column="1"
+                                                    AutomationProperties.AutomationId="WorkflowsAddWebsite"
                                                     Content="{loc:Str Workflows.Add}"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Command="{Binding Workflows.AddWebsitePatternChipCommand}"
                                                     Margin="8,0,0,0"
                                                     Padding="12,6"/>
                                             <Button Grid.Column="2"
+                                                    AutomationProperties.AutomationId="WorkflowsUseCurrentWebsite"
+                                                    AutomationProperties.Name="{loc:Str Workflows.DomainUseCurrent}"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Command="{Binding Workflows.AddCurrentWebsiteDomainCommand}"
                                                     Margin="8,0,0,0"
@@ -1045,6 +1099,8 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Button Style="{StaticResource WorkflowPickerRowButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding Domain, StringFormat=WorkflowsAddDomain.{0}}"
+                                                                    AutomationProperties.Name="{Binding Domain}"
                                                                     Command="{Binding DataContext.Workflows.AddDomainSuggestionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}">
                                                                 <Grid>
@@ -1098,6 +1154,8 @@
                                     <StackPanel Visibility="{Binding Workflows.ShowHotkeyTriggerEditor, Converter={StaticResource BoolToVis}}" Margin="0,0,0,14">
                                         <TextBlock Text="{loc:Str Workflows.HotkeyBehavior}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                         <ComboBox ItemsSource="{Binding Workflows.HotkeyBehaviorOptions}"
+                                                  AutomationProperties.AutomationId="WorkflowsHotkeyBehavior"
+                                                  AutomationProperties.Name="{loc:Str Workflows.HotkeyBehavior}"
                                                   SelectedValue="{Binding Workflows.EditHotkeyBehavior}"
                                                   SelectedValuePath="Behavior"
                                                   DisplayMemberPath="DisplayName"
@@ -1115,6 +1173,8 @@
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding}" Foreground="#D6DEE9" FontSize="10.5"/>
                                                             <Button Style="{StaticResource WorkflowChipCloseButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding StringFormat=WorkflowsRemoveHotkey.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Workflows.Remove}"
                                                                     Command="{Binding DataContext.Workflows.RemoveHotkeyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}"
                                                                     ToolTip="{loc:Str Workflows.Remove}">
@@ -1128,7 +1188,8 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <controls:HotkeyRecorderControl Hotkey="{Binding Workflows.NewHotkey, Mode=TwoWay}"
+                                        <controls:HotkeyRecorderControl AutomationProperties.AutomationId="WorkflowsAddHotkey"
+                                                                        Hotkey="{Binding Workflows.NewHotkey, Mode=TwoWay}"
                                                                         RecordedCommand="{Binding Workflows.AddHotkeyCommand}"
                                                                         UseAddGlyph="True"
                                                                         ToolTip="{loc:Str Workflows.AddHotkey}"
@@ -1163,12 +1224,16 @@
                                     <TextBlock Text="{loc:Str Workflows.Behavior}" Style="{StaticResource WorkflowPanelTitleStyle}"/>
                                     <TextBlock Text="{loc:Str Workflows.TranslationTarget}" Style="{StaticResource WorkflowFieldLabelStyle}" Visibility="{Binding Workflows.IsTranslationTemplate, Converter={StaticResource BoolToVis}}"/>
                                     <TextBox Text="{Binding Workflows.EditTranslationTargetLanguage, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.AutomationId="WorkflowsTranslationTarget"
+                                             AutomationProperties.Name="{loc:Str Workflows.TranslationTarget}"
                                              Style="{StaticResource WorkflowInputTextBoxStyle}"
                                              Margin="0,0,0,14"
                                              Visibility="{Binding Workflows.IsTranslationTemplate, Converter={StaticResource BoolToVis}}"/>
 
                                     <TextBlock Text="{loc:Str Workflows.CustomInstruction}" Style="{StaticResource WorkflowFieldLabelStyle}" Visibility="{Binding Workflows.IsCustomTemplate, Converter={StaticResource BoolToVis}}"/>
                                     <TextBox Text="{Binding Workflows.EditCustomInstruction, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.AutomationId="WorkflowsCustomInstruction"
+                                             AutomationProperties.Name="{loc:Str Workflows.CustomInstruction}"
                                              AcceptsReturn="True"
                                              MinHeight="88"
                                              Style="{StaticResource WorkflowTextAreaStyle}"
@@ -1177,6 +1242,8 @@
 
                                     <TextBlock Text="{loc:Str Workflows.FineTuning}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <TextBox Text="{Binding Workflows.EditFineTuning, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.AutomationId="WorkflowsFineTuning"
+                                             AutomationProperties.Name="{loc:Str Workflows.FineTuning}"
                                              AcceptsReturn="True"
                                              MinHeight="70"
                                              Style="{StaticResource WorkflowTextAreaStyle}"
@@ -1185,6 +1252,8 @@
                                     <TextBlock Text="{loc:Str Workflows.AiRouting}" Style="{StaticResource WorkflowPanelTitleStyle}" Margin="0,2,0,4"/>
                                     <TextBlock Text="{loc:Str Workflows.AiRoutingHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,8"/>
                                     <ComboBox ItemsSource="{Binding Workflows.AvailableEditProviders}"
+                                              AutomationProperties.AutomationId="WorkflowsAiProvider"
+                                              AutomationProperties.Name="{loc:Str Workflows.AiRouting}"
                                               SelectedItem="{Binding Workflows.SelectedEditProvider}"
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource WorkflowComboBoxStyle}"
@@ -1223,6 +1292,8 @@
                                                 <StackPanel>
                                                     <TextBlock Text="{loc:Str Workflows.SpeechModel}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                                     <ComboBox ItemsSource="{Binding Workflows.AvailableModelOptions}"
+                                                              AutomationProperties.AutomationId="WorkflowsSpeechModel"
+                                                              AutomationProperties.Name="{loc:Str Workflows.SpeechModel}"
                                                               SelectedValue="{Binding Workflows.EditTranscriptionModelOverride}"
                                                               SelectedValuePath="Id"
                                                               DisplayMemberPath="DisplayName"
@@ -1231,6 +1302,8 @@
                                                 <StackPanel Grid.Column="2">
                                                     <TextBlock Text="{loc:Str Workflows.SpokenLanguage}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                                     <ComboBox ItemsSource="{Binding Workflows.LanguageOptions}"
+                                                              AutomationProperties.AutomationId="WorkflowsSpokenLanguage"
+                                                              AutomationProperties.Name="{loc:Str Workflows.SpokenLanguage}"
                                                               SelectedValue="{Binding Workflows.EditLanguage}"
                                                               SelectedValuePath="Value"
                                                               DisplayMemberPath="DisplayName"
@@ -1241,6 +1314,8 @@
                                             <StackPanel Visibility="{Binding Workflows.SupportsSelectedTranscriptionTranslation, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="{loc:Str Workflows.EngineTask}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                                 <ComboBox ItemsSource="{Binding Workflows.TaskOptions}"
+                                                          AutomationProperties.AutomationId="WorkflowsEngineTask"
+                                                          AutomationProperties.Name="{loc:Str Workflows.EngineTask}"
                                                           SelectedValue="{Binding Workflows.EditTask}"
                                                           SelectedValuePath="Value"
                                                           DisplayMemberPath="DisplayName"
@@ -1257,18 +1332,25 @@
 
                                     <TextBlock Text="{loc:Str Workflows.Output}" Style="{StaticResource WorkflowPanelTitleStyle}"/>
                                     <TextBlock Text="{loc:Str Workflows.OutputFormat}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
-                                    <TextBox Text="{Binding Workflows.EditOutputFormat, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,12"/>
+                                    <TextBox Text="{Binding Workflows.EditOutputFormat, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,12"
+                                             AutomationProperties.AutomationId="WorkflowsOutputFormat"
+                                             AutomationProperties.Name="{loc:Str Workflows.OutputFormat}"/>
                                     <TextBlock Text="{loc:Str Workflows.NumberFormatting}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding Workflows.NumberNormalizationOptions}"
+                                              AutomationProperties.AutomationId="WorkflowsNumberFormatting"
+                                              AutomationProperties.Name="{loc:Str Workflows.NumberFormatting}"
                                               SelectedValue="{Binding Workflows.EditNumberNormalizationMode}"
                                               SelectedValuePath="Mode"
                                               DisplayMemberPath="DisplayName"
                                               Style="{StaticResource WorkflowComboBoxStyle}"
                                               Margin="0,0,0,6"/>
                                     <TextBlock Text="{loc:Str Workflows.NumberFormattingHint}" Style="{StaticResource HintStyle}" Margin="0,0,0,12"/>
-                                    <CheckBox Content="{loc:Str Workflows.AutoEnter}" IsChecked="{Binding Workflows.EditAutoEnter}" Margin="0,0,0,12"/>
+                                    <CheckBox Content="{loc:Str Workflows.AutoEnter}" IsChecked="{Binding Workflows.EditAutoEnter}" Margin="0,0,0,12"
+                                              AutomationProperties.AutomationId="WorkflowsAutoEnter"/>
                                     <TextBlock Text="{loc:Str Workflows.ActionPlugin}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <ComboBox ItemsSource="{Binding Workflows.ActionPluginOptions}"
+                                              AutomationProperties.AutomationId="WorkflowsActionPlugin"
+                                              AutomationProperties.Name="{loc:Str Workflows.ActionPlugin}"
                                               SelectedValue="{Binding Workflows.EditTargetActionPluginId}"
                                               SelectedValuePath="Id"
                                               DisplayMemberPath="DisplayName"

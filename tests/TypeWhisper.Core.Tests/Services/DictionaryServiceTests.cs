@@ -251,6 +251,7 @@ public class DictionaryServiceTests : IDisposable
         Assert.Equal(DictionaryEntryType.Correction, _sut.Entries[0].EntryType);
         Assert.Equal("kubernets", _sut.Entries[0].Original);
         Assert.Equal("Kubernetes", _sut.Entries[0].Replacement);
+        Assert.Equal(DictionaryEntrySource.Manual, _sut.Entries[0].Source);
     }
 
     [Fact]
@@ -277,6 +278,17 @@ public class DictionaryServiceTests : IDisposable
         Assert.Equal(["the", "receive"], learned.Select(c => c.Replacement).ToArray());
         Assert.Equal(2, _sut.Entries.Count);
         Assert.All(_sut.Entries, entry => Assert.Equal(DictionaryEntryType.Correction, entry.EntryType));
+        Assert.All(_sut.Entries, entry => Assert.Equal(DictionaryEntrySource.AutoLearned, entry.Source));
+    }
+
+    [Fact]
+    public void AutoLearnedSource_SurvivesRestart()
+    {
+        _sut.LearnCorrections([new CorrectionSuggestion("teh", "the")]);
+
+        var reloaded = new DictionaryService(_filePath);
+
+        Assert.Equal(DictionaryEntrySource.AutoLearned, Assert.Single(reloaded.Entries).Source);
     }
 
     [Fact]
@@ -449,6 +461,22 @@ public class DictionaryServiceTests : IDisposable
         var entry = Assert.Single(sut.Entries);
 
         Assert.Equal(createdAt, entry.UpdatedAt);
+    }
+
+    [Fact]
+    public void MissingAndUnknownSourcesDefaultToManual()
+    {
+        File.WriteAllText(_filePath, """
+        [
+          { "Id": "missing", "EntryType": 1, "Original": "teh", "Replacement": "the" },
+          { "Id": "unknown", "EntryType": 1, "Original": "recieve", "Replacement": "receive", "Source": "futureValue" }
+        ]
+        """);
+
+        var entries = new DictionaryService(_filePath).Entries;
+
+        Assert.Equal(2, entries.Count);
+        Assert.All(entries, entry => Assert.Equal(DictionaryEntrySource.Manual, entry.Source));
     }
 
     [Fact]

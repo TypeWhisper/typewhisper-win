@@ -255,6 +255,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/automation/insert-text", "POST") => await HandleAutomationInsertText(request, ct),
                 ("/v1/automation/commit-correction-learning", "POST") =>
                     await HandleAutomationCommitCorrectionLearning(),
+                ("/v1/automation/open-settings", "POST") =>
+                    await HandleAutomationOpenSettings(request),
                 ("/v1/recorder/start", "POST") => await HandleRecorderStart(request, ct),
                 ("/v1/recorder/stop", "POST") => await HandleRecorderStop(ct),
                 ("/v1/recorder/status", "GET") => HandleRecorderStatus(),
@@ -678,6 +680,24 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { signaled = true });
     }
 
+    private async Task<HttpApiResponse> HandleAutomationOpenSettings(HttpApiRequest request)
+    {
+        if (!Enum.TryParse<SettingsRoute>(request.QueryString["route"], true, out var route)
+            || !Enum.IsDefined(route))
+            return Error(400, "Missing or invalid 'route'");
+
+        if (Application.Current is not App app)
+            return Error(503, "Application is unavailable");
+
+        await InvokeOnDispatcherAsync(() =>
+        {
+            app.ShowSettingsWindow(route);
+            return Task.FromResult(true);
+        });
+
+        return Json(new { opened = true, route = route.ToString() });
+    }
+
     private async Task<HttpApiResponse> HandleRecorderStart(HttpApiRequest request, CancellationToken ct)
     {
         if (_recorder is null)
@@ -925,6 +945,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             ("/v1/dictation/transcription", "GET") => true,
             ("/v1/automation/insert-text", "POST") => automationEnabled,
             ("/v1/automation/commit-correction-learning", "POST") => automationEnabled,
+            ("/v1/automation/open-settings", "POST") => automationEnabled,
             ("/v1/recorder/start", "POST") => true,
             ("/v1/recorder/stop", "POST") => true,
             ("/v1/recorder/status", "GET") => true,
@@ -985,7 +1006,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private static string? Header(IReadOnlyDictionary<string, string> headers, string name) =>
         headers.TryGetValue(name, out var value) ? value : null;
 
-    private static bool IsAutomationEnvironmentEnabled()
+    internal static bool IsAutomationEnvironmentEnabled()
     {
         var value = Environment.GetEnvironmentVariable("TYPEWHISPER_AUTOMATION");
         return string.Equals(value, "1", StringComparison.Ordinal) ||

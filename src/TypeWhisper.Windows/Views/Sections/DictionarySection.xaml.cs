@@ -30,6 +30,15 @@ public partial class DictionarySection : UserControl
         e.Handled = true;
     }
 
+    private void DataManagement_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
+    }
+
     private void EditOverlay_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
