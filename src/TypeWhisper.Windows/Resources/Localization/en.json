@@ -390,6 +390,8 @@
   "Dictionary.Term": "Term",
   "Dictionary.ReplacementPlaceholder": "Replacement (optional)",
   "Dictionary.Add": "Add",
+  "Dictionary.AddAlias": "Add alias",
+  "Dictionary.ToggleAliases": "Expand or collapse aliases",
   "Dictionary.UsageCount": "{0}x used",
   "Dictionary.PackTerms": "Terms",
   "Dictionary.EditEntry": "Edit Entry",

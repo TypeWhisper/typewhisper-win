@@ -390,6 +390,8 @@
   "Dictionary.Term": "Begriff",
   "Dictionary.ReplacementPlaceholder": "Ersetzung (optional)",
   "Dictionary.Add": "Hinzuf\u00fcgen",
+  "Dictionary.AddAlias": "Alias hinzuf\u00fcgen",
+  "Dictionary.ToggleAliases": "Aliase ein- oder ausklappen",
   "Dictionary.UsageCount": "{0}x verwendet",
   "Dictionary.PackTerms": "Begriffe",
   "Dictionary.EditEntry": "Eintrag bearbeiten",

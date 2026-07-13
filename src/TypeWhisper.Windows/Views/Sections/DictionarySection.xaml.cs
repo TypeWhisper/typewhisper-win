@@ -24,6 +24,12 @@ public partial class DictionarySection : UserControl
         }
     }
 
+    private void PrepareAlias_Click(object sender, RoutedEventArgs e)
+    {
+        OriginalBox.Focus();
+        e.Handled = true;
+    }
+
     private void EditOverlay_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)

@@ -366,7 +366,7 @@
                             <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Dictionary.FilteredEntries.IsEmpty}" Value="True">
+                                    <DataTrigger Binding="{Binding Dictionary.EntryCount}" Value="0">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -440,173 +440,276 @@
                     </StackPanel>
 
                     <!-- Entry Cards -->
-                    <ItemsControl ItemsSource="{Binding Dictionary.FilteredEntries}">
+                    <ItemsControl ItemsSource="{Binding Dictionary.VisibleEntries}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <!-- Outer wrapper for opacity on disabled -->
-                                <Border Margin="0,0,0,6">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Opacity" Value="1"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                                    <Setter Property="Opacity" Value="0.5"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
+                                <Grid Margin="0,0,0,6">
+                                    <!-- Terms, empty corrections, and single-alias corrections stay lightweight. -->
+                                    <Border Visibility="{Binding IsGroupedCorrection, Converter={StaticResource InverseBoolToVis}}">
+                                        <Border DataContext="{Binding PrimaryEntry}">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Opacity" Value="1"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.5"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Border Background="{StaticResource InputBackgroundBrush}"
+                                                    BorderBrush="{StaticResource BorderBrush}"
+                                                    BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="3"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" CornerRadius="8,0,0,8">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#5B9BD5"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding EntryType}" Value="Correction">
+                                                                        <Setter Property="Background" Value="#D4915B"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+                                                    <Grid Grid.Column="1" Margin="12,10">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
+                                                                        VerticalAlignment="Center">
+                                                                    <Border.Style>
+                                                                        <Style TargetType="Border">
+                                                                            <Setter Property="Background" Value="#2A3A5A"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding EntryType}" Value="Correction">
+                                                                                    <Setter Property="Background" Value="#3A2A1A"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Border.Style>
+                                                                    <TextBlock FontSize="11" FontWeight="Medium">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Foreground" Value="#5B9BD5"/>
+                                                                                <Setter Property="Text" Value="{loc:Str Dictionary.Term}"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding EntryType}" Value="Correction">
+                                                                                        <Setter Property="Foreground" Value="#D4915B"/>
+                                                                                        <Setter Property="Text" Value="{loc:Str Dictionary.Correction}"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </Border>
+                                                                <TextBlock Text="{Binding Original}" Foreground="{StaticResource TextBrush}"
+                                                                           FontSize="13" VerticalAlignment="Center"/>
+                                                                <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
+                                                                            VerticalAlignment="Center"
+                                                                            Visibility="{Binding Replacement, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                                    <TextBlock Text="→" Foreground="#D4915B" FontSize="13" FontWeight="Medium"/>
+                                                                    <TextBlock Text="{Binding Replacement}" Foreground="{StaticResource TextBrush}"
+                                                                               FontSize="13" FontWeight="Medium" Margin="4,0,0,0"/>
+                                                                </StackPanel>
+                                                                <Border CornerRadius="3" Padding="4,1" Margin="8,0,0,0"
+                                                                        Background="#333333" VerticalAlignment="Center"
+                                                                        Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
+                                                                    <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
+                                                                               ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock FontSize="11" Foreground="{StaticResource HintBrush}" Margin="0,2,0,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding UsageCount}" Value="0">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                                <TextBlock.Text>
+                                                                    <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                                                        <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.UsageCount]"/>
+                                                                        <Binding Path="UsageCount"/>
+                                                                    </MultiBinding>
+                                                                </TextBlock.Text>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Style="{StaticResource IconButtonStyle}"
+                                                                    ToolTip="{loc:Str Dictionary.AddAlias}"
+                                                                    Visibility="{Binding Replacement, Converter={StaticResource BoolToVis}}"
+                                                                    Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding Replacement}"
+                                                                    Click="PrepareAlias_Click">
+                                                                <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                                            </Button>
+                                                            <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Edit}"
+                                                                    Command="{Binding DataContext.Dictionary.StartEditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                                            </Button>
+                                                            <ui:ToggleSwitch IsChecked="{Binding IsEnabled, Mode=OneWay}" Margin="4,0"
+                                                                             Command="{Binding DataContext.Dictionary.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                             CommandParameter="{Binding}"/>
+                                                            <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Delete}"
+                                                                    Command="{Binding DataContext.Dictionary.DeleteEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}">
+                                                                <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                                           Foreground="{StaticResource DangerBrush}"/>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </Border>
+                                    </Border>
 
-                                    <!-- Card with accent stripe -->
+                                    <!-- Multi-alias corrections use the same compact card shape as single entries. -->
                                     <Border Background="{StaticResource InputBackgroundBrush}"
                                             BorderBrush="{StaticResource BorderBrush}"
-                                            BorderThickness="1" CornerRadius="8"
-                                            ClipToBounds="True">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#555555"/>
-                                                        <Setter Property="Background" Value="#333333"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-
+                                            BorderThickness="1" CornerRadius="8" ClipToBounds="True"
+                                            Visibility="{Binding IsGroupedCorrection, Converter={StaticResource BoolToVis}}">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="3"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-
-                                            <!-- Accent stripe -->
-                                            <Border Grid.Column="0" CornerRadius="8,0,0,8">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="#5B9BD5"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding EntryType}" Value="Correction">
-                                                                <Setter Property="Background" Value="#D4915B"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                            </Border>
-
-                                            <!-- Card content -->
-                                            <Grid Grid.Column="1" Margin="12,10">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <!-- Left: Type badge + content -->
-                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <!-- Type Badge -->
-                                                        <Border CornerRadius="4" Padding="6,2" Margin="0,0,8,0"
-                                                                VerticalAlignment="Center">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="#2A3A5A"/>
+                                            <Border Grid.Column="0" Background="#D4915B" CornerRadius="8,0,0,8"/>
+                                            <StackPanel Grid.Column="1">
+                                                <Grid Margin="12,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Background="#3A2A1A" CornerRadius="4"
+                                                            Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Str Dictionary.Correction}" Foreground="#D4915B"
+                                                                   FontSize="11" FontWeight="Medium"/>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Replacement}"
+                                                               Foreground="{StaticResource TextBrush}" FontSize="13"
+                                                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                    <Border Grid.Column="2" Background="#252B33" CornerRadius="10"
+                                                            Padding="7,2" Margin="8,0,4,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Entries.Count}" Foreground="{StaticResource HintBrush}"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                    <Button Grid.Column="3" Style="{StaticResource IconButtonStyle}"
+                                                            ToolTip="{loc:Str Dictionary.AddAlias}"
+                                                            Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Replacement}"
+                                                            Click="PrepareAlias_Click">
+                                                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                                    </Button>
+                                                    <Button Grid.Column="4" Style="{StaticResource IconButtonStyle}"
+                                                            ToolTip="{loc:Str Dictionary.ToggleAliases}"
+                                                            AutomationProperties.Name="{loc:Str Dictionary.ToggleAliases}"
+                                                            Command="{Binding ToggleCommand}">
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="12">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="&#xE70D;"/>
                                                                     <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding EntryType}" Value="Correction">
-                                                                            <Setter Property="Background" Value="#3A2A1A"/>
+                                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                            <Setter Property="Text" Value="&#xE70E;"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
-                                                            </Border.Style>
-                                                            <TextBlock FontSize="11" FontWeight="Medium">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Foreground" Value="#5B9BD5"/>
-                                                                        <Setter Property="Text" Value="{loc:Str Dictionary.Term}"/>
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding EntryType}" Value="Correction">
-                                                                                <Setter Property="Foreground" Value="#D4915B"/>
-                                                                                <Setter Property="Text" Value="{loc:Str Dictionary.Correction}"/>
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                        </Border>
-
-                                                        <!-- Original text -->
-                                                        <TextBlock Text="{Binding Original}"
-                                                                   Foreground="{StaticResource TextBrush}"
-                                                                   FontSize="13" VerticalAlignment="Center"/>
-
-                                                        <!-- Arrow + Replacement (for corrections) -->
-                                                        <StackPanel Orientation="Horizontal" Margin="6,0,0,0"
-                                                                    VerticalAlignment="Center"
-                                                                    Visibility="{Binding Replacement, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
-                                                            <TextBlock Text="→" Foreground="#D4915B" FontSize="13"
-                                                                       FontWeight="Medium"/>
-                                                            <TextBlock Text="{Binding Replacement}"
-                                                                       Foreground="{StaticResource TextBrush}"
-                                                                       FontSize="13" FontWeight="Medium" Margin="4,0,0,0"/>
-                                                        </StackPanel>
-
-                                                        <!-- Case-sensitive indicator -->
-                                                        <Border CornerRadius="3" Padding="4,1" Margin="8,0,0,0"
-                                                                Background="#333333" VerticalAlignment="Center"
-                                                                Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
-                                                            <TextBlock Text="Aa" FontSize="10"
-                                                                       Foreground="{StaticResource HintBrush}"
-                                                                       ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
-                                                        </Border>
-                                                    </StackPanel>
-
-                                                    <!-- Usage count if > 0 -->
-                                                    <TextBlock FontSize="11" Foreground="{StaticResource HintBrush}"
-                                                               Margin="0,2,0,0">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Button>
+                                                </Grid>
+                                                <ItemsControl ItemsSource="{Binding Entries}"
+                                                              Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                                                            Padding="12,8">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Opacity" Value="1"/>
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding UsageCount}" Value="0">
-                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                        <Setter Property="Opacity" Value="0.5"/>
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                        <TextBlock.Text>
-                                                            <MultiBinding Converter="{StaticResource LocalizedFormat}">
-                                                                <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.UsageCount]"/>
-                                                                <Binding Path="UsageCount"/>
-                                                            </MultiBinding>
-                                                        </TextBlock.Text>
-                                                    </TextBlock>
-                                                </StackPanel>
-
-                                                <!-- Right: Actions -->
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                                            VerticalAlignment="Center">
-                                                    <!-- Edit -->
-                                                    <Button Style="{StaticResource IconButtonStyle}"
-                                                            ToolTip="{loc:Str Dictionary.Edit}"
-                                                            Command="{Binding DataContext.Dictionary.StartEditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}">
-                                                        <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
-                                                    </Button>
-                                                    <!-- Toggle -->
-                                                    <ui:ToggleSwitch IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                                              Margin="4,0"
-                                                              Command="{Binding DataContext.Dictionary.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                              CommandParameter="{Binding}"/>
-                                                    <!-- Delete -->
-                                                    <Button Style="{StaticResource IconButtonStyle}"
-                                                            ToolTip="{loc:Str Dictionary.Delete}"
-                                                            Command="{Binding DataContext.Dictionary.DeleteEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}">
-                                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
-                                                                   Foreground="{StaticResource DangerBrush}"/>
-                                                    </Button>
-                                                </StackPanel>
-                                            </Grid>
+                                                        </Border.Style>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding Original}" Foreground="{StaticResource TextBrush}"
+                                                                               FontSize="13" VerticalAlignment="Center"/>
+                                                                    <Border CornerRadius="3" Padding="4,1" Margin="8,0,0,0"
+                                                                            Background="#333333" VerticalAlignment="Center"
+                                                                            Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
+                                                                                   ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <TextBlock FontSize="11" Foreground="{StaticResource HintBrush}" Margin="0,2,0,0">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding UsageCount}" Value="0">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                    <TextBlock.Text>
+                                                                        <MultiBinding Converter="{StaticResource LocalizedFormat}">
+                                                                            <Binding Source="{x:Static loc:Loc.Instance}" Path="[Dictionary.UsageCount]"/>
+                                                                            <Binding Path="UsageCount"/>
+                                                                        </MultiBinding>
+                                                                    </TextBlock.Text>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Edit}"
+                                                                        Command="{Binding DataContext.Dictionary.StartEditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                                                                </Button>
+                                                                <ui:ToggleSwitch IsChecked="{Binding IsEnabled, Mode=OneWay}" Margin="4,0"
+                                                                                 Command="{Binding DataContext.Dictionary.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                 CommandParameter="{Binding}"/>
+                                                                <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Delete}"
+                                                                        Command="{Binding DataContext.Dictionary.DeleteEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                                               Foreground="{StaticResource DangerBrush}"/>
+                                                                </Button>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
-                                </Border>
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
