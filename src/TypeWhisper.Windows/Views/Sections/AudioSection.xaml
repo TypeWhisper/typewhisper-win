@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.AudioSection"
+             AutomationProperties.AutomationId="SettingsSection.Dictation"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -38,6 +39,8 @@
                                 <TextBlock Text="{loc:Str Dictation.DefaultModel}"
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="DictationDefaultModel"
+                                          AutomationProperties.Name="{loc:Str Dictation.DefaultModel}"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           ItemsSource="{Binding ModelManager.AvailableModelOptions}"
                                           DisplayMemberPath="DisplayName"
@@ -68,6 +71,8 @@
                                             Width="320"
                                             HorizontalAlignment="Right">
                                     <ComboBox Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                              AutomationProperties.AutomationId="DictationAcceleration"
+                                              AutomationProperties.Name="{loc:Str Models.AccelerationLabel}"
                                               ItemsSource="{Binding ModelManager.AccelerationOptions}"
                                               DisplayMemberPath="DisplayName"
                                               SelectedValuePath="Value"
@@ -84,6 +89,7 @@
                                                TextWrapping="Wrap"
                                                Visibility="{Binding ModelManager.IsAccelerationRestartRequired, Converter={StaticResource BoolToVis}}"/>
                                     <ui:Button Content="{loc:Str Models.AccelerationRestartNow}"
+                                               AutomationProperties.AutomationId="DictationAccelerationRestart"
                                                Command="{Binding ModelManager.RestartForAccelerationCommand}"
                                                Appearance="Primary"
                                                HorizontalAlignment="Right"
@@ -212,11 +218,14 @@
                                         <ColumnDefinition Width="36"/>
                                     </Grid.ColumnDefinitions>
                                     <ComboBox Grid.Column="0"
+                                              AutomationProperties.AutomationId="DictationInputDevice"
+                                              AutomationProperties.Name="{loc:Str Dictation.InputDevice}"
                                               Style="{StaticResource SettingsCompactComboBoxStyle}"
                                               ItemsSource="{Binding Settings.Microphones}"
                                               DisplayMemberPath="Name"
                                               SelectedItem="{Binding Settings.SelectedMicrophoneItem, Mode=TwoWay}"/>
                                     <ui:Button Grid.Column="2"
+                                               AutomationProperties.AutomationId="DictationAddMicrophonePriority"
                                                Width="36"
                                                Height="36"
                                                Command="{Binding Settings.AddMicrophonePriorityItemCommand}"
@@ -273,6 +282,7 @@
                                                            VerticalAlignment="Center"
                                                            TextTrimming="CharacterEllipsis"/>
                                                 <ui:Button Grid.Column="2"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=DictationRemoveMicrophone.{0}}"
                                                            Width="30"
                                                            Height="30"
                                                            Command="{Binding DataContext.Settings.RemoveMicrophonePriorityItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -305,6 +315,7 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <ui:Button Grid.Column="0"
+                                           AutomationProperties.AutomationId="DictationRefreshMicrophones"
                                            Content="{loc:Str Recording.Refresh}"
                                            Command="{Binding Settings.RefreshMicrophonesCommand}"
                                            Appearance="Secondary"
@@ -337,12 +348,15 @@
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <DockPanel Margin="0,8,0,0" LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
+                                            AutomationProperties.AutomationId="DictationAddLanguage"
                                             Margin="8,0,0,0"
                                             Padding="14,6"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Command="{Binding Settings.AddLanguageHintCommand}"
                                             Content="{loc:Str Dictation.AddLanguage}"/>
                                     <ComboBox ItemsSource="{Binding Settings.AvailableLanguageHints}"
+                                              AutomationProperties.AutomationId="DictationLanguageToAdd"
+                                              AutomationProperties.Name="{loc:Str Dictation.SpokenLanguage}"
                                               SelectedItem="{Binding Settings.SelectedLanguageHintToAdd}"
                                               DisplayMemberPath="DisplayName"/>
                                 </DockPanel>
@@ -365,18 +379,21 @@
                                                 <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}"/>
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                     <Button Margin="2,0" Padding="8,3" Content="↑"
+                                                            AutomationProperties.AutomationId="{Binding Code, StringFormat=DictationMoveLanguageEarlier.{0}}"
                                                             Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.MoveLanguageEarlier}"
                                                             AutomationProperties.Name="{loc:Str Dictation.MoveLanguageEarlier}"
                                                             Command="{Binding DataContext.Settings.MoveLanguageHintEarlierCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Margin="2,0" Padding="8,3" Content="↓"
+                                                            AutomationProperties.AutomationId="{Binding Code, StringFormat=DictationMoveLanguageLater.{0}}"
                                                             Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.MoveLanguageLater}"
                                                             AutomationProperties.Name="{loc:Str Dictation.MoveLanguageLater}"
                                                             Command="{Binding DataContext.Settings.MoveLanguageHintLaterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                             CommandParameter="{Binding}"/>
                                                     <Button Margin="2,0" Padding="8,3" Content="×"
+                                                            AutomationProperties.AutomationId="{Binding Code, StringFormat=DictationRemoveLanguage.{0}}"
                                                             Style="{StaticResource SecondaryButtonStyle}"
                                                             ToolTip="{loc:Str Dictation.RemoveLanguage}"
                                                             AutomationProperties.Name="{loc:Str Dictation.RemoveLanguage}"
@@ -406,6 +423,8 @@
                                 <TextBlock Text="{loc:Str General.TargetLanguage}"
                                            Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="DictationTargetLanguage"
+                                          AutomationProperties.Name="{loc:Str General.TargetLanguage}"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           ItemsSource="{Binding Settings.TranslationTargetOptions}"
                                           SelectedValue="{Binding Settings.TranslationTargetLanguage}"
@@ -437,7 +456,9 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Dictation.AutoPasteAfter}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AutoPaste}" OnContent="" OffContent=""/>
+                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AutoPaste}" OnContent="" OffContent=""
+                                                 AutomationProperties.AutomationId="DictationAutoPaste"
+                                                 AutomationProperties.Name="{loc:Str Dictation.AutoPasteAfter}"/>
                             </Grid>
                         </Border>
                         <Border Grid.Row="1" Background="#18FFFFFF"/>
@@ -445,7 +466,9 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str General.WhisperMode}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.WhisperModeEnabled}" OnContent="" OffContent=""/>
+                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.WhisperModeEnabled}" OnContent="" OffContent=""
+                                                 AutomationProperties.AutomationId="DictationWhisperMode"
+                                                 AutomationProperties.Name="{loc:Str General.WhisperMode}"/>
                             </Grid>
                         </Border>
                         <Border Grid.Row="3" Background="#18FFFFFF"/>
@@ -453,7 +476,9 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str General.SoundFeedback}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SoundFeedbackEnabled}" OnContent="" OffContent=""/>
+                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.SoundFeedbackEnabled}" OnContent="" OffContent=""
+                                                 AutomationProperties.AutomationId="DictationSoundFeedback"
+                                                 AutomationProperties.Name="{loc:Str General.SoundFeedback}"/>
                             </Grid>
                         </Border>
                         <Border Grid.Row="5" Background="#18FFFFFF"/>
@@ -468,6 +493,8 @@
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="DictationShortQuietAggressive"
+                                                 AutomationProperties.Name="{loc:Str Dictation.ShortQuietAggressive}"
                                                  IsChecked="{Binding Settings.TranscribeShortQuietClipsAggressively}"
                                                  OnContent=""
                                                  OffContent=""/>
@@ -485,6 +512,8 @@
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="DictationNormalizeNumbers"
+                                                 AutomationProperties.Name="{loc:Str Dictation.NormalizeNumbers}"
                                                  IsChecked="{Binding Settings.TranscriptionNumberNormalizationEnabled}"
                                                  OnContent=""
                                                  OffContent=""/>
@@ -510,7 +539,9 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Dictation.ReduceOtherAudio}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AudioDuckingEnabled}" OnContent="" OffContent=""/>
+                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.AudioDuckingEnabled}" OnContent="" OffContent=""
+                                                 AutomationProperties.AutomationId="DictationAudioDucking"
+                                                 AutomationProperties.Name="{loc:Str Dictation.ReduceOtherAudio}"/>
                             </Grid>
                         </Border>
 
@@ -524,6 +555,8 @@
                                     <Run Text="{Binding Settings.AudioDuckingLevel, StringFormat='{}{0:P0}'}"/>
                                 </TextBlock>
                                 <Slider Minimum="0"
+                                        AutomationProperties.AutomationId="DictationAudioDuckingLevel"
+                                        AutomationProperties.Name="{loc:Str Dictation.DuckingLevel}"
                                         Maximum="0.5"
                                         TickFrequency="0.05"
                                         IsSnapToTickEnabled="True"
@@ -539,7 +572,9 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Dictation.PauseMediaPlayback}" Style="{StaticResource SettingsRowLabelStyle}"/>
-                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PauseMediaDuringRecording}" OnContent="" OffContent=""/>
+                                <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.PauseMediaDuringRecording}" OnContent="" OffContent=""
+                                                 AutomationProperties.AutomationId="DictationPauseMedia"
+                                                 AutomationProperties.Name="{loc:Str Dictation.PauseMediaPlayback}"/>
                             </Grid>
                         </Border>
                     </Grid>

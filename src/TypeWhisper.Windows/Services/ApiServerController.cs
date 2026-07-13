@@ -10,16 +10,21 @@ public sealed class ApiServerController : IDisposable
 {
     private readonly ILocalApiServer _server;
     private readonly ISettingsService _settings;
+    private readonly Func<bool> _automationEnabledProvider;
     private bool _initialized;
     private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the ApiServerController class.
     /// </summary>
-    public ApiServerController(ILocalApiServer server, ISettingsService settings)
+    public ApiServerController(
+        ILocalApiServer server,
+        ISettingsService settings,
+        Func<bool>? automationEnabledProvider = null)
     {
         _server = server;
         _settings = settings;
+        _automationEnabledProvider = automationEnabledProvider ?? HttpApiService.IsAutomationEnvironmentEnabled;
     }
 
     /// <summary>
@@ -62,7 +67,7 @@ public sealed class ApiServerController : IDisposable
 
     private void Apply(AppSettings settings)
     {
-        if (!settings.ApiServerEnabled)
+        if (!settings.ApiServerEnabled && !_automationEnabledProvider())
         {
             Stop(clearError: true);
             return;
@@ -110,8 +115,7 @@ public sealed class ApiServerController : IDisposable
 
     private void Stop(bool clearError)
     {
-        if (_server.IsRunning)
-            _server.Stop();
+        _server.Stop();
 
         ActivePort = null;
         if (clearError)

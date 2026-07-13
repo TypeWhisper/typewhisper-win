@@ -19,6 +19,11 @@ namespace TypeWhisper.Windows.ViewModels;
 /// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
+    private static readonly string[] CurlExampleKeys =
+        ["Status", "Models", "TranscribeFile", "StartDictation", "StopDictation"];
+    private static readonly string[] CliExampleKeys =
+        ["Help", "Status", "Models", "TranscribeFile", "TranscribeGermanJson"];
+
     private readonly ISettingsService _settings;
     private readonly AudioRecordingService _audio;
     private readonly ApiServerController _apiServer;
@@ -1075,10 +1080,10 @@ public partial class SettingsViewModel : ObservableObject
     private void RefreshApiExamples()
     {
         ReplaceCollection(CurlExamples, CliInstallService.BuildCurlExamples(ApiServerPort)
-            .Select(command => new CommandExample(command))
+            .Select((command, index) => new CommandExample(CurlExampleKeys[index], command))
             .ToList());
         ReplaceCollection(CliExamples, CliInstallService.BuildCliExamples(ApiServerPort)
-            .Select(command => new CommandExample(command))
+            .Select((command, index) => new CommandExample(CliExampleKeys[index], command))
             .ToList());
     }
 
@@ -1429,8 +1434,9 @@ public sealed record HistoryRetentionOption(HistoryRetentionMode Mode, int? Minu
 /// <summary>
 /// Represents command example data.
 /// </summary>
+/// <param name="Key">Stable key supplied to automation clients.</param>
 /// <param name="Command">Command supplied to the member.</param>
-public sealed record CommandExample(string Command);
+public sealed record CommandExample(string Key, string Command);
 /// <summary>
 /// Represents a selectable spoken-language hint.
 /// </summary>

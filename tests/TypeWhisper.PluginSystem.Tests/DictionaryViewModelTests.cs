@@ -277,6 +277,15 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("ItemsSource=\"{Binding Dictionary.VisibleEntries}\"", xaml);
         Assert.Contains("Command=\"{Binding ToggleCommand}\"", xaml);
         Assert.Contains("AutomationProperties.Name=\"{loc:Str Dictionary.ToggleAliases}\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryTabPacks\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryVocabularyBoosting\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionarySearch\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryNewOriginal\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryAddEntry\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryEntries\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryPacks\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"{Binding Pack.Id}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{Binding Pack.Name}\"", xaml);
         Assert.Contains("Visibility=\"{Binding IsExpanded, Converter={StaticResource BoolToVis}}\"", xaml);
         Assert.Contains("ItemsSource=\"{Binding Entries}\"", xaml);
         Assert.Contains("Command=\"{Binding DataContext.Dictionary.PrepareAliasCommand", xaml);

@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.PremiumSection"
+             AutomationProperties.AutomationId="SettingsSection.Premium"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -64,6 +65,7 @@
                         </StackPanel>
 
                         <ui:Button Grid.Column="2"
+                                   AutomationProperties.AutomationId="PremiumOpenLicense"
                                    Content="{loc:Str Premium.OpenLicense}"
                                    Appearance="Primary"
                                    Margin="16,0,0,0"
@@ -103,6 +105,8 @@
                                 </StackPanel>
 
                                 <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="PremiumCorrectionLearning"
+                                                 AutomationProperties.Name="{loc:Str Premium.LearnCorrectionsFromEdits}"
                                                  IsChecked="{Binding TargetAppCorrectionLearningEnabled, Mode=TwoWay}"
                                                  IsEnabled="{Binding CanUseTargetAppCorrectionLearning}"
                                                  OnContent=""
@@ -172,6 +176,7 @@
                                            Style="{StaticResource SettingsValueTextStyle}"
                                            TextTrimming="CharacterEllipsis"/>
                                 <ui:Button Grid.Column="2"
+                                           AutomationProperties.AutomationId="PremiumChooseFolder"
                                            Content="{loc:Str Premium.ChooseFolder}"
                                            Appearance="Secondary"
                                            Margin="16,0,0,0"
@@ -233,10 +238,12 @@
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <ui:Button Content="{loc:Str Premium.SyncNow}"
+                                       AutomationProperties.AutomationId="PremiumSyncNow"
                                        Command="{Binding CloudFolderSync.SyncNowCommand}"
                                        Appearance="Primary"
                                        Margin="0,0,8,0"/>
                             <ui:Button Content="{loc:Str Premium.Clear}"
+                                       AutomationProperties.AutomationId="PremiumClear"
                                        Command="{Binding CloudFolderSync.ClearFolderCommand}"
                                        Appearance="Secondary"/>
                         </StackPanel>
