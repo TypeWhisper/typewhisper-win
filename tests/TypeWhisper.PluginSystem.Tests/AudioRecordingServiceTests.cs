@@ -486,6 +486,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         Assert.Contains("OnMicrophonePriorityItemDrop", microphoneBlock);
         Assert.Contains("ReorderMicrophonePriorityItemCommand", microphoneBlock);
         Assert.Contains("RemoveMicrophonePriorityItemCommand", microphoneBlock);
+        Assert.Contains("AutomationProperties.AutomationId=\"{Binding Id, StringFormat=DictationRemoveMicrophone.{0}}\"", microphoneBlock);
         Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.AddPriorityItem}\"", microphoneBlock);
         Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.DragPriorityItem}\"", microphoneBlock);
         Assert.Contains("AutomationProperties.Name=\"{loc:Str Microphone.RemovePriorityItem}\"", microphoneBlock);

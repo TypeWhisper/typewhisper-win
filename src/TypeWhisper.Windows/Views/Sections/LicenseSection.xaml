@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.LicenseSection"
+             AutomationProperties.AutomationId="SettingsSection.License"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -47,6 +48,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Button Command="{Binding DataContext.SelectPlanCommand, ElementName=ContentRoot}"
+                                        AutomationProperties.AutomationId="{Binding Id, StringFormat=LicensePlan.{0}}"
+                                        AutomationProperties.Name="{Binding Title}"
                                         CommandParameter="{Binding}"
                                         Style="{StaticResource SidebarButtonStyle}"
                                         HorizontalContentAlignment="Stretch"
@@ -141,9 +144,12 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <PasswordBox x:Name="LicenseKeyBox"
+                                     AutomationProperties.AutomationId="LicenseKey"
+                                     AutomationProperties.Name="{loc:Str License.AnyKeyHint}"
                                      Style="{StaticResource InputPasswordBoxStyle}"
                                      PasswordChanged="OnLicenseKeyChanged"/>
                         <ui:Button Grid.Column="1"
+                                   AutomationProperties.AutomationId="LicenseActivate"
                                    Content="{loc:Str License.Activate}"
                                    Appearance="Primary"
                                    Margin="10,0,0,0"
@@ -173,6 +179,7 @@
                                    VerticalAlignment="Center"
                                    TextWrapping="Wrap"/>
                         <ui:Button Grid.Column="1"
+                                   AutomationProperties.AutomationId="LicenseManagePurchase"
                                    Content="{loc:Str License.ManagePurchase}"
                                    Appearance="Secondary"
                                    Command="{Binding OpenCustomerPortalCommand}"/>
@@ -206,6 +213,8 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Command="{Binding DataContext.OpenUrlCommand, ElementName=ContentRoot}"
+                                            AutomationProperties.AutomationId="{Binding Url, StringFormat=LicenseMonthlyOption.{0}}"
+                                            AutomationProperties.Name="{Binding Title}"
                                             CommandParameter="{Binding Url}"
                                             Style="{StaticResource SidebarButtonStyle}"
                                             Margin="0,0,10,0">
@@ -244,6 +253,8 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Command="{Binding DataContext.OpenUrlCommand, ElementName=ContentRoot}"
+                                            AutomationProperties.AutomationId="{Binding Url, StringFormat=LicenseLifetimeOption.{0}}"
+                                            AutomationProperties.Name="{Binding Title}"
                                             CommandParameter="{Binding Url}"
                                             Style="{StaticResource SidebarButtonStyle}"
                                             Margin="0,0,10,0">
@@ -291,14 +302,17 @@
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <ui:Button Content="{loc:Str License.ManagePurchase}"
+                                       AutomationProperties.AutomationId="LicenseCommercialManagePurchase"
                                        Appearance="Secondary"
                                        Margin="0,0,8,0"
                                        Command="{Binding OpenCustomerPortalCommand}"/>
                             <ui:Button Content="{loc:Str License.Refresh}"
+                                       AutomationProperties.AutomationId="LicenseCommercialRefresh"
                                        Appearance="Secondary"
                                        Margin="0,0,8,0"
                                        Command="{Binding RefreshCommercialLicenseCommand}"/>
                             <Button Content="{loc:Str License.Deactivate}"
+                                    AutomationProperties.AutomationId="LicenseCommercialDeactivate"
                                     Style="{StaticResource LinkButtonStyle}"
                                     Command="{Binding DeactivateCommercialLicenseCommand}"
                                     Foreground="{StaticResource DangerBrush}"
@@ -351,6 +365,8 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Command="{Binding DataContext.OpenUrlCommand, ElementName=ContentRoot}"
+                                            AutomationProperties.AutomationId="{Binding Url, StringFormat=LicenseSupporterOption.{0}}"
+                                            AutomationProperties.Name="{Binding Title}"
                                             CommandParameter="{Binding Url}"
                                             Style="{StaticResource SidebarButtonStyle}"
                                             Margin="0,0,10,0">
@@ -373,6 +389,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <Button Content="{loc:Str License.ClaimGitHubSponsorsOnWeb}"
+                                AutomationProperties.AutomationId="LicenseClaimGitHubSponsors"
                                 Style="{StaticResource LinkButtonStyle}"
                                 Command="{Binding OpenGitHubSponsorsClaimCommand}"
                                 Margin="0,12,0,0"
@@ -400,14 +417,17 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                 <ui:Button Content="{loc:Str License.ManagePurchase}"
+                                           AutomationProperties.AutomationId="LicenseSupporterManagePurchase"
                                            Appearance="Secondary"
                                            Margin="0,0,8,0"
                                            Command="{Binding OpenCustomerPortalCommand}"/>
                                 <ui:Button Content="{loc:Str License.Refresh}"
+                                           AutomationProperties.AutomationId="LicenseSupporterRefresh"
                                            Appearance="Secondary"
                                            Margin="0,0,8,0"
                                            Command="{Binding RefreshSupporterLicenseCommand}"/>
                                 <Button Content="{loc:Str License.Deactivate}"
+                                        AutomationProperties.AutomationId="LicenseSupporterDeactivate"
                                         Style="{StaticResource LinkButtonStyle}"
                                         Command="{Binding DeactivateSupporterLicenseCommand}"
                                         Foreground="{StaticResource DangerBrush}"
@@ -446,6 +466,7 @@
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding ShowDiscordConnect, Converter={StaticResource BoolToVisibility}}">
                             <ui:Button Content="{loc:Str License.ConnectDiscord}"
+                                       AutomationProperties.AutomationId="LicenseConnectDiscord"
                                        Appearance="Primary"
                                        Margin="0,0,8,0"
                                        Command="{Binding ConnectDiscordCommand}"/>
@@ -454,10 +475,12 @@
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding ShowDiscordRefresh, Converter={StaticResource BoolToVisibility}}">
                             <ui:Button Content="{loc:Str License.RefreshDiscord}"
+                                       AutomationProperties.AutomationId="LicenseRefreshDiscord"
                                        Appearance="Secondary"
                                        Margin="0,0,8,0"
                                        Command="{Binding RefreshDiscordStatusCommand}"/>
                             <ui:Button Content="{loc:Str License.ReconnectDiscord}"
+                                       AutomationProperties.AutomationId="LicenseReconnectDiscord"
                                        Appearance="Secondary"
                                        Margin="0,0,8,0"
                                        Command="{Binding ReconnectDiscordCommand}"

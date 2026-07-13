@@ -361,7 +361,7 @@ public partial class App : Application
         ShowSettingsWindow(SettingsRoute.License);
     }
 
-    private void ShowSettingsWindow(
+    internal void ShowSettingsWindow(
         SettingsRoute? route = null,
         bool presentFileImporter = false,
         string? focusPluginId = null)

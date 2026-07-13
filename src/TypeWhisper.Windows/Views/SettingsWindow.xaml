@@ -14,7 +14,9 @@
         ExtendsContentIntoTitleBar="True"
         WindowBackdropType="None"
         Background="#0E131B"
-        Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+        AutomationProperties.AutomationId="SettingsWindow"
+        AutomationProperties.Name="{loc:Str Settings.WindowTitle}">
 
     <ui:FluentWindow.Resources>
         <ResourceDictionary>
@@ -76,7 +78,9 @@
                                                 <DataTemplate DataType="{x:Type vm:SettingsNavigationItem}">
                                                     <Button Style="{StaticResource SidebarRouteButtonStyle}"
                                                             Command="{Binding DataContext.NavigateToItemCommand, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}}"
-                                                            CommandParameter="{Binding}">
+                                                            CommandParameter="{Binding}"
+                                                            AutomationProperties.AutomationId="{Binding Route}"
+                                                            AutomationProperties.Name="{Binding Title}">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
@@ -142,17 +146,20 @@
                             <ui:Button Content="{loc:Str Update.Check}"
                                        Command="{Binding CheckForUpdatesCommand}"
                                        Appearance="Secondary"
+                                       AutomationProperties.AutomationId="CheckForUpdates"
                                        Margin="0,0,8,0"/>
                             <ui:Button Content="{loc:Str Dashboard.RunWizard}"
                                        Command="{Binding OpenSetupWizardCommand}"
-                                       Appearance="Secondary"/>
+                                       Appearance="Secondary"
+                                       AutomationProperties.AutomationId="OpenSetupWizard"/>
                         </StackPanel>
                     </Grid>
 
                     <Border Grid.Row="1" Background="#283644"/>
 
                     <ContentControl Grid.Row="2"
-                                    Content="{Binding CurrentSection}"/>
+                                    Content="{Binding CurrentSection}"
+                                    AutomationProperties.AutomationId="{Binding CurrentSectionName, StringFormat=SettingsSection.{0}}"/>
                 </Grid>
             </Grid>
         </Grid>

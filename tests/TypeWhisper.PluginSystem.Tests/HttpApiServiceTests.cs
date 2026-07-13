@@ -246,6 +246,22 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AutomationOpenSettings_ValidatesRoute()
+    {
+        var service = CreateService(automationEnabled: true);
+
+        var response = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/open-settings",
+            new NameValueCollection { ["route"] = "missing" },
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []), CancellationToken.None);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Equal("Missing or invalid 'route'", ErrorMessage(response));
+    }
+
+    [Fact]
     public async Task AutomationRoutes_ReturnNotFoundWhenDisabled()
     {
         var automation = new FakeDictationAutomationController();
@@ -261,9 +277,16 @@ public class HttpApiServiceTests : IDisposable
             new NameValueCollection(),
             new Dictionary<string, string>(),
             []), CancellationToken.None);
+        var openSettings = await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/automation/open-settings",
+            new NameValueCollection { ["route"] = "Dictionary" },
+            new Dictionary<string, string> { ["authorization"] = "Bearer test-token" },
+            []), CancellationToken.None);
 
         Assert.Equal(404, insert.StatusCode);
         Assert.Equal(404, commit.StatusCode);
+        Assert.Equal(404, openSettings.StatusCode);
         Assert.Empty(automation.InsertRequests);
         Assert.Equal(0, automation.CommitCalls);
     }

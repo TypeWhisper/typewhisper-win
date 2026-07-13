@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.FileTranscriptionSection"
+             AutomationProperties.AutomationId="SettingsSection.FileTranscription"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -34,6 +35,7 @@
                                Margin="0,10,0,10"
                                HorizontalAlignment="Center"/>
                     <Button Content="{loc:Str FileTranscription.SelectFile}"
+                            AutomationProperties.AutomationId="FileTranscriptionSelectFiles"
                             Click="OnSelectFile"
                             Style="{StaticResource SecondaryButtonStyle}"
                             Padding="18,8"
@@ -67,6 +69,7 @@
                                            FontSize="15"
                                            Margin="0"/>
                                 <Button Grid.Column="1"
+                                        AutomationProperties.AutomationId="FileTranscriptionCancelImport"
                                         Content="{loc:Str FileTranscription.Cancel}"
                                         Command="{Binding FileTranscription.CancelCommand}"
                                         Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"
@@ -102,6 +105,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str FileTranscription.Engine}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="FileTranscriptionEngine"
+                                          AutomationProperties.Name="{loc:Str FileTranscription.Engine}"
                                           ItemsSource="{Binding FileTranscription.FileTranscriptionEngineOptions}"
                                           SelectedValue="{Binding FileTranscription.FileTranscriptionEngineSelection}"
                                           SelectedValuePath="Id"
@@ -120,6 +125,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str FileTranscription.Model}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="FileTranscriptionModel"
+                                          AutomationProperties.Name="{loc:Str FileTranscription.Model}"
                                           ItemsSource="{Binding FileTranscription.FileTranscriptionModelOptions}"
                                           SelectedValue="{Binding FileTranscription.FileTranscriptionModelSelection}"
                                           SelectedValuePath="Id"
@@ -148,12 +155,14 @@
                                            Margin="0"/>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Button Content="{loc:Str FileTranscription.ClearQueue}"
+                                            AutomationProperties.AutomationId="FileTranscriptionClearQueue"
                                             Command="{Binding FileTranscription.ClearQueueCommand}"
                                             Visibility="{Binding FileTranscription.HasClearableItems, Converter={StaticResource BoolToVis}}"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Padding="14,8"
                                             Margin="0,0,8,0"/>
                                     <Button Content="{loc:Str FileTranscription.CancelAll}"
+                                            AutomationProperties.AutomationId="FileTranscriptionCancelAll"
                                             Command="{Binding FileTranscription.CancelCommand}"
                                             Visibility="{Binding FileTranscription.IsProcessing, Converter={StaticResource BoolToVis}}"
                                             Style="{StaticResource SecondaryButtonStyle}"
@@ -162,7 +171,8 @@
                             </Grid>
                         </Border>
                         <Border Height="1" Background="#18FFFFFF"/>
-                        <ListBox ItemsSource="{Binding FileTranscription.Items}"
+                        <ListBox AutomationProperties.AutomationId="FileTranscriptionQueue"
+                                 ItemsSource="{Binding FileTranscription.Items}"
                                  SelectedItem="{Binding FileTranscription.SelectedItem, Mode=TwoWay}"
                                  Background="Transparent"
                                  BorderThickness="0"
@@ -194,18 +204,21 @@
 
                                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                 <Button Content="{loc:Str FileTranscription.Copy}"
+                                                        AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionCopy.{0}}"
                                                         Command="{Binding DataContext.FileTranscription.CopyItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding HasResult}"
                                                         Style="{StaticResource SecondaryButtonStyle}"
                                                         Margin="0,0,8,0"/>
                                                 <Button Content="{loc:Str FileTranscription.TextExportShort}"
+                                                        AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionExportText.{0}}"
                                                         Command="{Binding DataContext.FileTranscription.ExportItemTextCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding HasResult}"
                                                         Style="{StaticResource SecondaryButtonStyle}"
                                                         Margin="0,0,8,0"/>
                                                 <Button Content="SRT"
+                                                        AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionExportSrt.{0}}"
                                                         Command="{Binding DataContext.FileTranscription.ExportItemSrtCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding CanExportSubtitles}"
@@ -214,6 +227,7 @@
                                                         Style="{StaticResource SecondaryButtonStyle}"
                                                         Margin="0,0,8,0"/>
                                                 <Button Content="WebVTT"
+                                                        AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionExportWebVtt.{0}}"
                                                         Command="{Binding DataContext.FileTranscription.ExportItemWebVttCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding CanExportSubtitles}"
@@ -222,6 +236,7 @@
                                                         Style="{StaticResource SecondaryButtonStyle}"
                                                         Margin="0,0,8,0"/>
                                                 <Button Content="{loc:Str FileTranscription.Cancel}"
+                                                        AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionCancel.{0}}"
                                                         Command="{Binding DataContext.FileTranscription.CancelItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding CanCancel}"
@@ -236,6 +251,8 @@
                                                          Visibility="{Binding IsProcessing, Converter={StaticResource BoolToVis}}"/>
 
                                             <TextBox Grid.Row="2"
+                                                     AutomationProperties.AutomationId="{Binding FileName, StringFormat=FileTranscriptionResult.{0}}"
+                                                     AutomationProperties.Name="{loc:Str FileTranscription.Result}"
                                                      Grid.ColumnSpan="2"
                                                      Text="{Binding ResultText, Mode=OneWay}"
                                                      IsReadOnly="True"
@@ -287,6 +304,7 @@
                                                Margin="0,6,0,0"/>
                                 </StackPanel>
                                 <Button Grid.Column="1"
+                                        AutomationProperties.AutomationId="WatchFolderSelectInput"
                                         Content="{loc:Str WatchFolder.SelectFolder}"
                                         Click="OnSelectWatchFolder"
                                         Style="{StaticResource SecondaryButtonStyle}"
@@ -311,12 +329,14 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Button Content="{loc:Str WatchFolder.Clear}"
+                                            AutomationProperties.AutomationId="WatchFolderClearOutput"
                                             Command="{Binding FileTranscription.ClearWatchFolderOutputPathCommand}"
                                             Visibility="{Binding FileTranscription.HasWatchFolderOutputPath, Converter={StaticResource BoolToVis}}"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Padding="14,8"
                                             Margin="0,0,8,0"/>
                                     <Button Content="{loc:Str WatchFolder.SelectFolder}"
+                                            AutomationProperties.AutomationId="WatchFolderSelectOutput"
                                             Click="OnSelectWatchFolderOutput"
                                             Style="{StaticResource SecondaryButtonStyle}"
                                             Padding="14,8"/>
@@ -334,6 +354,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.OutputFormat}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="WatchFolderOutputFormat"
+                                          AutomationProperties.Name="{loc:Str WatchFolder.OutputFormat}"
                                           ItemsSource="{Binding FileTranscription.WatchFolderOutputFormatOptions}"
                                           SelectedValue="{Binding FileTranscription.WatchFolderOutputFormat}"
                                           SelectedValuePath="Id"
@@ -352,6 +374,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.AutoStart}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="WatchFolderAutoStart"
+                                                 AutomationProperties.Name="{loc:Str WatchFolder.AutoStart}"
                                                  IsChecked="{Binding FileTranscription.WatchFolderAutoStart}"
                                                  OnContent=""
                                                  OffContent=""/>
@@ -368,6 +392,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.DeleteSource}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="WatchFolderDeleteSource"
+                                                 AutomationProperties.Name="{loc:Str WatchFolder.DeleteSource}"
                                                  IsChecked="{Binding FileTranscription.WatchFolderDeleteSource}"
                                                  OnContent=""
                                                  OffContent=""/>
@@ -391,6 +417,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Button Content="{loc:Str WatchFolder.Start}"
+                                            AutomationProperties.AutomationId="WatchFolderStart"
                                             Command="{Binding FileTranscription.StartWatchFolderCommand}"
                                             IsEnabled="{Binding FileTranscription.HasWatchFolderPath}"
                                             Visibility="{Binding FileTranscription.IsWatchFolderStopped, Converter={StaticResource BoolToVis}}"
@@ -398,6 +425,7 @@
                                             Padding="14,8"
                                             Margin="0,0,8,0"/>
                                     <Button Content="{loc:Str WatchFolder.Stop}"
+                                            AutomationProperties.AutomationId="WatchFolderStop"
                                             Command="{Binding FileTranscription.StopWatchFolderCommand}"
                                             Visibility="{Binding FileTranscription.IsWatchFolderRunning, Converter={StaticResource BoolToVis}}"
                                             Style="{StaticResource SecondaryButtonStyle}"
@@ -429,6 +457,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.Engine}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="WatchFolderEngine"
+                                          AutomationProperties.Name="{loc:Str WatchFolder.Engine}"
                                           ItemsSource="{Binding FileTranscription.WatchFolderEngineOptions}"
                                           SelectedValue="{Binding FileTranscription.WatchFolderEngineSelection}"
                                           SelectedValuePath="Id"
@@ -447,6 +477,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.Model}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="WatchFolderModel"
+                                          AutomationProperties.Name="{loc:Str WatchFolder.Model}"
                                           ItemsSource="{Binding FileTranscription.WatchFolderModelOptions}"
                                           SelectedValue="{Binding FileTranscription.WatchFolderModelSelection}"
                                           SelectedValuePath="Id"
@@ -466,6 +498,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.Language}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="WatchFolderLanguage"
+                                          AutomationProperties.Name="{loc:Str WatchFolder.Language}"
                                           ItemsSource="{Binding FileTranscription.WatchFolderLanguageOptions}"
                                           SelectedValue="{Binding FileTranscription.WatchFolderLanguage}"
                                           SelectedValuePath="Id"
@@ -489,6 +523,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str WatchFolder.HistoryHint}" Style="{StaticResource HintStyle}" Margin="0"/>
                                 <Button Grid.Column="1"
+                                        AutomationProperties.AutomationId="WatchFolderClearHistory"
                                         Content="{loc:Str WatchFolder.ClearHistory}"
                                         Command="{Binding FileTranscription.ClearWatchFolderHistoryCommand}"
                                         Visibility="{Binding FileTranscription.HasWatchFolderHistory, Converter={StaticResource BoolToVis}}"

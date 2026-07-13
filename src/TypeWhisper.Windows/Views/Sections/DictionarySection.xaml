@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:converters="clr-namespace:TypeWhisper.Windows.Converters"
-             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
+             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
+             AutomationProperties.AutomationId="SettingsSection.Dictionary">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -141,6 +142,8 @@
 
                 <ui:ToggleSwitch Grid.Column="1"
                                  IsChecked="{Binding Dictionary.VocabularyBoostingEnabled}"
+                                 AutomationProperties.AutomationId="DictionaryVocabularyBoosting"
+                                 AutomationProperties.Name="{loc:Str Dictionary.BoostingToggle}"
                                  VerticalAlignment="Top"
                                  Margin="12,0,0,0"/>
             </Grid>
@@ -149,14 +152,19 @@
         <!-- Tabs -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
             <RadioButton Content="{loc:Str Dictionary.TabAll}" IsChecked="True" GroupName="DictTab"
+                         AutomationProperties.AutomationId="DictionaryTabAll"
                          Checked="Tab_Checked" Tag="0" Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabTerms}" GroupName="DictTab"
+                         AutomationProperties.AutomationId="DictionaryTabTerms"
                          Checked="Tab_Checked" Tag="1" Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabCorrections}" GroupName="DictTab"
+                         AutomationProperties.AutomationId="DictionaryTabCorrections"
                          Checked="Tab_Checked" Tag="2" Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabAutoLearned}" GroupName="DictTab"
+                         AutomationProperties.AutomationId="DictionaryTabAutoLearned"
                          Checked="Tab_Checked" Tag="3" Style="{StaticResource TabRadioStyle}"/>
             <RadioButton Content="{loc:Str Dictionary.TabPacks}" GroupName="DictTab"
+                         AutomationProperties.AutomationId="DictionaryTabPacks"
                          Checked="Tab_Checked" Tag="4" Style="{StaticResource TabRadioStyle}"/>
         </StackPanel>
 
@@ -204,6 +212,8 @@
                     <!-- Search TextBox -->
                     <TextBox Grid.Column="1"
                              Text="{Binding Dictionary.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.AutomationId="DictionarySearch"
+                             AutomationProperties.Name="{loc:Str Dictionary.SearchPlaceholder}"
                              Background="Transparent" BorderThickness="0"
                              Foreground="{StaticResource TextBrush}" FontSize="13"
                              VerticalAlignment="Center" Padding="0,8"
@@ -212,6 +222,8 @@
                     <!-- Clear button -->
                     <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}"
                             Command="{Binding Dictionary.ClearSearchCommand}"
+                            AutomationProperties.AutomationId="DictionaryClearSearch"
+                            AutomationProperties.Name="{loc:Str Dictionary.ClearSearch}"
                             Visibility="{Binding Dictionary.HasSearchText, Converter={StaticResource BoolToVis}}"
                             ToolTip="{loc:Str Dictionary.ClearSearch}" Margin="0,0,4,0">
                         <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="11"
@@ -229,6 +241,8 @@
 
             <ui:Button Grid.Column="2" Command="{Binding Dictionary.Training.OpenCommand}"
                        Click="OpenTraining_Click" Appearance="Secondary"
+                       AutomationProperties.AutomationId="DictionaryTrainingOpen"
+                       AutomationProperties.Name="{loc:Str Dictionary.TrainingOpen}"
                        Margin="10,0,0,0" Padding="10,5">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" FontSize="12"
@@ -238,15 +252,23 @@
             </ui:Button>
 
             <Button Grid.Column="3" Content="{loc:Str Dictionary.DataManagement}"
+                    AutomationProperties.AutomationId="DictionaryDataManagement"
+                    AutomationProperties.Name="{loc:Str Dictionary.DataManagement}"
                     Margin="10,0,0,0" Padding="10,5" Click="DataManagement_Click">
                 <Button.ContextMenu>
                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                         <MenuItem Header="{loc:Str Dictionary.ClearAutoLearned}"
+                                  AutomationProperties.AutomationId="DictionaryClearAutoLearned"
+                                  AutomationProperties.Name="{loc:Str Dictionary.ClearAutoLearned}"
                                   Command="{Binding Dictionary.ClearAutoLearnedCorrectionsCommand}"/>
                         <MenuItem Header="{loc:Str Dictionary.ResetCustomDictionary}"
+                                  AutomationProperties.AutomationId="DictionaryResetCustom"
+                                  AutomationProperties.Name="{loc:Str Dictionary.ResetCustomDictionary}"
                                   Command="{Binding Dictionary.ResetCustomDictionaryCommand}"/>
                         <Separator/>
                         <MenuItem Header="{loc:Str Dictionary.DeactivateAllPacks}"
+                                  AutomationProperties.AutomationId="DictionaryDeactivateAllPacks"
+                                  AutomationProperties.Name="{loc:Str Dictionary.DeactivateAllPacks}"
                                   Command="{Binding Dictionary.DeactivateAllTermPacksCommand}"/>
                     </ContextMenu>
                 </Button.ContextMenu>
@@ -283,6 +305,8 @@
                     <!-- Original field with watermark -->
                     <Grid Grid.Column="0">
                         <TextBox Text="{Binding Dictionary.NewOriginal, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.AutomationId="DictionaryNewOriginal"
+                                 AutomationProperties.Name="{loc:Str Dictionary.OriginalPlaceholder}"
                                  Style="{StaticResource InputTextBoxStyle}" x:Name="OriginalBox"/>
                         <TextBlock Text="{loc:Str Dictionary.OriginalPlaceholder}" Foreground="{StaticResource HintBrush}"
                                    FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"
@@ -308,6 +332,8 @@
                     <!-- Replacement field with watermark -->
                     <Grid Grid.Column="2">
                         <TextBox Text="{Binding Dictionary.NewReplacement, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.AutomationId="DictionaryNewReplacement"
+                                 AutomationProperties.Name="{loc:Str Dictionary.ReplacementPlaceholder}"
                                  Style="{StaticResource InputTextBoxStyle}" x:Name="ReplacementBox"/>
                         <TextBlock Foreground="{StaticResource HintBrush}"
                                    FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"
@@ -331,9 +357,11 @@
                                 VerticalAlignment="Center">
                         <RadioButton Content="{loc:Str Dictionary.Correction}" GroupName="EntryType"
                                      IsChecked="{Binding Dictionary.IsNewTypeCorrection}"
+                                     AutomationProperties.AutomationId="DictionaryNewTypeCorrection"
                                      Style="{StaticResource SegmentedButtonLeftStyle}"/>
                         <RadioButton Content="{loc:Str Dictionary.Term}" GroupName="EntryType"
                                      IsChecked="{Binding Dictionary.IsNewTypeTerm}"
+                                     AutomationProperties.AutomationId="DictionaryNewTypeTerm"
                                      Style="{StaticResource SegmentedButtonRightStyle}"/>
                     </StackPanel>
 
@@ -353,12 +381,16 @@
                             </Style>
                         </Border.Style>
                         <CheckBox IsChecked="{Binding Dictionary.NewCaseSensitive}"
+                                  AutomationProperties.AutomationId="DictionaryNewCaseSensitive"
+                                  AutomationProperties.Name="{loc:Str Dictionary.CaseSensitive}"
                                   Style="{StaticResource InputCheckBoxStyle}"
                                   Content="Aa" FontSize="12" Opacity="0.6"/>
                     </Border>
 
                     <!-- Add button -->
                     <ui:Button Grid.Column="5" Command="{Binding Dictionary.AddEntryCommand}"
+                            AutomationProperties.AutomationId="DictionaryAddEntry"
+                            AutomationProperties.Name="{loc:Str Dictionary.Add}"
                             Appearance="Primary" Padding="14,8"
                             Margin="8,0,0,0" VerticalAlignment="Stretch">
                         <StackPanel Orientation="Horizontal">
@@ -374,7 +406,8 @@
         <!-- Edit Overlay + Lists -->
         <Grid>
             <!-- Entries List (Tabs 0-3) -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          AutomationProperties.AutomationId="DictionaryEntries">
                 <ScrollViewer.Resources>
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
                 </ScrollViewer.Resources>
@@ -601,6 +634,8 @@
                                                         </StackPanel>
                                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                                             <Button Style="{StaticResource IconButtonStyle}"
+                                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryAddAlias.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Dictionary.AddAlias}"
                                                                     ToolTip="{loc:Str Dictionary.AddAlias}"
                                                                     Visibility="{Binding Replacement, Converter={StaticResource BoolToVis}}"
                                                                     Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -609,14 +644,20 @@
                                                                 <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                                                             </Button>
                                                             <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Edit}"
+                                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryEdit.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Dictionary.Edit}"
                                                                     Command="{Binding DataContext.Dictionary.StartEditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                                                             </Button>
                                                             <ui:ToggleSwitch IsChecked="{Binding IsEnabled, Mode=OneWay}" Margin="4,0"
+                                                                             AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryEnabled.{0}}"
+                                                                             AutomationProperties.Name="{Binding Original}"
                                                                              Command="{Binding DataContext.Dictionary.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                              CommandParameter="{Binding}"/>
                                                             <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Delete}"
+                                                                    AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryDelete.{0}}"
+                                                                    AutomationProperties.Name="{loc:Str Dictionary.Delete}"
                                                                     Command="{Binding DataContext.Dictionary.DeleteEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                     CommandParameter="{Binding}">
                                                                 <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
@@ -663,6 +704,8 @@
                                                                    FontSize="10" FontWeight="SemiBold"/>
                                                     </Border>
                                                     <Button Grid.Column="3" Style="{StaticResource IconButtonStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Replacement, StringFormat=DictionaryAddGroupedAlias.{0}}"
+                                                            AutomationProperties.Name="{loc:Str Dictionary.AddAlias}"
                                                             ToolTip="{loc:Str Dictionary.AddAlias}"
                                                             Command="{Binding DataContext.Dictionary.PrepareAliasCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding Replacement}"
@@ -670,6 +713,7 @@
                                                         <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                                                     </Button>
                                                     <Button Grid.Column="4" Style="{StaticResource IconButtonStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Replacement, StringFormat=DictionaryToggleAliases.{0}}"
                                                             ToolTip="{loc:Str Dictionary.ToggleAliases}"
                                                             AutomationProperties.Name="{loc:Str Dictionary.ToggleAliases}"
                                                             Command="{Binding ToggleCommand}">
@@ -754,14 +798,20 @@
                                                             </StackPanel>
                                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                                                 <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Edit}"
+                                                                        AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryEditAlias.{0}}"
+                                                                        AutomationProperties.Name="{loc:Str Dictionary.Edit}"
                                                                         Command="{Binding DataContext.Dictionary.StartEditCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                         CommandParameter="{Binding}">
                                                                     <TextBlock Text="&#xE70F;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                                                                 </Button>
                                                                 <ui:ToggleSwitch IsChecked="{Binding IsEnabled, Mode=OneWay}" Margin="4,0"
+                                                                                 AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryAliasEnabled.{0}}"
+                                                                                 AutomationProperties.Name="{Binding Original}"
                                                                                  Command="{Binding DataContext.Dictionary.ToggleEnabledCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                                  CommandParameter="{Binding}"/>
                                                                 <Button Style="{StaticResource IconButtonStyle}" ToolTip="{loc:Str Dictionary.Delete}"
+                                                                        AutomationProperties.AutomationId="{Binding Id, StringFormat=DictionaryDeleteAlias.{0}}"
+                                                                        AutomationProperties.Name="{loc:Str Dictionary.Delete}"
                                                                         Command="{Binding DataContext.Dictionary.DeleteEntryCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                         CommandParameter="{Binding}">
                                                                     <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
@@ -785,7 +835,8 @@
             </ScrollViewer>
 
             <!-- Packs Tab (Tab 4) -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          AutomationProperties.AutomationId="DictionaryPacks">
                 <ScrollViewer.Resources>
                     <Style TargetType="ScrollBar" BasedOn="{StaticResource SettingsScrollBarStyle}"/>
                 </ScrollViewer.Resources>
@@ -882,6 +933,9 @@
                                                     <ui:ToggleSwitch Grid.Column="2"
                                                               IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                               VerticalAlignment="Center"
+                                                              AutomationProperties.AutomationId="{Binding Pack.Id}"
+                                                              AutomationProperties.Name="{Binding Pack.Name}"
+                                                              AutomationProperties.HelpText="{Binding TermsPreview}"
                                                               Command="{Binding DataContext.Dictionary.TogglePackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                               CommandParameter="{Binding}"/>
                                                 </Grid>
@@ -953,22 +1007,29 @@
 
                         <TextBlock Text="{loc:Str Dictionary.Original}" Style="{StaticResource LabelStyle}"/>
                         <TextBox Text="{Binding Dictionary.EditOriginal, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.AutomationId="DictionaryEditOriginal"
+                                 AutomationProperties.Name="{loc:Str Dictionary.Original}"
                                  Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,12"/>
 
                         <TextBlock Text="{loc:Str Dictionary.Replacement}" Style="{StaticResource LabelStyle}"/>
                         <TextBox Text="{Binding Dictionary.EditReplacement, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.AutomationId="DictionaryEditReplacement"
+                                 AutomationProperties.Name="{loc:Str Dictionary.Replacement}"
                                  Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,12"/>
 
                         <CheckBox Content="{loc:Str Dictionary.CaseSensitive}"
+                                  AutomationProperties.AutomationId="DictionaryEditCaseSensitive"
                                   IsChecked="{Binding Dictionary.EditCaseSensitive}"
                                   Style="{StaticResource InputCheckBoxStyle}" Margin="0,0,0,16"/>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <ui:Button Content="{loc:Str Dictionary.Cancel}"
+                                       AutomationProperties.AutomationId="DictionaryEditCancel"
                                     Command="{Binding Dictionary.CancelEditCommand}"
                                     Appearance="Secondary"
                                     Padding="16,8" Margin="0,0,8,0"/>
                             <ui:Button Content="{loc:Str Dictionary.Save}"
+                                       AutomationProperties.AutomationId="DictionaryEditSave"
                                     Command="{Binding Dictionary.SaveEditCommand}"
                                     Appearance="Primary"
                                     Padding="16,8"/>
@@ -1012,6 +1073,7 @@
                                 <TextBlock Text="{loc:Str Dictionary.TrainingTargetWord}" Style="{StaticResource LabelStyle}"/>
                                 <TextBox x:Name="TrainingTargetBox"
                                          Text="{Binding Dictionary.Training.TargetWord, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.AutomationId="DictionaryTrainingTarget"
                                          Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,14"/>
                                 <Grid Margin="0,0,0,18">
                                     <Grid.ColumnDefinitions>
@@ -1032,9 +1094,11 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <ui:Button Content="{loc:Str Dictionary.Cancel}"
                                                Command="{Binding Dictionary.Training.CancelCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingSetupCancel"
                                                Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
                                     <ui:Button Content="{loc:Str Dictionary.TrainingContinue}"
                                                Command="{Binding Dictionary.Training.BeginCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingCreateSamples"
                                                Appearance="Primary" Padding="16,8"/>
                                 </StackPanel>
                             </StackPanel>
@@ -1071,9 +1135,11 @@
                                                                    Margin="12,0"/>
                                                         <ui:Button Grid.Column="2" Content="{Binding ActionText}"
                                                                    Command="{Binding DataContext.Dictionary.Training.ToggleSampleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                   AutomationProperties.AutomationId="DictionaryTrainingSampleRecord"
                                                                    CommandParameter="{Binding}" Padding="12,5"/>
                                                     </Grid>
                                                     <TextBox Text="{Binding Sentence, UpdateSourceTrigger=PropertyChanged}"
+                                                             AutomationProperties.AutomationId="DictionaryTrainingSampleSentence"
                                                              Style="{StaticResource InputTextBoxStyle}"
                                                              Padding="6,2" Margin="0,6,0,0"/>
                                                     <Border Background="#242A32" CornerRadius="6" Padding="8,5" Margin="0,6,0,0"
@@ -1099,9 +1165,11 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
                                     <ui:Button Content="{loc:Str Dictionary.Cancel}"
                                                Command="{Binding Dictionary.Training.CancelCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingSamplesCancel"
                                                Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
                                     <ui:Button Content="{loc:Str Dictionary.TrainingReview}"
                                                Command="{Binding Dictionary.Training.ReviewCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingReview"
                                                Appearance="Primary" Padding="16,8"/>
                                 </StackPanel>
                             </StackPanel>
@@ -1139,8 +1207,10 @@
                                                         </Grid.ColumnDefinitions>
                                                         <CheckBox Grid.Column="0" IsChecked="{Binding IsApproved}"
                                                                   IsEnabled="{Binding CanApprove}"
+                                                                  AutomationProperties.AutomationId="DictionaryTrainingCandidateApproved"
                                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
                                                         <TextBox Grid.Column="1" Text="{Binding Original, UpdateSourceTrigger=PropertyChanged}"
+                                                                 AutomationProperties.AutomationId="DictionaryTrainingCandidateOriginal"
                                                                  Style="{StaticResource InputTextBoxStyle}"/>
                                                         <TextBlock Grid.Column="2" Text="→" Foreground="{StaticResource HintBrush}"
                                                                    VerticalAlignment="Center" Margin="10,0"/>
@@ -1159,12 +1229,15 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                                     <ui:Button Content="{loc:Str Dictionary.Cancel}"
                                                Command="{Binding Dictionary.Training.CancelCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingReviewCancel"
                                                Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
                                     <ui:Button Content="{loc:Str Dictionary.TrainingBackToSamples}"
                                                Command="{Binding Dictionary.Training.BackToSamplesCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingBackToSamples"
                                                Appearance="Secondary" Padding="16,8" Margin="0,0,8,0"/>
                                     <ui:Button Content="{loc:Str Dictionary.Save}"
                                                Command="{Binding Dictionary.Training.SaveCommand}"
+                                               AutomationProperties.AutomationId="DictionaryTrainingSave"
                                                Appearance="Primary" Padding="16,8"/>
                                 </StackPanel>
                             </StackPanel>

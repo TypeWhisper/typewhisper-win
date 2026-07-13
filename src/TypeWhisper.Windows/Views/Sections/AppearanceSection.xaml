@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.AppearanceSection"
+             AutomationProperties.AutomationId="SettingsSection.Appearance"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -73,6 +74,8 @@
                                 <TextBlock Text="{loc:Str Appearance.Style}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <UniformGrid Columns="3" Margin="0,12,-10,0">
                                     <RadioButton GroupName="IndicatorStyle"
+                                                 AutomationProperties.AutomationId="AppearanceStyleStatusIsland"
+                                                 AutomationProperties.Name="{loc:Str Appearance.StyleStatusIsland}"
                                                  Style="{StaticResource IndicatorStyleTileStyle}"
                                                  IsChecked="{Binding Settings.IndicatorStyle, Mode=TwoWay, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static models:IndicatorStyle.StatusIsland}}">
                                         <StackPanel>
@@ -137,6 +140,8 @@
                                     </RadioButton>
 
                                     <RadioButton GroupName="IndicatorStyle"
+                                                 AutomationProperties.AutomationId="AppearanceStyleEdgeDock"
+                                                 AutomationProperties.Name="{loc:Str Appearance.StyleEdgeDock}"
                                                  Style="{StaticResource IndicatorStyleTileStyle}"
                                                  IsChecked="{Binding Settings.IndicatorStyle, Mode=TwoWay, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static models:IndicatorStyle.EdgeDock}}">
                                         <StackPanel>
@@ -200,6 +205,8 @@
                                     </RadioButton>
 
                                     <RadioButton GroupName="IndicatorStyle"
+                                                 AutomationProperties.AutomationId="AppearanceStyleCompactBadge"
+                                                 AutomationProperties.Name="{loc:Str Appearance.StyleCompactBadge}"
                                                  Style="{StaticResource IndicatorStyleTileStyle}"
                                                  IsChecked="{Binding Settings.IndicatorStyle, Mode=TwoWay, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static models:IndicatorStyle.CompactBadge}}">
                                         <StackPanel>
@@ -256,6 +263,8 @@
                                                    Margin="0,5,0,0"/>
                                     </StackPanel>
                                     <ui:ToggleSwitch Grid.Column="1"
+                                                     AutomationProperties.AutomationId="AppearanceLivePreview"
+                                                     AutomationProperties.Name="{loc:Str Appearance.LivePreview}"
                                                      IsChecked="{Binding Settings.LiveTranscriptionEnabled}"
                                                      OnContent=""
                                                      OffContent=""
@@ -291,6 +300,8 @@
                                                FontSize="12"
                                                VerticalAlignment="Center"/>
                                     <Slider Grid.Row="1"
+                                            AutomationProperties.AutomationId="AppearanceLiveTextSize"
+                                            AutomationProperties.Name="{loc:Str Appearance.LiveTextSize}"
                                             Grid.ColumnSpan="2"
                                             Minimum="10"
                                             Maximum="18"
@@ -320,6 +331,8 @@
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <ui:ToggleSwitch Grid.Column="1"
+                                                     AutomationProperties.AutomationId="AppearanceOnlineAsrBatchPreview"
+                                                     AutomationProperties.Name="{loc:Str Appearance.OnlineAsrBatchLivePreview}"
                                                      IsChecked="{Binding Settings.OnlineAsrBatchLiveTranscriptionEnabled}"
                                                      OnContent=""
                                                      OffContent=""
@@ -344,6 +357,8 @@
                                                FontSize="12"
                                                VerticalAlignment="Center"/>
                                     <Slider Grid.Row="1"
+                                            AutomationProperties.AutomationId="AppearanceAutoHideDelay"
+                                            AutomationProperties.Name="{loc:Str Appearance.AutoHideDelay}"
                                             Grid.ColumnSpan="2"
                                             Minimum="0"
                                             Maximum="5"
@@ -369,6 +384,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str General.Position}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="AppearancePosition"
+                                          AutomationProperties.Name="{loc:Str General.Position}"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           SelectedValue="{Binding Settings.OverlayPosition}"
                                           SelectedValuePath="Tag">
@@ -412,6 +429,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Appearance.LeftContent}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="AppearanceLeftContent"
+                                          AutomationProperties.Name="{loc:Str Appearance.LeftContent}"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           ItemsSource="{Binding Settings.WidgetOptions}"
                                           SelectedValue="{Binding Settings.OverlayLeftWidget}"
@@ -454,6 +473,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str Appearance.RightContent}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="AppearanceRightContent"
+                                          AutomationProperties.Name="{loc:Str Appearance.RightContent}"
                                           Style="{StaticResource SettingsAlignedComboBoxStyle}"
                                           ItemsSource="{Binding Settings.WidgetOptions}"
                                           SelectedValue="{Binding Settings.OverlayRightWidget}"
@@ -676,6 +697,8 @@
                                        FontSize="12"
                                        VerticalAlignment="Center"/>
                             <Slider Grid.Row="1"
+                                    AutomationProperties.AutomationId="AppearancePreviewAutoHideDelay"
+                                    AutomationProperties.Name="{loc:Str Appearance.AutoHideDelay}"
                                     Grid.ColumnSpan="2"
                                     Minimum="0"
                                     Maximum="5"

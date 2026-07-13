@@ -1,4 +1,5 @@
 <UserControl x:Class="TypeWhisper.Windows.Views.Sections.HistorySection"
+             AutomationProperties.AutomationId="SettingsSection.History"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -37,18 +38,24 @@
 
             <!-- Controls row -->
             <TextBox Grid.Row="1" Grid.Column="0"
+                     AutomationProperties.AutomationId="HistorySearch"
+                     AutomationProperties.Name="{loc:Str History.Search}"
                      Text="{Binding History.SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource InputTextBoxStyle}" Margin="0,0,8,0"/>
 
             <ComboBox Grid.Row="1" Grid.Column="1"
+                      AutomationProperties.AutomationId="HistoryAppFilter"
+                      AutomationProperties.Name="{loc:Str History.App}"
                       ItemsSource="{Binding History.AvailableApps}"
                       SelectedItem="{Binding History.SelectedAppFilter}"
                       Width="150" Margin="0,0,8,0" IsEditable="False"/>
 
             <ui:Button Grid.Row="1" Grid.Column="2" Content="{loc:Str History.Export}"
+                       AutomationProperties.AutomationId="HistoryExport"
                     Command="{Binding History.ExportCommand}"
                     Appearance="Secondary" Padding="12,7" Margin="0,0,8,0"/>
             <ui:Button Grid.Row="1" Grid.Column="3" Content="{loc:Str History.ClearAll}"
+                       AutomationProperties.AutomationId="HistoryClearAll"
                     Command="{Binding History.ClearAllCommand}"
                     Appearance="Danger" Padding="12,7"/>
         </Grid>
@@ -89,7 +96,8 @@
         </TextBlock>
 
         <!-- Timeline (ListBox for real UI virtualization) -->
-        <ListBox ItemsSource="{Binding History.GroupedEntries}"
+        <ListBox AutomationProperties.AutomationId="HistoryTimeline"
+                 ItemsSource="{Binding History.GroupedEntries}"
                  Visibility="{Binding History.IsLoading, Converter={StaticResource InverseBoolToVis}}"
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
@@ -224,14 +232,18 @@
                                     <!-- Edit mode -->
                                     <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
                                         <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryEditText.{0}}"
+                                                 AutomationProperties.Name="{loc:Str History.Edit}"
                                                  Style="{StaticResource InputTextBoxStyle}"
                                                  TextWrapping="Wrap" AcceptsReturn="True"
                                                  MinHeight="60" MaxHeight="200" Margin="0,0,0,8"/>
                                         <StackPanel Orientation="Horizontal">
                                             <ui:Button Content="{loc:Str History.SaveEdit}" Command="{Binding SaveEditCommand}"
+                                                       AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistorySaveEdit.{0}}"
                                                     Appearance="Primary"
                                                     Padding="12,6" Margin="0,0,6,0"/>
                                             <ui:Button Content="{loc:Str History.CancelEdit}" Command="{Binding CancelEditCommand}"
+                                                       AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryCancelEdit.{0}}"
                                                     Appearance="Secondary"
                                                     Padding="12,6"/>
                                         </StackPanel>
@@ -264,9 +276,11 @@
                                             </ItemsControl>
                                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                                 <ui:Button Content="{loc:Str History.AddToDictionary}" Command="{Binding AcceptSuggestionsCommand}"
+                                                           AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryAddToDictionary.{0}}"
                                                         Appearance="Primary"
                                                         Padding="10,5" FontSize="12" Margin="0,0,6,0"/>
                                                 <ui:Button Content="{loc:Str History.Dismiss}" Command="{Binding DismissSuggestionsCommand}"
+                                                           AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryDismissSuggestions.{0}}"
                                                         Appearance="Secondary"
                                                         Padding="10,5" FontSize="12"/>
                                             </StackPanel>
@@ -293,12 +307,16 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                                                 Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
                                         <Button Content="{loc:Str History.Edit}" Command="{Binding StartEditCommand}"
+                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryEdit.{0}}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
                                         <Button Content="{loc:Str History.ReadBack}" Command="{Binding ReadBackCommand}"
+                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryReadBack.{0}}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
                                         <Button Content="{loc:Str History.Copy}" Command="{Binding CopyCommand}"
+                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryCopy.{0}}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
                                         <Button Content="{loc:Str History.DeleteEntry}" Command="{Binding DeleteCommand}"
+                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryDelete.{0}}"
                                                 Style="{StaticResource LinkButtonStyle}"
                                                 Foreground="{StaticResource DangerBrush}"/>
                                     </StackPanel>
