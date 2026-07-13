@@ -141,6 +141,7 @@ public sealed class DictionaryViewModelTests
 
         Assert.Contains("ItemsSource=\"{Binding Dictionary.VisibleEntries}\"", xaml);
         Assert.Contains("Command=\"{Binding ToggleCommand}\"", xaml);
+        Assert.Contains("AutomationProperties.Name=\"{loc:Str Dictionary.ToggleAliases}\"", xaml);
         Assert.Contains("Visibility=\"{Binding IsExpanded, Converter={StaticResource BoolToVis}}\"", xaml);
         Assert.Contains("ItemsSource=\"{Binding Entries}\"", xaml);
         Assert.Contains("Command=\"{Binding DataContext.Dictionary.PrepareAliasCommand", xaml);
@@ -165,6 +166,8 @@ public sealed class DictionaryViewModelTests
 
             Assert.False(string.IsNullOrWhiteSpace(
                 document.RootElement.GetProperty("Dictionary.AddAlias").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(
+                document.RootElement.GetProperty("Dictionary.ToggleAliases").GetString()));
         }
     }
 

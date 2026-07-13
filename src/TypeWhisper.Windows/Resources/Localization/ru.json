@@ -383,6 +383,7 @@
   "Dictionary.ReplacementPlaceholder": "Замена (необязательно)",
   "Dictionary.Add": "Добавить",
   "Dictionary.AddAlias": "Добавить вариант",
+  "Dictionary.ToggleAliases": "Развернуть или свернуть варианты",
   "Dictionary.UsageCount": "{0}× использовано",
   "Dictionary.PackTerms": "Термины",
   "Dictionary.EditEntry": "Изменить запись",

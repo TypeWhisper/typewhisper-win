@@ -215,7 +215,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
             }
 
             var replacementMatch = search.Length > 0 &&
-                entries[0].Replacement?.Contains(search, StringComparison.OrdinalIgnoreCase) == true;
+                entries[0].Replacement?.Contains(search, StringComparison.OrdinalIgnoreCase) is true;
             var aliasMatch = search.Length > 0 &&
                 entries.Any(candidate => candidate.Original.Contains(search, StringComparison.OrdinalIgnoreCase));
             if (search.Length > 0 && !replacementMatch && !aliasMatch)

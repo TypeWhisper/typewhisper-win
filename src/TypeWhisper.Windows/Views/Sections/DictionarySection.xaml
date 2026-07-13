@@ -617,6 +617,8 @@
                                                         <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
                                                     </Button>
                                                     <Button Grid.Column="4" Style="{StaticResource IconButtonStyle}"
+                                                            ToolTip="{loc:Str Dictionary.ToggleAliases}"
+                                                            AutomationProperties.Name="{loc:Str Dictionary.ToggleAliases}"
                                                             Command="{Binding ToggleCommand}">
                                                         <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="12">
                                                             <TextBlock.Style>
