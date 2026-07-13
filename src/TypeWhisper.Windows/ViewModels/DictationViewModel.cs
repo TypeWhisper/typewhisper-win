@@ -1818,6 +1818,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
 
         var learning = _targetAppCorrectionLearning;
+        if (targetWindowHandle == IntPtr.Zero)
+        {
+            targetWindowHandle = _activeWindow.GetActiveWindowHandle();
+        }
+
         var attemptId = learning.BeginAttempt();
         if (_targetAppTextObserver is not { } observer)
         {

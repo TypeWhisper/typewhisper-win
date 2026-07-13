@@ -333,6 +333,26 @@ public class DictationTargetAppCorrectionLearningGateTests
     }
 
     [Fact]
+    public void BackgroundTargetAppCorrectionLearning_RecapturesMissingTargetWindow()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var backgroundBlock = TestFile.ExtractBlock(
+            source,
+            "private void StartTargetAppCorrectionLearningInBackground",
+            4200);
+
+        var fallback = backgroundBlock.IndexOf("if (targetWindowHandle == IntPtr.Zero)", StringComparison.Ordinal);
+        var attempt = backgroundBlock.IndexOf("var attemptId = learning.BeginAttempt();", StringComparison.Ordinal);
+
+        Assert.True(fallback >= 0 && fallback < attempt);
+        Assert.Contains("targetWindowHandle = _activeWindow.GetActiveWindowHandle();", backgroundBlock);
+    }
+
+    [Fact]
     public void AutomationTargetAppCorrectionLearning_DoesNotUseSlowDescendantScan()
     {
         var source = TestFile.ReadProjectFile(
