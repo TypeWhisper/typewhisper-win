@@ -25,6 +25,7 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
 
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.Learned, learned.Outcome);
         var correction = Assert.Single(learned);
         Assert.Equal("teh", correction.Original);
         Assert.Equal("the", correction.Replacement);
@@ -32,6 +33,20 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
             entry.EntryType == DictionaryEntryType.Correction &&
             entry.Original == "teh" &&
             entry.Replacement == "the");
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_ReportsNoEditOnCommitSignal()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(baseline);
+        var service = CreateService(observer, new FakeCommitObserver([true]));
+
+        var result = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoEdit, result.Outcome);
+        Assert.Empty(result.LearnedCorrections);
     }
 
     [Fact]
@@ -173,6 +188,7 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
 
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout, learned.Outcome);
         Assert.Empty(learned);
         Assert.Equal(1, observer.RecaptureCalls);
         Assert.Empty(_dictionary.Entries);
@@ -517,6 +533,7 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
 
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection, learned.Outcome);
         Assert.Empty(learned);
         var correction = Assert.Single(_dictionary.Entries);
         Assert.Equal("THE", correction.Replacement);
@@ -533,8 +550,78 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
 
         var learned = await service.TrackInsertionAsync("teh", baseline);
 
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation, learned.Outcome);
         Assert.Empty(learned);
         Assert.Empty(_dictionary.Entries);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_ReportsAmbiguousEdit()
+    {
+        var observer = new FakeTargetTextObserver();
+        var baseline = Observation("hello teh world");
+        observer.Recaptures.Enqueue(Observation("hello the better world"));
+        var service = CreateService(observer, new FakeCommitObserver([true]));
+
+        var result = await service.TrackInsertionAsync("teh", baseline);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit, result.Outcome);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_ReportsCancelledAttempt()
+    {
+        var service = CreateService(new FakeTargetTextObserver(), new FakeCommitObserver([]));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var result = await service.TrackInsertionAsync("teh", Observation("hello teh world"), cts.Token);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.Cancelled, result.Outcome);
+    }
+
+    [Fact]
+    public async Task TrackInsertionAsync_ReportsExpectedObservationFailure()
+    {
+        var observer = new FakeTargetTextObserver { RecaptureException = new InvalidOperationException() };
+        var service = CreateService(observer, new FakeCommitObserver([true]));
+
+        var result = await service.TrackInsertionAsync("teh", Observation("hello teh world"));
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.Failed, result.Outcome);
+    }
+
+    [Fact]
+    public void CompleteAttempt_IgnoresStaleAttempt()
+    {
+        var service = CreateService(new FakeTargetTextObserver(), new FakeCommitObserver([]));
+        var staleAttempt = service.BeginAttempt();
+        var currentAttempt = service.BeginAttempt();
+
+        service.CompleteAttempt(currentAttempt, TargetAppCorrectionLearningOutcomeKind.Learned);
+        service.CompleteAttempt(staleAttempt, TargetAppCorrectionLearningOutcomeKind.Cancelled);
+
+        Assert.Equal(TargetAppCorrectionLearningOutcomeKind.Learned, service.LastOutcome?.Outcome);
+    }
+
+    [Theory]
+    [InlineData("Learned", "learned")]
+    [InlineData("UnsupportedTextObservation", "unsupported_text_observation")]
+    [InlineData("NoEdit", "no_edit")]
+    [InlineData("AmbiguousEdit", "ambiguous_edit")]
+    [InlineData("NoCommitBeforeTimeout", "no_commit_before_timeout")]
+    [InlineData("DuplicateCorrection", "duplicate_correction")]
+    [InlineData("Cancelled", "cancelled")]
+    [InlineData("Failed", "failed")]
+    public void Outcome_UsesStableDiagnosticCode(
+        string outcomeName,
+        string expectedCode)
+    {
+        var outcome = Enum.Parse<TargetAppCorrectionLearningOutcomeKind>(outcomeName);
+        var status = new TargetAppCorrectionLearningOutcome(outcome, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(expectedCode, status.Code);
     }
 
     private TargetAppCorrectionLearningService CreateService(
@@ -575,12 +662,17 @@ public sealed class TargetAppCorrectionLearningServiceTests : IDisposable
 
         public int RecaptureCalls { get; private set; }
 
+        public Exception? RecaptureException { get; init; }
+
         public TargetAppTextObservation? Capture(IntPtr targetHwnd, int maxTextLength)
             => Observation("unused");
 
         public TargetAppTextObservation? Recapture(TargetAppTextObservation baseline)
         {
             RecaptureCalls++;
+            if (RecaptureException is not null)
+                throw RecaptureException;
+
             return Recaptures.Count > 0 ? Recaptures.Dequeue() : baseline;
         }
 

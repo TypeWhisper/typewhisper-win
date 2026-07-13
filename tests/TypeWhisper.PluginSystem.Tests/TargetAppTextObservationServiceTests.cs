@@ -82,4 +82,24 @@ public sealed class TargetAppTextObservationServiceTests
         Assert.Contains("TextPattern.Pattern", descendantBlock);
         Assert.Contains("ValuePattern.Pattern", descendantBlock);
     }
+
+    [Fact]
+    public void Recapture_AllowsFocusedSameWindowFallbackBeforeCursorWithoutDescendantScan()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "TargetAppTextObservationService.cs");
+        var recaptureBlock = TestFile.ExtractBlock(
+            source,
+            "public TargetAppTextObservation? Recapture",
+            2400);
+
+        var focusedIndex = recaptureBlock.IndexOf("CaptureFocusedElement", StringComparison.Ordinal);
+        var cursorIndex = recaptureBlock.IndexOf("CaptureElementAtCursor", StringComparison.Ordinal);
+        Assert.True(focusedIndex >= 0 && focusedIndex < cursorIndex);
+        Assert.Contains("ResolveObservableWindow(baseline.WindowHandle)", recaptureBlock);
+        Assert.DoesNotContain("CaptureUniqueDescendantContaining", recaptureBlock);
+    }
 }

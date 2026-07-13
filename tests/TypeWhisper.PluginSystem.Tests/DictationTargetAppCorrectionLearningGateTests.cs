@@ -288,7 +288,7 @@ public class DictationTargetAppCorrectionLearningGateTests
         var captureBlock = TestFile.ExtractBlock(
             source,
             "private async Task<TargetAppCorrectionLearningStartResult> TryStartTargetAppCorrectionLearningAsync",
-            3200);
+            5200);
 
         Assert.Contains("catch (UnauthorizedAccessException)", captureBlock);
         Assert.Contains("return new TargetAppCorrectionLearningStartResult(false, \"capture_error\");", captureBlock);
@@ -330,6 +330,26 @@ public class DictationTargetAppCorrectionLearningGateTests
         Assert.Contains(".CaptureDeep(", backgroundBlock);
         Assert.Contains("allowDescendantScan: true", backgroundBlock);
         Assert.Contains("Task.Run", backgroundBlock);
+    }
+
+    [Fact]
+    public void BackgroundTargetAppCorrectionLearning_RecapturesMissingTargetWindow()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var backgroundBlock = TestFile.ExtractBlock(
+            source,
+            "private void StartTargetAppCorrectionLearningInBackground",
+            4200);
+
+        var fallback = backgroundBlock.IndexOf("if (targetWindowHandle == IntPtr.Zero)", StringComparison.Ordinal);
+        var attempt = backgroundBlock.IndexOf("var attemptId = learning.BeginAttempt();", StringComparison.Ordinal);
+
+        Assert.True(fallback >= 0 && fallback < attempt);
+        Assert.Contains("targetWindowHandle = _activeWindow.GetActiveWindowHandle();", backgroundBlock);
     }
 
     [Fact]

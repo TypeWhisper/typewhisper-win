@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Automation;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -116,6 +117,58 @@ public interface ITargetAppCorrectionCommitObserver : IDisposable
 }
 
 /// <summary>
+/// Describes the outcome of one target-app correction learning attempt.
+/// </summary>
+internal enum TargetAppCorrectionLearningOutcomeKind
+{
+    Learned,
+    UnsupportedTextObservation,
+    NoEdit,
+    AmbiguousEdit,
+    NoCommitBeforeTimeout,
+    DuplicateCorrection,
+    Cancelled,
+    Failed
+}
+
+/// <summary>
+/// Contains the outcome and any corrections created by one learning attempt.
+/// </summary>
+internal sealed record TargetAppCorrectionLearningAttemptResult(
+    TargetAppCorrectionLearningOutcomeKind Outcome,
+    IReadOnlyList<LearnedDictionaryCorrection> LearnedCorrections) : IReadOnlyList<LearnedDictionaryCorrection>
+{
+    public int Count => LearnedCorrections.Count;
+    public LearnedDictionaryCorrection this[int index] => LearnedCorrections[index];
+    public IEnumerator<LearnedDictionaryCorrection> GetEnumerator() => LearnedCorrections.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+/// <summary>
+/// Contains the privacy-safe status retained for the current app session.
+/// </summary>
+internal sealed record TargetAppCorrectionLearningOutcome(
+    TargetAppCorrectionLearningOutcomeKind Outcome,
+    DateTimeOffset RecordedAtUtc)
+{
+    /// <summary>
+    /// Gets the stable diagnostic code for the outcome.
+    /// </summary>
+    public string Code => Outcome switch
+    {
+        TargetAppCorrectionLearningOutcomeKind.Learned => "learned",
+        TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation => "unsupported_text_observation",
+        TargetAppCorrectionLearningOutcomeKind.NoEdit => "no_edit",
+        TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit => "ambiguous_edit",
+        TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout => "no_commit_before_timeout",
+        TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection => "duplicate_correction",
+        TargetAppCorrectionLearningOutcomeKind.Cancelled => "cancelled",
+        TargetAppCorrectionLearningOutcomeKind.Failed => "failed",
+        _ => "failed"
+    };
+}
+
+/// <summary>
 /// Learns conservative target-app corrections after users directly edit pasted text.
 /// </summary>
 public sealed class TargetAppCorrectionLearningService
@@ -133,6 +186,26 @@ public sealed class TargetAppCorrectionLearningService
     private readonly IReadOnlyList<TimeSpan> _pollSchedule;
     private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
     private readonly SemaphoreSlim _trackingGate = new(1, 1);
+    private readonly object _outcomeLock = new();
+    private long _currentAttemptId;
+    private TargetAppCorrectionLearningOutcome? _lastOutcome;
+
+    /// <summary>
+    /// Gets the most recent outcome from the current app session.
+    /// </summary>
+    internal TargetAppCorrectionLearningOutcome? LastOutcome
+    {
+        get
+        {
+            lock (_outcomeLock)
+                return _lastOutcome;
+        }
+    }
+
+    /// <summary>
+    /// Raised when the most recent outcome changes.
+    /// </summary>
+    internal event Action? LastOutcomeChanged;
 
     /// <summary>
     /// Initializes a new instance of the TargetAppCorrectionLearningService class.
@@ -160,13 +233,13 @@ public sealed class TargetAppCorrectionLearningService
     /// <summary>
     /// Tracks an inserted text segment until commit, timeout, or cancellation.
     /// </summary>
-    public async Task<IReadOnlyList<LearnedDictionaryCorrection>> TrackInsertionAsync(
+    internal async Task<TargetAppCorrectionLearningAttemptResult> TrackInsertionAsync(
         string insertedText,
         TargetAppTextObservation baseline,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(insertedText) || string.IsNullOrWhiteSpace(baseline.Value))
-            return [];
+            return Result(TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
 
         try
         {
@@ -174,7 +247,7 @@ public sealed class TargetAppCorrectionLearningService
         }
         catch (OperationCanceledException)
         {
-            return [];
+            return Result(TargetAppCorrectionLearningOutcomeKind.Cancelled);
         }
 
         try
@@ -182,13 +255,43 @@ public sealed class TargetAppCorrectionLearningService
             return await TrackInsertionCoreAsync(insertedText, baseline, cancellationToken)
                 .ConfigureAwait(false);
         }
+        catch (Exception ex) when (IsExpectedObservationFailure(ex))
+        {
+            System.Diagnostics.Debug.WriteLine($"Target-app correction learning failed: {ex.Message}");
+            return Result(TargetAppCorrectionLearningOutcomeKind.Failed);
+        }
         finally
         {
             _trackingGate.Release();
         }
     }
 
-    private async Task<IReadOnlyList<LearnedDictionaryCorrection>> TrackInsertionCoreAsync(
+    /// <summary>
+    /// Starts a new status attempt and invalidates completion from older attempts.
+    /// </summary>
+    internal long BeginAttempt()
+    {
+        lock (_outcomeLock)
+            return ++_currentAttemptId;
+    }
+
+    /// <summary>
+    /// Records an outcome only when it belongs to the newest attempt.
+    /// </summary>
+    internal void CompleteAttempt(long attemptId, TargetAppCorrectionLearningOutcomeKind outcome)
+    {
+        lock (_outcomeLock)
+        {
+            if (attemptId != _currentAttemptId)
+                return;
+
+            _lastOutcome = new TargetAppCorrectionLearningOutcome(outcome, DateTimeOffset.UtcNow);
+        }
+
+        LastOutcomeChanged?.Invoke();
+    }
+
+    private async Task<TargetAppCorrectionLearningAttemptResult> TrackInsertionCoreAsync(
         string insertedText,
         TargetAppTextObservation baseline,
         CancellationToken cancellationToken)
@@ -204,7 +307,7 @@ public sealed class TargetAppCorrectionLearningService
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (_commitObserver.ConsumeCommitSignal())
-                    return LearnFromCurrentObservation(insertedText, baseline, lastObserved);
+                    return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
 
                 var focusMatch = _textObserver.GetFocusedElementMatch(baseline);
                 if (focusMatch == TargetAppTextElementMatch.Same)
@@ -212,13 +315,13 @@ public sealed class TargetAppCorrectionLearningService
                     var current = TryRecaptureSameElement(baseline);
                     if (current is not null)
                     {
-                        var commitSuggestions = ExtractSameElementLineBreakCommitSuggestions(
+                        var commitResult = EvaluateSameElementLineBreakCommit(
                             insertedText,
                             baseline.Value,
                             lastObserved.Value,
                             current.Value);
-                        if (commitSuggestions.Count > 0)
-                            return Learn(commitSuggestions);
+                        if (commitResult is not null)
+                            return commitResult;
 
                         lastObserved = current;
                     }
@@ -239,28 +342,28 @@ public sealed class TargetAppCorrectionLearningService
                         continue;
                     }
 
-                    return LearnFromCurrentObservation(insertedText, baseline, lastObserved);
+                    return EvaluateCurrentObservation(insertedText, baseline, lastObserved);
                 }
 
-                var learned = LearnFromCurrentObservation(insertedText, baseline, lastObserved);
-                if (learned.Count > 0 ||
+                var result = EvaluateCurrentObservation(insertedText, baseline, lastObserved);
+                if (result.Outcome == TargetAppCorrectionLearningOutcomeKind.Learned ||
                     !baseline.AllowElementKeyChangeOnCommit ||
                     focusMatch == TargetAppTextElementMatch.DifferentWindow)
                 {
-                    return learned;
+                    return result;
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            return [];
+            return Result(TargetAppCorrectionLearningOutcomeKind.Cancelled);
         }
         finally
         {
             _commitObserver.Stop();
         }
 
-        return [];
+        return Result(TargetAppCorrectionLearningOutcomeKind.NoCommitBeforeTimeout);
     }
 
     /// <summary>
@@ -271,21 +374,37 @@ public sealed class TargetAppCorrectionLearningService
         _commitObserver.SignalCommitForAutomation();
     }
 
-    private IReadOnlyList<LearnedDictionaryCorrection> Learn(IReadOnlyList<CorrectionSuggestion> suggestions)
-        => suggestions.Count == 0 ? [] : _dictionary.LearnCorrections(suggestions);
+    private TargetAppCorrectionLearningAttemptResult Learn(IReadOnlyList<CorrectionSuggestion> suggestions)
+    {
+        var learned = _dictionary.LearnCorrections(suggestions);
+        return learned.Count == 0
+            ? Result(TargetAppCorrectionLearningOutcomeKind.DuplicateCorrection)
+            : new TargetAppCorrectionLearningAttemptResult(TargetAppCorrectionLearningOutcomeKind.Learned, learned);
+    }
 
-    private IReadOnlyList<LearnedDictionaryCorrection> LearnFromCurrentObservation(
+    private TargetAppCorrectionLearningAttemptResult EvaluateCurrentObservation(
         string insertedText,
         TargetAppTextObservation baseline,
         TargetAppTextObservation fallbackObservation)
     {
         var current = TryRecaptureCommittedElement(baseline);
-        if (current is null ||
-            (string.Equals(current.Value, baseline.Value, StringComparison.Ordinal) &&
-             !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal)))
-            current = fallbackObservation;
+        if (current is null)
+        {
+            if (string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal))
+                return Result(TargetAppCorrectionLearningOutcomeKind.UnsupportedTextObservation);
 
-        return Learn(ExtractSuggestions(insertedText, baseline.Value, current.Value));
+            current = fallbackObservation;
+        }
+        else if (string.Equals(current.Value, baseline.Value, StringComparison.Ordinal) &&
+                 !string.Equals(fallbackObservation.Value, baseline.Value, StringComparison.Ordinal))
+        {
+            current = fallbackObservation;
+        }
+
+        var extraction = ExtractSuggestions(insertedText, baseline.Value, current.Value);
+        return extraction.Outcome is { } outcome
+            ? Result(outcome)
+            : Learn(extraction.Suggestions);
     }
 
     private TargetAppTextObservation? TryRecaptureSameElement(TargetAppTextObservation baseline)
@@ -312,45 +431,58 @@ public sealed class TargetAppCorrectionLearningService
                 : null;
     }
 
-    private static List<CorrectionSuggestion> ExtractSuggestions(
+    private static SuggestionExtraction ExtractSuggestions(
         string insertedText,
         string baselineValue,
         string currentValue)
     {
         var editedInsertedText = ExtractEditedInsertedText(insertedText, baselineValue, currentValue);
-        if (editedInsertedText is null ||
-            string.Equals(insertedText, editedInsertedText, StringComparison.Ordinal))
-        {
-            return [];
-        }
+        if (editedInsertedText is null)
+            return new(TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit, []);
 
-        return TextDiffService.ExtractHighConfidenceCorrections(insertedText, editedInsertedText);
+        if (string.Equals(insertedText, editedInsertedText, StringComparison.Ordinal))
+            return new(TargetAppCorrectionLearningOutcomeKind.NoEdit, []);
+
+        var suggestions = TextDiffService.ExtractHighConfidenceCorrections(insertedText, editedInsertedText);
+        return suggestions.Count == 0
+            ? new(TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit, [])
+            : new(null, suggestions);
     }
 
-    private static List<CorrectionSuggestion> ExtractSameElementLineBreakCommitSuggestions(
+    private TargetAppCorrectionLearningAttemptResult? EvaluateSameElementLineBreakCommit(
         string insertedText,
         string baselineValue,
         string previousValue,
         string currentValue)
     {
         if (CountLineBreaks(currentValue) <= CountLineBreaks(previousValue))
-            return [];
+            return null;
 
         var candidates = new Dictionary<string, List<CorrectionSuggestion>>(StringComparer.Ordinal);
+        var sawAmbiguousEdit = false;
         foreach (var candidateValue in RemoveOneLineBreakCandidates(currentValue))
         {
-            var suggestions = ExtractSuggestions(insertedText, baselineValue, candidateValue);
-            if (suggestions.Count == 0)
+            var extraction = ExtractSuggestions(insertedText, baselineValue, candidateValue);
+            if (extraction.Outcome == TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit)
+                sawAmbiguousEdit = true;
+
+            if (extraction.Suggestions.Count == 0)
                 continue;
 
             var key = string.Join(
                 '\u001f',
-                suggestions.Select(static suggestion =>
+                extraction.Suggestions.Select(static suggestion =>
                     string.Concat(suggestion.Original, '\u001e', suggestion.Replacement)));
-            candidates.TryAdd(key, suggestions);
+            candidates.TryAdd(key, extraction.Suggestions);
         }
 
-        return candidates.Count == 1 ? candidates.Values.Single() : [];
+        return candidates.Count switch
+        {
+            1 => Learn(candidates.Values.Single()),
+            > 1 => Result(TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit),
+            _ when sawAmbiguousEdit => Result(TargetAppCorrectionLearningOutcomeKind.AmbiguousEdit),
+            _ => Result(TargetAppCorrectionLearningOutcomeKind.NoEdit)
+        };
     }
 
     private static int CountLineBreaks(string value)
@@ -425,4 +557,20 @@ public sealed class TargetAppCorrectionLearningService
 
         return matches.Count == 1 ? matches[0] : null;
     }
+
+    private static TargetAppCorrectionLearningAttemptResult Result(
+        TargetAppCorrectionLearningOutcomeKind outcome)
+        => new(outcome, []);
+
+    private static bool IsExpectedObservationFailure(Exception ex)
+        => ex is System.Windows.Automation.ElementNotAvailableException
+            or ObjectDisposedException
+            or InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or System.Runtime.InteropServices.COMException;
+
+    private sealed record SuggestionExtraction(
+        TargetAppCorrectionLearningOutcomeKind? Outcome,
+        List<CorrectionSuggestion> Suggestions);
 }
