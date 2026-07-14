@@ -44,7 +44,7 @@ public sealed class FileTranscriptionProcessorTests
         using var harness = new Harness();
         using var watchFolder = new WatchFolderService(harness.DataPath);
         harness.WriteAudioFile(harness.WatchPath, "clip.wav");
-        var outputPath = Path.Combine(harness.OutputPath, "clip.txt");
+        var outputPath = Path.Join(harness.OutputPath, "clip.txt");
         var sut = new FileTranscriptionViewModel(
             harness.Processor,
             harness.ModelManager,
@@ -86,12 +86,11 @@ public sealed class FileTranscriptionProcessorTests
         public Harness()
         {
             Loc.Instance.Initialize();
-            Loc.Instance.CurrentLanguage = "en";
 
-            TempPath = Path.Combine(Path.GetTempPath(), $"tw_file_processor_test_{Guid.NewGuid():N}");
-            DataPath = Path.Combine(TempPath, "data");
-            WatchPath = Path.Combine(TempPath, "watch");
-            OutputPath = Path.Combine(TempPath, "output");
+            TempPath = Path.Join(Path.GetTempPath(), $"tw_file_processor_test_{Guid.NewGuid():N}");
+            DataPath = Path.Join(TempPath, "data");
+            WatchPath = Path.Join(TempPath, "watch");
+            OutputPath = Path.Join(TempPath, "output");
             Directory.CreateDirectory(DataPath);
             Directory.CreateDirectory(WatchPath);
             Directory.CreateDirectory(OutputPath);
@@ -186,7 +185,7 @@ public sealed class FileTranscriptionProcessorTests
 
         public string WriteAudioFile(string directory, string fileName)
         {
-            var path = Path.Combine(directory, fileName);
+            var path = Path.Join(directory, fileName);
             File.WriteAllBytes(path, WavEncoder.Encode(Enumerable.Repeat(0.05f, 1600).ToArray()));
             return path;
         }
@@ -195,7 +194,18 @@ public sealed class FileTranscriptionProcessorTests
         {
             ModelManager.Dispose();
             _pluginManager.Dispose();
-            try { Directory.Delete(TempPath, recursive: true); } catch { }
+            try
+            {
+                Directory.Delete(TempPath, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup for temporary test files.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Best-effort cleanup for temporary test files.
+            }
         }
     }
 }
