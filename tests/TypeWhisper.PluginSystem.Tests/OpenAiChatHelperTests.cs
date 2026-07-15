@@ -30,4 +30,33 @@ public sealed class OpenAiChatHelperTests
         Assert.NotNull(method);
         Assert.Equal(typeof(Task<string>), method!.ReturnType);
     }
+
+    [Fact]
+    public void SendChatCompletionAsync_PreservesLegacyElevenParameterOverload()
+    {
+        var parameterTypes = new[]
+        {
+            typeof(HttpClient),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(CancellationToken),
+            typeof(int?),
+            typeof(string),
+            typeof(string),
+            typeof(double?)
+        };
+
+        var method = typeof(OpenAiChatHelper).GetMethod(
+            nameof(OpenAiChatHelper.SendChatCompletionAsync),
+            BindingFlags.Public | BindingFlags.Static,
+            binder: null,
+            types: parameterTypes,
+            modifiers: null);
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(Task<string>), method!.ReturnType);
+    }
 }
