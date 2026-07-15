@@ -305,12 +305,9 @@ public sealed class WelcomeViewModelTests
             new PluginLoader(),
             settings,
             CreateRegistryHttpClient());
-        var dictionary = new DictionaryViewModel(
-            Mock.Of<IDictionaryService>(d => d.Entries == Array.Empty<DictionaryEntry>()),
-            settings);
         var dictation = (DictationViewModel)RuntimeHelpers.GetUninitializedObject(typeof(DictationViewModel));
 
-        return new WelcomeViewModel(modelManager, settings, audio, registry, dictation, dictionary);
+        return new WelcomeViewModel(modelManager, settings, audio, registry, dictation);
     }
 
     private static HttpClient CreateRegistryHttpClient()

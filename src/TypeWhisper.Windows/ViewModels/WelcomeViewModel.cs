@@ -52,7 +52,6 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly AudioRecordingService _audio;
     private readonly PluginRegistryService _registry;
     private readonly DictationViewModel _dictation;
-    private readonly DictionaryViewModel _dictionary;
     private readonly EventHandler _pluginStateChangedHandler;
     private readonly Dispatcher? _uiDispatcher;
     private readonly Dictionary<string, (ITranscriptionEnginePlugin Plugin, UserControl? View)> _settingsViewCache = [];
@@ -73,7 +72,6 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private string _trialText = "";
     [ObservableProperty] private bool _trialSuccess;
     [ObservableProperty] private string _trialInlineStatus = "";
-    [ObservableProperty] private string _selectedIndustryPresetId = IndustryPreset.General.Id;
 
     /// <summary>
     /// Gets the loaded plugin view models.
@@ -83,10 +81,6 @@ public partial class WelcomeViewModel : ObservableObject
     /// Gets the available models.
     /// </summary>
     public ObservableCollection<WelcomeModelItem> AvailableModels { get; } = [];
-    /// <summary>
-    /// Gets the industry presets.
-    /// </summary>
-    public ObservableCollection<LocalizedIndustryPresetOption> IndustryPresets => _dictionary.IndustryPresets;
     /// <summary>
     /// Gets the microphones.
     /// </summary>
@@ -102,6 +96,18 @@ public partial class WelcomeViewModel : ObservableObject
     /// </summary>
     public WelcomeCompletionRequest CompletionRequest { get; private set; } = WelcomeCompletionRequest.None;
     /// <summary>
+    /// Gets or sets whether TypeWhisper starts with Windows.
+    /// </summary>
+    public bool AutostartEnabled
+    {
+        get => StartupService.IsEnabled;
+        set
+        {
+            StartupService.SetEnabled(value);
+            OnPropertyChanged();
+        }
+    }
+    /// <summary>
     /// Raised when playback or the asynchronous operation completes.
     /// </summary>
     public event EventHandler? Completed;
@@ -115,22 +121,19 @@ public partial class WelcomeViewModel : ObservableObject
         ISettingsService settings,
         AudioRecordingService audio,
         PluginRegistryService registry,
-        DictationViewModel dictation,
-        DictionaryViewModel dictionary)
+        DictationViewModel dictation)
     {
         _modelManager = modelManager;
         _settings = settings;
         _audio = audio;
         _registry = registry;
         _dictation = dictation;
-        _dictionary = dictionary;
         _uiDispatcher = CaptureActiveDispatcher();
         _lastObservedDictationState = dictation.State;
 
         _isInitializing = true;
         ReplaceCollection(MainDictationHotkeys, ResolveMainDictationHotkeys(settings.Current));
         MainDictationHotkey = FirstOrEmpty(MainDictationHotkeys);
-        SelectedIndustryPresetId = IndustryPreset.Resolve(settings.Current.SelectedIndustryPresetId).Id;
         _isInitializing = false;
 
         _pluginStateChangedHandler = (_, _) => DispatchToUi(RefreshModels);
@@ -696,7 +699,6 @@ public partial class WelcomeViewModel : ObservableObject
 
         StopMicTest();
         PersistMainDictationHotkeys(MainDictationHotkeys);
-        _dictionary.ApplyIndustryPreset(SelectedIndustryPresetId);
 
         Completed?.Invoke(this, EventArgs.Empty);
     }

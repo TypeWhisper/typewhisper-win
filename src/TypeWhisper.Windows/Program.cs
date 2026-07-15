@@ -2,7 +2,10 @@ using System.Diagnostics;
 using System.IO;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Core;
-#if !TYPEWHISPER_STORE
+#if TYPEWHISPER_STORE
+using Windows.ApplicationModel;
+using Windows.ApplicationModel.Activation;
+#else
 using Velopack;
 #endif
 
@@ -36,8 +39,19 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-#if !TYPEWHISPER_STORE
+        var isStartupActivation = false;
+#if TYPEWHISPER_STORE
+        try
+        {
+            isStartupActivation = AppInstance.GetActivatedEventArgs()?.Kind == ActivationKind.StartupTask;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Debug.WriteLine($"Store activation detection failed: {ex.Message}");
+        }
+#else
         VelopackApp.Build()
+            .OnFirstRun((_) => StartupService.Enable())
             .OnBeforeUninstallFastCallback((v) =>
             {
                 UninstallUserDataProtector.ProtectLegacyAudioDirectory();
@@ -50,7 +64,8 @@ public static class Program
             .Run();
 #endif
 
-        StartMinimized = args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
+        StartMinimized = isStartupActivation
+            || args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
         var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
 
         // Single instance check

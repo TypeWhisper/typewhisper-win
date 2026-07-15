@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using TypeWhisper.Core;
 using Velopack.Locators;
 using Velopack.Windows;
+using Windows.ApplicationModel;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -15,17 +16,26 @@ public static class StartupService
     private const string RegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "TypeWhisper";
     private const string MinimizedArgument = "--minimized";
+    private const string StoreTaskId = "TypeWhisperStartup";
 
     /// <summary>
     /// Returns whether startup shortcut.
     /// </summary>
-    public static bool IsEnabled => HasStartupShortcut() || HasRegistryEntry();
+    public static bool IsEnabled => AppDistribution.Current == AppDistributionKind.Store
+        ? IsStoreStartupEnabled()
+        : HasStartupShortcut() || HasRegistryEntry();
 
     /// <summary>
     /// Performs enable.
     /// </summary>
     public static void Enable()
     {
+        if (AppDistribution.Current == AppDistributionKind.Store)
+        {
+            EnableStoreStartup();
+            return;
+        }
+
         if (TryEnableStartupShortcut())
         {
             DeleteRegistryEntry();
@@ -50,6 +60,12 @@ public static class StartupService
     /// </summary>
     public static void Disable()
     {
+        if (AppDistribution.Current == AppDistributionKind.Store)
+        {
+            DisableStoreStartup();
+            return;
+        }
+
         var removedShortcut = TryDisableStartupShortcut();
         var removedRegistry = DeleteRegistryEntry();
         Log($"Disabled auto-start (startup shortcut removed: {removedShortcut}, registry removed: {removedRegistry})");
@@ -62,6 +78,74 @@ public static class StartupService
     {
         if (enabled) Enable();
         else Disable();
+    }
+
+    internal static bool IsStoreStartupEnabled(StartupTaskState state) =>
+        state is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
+
+    private static bool IsStoreStartupEnabled()
+    {
+        var task = GetStoreStartupTask();
+        return task is not null && IsStoreStartupEnabled(task.State);
+    }
+
+    private static void EnableStoreStartup()
+    {
+        var task = GetStoreStartupTask();
+        if (task is null)
+            return;
+
+        if (task.State == StartupTaskState.Disabled)
+        {
+            try
+            {
+                var state = task.RequestEnableAsync().AsTask().GetAwaiter().GetResult();
+                Log($"Store auto-start enable result: {state}");
+            }
+            catch (Exception ex)
+            {
+                Log($"Store auto-start enable failed: {ex.Message}");
+            }
+            return;
+        }
+
+        Log($"Store auto-start not changed: {task.State}");
+    }
+
+    private static void DisableStoreStartup()
+    {
+        var task = GetStoreStartupTask();
+        if (task is null)
+            return;
+
+        if (task.State == StartupTaskState.Enabled)
+        {
+            try
+            {
+                task.Disable();
+                Log("Disabled Store auto-start");
+            }
+            catch (Exception ex)
+            {
+                Log($"Store auto-start disable failed: {ex.Message}");
+            }
+            return;
+        }
+
+        Log($"Store auto-start not changed: {task.State}");
+    }
+
+    private static StartupTask? GetStoreStartupTask()
+    {
+        try
+        {
+            return StartupTask.GetAsync(StoreTaskId).AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log($"Store auto-start access failed: {ex.Message}");
+            return null;
+        }
     }
 
 #pragma warning disable CS0618 // Velopack's shortcut helper remains the supported API for Startup links.
