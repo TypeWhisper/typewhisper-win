@@ -53,13 +53,41 @@ public static class OpenAiChatHelper
     /// <param name="reasoningEffort">Optional reasoning effort value for providers that support it.</param>
     /// <param name="temperature">Optional sampling temperature.</param>
     /// <returns>The assistant's response content text.</returns>
-    public static async Task<string> SendChatCompletionAsync(
+    public static Task<string> SendChatCompletionAsync(
         HttpClient httpClient, string baseUrl, string apiKey,
         string model, string systemPrompt, string userText, CancellationToken ct,
         int? maxOutputTokens = 2048,
         string maxOutputTokenParameter = "max_tokens",
         string? reasoningEffort = null,
-        double? temperature = 0.1)
+        double? temperature = 0.1) =>
+        SendChatCompletionAsync(
+            httpClient, baseUrl, apiKey, model, systemPrompt, userText, ct,
+            maxOutputTokens, maxOutputTokenParameter, reasoningEffort, temperature, null);
+
+    /// <summary>
+    /// Sends a chat completion request with an explicit reasoning output format.
+    /// </summary>
+    /// <param name="httpClient">HTTP client to use for the request.</param>
+    /// <param name="baseUrl">API base URL.</param>
+    /// <param name="apiKey">Bearer token for authentication.</param>
+    /// <param name="model">Model identifier.</param>
+    /// <param name="systemPrompt">System prompt text.</param>
+    /// <param name="userText">User message text.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="maxOutputTokens">Optional response token cap.</param>
+    /// <param name="maxOutputTokenParameter">Provider-specific token cap parameter name.</param>
+    /// <param name="reasoningEffort">Optional reasoning effort value.</param>
+    /// <param name="temperature">Optional sampling temperature.</param>
+    /// <param name="reasoningFormat">Optional reasoning output format.</param>
+    /// <returns>The assistant's response content text.</returns>
+    public static async Task<string> SendChatCompletionAsync(
+        HttpClient httpClient, string baseUrl, string apiKey,
+        string model, string systemPrompt, string userText, CancellationToken ct,
+        int? maxOutputTokens,
+        string maxOutputTokenParameter,
+        string? reasoningEffort,
+        double? temperature,
+        string? reasoningFormat)
     {
         var body = new Dictionary<string, object?>
         {
@@ -79,6 +107,9 @@ public static class OpenAiChatHelper
 
         if (!string.IsNullOrWhiteSpace(reasoningEffort))
             body["reasoning_effort"] = reasoningEffort;
+
+        if (!string.IsNullOrWhiteSpace(reasoningFormat))
+            body["reasoning_format"] = reasoningFormat;
 
         var requestBody = JsonSerializer.Serialize(body);
 

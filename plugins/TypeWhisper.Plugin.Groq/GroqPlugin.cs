@@ -81,7 +81,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.3";
+    public string PluginVersion => "1.0.4";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -247,7 +247,12 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
 
         var modelId = ResolveLlmModelId(string.IsNullOrWhiteSpace(model) ? null : model);
         return await OpenAiChatHelper.SendChatCompletionAsync(
-            _httpClient, BaseUrl, _apiKey!, modelId, systemPrompt, userText, ct);
+            _httpClient, BaseUrl, _apiKey!, modelId, systemPrompt, userText, ct,
+            maxOutputTokens: 2048,
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: null,
+            temperature: 0.1,
+            reasoningFormat: modelId.StartsWith("qwen", StringComparison.OrdinalIgnoreCase) ? "hidden" : null);
     }
 
     // API key management (for settings view)
