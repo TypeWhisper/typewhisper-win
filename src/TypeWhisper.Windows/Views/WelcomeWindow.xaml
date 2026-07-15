@@ -126,6 +126,20 @@
                                 </StackPanel>
                             </Border>
 
+                            <Border Style="{StaticResource SettingsGroupPanelStyle}"
+                                    Margin="0,14,0,0">
+                                <StackPanel Margin="18">
+                                    <CheckBox Content="{loc:Str General.Autostart}"
+                                              IsChecked="{Binding AutostartEnabled}"
+                                              Style="{StaticResource InputCheckBoxStyle}"
+                                              AutomationProperties.AutomationId="WelcomeAutostart"
+                                              AutomationProperties.Name="{loc:Str General.Autostart}"/>
+                                    <TextBlock Text="{loc:Str General.AutostartHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="28,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+
                             <TextBlock Text="{loc:Str Welcome.ModelHeader}"
                                        Style="{StaticResource SettingsGroupTitleStyle}"/>
 
@@ -221,7 +235,7 @@
                                                         CornerRadius="999"
                                                         Padding="10,5"
                                                         Visibility="{Binding IsLocalRecommendationPendingRestart, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock Text="{loc:Str Welcome.RestartRequired}"
+                                                    <TextBlock Text="{loc:Str Plugins.RestartRequiredBadge}"
                                                                Foreground="{StaticResource WarningBrush}"
                                                                FontSize="11"
                                                                FontWeight="SemiBold"/>
@@ -452,25 +466,6 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="{loc:Str Welcome.IndustryHeader}"
-                                       Style="{StaticResource SettingsGroupTitleStyle}"/>
-
-                            <Border Style="{StaticResource SettingsGroupPanelStyle}">
-                                <StackPanel Margin="18">
-                                    <TextBlock Text="{loc:Str Welcome.IndustryDesc}"
-                                               Style="{StaticResource PageSubtitleStyle}"
-                                               Margin="0,0,0,10"/>
-                                    <ComboBox ItemsSource="{Binding IndustryPresets}"
-                                              SelectedValue="{Binding SelectedIndustryPresetId}"
-                                              SelectedValuePath="Id"
-                                              DisplayMemberPath="DisplayName"
-                                              Margin="0,0,0,10"/>
-                                    <TextBlock Text="{loc:Str Welcome.IndustryLicenseHint}"
-                                               Style="{StaticResource HintStyle}"
-                                               Margin="0"/>
-                                </StackPanel>
-                            </Border>
-
                             <TextBlock Text="{loc:Str Welcome.ExtensionsHeader}"
                                        Style="{StaticResource SettingsGroupTitleStyle}"/>
 
@@ -587,7 +582,7 @@
                                                                     CornerRadius="999"
                                                                     Padding="10,5"
                                                                     Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=PendingRestart}">
-                                                                <TextBlock Text="{loc:Str Welcome.RestartRequired}"
+                                                                <TextBlock Text="{loc:Str Plugins.RestartRequiredBadge}"
                                                                            Foreground="{StaticResource WarningBrush}"
                                                                            FontSize="11"
                                                                            FontWeight="SemiBold"/>

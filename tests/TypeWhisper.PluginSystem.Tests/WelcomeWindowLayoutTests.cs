@@ -41,7 +41,24 @@ public sealed class WelcomeWindowLayoutTests
             "WelcomeWindow.xaml");
 
         Assert.Contains("ConverterParameter=PendingRestart", xaml);
-        Assert.Contains("Welcome.RestartRequired", xaml);
+        Assert.Contains("Plugins.RestartRequiredBadge", xaml);
+        Assert.DoesNotContain("Welcome.RestartRequired", xaml);
+    }
+
+    [Fact]
+    public void WelcomeWindow_ShowsAutostartAndOmitsWritingFocus()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "WelcomeWindow.xaml");
+
+        Assert.Contains("WelcomeAutostart", xaml);
+        Assert.Contains("IsChecked=\"{Binding AutostartEnabled}\"", xaml);
+        Assert.DoesNotContain("Welcome.IndustryHeader", xaml);
+        Assert.DoesNotContain("IndustryPresets", xaml);
+        Assert.DoesNotContain("SelectedIndustryPresetId", xaml);
     }
 
     [Fact]

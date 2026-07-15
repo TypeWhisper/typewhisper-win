@@ -72,6 +72,16 @@ public sealed class UninstallUserDataProtectorTests : IDisposable
     }
 
     [Fact]
+    public void Program_EnablesAutostartOnFirstVelopackRunAndDetectsStoreStartup()
+    {
+        var source = TestFile.ReadProjectFile("src", "TypeWhisper.Windows", "Program.cs");
+
+        Assert.Contains(".OnFirstRun((_) => StartupService.Enable())", source);
+        Assert.Contains("ActivationKind.StartupTask", source);
+        Assert.Contains("StartMinimized = isStartupActivation", source);
+    }
+
+    [Fact]
     public void Program_AcquiresSingleInstanceBeforeMigratingUserData()
     {
         var source = TestFile.ReadProjectFile("src", "TypeWhisper.Windows", "Program.cs");
