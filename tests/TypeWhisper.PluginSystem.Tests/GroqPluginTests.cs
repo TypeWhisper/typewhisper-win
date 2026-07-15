@@ -257,10 +257,11 @@ public class GroqPluginTests
     [Fact]
     public async Task ProcessAsync_UsesSelectedLlmModelWhenCallerDoesNotOverride()
     {
-        var handler = new CapturingHandler((_, body) =>
+        var handler = new CapturingHandler((request, body) =>
         {
             using var doc = JsonDocument.Parse(body ?? throw new InvalidOperationException("Missing request body."));
             Assert.Equal("openai/gpt-oss-120b", doc.RootElement.GetProperty("model").GetString());
+            Assert.False(doc.RootElement.TryGetProperty("reasoning_format", out _));
 
             return JsonResponse("""
                 {
@@ -286,6 +287,39 @@ public class GroqPluginTests
         var result = await sut.ProcessAsync("system", "user", "", CancellationToken.None);
 
         Assert.Equal("done", result);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HidesReasoningForQwenModels()
+    {
+        var handler = new CapturingHandler((_, body) =>
+        {
+            using var doc = JsonDocument.Parse(body ?? throw new InvalidOperationException("Missing request body."));
+            Assert.Equal("hidden", doc.RootElement.GetProperty("reasoning_format").GetString());
+
+            return JsonResponse("""
+                {
+                  "choices": [
+                    {
+                      "message": {
+                        "content": "final answer"
+                      }
+                    }
+                  ]
+                }
+                """);
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new GroqPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.ProcessAsync("system", "user", "qwen/qwen3.6-27b", CancellationToken.None);
+
+        Assert.Equal("final answer", result);
     }
 
     [Fact]
