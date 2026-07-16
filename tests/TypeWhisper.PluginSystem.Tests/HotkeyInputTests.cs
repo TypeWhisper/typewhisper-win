@@ -683,6 +683,38 @@ public class HotkeyInputTests
         Assert.False(rightCtrlUp.Swallow);
     }
 
+    [Theory]
+    [InlineData(NativeMethods.VK_RMENU, NativeMethods.VK_LMENU)]
+    [InlineData(NativeMethods.VK_RCONTROL, NativeMethods.VK_LCONTROL)]
+    public void SideSpecificSingleModifier_HybridActivatesOnMatchingPress(uint targetVk, uint otherSideVk)
+    {
+        var sut = CreateStateMachine(0, targetVk, activateModifierOnlyOnKeyDown: true);
+
+        Assert.Equal(default, sut.ProcessKeyEvent(otherSideVk, isKeyDown: true, isKeyUp: false));
+        Assert.Equal(default, sut.ProcessKeyEvent(otherSideVk, isKeyDown: false, isKeyUp: true));
+
+        var targetDown = sut.ProcessKeyEvent(targetVk, isKeyDown: true, isKeyUp: false);
+        Assert.True(targetDown.RaiseKeyDown);
+        Assert.True(targetDown.Swallow);
+
+        var targetUp = sut.ProcessKeyEvent(targetVk, isKeyDown: false, isKeyUp: true);
+        Assert.True(targetUp.RaiseKeyUp);
+        Assert.True(targetUp.Swallow);
+    }
+
+    [Theory]
+    [InlineData(NativeMethods.VK_RMENU, NativeMethods.VK_LMENU)]
+    [InlineData(NativeMethods.VK_RMENU, NativeMethods.VK_LCONTROL)]
+    [InlineData(NativeMethods.VK_RCONTROL, NativeMethods.VK_LCONTROL)]
+    [InlineData(NativeMethods.VK_RCONTROL, NativeMethods.VK_LMENU)]
+    public void SideSpecificSingleModifier_HybridRejectsAdditionalModifiers(uint targetVk, uint additionalVk)
+    {
+        var sut = CreateStateMachine(0, targetVk, activateModifierOnlyOnKeyDown: true);
+        _ = sut.ProcessKeyEvent(additionalVk, isKeyDown: true, isKeyUp: false);
+
+        Assert.Equal(default, sut.ProcessKeyEvent(targetVk, isKeyDown: true, isKeyUp: false));
+    }
+
     private static HotkeyMatchStateMachine CreateStateMachine(
         uint modifiers,
         uint vk = 0,

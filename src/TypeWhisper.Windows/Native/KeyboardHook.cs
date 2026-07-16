@@ -629,7 +629,9 @@ internal sealed class HotkeyMatchStateMachine
             return false;
 
         if (_targetVk != 0)
-            return vkCode == _targetVk && GetPressedModifiers() == _targetModifiers;
+            return vkCode == _targetVk
+                && GetPressedModifiers(HotkeyKeyClassifier.IsModifierKey(_targetVk) ? _targetVk : 0)
+                    == _targetModifiers;
 
         return HotkeyKeyClassifier.IsModifierKey(vkCode)
             && IsRequiredModifier(vkCode)
@@ -719,13 +721,13 @@ internal sealed class HotkeyMatchStateMachine
     private bool HasAnyModifierOnlyTargetPressed() =>
         _pressedKeys.Any(IsModifierOnlyTargetKey);
 
-    private uint GetPressedModifiers()
+    private uint GetPressedModifiers(uint excludedVkCode = 0)
     {
         var modifiers = 0u;
-        if (AnyPressed(HotkeyModifier.Control)) modifiers |= NativeMethods.MOD_CONTROL;
-        if (AnyPressed(HotkeyModifier.Shift)) modifiers |= NativeMethods.MOD_SHIFT;
-        if (AnyPressed(HotkeyModifier.Alt)) modifiers |= NativeMethods.MOD_ALT;
-        if (AnyPressed(HotkeyModifier.Win)) modifiers |= NativeMethods.MOD_WIN;
+        if (AnyPressed(HotkeyModifier.Control, excludedVkCode)) modifiers |= NativeMethods.MOD_CONTROL;
+        if (AnyPressed(HotkeyModifier.Shift, excludedVkCode)) modifiers |= NativeMethods.MOD_SHIFT;
+        if (AnyPressed(HotkeyModifier.Alt, excludedVkCode)) modifiers |= NativeMethods.MOD_ALT;
+        if (AnyPressed(HotkeyModifier.Win, excludedVkCode)) modifiers |= NativeMethods.MOD_WIN;
         return modifiers;
     }
 
@@ -786,8 +788,9 @@ internal sealed class HotkeyMatchStateMachine
         return false;
     }
 
-    private bool AnyPressed(HotkeyModifier modifier) =>
-        _pressedKeys.Any(vkCode => HotkeyKeyClassifier.MatchesModifier(vkCode, modifier));
+    private bool AnyPressed(HotkeyModifier modifier, uint excludedVkCode = 0) =>
+        _pressedKeys.Any(vkCode =>
+            vkCode != excludedVkCode && HotkeyKeyClassifier.MatchesModifier(vkCode, modifier));
 
     private bool WouldModifierRemainPressedAfterRelease(HotkeyModifier modifier, uint releasedVkCode) =>
         _pressedKeys.Any(vkCode => vkCode != releasedVkCode && HotkeyKeyClassifier.MatchesModifier(vkCode, modifier));
