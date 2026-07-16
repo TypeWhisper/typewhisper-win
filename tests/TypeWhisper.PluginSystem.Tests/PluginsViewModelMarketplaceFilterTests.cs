@@ -118,6 +118,19 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
         Assert.True(installedPlugin.UpdateRegistryPluginCommand.CanExecute(null));
     }
 
+    [Fact]
+    public async Task FocusInstalledPlugin_SelectsInstalledTab()
+    {
+        var first = CreateLoadedPlugin("com.typewhisper.openai", "OpenAI", "1.0.0");
+        var second = CreateLoadedPlugin("com.typewhisper.groq", "Groq", "1.0.0");
+        var viewModel = await CreateViewModelAsync(null, "1.0.0", [first, second]);
+        viewModel.IsMarketplaceSelected = true;
+
+        Assert.True(viewModel.FocusInstalledPlugin("com.typewhisper.groq"));
+
+        Assert.False(viewModel.IsMarketplaceSelected);
+    }
+
     private async Task<PluginsViewModel> CreateViewModelAsync()
         => await CreateViewModelAsync(null, "1.0.0");
 

@@ -122,17 +122,12 @@ public partial class PluginsViewModel : ObservableObject
 
     private void RefreshPlugins()
     {
-        // Preserve expanded state across refresh
-        var expandedIds = Plugins.Where(p => p.IsExpanded).Select(p => p.Id).ToHashSet();
-
         Plugins.Clear();
         foreach (var plugin in _pluginManager.AllPlugins)
         {
             var isEnabled = _pluginManager.IsEnabled(plugin.Manifest.Id);
             var vm = new PluginItemViewModel(plugin, isEnabled, _pluginManager, _registryService);
             vm.RegistryPlugin = FindRegistryPlugin(vm.Id);
-            if (expandedIds.Contains(vm.Id))
-                vm.IsExpanded = true;
             Plugins.Add(vm);
         }
 
@@ -247,8 +242,6 @@ public partial class PluginsViewModel : ObservableObject
             return false;
 
         IsMarketplaceSelected = false;
-        foreach (var plugin in Plugins)
-            plugin.IsExpanded = ReferenceEquals(plugin, selected);
         return true;
     }
 
@@ -461,7 +454,16 @@ public partial class PluginItemViewModel : ObservableObject
 
     [ObservableProperty] private bool _isEnabled;
     [ObservableProperty] private UserControl? _settingsView;
-    [ObservableProperty] private bool _isExpanded;
+
+    /// <summary>
+    /// Gets whether the plugin exposes settings.
+    /// </summary>
+    public bool HasSettings => SettingsView is not null;
+
+    /// <summary>
+    /// Gets the accessible label for the plugin settings action.
+    /// </summary>
+    public string SettingsAutomationName => $"{Loc.Instance["Settings.WindowTitle"]}: {Name}";
 
     private IReadOnlyList<PluginMarketplaceCategoryDescriptor>? _categoryDescriptors;
 
@@ -569,11 +571,9 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusLabel));
     }
 
-    partial void OnIsExpandedChanged(bool value)
+    partial void OnSettingsViewChanged(UserControl? value)
     {
-        // Lazy-load settings view when first expanded
-        if (value && SettingsView is null && IsEnabled)
-            SettingsView = _plugin.Instance.CreateSettingsView();
+        OnPropertyChanged(nameof(HasSettings));
     }
 
     [RelayCommand]
@@ -659,6 +659,7 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(Category));
         OnPropertyChanged(nameof(LocationBadge));
+        OnPropertyChanged(nameof(SettingsAutomationName));
         NotifyUpdateStateChanged();
     }
 }
