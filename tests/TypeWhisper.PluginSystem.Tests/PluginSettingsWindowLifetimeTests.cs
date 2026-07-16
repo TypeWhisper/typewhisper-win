@@ -11,7 +11,7 @@ public sealed class PluginSettingsWindowLifetimeTests
         Exception? failure = null;
         var thread = new Thread(() =>
         {
-            try
+            failure = Record.Exception(() =>
             {
                 var settingsView = new UserControl();
                 var dialog = new PluginSettingsWindow("Test Plugin", settingsView);
@@ -26,11 +26,7 @@ public sealed class PluginSettingsWindowLifetimeTests
                 reopenedDialog.Show();
                 reopenedDialog.Close();
                 Assert.Null(reopenedDialog.SettingsContent.Content);
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
+            });
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
