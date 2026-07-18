@@ -10,7 +10,9 @@ namespace TypeWhisper.Plugin.Script;
 public partial class ScriptSettingsView : UserControl
 {
     private readonly ScriptPlugin _plugin;
+    private ScriptEntry? _editingScript;
     private bool _suppressEditEvents;
+    private bool _suppressSelectionEvents;
 
     /// <summary>
     /// Initializes a new instance of the ScriptSettingsView class.
@@ -81,24 +83,34 @@ public partial class ScriptSettingsView : UserControl
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressSelectionEvents) return;
+
         if (ScriptList.SelectedItem is not ScriptEntry selected)
         {
+            _editingScript = null;
             EditPanel.Visibility = Visibility.Collapsed;
+            UpdateEditButtons();
             return;
         }
 
+        LoadEditor(selected);
+    }
+
+    private void LoadEditor(ScriptEntry script)
+    {
+        _editingScript = script;
         _suppressEditEvents = true;
         try
         {
-            NameBox.Text = selected.Name;
-            CommandBox.Text = selected.Command;
+            NameBox.Text = script.Name;
+            CommandBox.Text = script.Command;
 
             // Select matching shell in ComboBox
             for (var i = 0; i < ShellCombo.Items.Count; i++)
             {
                 if (ShellCombo.Items[i] is ComboBoxItem item
                     && item.Content is string shell
-                    && shell.Equals(selected.Shell, StringComparison.OrdinalIgnoreCase))
+                    && shell.Equals(script.Shell, StringComparison.OrdinalIgnoreCase))
                 {
                     ShellCombo.SelectedIndex = i;
                     break;
@@ -111,21 +123,62 @@ public partial class ScriptSettingsView : UserControl
         {
             _suppressEditEvents = false;
         }
+
+        UpdateEditButtons();
     }
 
     private void OnEditFieldChanged(object sender, RoutedEventArgs e)
     {
         if (_suppressEditEvents) return;
-        if (ScriptList.SelectedItem is not ScriptEntry selected) return;
+        UpdateEditButtons();
+    }
 
-        var shell = (ShellCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "cmd";
+    private void OnSaveEdit(object sender, RoutedEventArgs e)
+    {
+        if (CreateEditedScript() is not { } updated || updated == _editingScript) return;
+        UpdateScriptAndKeepSelection(updated);
+        UpdateEditButtons();
+    }
 
-        _plugin.Service?.UpdateScript(selected with
+    private void OnCancelEdit(object sender, RoutedEventArgs e)
+    {
+        if (_editingScript is { } script) LoadEditor(script);
+    }
+
+    private ScriptEntry? CreateEditedScript()
+    {
+        if (_editingScript is not { } script) return null;
+
+        return script with
         {
             Name = NameBox.Text,
             Command = CommandBox.Text,
-            Shell = shell
-        });
+            Shell = (ShellCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "cmd"
+        };
+    }
+
+    private void UpdateEditButtons()
+    {
+        var hasChanges = CreateEditedScript() is { } edited && edited != _editingScript;
+        SaveButton.IsEnabled = hasChanges;
+        CancelButton.IsEnabled = hasChanges;
+    }
+
+    private void UpdateScriptAndKeepSelection(ScriptEntry updated)
+    {
+        if (_plugin.Service is not { } service) return;
+
+        _suppressSelectionEvents = true;
+        try
+        {
+            service.UpdateScript(updated);
+            ScriptList.SelectedItem = updated;
+            _editingScript = updated;
+        }
+        finally
+        {
+            _suppressSelectionEvents = false;
+        }
     }
 
     private void OnToggleChanged(object sender, RoutedEventArgs e)
@@ -134,6 +187,15 @@ public partial class ScriptSettingsView : UserControl
         var existing = _plugin.Service?.Scripts.FirstOrDefault(s => s.Id == id);
         if (existing is null) return;
 
-        _plugin.Service?.UpdateScript(existing with { IsEnabled = isChecked == true });
+        var updated = existing with { IsEnabled = isChecked == true };
+        if (_editingScript?.Id == id)
+        {
+            UpdateScriptAndKeepSelection(updated);
+            UpdateEditButtons();
+        }
+        else
+        {
+            _plugin.Service?.UpdateScript(updated);
+        }
     }
 }
