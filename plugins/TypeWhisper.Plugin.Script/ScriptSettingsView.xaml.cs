@@ -104,6 +104,7 @@ public partial class ScriptSettingsView : UserControl
         {
             NameBox.Text = script.Name;
             CommandBox.Text = script.Command;
+            ShellCombo.SelectedIndex = -1;
 
             // Select matching shell in ComboBox
             for (var i = 0; i < ShellCombo.Items.Count; i++)
@@ -153,7 +154,7 @@ public partial class ScriptSettingsView : UserControl
         {
             Name = NameBox.Text,
             Command = CommandBox.Text,
-            Shell = (ShellCombo.SelectedItem as ComboBoxItem)?.Content as string ?? "cmd"
+            Shell = (ShellCombo.SelectedItem as ComboBoxItem)?.Content as string ?? script.Shell
         };
     }
 

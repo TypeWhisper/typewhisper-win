@@ -13,7 +13,7 @@ public sealed class ScriptPluginTests
     public void SettingsView_StagesEditsUntilSaveAndSupportsCancel()
     {
         Exception? failure = null;
-        var thread = new Thread(() =>
+        var thread = new Thread(() => failure = Record.Exception(() =>
         {
             var dataDirectory = Path.Join(Path.GetTempPath(), $"typewhisper-script-{Guid.NewGuid():N}");
             Directory.CreateDirectory(dataDirectory);
@@ -28,8 +28,10 @@ public sealed class ScriptPluginTests
 
                 var original = new ScriptEntry { Name = "Original", Command = "echo original" };
                 var other = new ScriptEntry { Name = "Other" };
+                var customShell = new ScriptEntry { Name = "Custom", Shell = "custom-shell" };
                 plugin.Service!.AddScript(original);
                 plugin.Service.AddScript(other);
+                plugin.Service.AddScript(customShell);
 
                 var view = Assert.IsType<ScriptSettingsView>(plugin.CreateSettingsView());
                 var list = Assert.IsType<ListBox>(view.FindName("ScriptList"));
@@ -80,10 +82,15 @@ public sealed class ScriptPluginTests
                 list.SelectedItem = saved;
                 Assert.Equal("Edited Script", name.Text);
                 Assert.Equal(Visibility.Visible, panel.Visibility);
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
+
+                list.SelectedItem = customShell;
+                Assert.Equal(-1, shell.SelectedIndex);
+                Assert.False(save.IsEnabled);
+                name.Text = "Custom edited";
+                save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal(
+                    "custom-shell",
+                    plugin.Service.Scripts.Single(script => script.Id == customShell.Id).Shell);
             }
             finally
             {
@@ -91,8 +98,9 @@ public sealed class ScriptPluginTests
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
-        });
+        }));
 
+        thread.IsBackground = true;
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "Script settings test did not finish.");
