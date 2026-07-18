@@ -38,6 +38,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SupertonicTts\TypeWhisper.Plugin.SupertonicTts.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.GraniteSpeech\TypeWhisper.Plugin.GraniteSpeech.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\TypeWhisper.Plugin.LiveTranscript.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Script\TypeWhisper.Plugin.Script.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\TypeWhisper.Plugin.SmallestAi.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Cli\TypeWhisper.Cli.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
