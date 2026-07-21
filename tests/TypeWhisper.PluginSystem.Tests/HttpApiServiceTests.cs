@@ -918,6 +918,30 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DictationStart_ReturnsConflictWhenConcurrentAdmissionIsRejected()
+    {
+        var dictation = new ConcurrentAdmissionDictationApiController();
+        var service = CreateService(dictation: dictation);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/dictation/start",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []);
+
+        var firstStart = service.HandleRequestAsync(request, CancellationToken.None);
+        await dictation.FirstStartEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondResponse = await service.HandleRequestAsync(request, CancellationToken.None);
+        dictation.ReleaseFirstStart.TrySetResult();
+        var firstResponse = await firstStart;
+
+        Assert.Equal(200, firstResponse.StatusCode);
+        Assert.Equal(409, secondResponse.StatusCode);
+        Assert.Equal("Already recording", ErrorMessage(secondResponse));
+    }
+
+    [Fact]
     public async Task DictationStart_RejectsUnknownDisabledAndMalformedWorkflows()
     {
         var disabled = new Workflow
@@ -1018,7 +1042,7 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, null, null, false, null, plugins).Service;
+        }, null, null, false, null, null, plugins).Service;
     }
 
     private HttpApiService CreateService(
@@ -1027,6 +1051,7 @@ public class HttpApiServiceTests : IDisposable
         IRecorderApiController? recorder = null,
         bool automationEnabled = false,
         IDictationAutomationController? automationController = null,
+        IDictationApiController? dictation = null,
         params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -1037,13 +1062,13 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, apiTokenProvider, recorder, automationEnabled, automationController, plugins).Service;
+        }, apiTokenProvider, recorder, automationEnabled, automationController, dictation, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         params ITranscriptionEnginePlugin[] plugins)
-        => CreateServiceWithModelManager(settings, null, null, false, null, plugins);
+        => CreateServiceWithModelManager(settings, null, null, false, null, null, plugins);
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
@@ -1051,6 +1076,7 @@ public class HttpApiServiceTests : IDisposable
         IRecorderApiController? recorder,
         bool automationEnabled,
         IDictationAutomationController? automationController,
+        IDictationApiController? dictation,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -1081,7 +1107,7 @@ public class HttpApiServiceTests : IDisposable
             vocabulary.Object,
             new PostProcessingPipeline(),
             translation.Object,
-            _dictation,
+            dictation ?? _dictation,
             _workflows.Object,
             apiTokenProvider ?? (() => "test-token"),
             recorder,
@@ -1245,6 +1271,48 @@ public class HttpApiServiceTests : IDisposable
                     null,
                     null)
                 : null;
+    }
+
+    private sealed class ConcurrentAdmissionDictationApiController : IDictationApiController
+    {
+        private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _sessions = [];
+        private int _startCount;
+
+        public TaskCompletionSource FirstStartEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirstStart { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool IsRecording { get; private set; }
+        public DictationState State => IsRecording ? DictationState.Recording : DictationState.Idle;
+        public string? ActiveWorkflowName => null;
+        public string? ActiveWorkflowId => null;
+
+        public async Task<Guid> StartRecordingForApiAsync(string? workflowId = null)
+        {
+            var sessionId = Guid.NewGuid();
+            if (Interlocked.Increment(ref _startCount) > 1)
+            {
+                _sessions[sessionId] = new ApiDictationSessionSnapshot(
+                    sessionId,
+                    ApiDictationSessionStatus.Failed,
+                    null,
+                    "Already recording");
+                return sessionId;
+            }
+
+            FirstStartEntered.TrySetResult();
+            await ReleaseFirstStart.Task;
+            IsRecording = true;
+            _sessions[sessionId] = new ApiDictationSessionSnapshot(
+                sessionId,
+                ApiDictationSessionStatus.Recording,
+                null,
+                null);
+            return sessionId;
+        }
+
+        public Task<Guid?> StopRecordingForApiAsync() => Task.FromResult<Guid?>(null);
+
+        public ApiDictationSessionSnapshot? GetApiDictationSession(Guid id) =>
+            _sessions.GetValueOrDefault(id);
     }
 
     private sealed class FakeDictationAutomationController : IDictationAutomationController

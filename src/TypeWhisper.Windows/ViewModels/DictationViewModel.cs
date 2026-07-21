@@ -516,6 +516,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     public async Task<Guid> StartRecordingForApiAsync(string? workflowId = null)
     {
         var sessionId = Guid.NewGuid();
+
+        if (_isRecording || _isStoppingRecording)
+        {
+            StoreApiDictationSession(new ApiDictationSessionSnapshot(
+                sessionId,
+                ApiDictationSessionStatus.Failed,
+                null,
+                "Already recording"));
+            return sessionId;
+        }
+
         _activeApiDictationSessionId = sessionId;
         StoreApiDictationSession(new ApiDictationSessionSnapshot(
             sessionId,
