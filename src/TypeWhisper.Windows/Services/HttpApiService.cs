@@ -30,7 +30,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly IVocabularyBoostingService _vocabularyBoosting;
     private readonly IPostProcessingPipeline _pipeline;
     private readonly ITranslationService _translation;
-    private readonly DictationViewModel _dictation;
+    private readonly IDictationApiController _dictation;
     private readonly IWorkflowService _workflows;
     private readonly IRecorderApiController? _recorder;
     private readonly IDictationAutomationController? _automation;
@@ -68,7 +68,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         IVocabularyBoostingService vocabularyBoosting,
         IPostProcessingPipeline pipeline,
         ITranslationService translation,
-        DictationViewModel dictation,
+        IDictationApiController dictation,
         IWorkflowService workflows,
         Func<string>? apiTokenProvider = null,
         IRecorderApiController? recorder = null,
@@ -248,7 +248,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/transcribe/local-file", "POST") => await HandleTranscribeLocalFile(request, ct),
                 ("/v1/history", "GET") => HandleHistorySearch(request),
                 ("/v1/history", "DELETE") => HandleHistoryDelete(request),
-                ("/v1/dictation/start", "POST") => await HandleDictationStart(),
+                ("/v1/dictation/start", "POST") => await HandleDictationStart(request),
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
                 ("/v1/dictation/transcription", "GET") => HandleDictationTranscription(request),
@@ -306,7 +306,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             engine = activePlugin?.ProviderId,
             model = activeModel,
             active_model = _modelManager.ActiveModelId,
-            api_version = "1.0",
+            api_version = "1.1",
+            supports_workflow_dictation = true,
             supports_streaming = activePlugin?.SupportsStreaming ?? false,
             supports_translation = activePlugin?.SupportsTranslation ?? false,
             acceleration = activePlugin is null || accelerationStatus is null
@@ -545,17 +546,54 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { deleted = true, id });
     }
 
-    private async Task<HttpApiResponse> HandleDictationStart()
+    private async Task<HttpApiResponse> HandleDictationStart(HttpApiRequest request)
     {
         if (_dictation.IsRecording)
             return Error(409, "Already recording");
 
-        var id = await InvokeOnDispatcherAsync(() => _dictation.StartRecordingForApiAsync());
+        DictationStartRequest? payload = null;
+        if (request.Body.Length > 0)
+        {
+            try
+            {
+                payload = JsonSerializer.Deserialize<DictationStartRequest>(request.Body, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                return Error(400, "Invalid JSON body");
+            }
+
+            if (payload is null)
+                return Error(400, "Invalid JSON body");
+        }
+
+        Workflow? workflow = null;
+        if (payload?.WorkflowId is { } requestedWorkflowId)
+        {
+            if (string.IsNullOrWhiteSpace(requestedWorkflowId))
+                return Error(400, "Missing or invalid 'workflow_id'");
+
+            workflow = _workflows.GetWorkflow(requestedWorkflowId)
+                ?? _workflows.Workflows.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, requestedWorkflowId, StringComparison.Ordinal));
+            if (workflow is null)
+                return Error(404, "Workflow not found");
+            if (!workflow.IsEnabled)
+                return Error(409, "Workflow is disabled");
+        }
+
+        var id = await InvokeOnDispatcherAsync(() => _dictation.StartRecordingForApiAsync(workflow?.Id));
         var session = _dictation.GetApiDictationSession(id);
         if (session?.Status == ApiDictationSessionStatus.Failed)
             return Error(409, session.Error ?? "Failed to start dictation");
 
-        return Json(new { id, status = "recording" });
+        return Json(new
+        {
+            id,
+            status = "recording",
+            workflow_id = workflow?.Id,
+            workflow_name = workflow?.Name
+        });
     }
 
     private async Task<HttpApiResponse> HandleDictationStop()
@@ -577,7 +615,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             state = _dictation.State.ToString().ToLowerInvariant(),
             is_recording = _dictation.IsRecording,
             active_model = _modelManager.ActiveModelId,
-            active_workflow = _dictation.ActiveWorkflowName
+            active_workflow = _dictation.ActiveWorkflowName,
+            active_workflow_id = _dictation.ActiveWorkflowId
         });
     }
 
@@ -1250,6 +1289,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         string Mode,
         string? InputLanguage,
         IReadOnlyList<string> Hints);
+
+    private sealed record DictationStartRequest(string? WorkflowId);
 
     private sealed record DictionaryCorrectionDto(
         [property: JsonPropertyName("original")] string Original,

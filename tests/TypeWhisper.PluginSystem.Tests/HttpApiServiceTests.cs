@@ -23,6 +23,7 @@ public class HttpApiServiceTests : IDisposable
     private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly Mock<IHistoryService> _history = new();
+    private readonly FakeDictationApiController _dictation = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
 
@@ -872,6 +873,134 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Status_AdvertisesWorkflowDictationCapability()
+    {
+        var response = JsonObject(await CreateService().HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.Equal("1.1", response["api_version"].GetString());
+        Assert.True(response["supports_workflow_dictation"].GetBoolean());
+    }
+
+    [Fact]
+    public async Task DictationStart_PreservesBodylessBehaviorAndAcceptsEnabledWorkflow()
+    {
+        var workflow = new Workflow
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Meeting notes",
+            Template = WorkflowTemplate.Custom,
+            Trigger = new WorkflowTrigger { Kind = WorkflowTriggerKind.Manual }
+        };
+        _workflows.Setup(w => w.Workflows).Returns([workflow]);
+        var service = CreateService();
+
+        var bodyless = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "POST",
+            "/v1/dictation/start",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+        _dictation.IsRecording = false;
+        var withWorkflow = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/dictation/start",
+            JsonSerializer.Serialize(new { workflow_id = workflow.Id })), CancellationToken.None));
+
+        Assert.Equal([null, workflow.Id], _dictation.StartWorkflowIds);
+        Assert.Equal(JsonValueKind.Null, bodyless["workflow_id"].ValueKind);
+        Assert.Equal(workflow.Id, withWorkflow["workflow_id"].GetString());
+        Assert.Equal("Meeting notes", withWorkflow["workflow_name"].GetString());
+    }
+
+    [Fact]
+    public async Task DictationStart_ReturnsConflictWhenConcurrentAdmissionIsRejected()
+    {
+        var dictation = new ConcurrentAdmissionDictationApiController();
+        var service = CreateService(dictation: dictation);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/dictation/start",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []);
+
+        var firstStart = service.HandleRequestAsync(request, CancellationToken.None);
+        await dictation.FirstStartEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondResponse = await service.HandleRequestAsync(request, CancellationToken.None);
+        dictation.ReleaseFirstStart.TrySetResult();
+        var firstResponse = await firstStart;
+
+        Assert.Equal(200, firstResponse.StatusCode);
+        Assert.Equal(409, secondResponse.StatusCode);
+        Assert.Equal("Already recording", ErrorMessage(secondResponse));
+    }
+
+    [Fact]
+    public async Task DictationStart_RejectsUnknownDisabledAndMalformedWorkflows()
+    {
+        var disabled = new Workflow
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = "Disabled",
+            IsEnabled = false,
+            Template = WorkflowTemplate.Custom,
+            Trigger = new WorkflowTrigger { Kind = WorkflowTriggerKind.Manual }
+        };
+        _workflows.Setup(w => w.Workflows).Returns([disabled]);
+        var service = CreateService();
+
+        var unknown = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/dictation/start",
+            """{"workflow_id":"missing"}"""), CancellationToken.None);
+        var disabledResponse = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/dictation/start",
+            JsonSerializer.Serialize(new { workflow_id = disabled.Id })), CancellationToken.None);
+        var empty = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/dictation/start",
+            """{"workflow_id":" "}"""), CancellationToken.None);
+        var malformed = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/dictation/start",
+            "{"), CancellationToken.None);
+
+        Assert.Equal(404, unknown.StatusCode);
+        Assert.Equal(409, disabledResponse.StatusCode);
+        Assert.Equal(400, empty.StatusCode);
+        Assert.Equal(400, malformed.StatusCode);
+        Assert.Empty(_dictation.StartWorkflowIds);
+    }
+
+    [Fact]
+    public async Task DictationStatus_IncludesActiveWorkflowIdentity()
+    {
+        _dictation.IsRecording = true;
+        _dictation.State = DictationState.Recording;
+        _dictation.ActiveWorkflowId = "workflow-id";
+        _dictation.ActiveWorkflowName = "Meeting notes";
+
+        var response = JsonObject(await CreateService().HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/dictation/status",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.True(response["is_recording"].GetBoolean());
+        Assert.Equal("recording", response["state"].GetString());
+        Assert.Equal("workflow-id", response["active_workflow_id"].GetString());
+        Assert.Equal("Meeting notes", response["active_workflow"].GetString());
+    }
+
+    [Fact]
     public async Task TranscribeLocalFileEndpoint_RejectsMissingAndUnsupportedFiles()
     {
         var service = CreateService();
@@ -913,7 +1042,7 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, null, null, false, null, plugins).Service;
+        }, null, null, false, null, null, plugins).Service;
     }
 
     private HttpApiService CreateService(
@@ -922,6 +1051,7 @@ public class HttpApiServiceTests : IDisposable
         IRecorderApiController? recorder = null,
         bool automationEnabled = false,
         IDictationAutomationController? automationController = null,
+        IDictationApiController? dictation = null,
         params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -932,13 +1062,13 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, apiTokenProvider, recorder, automationEnabled, automationController, plugins).Service;
+        }, apiTokenProvider, recorder, automationEnabled, automationController, dictation, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         params ITranscriptionEnginePlugin[] plugins)
-        => CreateServiceWithModelManager(settings, null, null, false, null, plugins);
+        => CreateServiceWithModelManager(settings, null, null, false, null, null, plugins);
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
@@ -946,6 +1076,7 @@ public class HttpApiServiceTests : IDisposable
         IRecorderApiController? recorder,
         bool automationEnabled,
         IDictationAutomationController? automationController,
+        IDictationApiController? dictation,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -976,7 +1107,7 @@ public class HttpApiServiceTests : IDisposable
             vocabulary.Object,
             new PostProcessingPipeline(),
             translation.Object,
-            null!,
+            dictation ?? _dictation,
             _workflows.Object,
             apiTokenProvider ?? (() => "test-token"),
             recorder,
@@ -1106,6 +1237,82 @@ public class HttpApiServiceTests : IDisposable
 
         public RecorderApiSessionSnapshot? GetRecorderApiSession(Guid id) =>
             Session is not null && Session.Id == id ? Session : null;
+    }
+
+    private sealed class FakeDictationApiController : IDictationApiController
+    {
+        public bool IsRecording { get; set; }
+        public DictationState State { get; set; } = DictationState.Idle;
+        public string? ActiveWorkflowName { get; set; }
+        public string? ActiveWorkflowId { get; set; }
+        public List<string?> StartWorkflowIds { get; } = [];
+        public Guid SessionId { get; } = Guid.NewGuid();
+
+        public Task<Guid> StartRecordingForApiAsync(string? workflowId = null)
+        {
+            StartWorkflowIds.Add(workflowId);
+            IsRecording = true;
+            State = DictationState.Recording;
+            return Task.FromResult(SessionId);
+        }
+
+        public Task<Guid?> StopRecordingForApiAsync()
+        {
+            IsRecording = false;
+            State = DictationState.Idle;
+            return Task.FromResult<Guid?>(SessionId);
+        }
+
+        public ApiDictationSessionSnapshot? GetApiDictationSession(Guid id) =>
+            id == SessionId
+                ? new ApiDictationSessionSnapshot(
+                    SessionId,
+                    ApiDictationSessionStatus.Recording,
+                    null,
+                    null)
+                : null;
+    }
+
+    private sealed class ConcurrentAdmissionDictationApiController : IDictationApiController
+    {
+        private readonly Dictionary<Guid, ApiDictationSessionSnapshot> _sessions = [];
+        private int _startCount;
+
+        public TaskCompletionSource FirstStartEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirstStart { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool IsRecording { get; private set; }
+        public DictationState State => IsRecording ? DictationState.Recording : DictationState.Idle;
+        public string? ActiveWorkflowName => null;
+        public string? ActiveWorkflowId => null;
+
+        public async Task<Guid> StartRecordingForApiAsync(string? workflowId = null)
+        {
+            var sessionId = Guid.NewGuid();
+            if (Interlocked.Increment(ref _startCount) > 1)
+            {
+                _sessions[sessionId] = new ApiDictationSessionSnapshot(
+                    sessionId,
+                    ApiDictationSessionStatus.Failed,
+                    null,
+                    "Already recording");
+                return sessionId;
+            }
+
+            FirstStartEntered.TrySetResult();
+            await ReleaseFirstStart.Task;
+            IsRecording = true;
+            _sessions[sessionId] = new ApiDictationSessionSnapshot(
+                sessionId,
+                ApiDictationSessionStatus.Recording,
+                null,
+                null);
+            return sessionId;
+        }
+
+        public Task<Guid?> StopRecordingForApiAsync() => Task.FromResult<Guid?>(null);
+
+        public ApiDictationSessionSnapshot? GetApiDictationSession(Guid id) =>
+            _sessions.GetValueOrDefault(id);
     }
 
     private sealed class FakeDictationAutomationController : IDictationAutomationController

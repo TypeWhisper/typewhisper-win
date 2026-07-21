@@ -505,6 +505,7 @@ public partial class App : Application
         services.AddSingleton<AudioRecorderViewModel>();
         services.AddSingleton<IRecorderApiController>(sp => sp.GetRequiredService<AudioRecorderViewModel>());
         services.AddSingleton<DictationViewModel>();
+        services.AddSingleton<IDictationApiController>(sp => sp.GetRequiredService<DictationViewModel>());
         services.AddSingleton<RecordingOverlayViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<ModelManagerViewModel>();

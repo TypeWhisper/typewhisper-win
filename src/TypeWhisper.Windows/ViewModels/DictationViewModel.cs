@@ -82,9 +82,36 @@ public enum ApiDictationSessionStatus
 }
 
 /// <summary>
+/// API-facing dictation control surface.
+/// </summary>
+public interface IDictationApiController
+{
+    /// <summary>Gets whether dictation recording is active.</summary>
+    bool IsRecording { get; }
+
+    /// <summary>Gets the current dictation state.</summary>
+    DictationState State { get; }
+
+    /// <summary>Gets the active workflow name, when applicable.</summary>
+    string? ActiveWorkflowName { get; }
+
+    /// <summary>Gets the active workflow id, when applicable.</summary>
+    string? ActiveWorkflowId { get; }
+
+    /// <summary>Starts an API dictation session, optionally forcing a workflow.</summary>
+    Task<Guid> StartRecordingForApiAsync(string? workflowId = null);
+
+    /// <summary>Stops the active API dictation session.</summary>
+    Task<Guid?> StopRecordingForApiAsync();
+
+    /// <summary>Returns an API dictation session by id.</summary>
+    ApiDictationSessionSnapshot? GetApiDictationSession(Guid id);
+}
+
+/// <summary>
 /// Provides dictation view model behavior.
 /// </summary>
-public partial class DictationViewModel : ObservableObject, IDisposable, IDictationAutomationController
+public partial class DictationViewModel : ObservableObject, IDisposable, IDictationApiController, IDictationAutomationController
 {
     private readonly ISettingsService _settings;
     private readonly ModelManagerService _modelManager;
@@ -480,12 +507,26 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     /// <summary>Whether the service is currently recording.</summary>
     public bool IsRecording => _isRecording;
 
+    /// <summary>Gets the active workflow id for API status responses.</summary>
+    public string? ActiveWorkflowId => _activeWorkflow?.Id;
+
     /// <summary>
     /// Starts recording for api asynchronously.
     /// </summary>
-    public async Task<Guid> StartRecordingForApiAsync()
+    public async Task<Guid> StartRecordingForApiAsync(string? workflowId = null)
     {
         var sessionId = Guid.NewGuid();
+
+        if (_isRecording || _isStoppingRecording)
+        {
+            StoreApiDictationSession(new ApiDictationSessionSnapshot(
+                sessionId,
+                ApiDictationSessionStatus.Failed,
+                null,
+                "Already recording"));
+            return sessionId;
+        }
+
         _activeApiDictationSessionId = sessionId;
         StoreApiDictationSession(new ApiDictationSessionSnapshot(
             sessionId,
@@ -493,6 +534,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             null,
             null));
 
+        _workflowHotkeyOverrideId = workflowId;
         await StartRecording();
 
         if (!_isRecording)
