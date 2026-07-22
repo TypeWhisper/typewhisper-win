@@ -144,6 +144,78 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public void WarmUp_DoesNotStartMicrophoneCapture()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+
+        Assert.True(sut.WarmUp());
+
+        var capture = Assert.Single(captures.Created);
+        Assert.False(capture.Started);
+    }
+
+    [Fact]
+    public void StopRecording_StopsAndDisposesMicrophoneCapture_WhenNoAudioWasReceived()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        sut.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        var samples = sut.StopRecording();
+
+        Assert.Null(samples);
+        Assert.True(capture.Stopped);
+        Assert.True(capture.Disposed);
+    }
+
+    [Fact]
+    public async Task StopRecordingAsync_ReleasesMicrophoneCapture_WhenCancellationIsRequested()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        sut.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var samples = await sut.StopRecordingAsync(cancellation.Token);
+
+        Assert.Null(samples);
+        Assert.True(capture.Stopped);
+        Assert.True(capture.Disposed);
+    }
+
+    [Fact]
+    public void ConsecutiveRecordings_UseFreshMicrophoneCaptures()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        var bytes = new byte[sizeof(short) * 2];
+
+        sut.StartRecording();
+        var firstCapture = Assert.Single(captures.Created);
+        firstCapture.RaiseData(bytes, bytes.Length);
+        Assert.NotNull(sut.StopRecording());
+
+        sut.StartRecording();
+        var secondCapture = Assert.Single(captures.Created.Skip(1));
+        secondCapture.RaiseData(bytes, bytes.Length);
+        Assert.NotNull(sut.StopRecording());
+
+        Assert.True(firstCapture.Stopped);
+        Assert.True(firstCapture.Disposed);
+        Assert.True(secondCapture.Stopped);
+        Assert.True(secondCapture.Disposed);
+    }
+
+    [Fact]
     public void RecordingStopped_WithoutException_DoesNotRaiseDeviceLost_WhenCaptureStopsCleanly()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");

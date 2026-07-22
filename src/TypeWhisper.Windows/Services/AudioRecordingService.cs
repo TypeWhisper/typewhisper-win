@@ -184,7 +184,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         AudioCaptureDiagnostics.Log(
             $"WarmUp enter warmed={_isWarmedUp} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
-        if (_isWarmedUp || _disposed) return _isWarmedUp;
+        if (_disposed) return false;
+        if (_isWarmedUp && _waveIn is not null) return true;
 
         if (_deviceProvider.DeviceCount == 0)
         {
@@ -213,12 +214,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
             _waveIn.DataAvailable += OnDataAvailable;
             _waveIn.RecordingStopped += OnRecordingStopped;
-            _waveIn.StartRecording();
 
             SetActiveDeviceIdentity(_activeDeviceNumber);
             _isWarmedUp = true;
             AudioCaptureDiagnostics.Log(
-                $"WarmUp success active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+                $"WarmUp prepared active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
         }
         catch (Exception ex) when (IsNonFatalAudioException(ex))
         {
@@ -264,7 +264,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         if (_isPreviewing)
             StopPreview();
 
-        if (!_isWarmedUp && !WarmUp())
+        if ((!_isWarmedUp || _waveIn is null) && !WarmUp())
         {
             AudioCaptureDiagnostics.Log("StartRecording warmup failed");
             return;
@@ -288,8 +288,20 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         _recordingStartTime = DateTime.UtcNow;
         _isRecording = true;
         _diagnosticDataAvailableCount = 0;
-        AudioCaptureDiagnostics.Log(
-            $"StartRecording active isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+
+        try
+        {
+            _waveIn.StartRecording();
+            AudioCaptureDiagnostics.Log(
+                $"StartRecording active isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log($"StartRecording failed {ex.GetType().Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
+            ClearRecordingState();
+            DisposeWaveIn();
+        }
     }
 
     /// <summary>
@@ -326,6 +338,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             samples = _sampleBuffer?.ToArray();
             _sampleBuffer = null;
         }
+
+        DisposeWaveIn(resetWarmUp: false);
 
         if (samples is null || samples.Length == 0)
         {
@@ -1097,12 +1111,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         RaisePreviewLevelChanged(peak, rms);
     }
 
-    private void DisposeWaveIn(bool stopRecording = true)
+    private void DisposeWaveIn(bool stopRecording = true, bool resetWarmUp = true)
     {
         if (_waveIn is not null)
         {
             var waveIn = _waveIn;
             _waveIn = null;
+            AudioCaptureDiagnostics.Log(
+                $"DisposeWaveIn release stopRecording={stopRecording} resetWarmUp={resetWarmUp}");
             waveIn.DataAvailable -= OnDataAvailable;
             waveIn.RecordingStopped -= OnRecordingStopped;
             if (stopRecording)
@@ -1111,6 +1127,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             }
             waveIn.Dispose();
         }
+
+        if (!resetWarmUp)
+            return;
+
         _isWarmedUp = false;
         _activeDeviceNumber = -1;
         _activeDeviceId = null;
