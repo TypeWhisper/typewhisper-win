@@ -102,6 +102,12 @@ jobs:
             --channel ${{ steps.meta.outputs.velopack_channel }} `
             --outputDir "releases/${{ steps.meta.outputs.velopack_channel }}"
 
+      - name: Validate portable package
+        shell: pwsh
+        run: |
+          ./eng/Test-PortablePackage.ps1 `
+            -ReleaseDirectory "releases/${{ steps.meta.outputs.velopack_channel }}"
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -89,16 +89,64 @@ public sealed class UserDataMigrationServiceTests : IDisposable
     }
 
     [Fact]
+    public void MigrateLegacyData_DoesNothingWhenLegacyPathIsMissing()
+    {
+        var legacy = Path.Join(_root, "missing");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+
+        UserDataMigrationService.MigrateLegacyData(legacy, userData);
+
+        Assert.False(Directory.Exists(userData));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_DoesNothingWhenPathsAreEqual()
+    {
+        var sharedRoot = Path.Join(_root, "TypeWhisper");
+        Directory.CreateDirectory(Path.Join(sharedRoot, "Data"));
+        File.WriteAllText(Path.Join(sharedRoot, "Data", "typewhisper.db"), "database");
+
+        UserDataMigrationService.MigrateLegacyData(sharedRoot, sharedRoot);
+
+        Assert.Equal("database", File.ReadAllText(Path.Join(sharedRoot, "Data", "typewhisper.db")));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_FallsBackToRecursiveCopyWhenDirectoryMoveFails()
+    {
+        var legacy = Path.Join(_root, "TypeWhisper");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+        Directory.CreateDirectory(Path.Join(legacy, "Data", "nested"));
+        File.WriteAllText(Path.Join(legacy, "Data", "typewhisper.db"), "database");
+        File.WriteAllText(Path.Join(legacy, "Data", "nested", "metadata.json"), "metadata");
+
+        UserDataMigrationService.MigrateLegacyData(
+            legacy,
+            userData,
+            moveDirectory: (_, _) => throw new IOException("Simulated cross-volume directory move."),
+            copyFile: (source, target) => File.Copy(source, target));
+
+        Assert.Equal("database", File.ReadAllText(Path.Join(userData, "Data", "typewhisper.db")));
+        Assert.Equal("metadata", File.ReadAllText(Path.Join(userData, "Data", "nested", "metadata.json")));
+        Assert.False(Directory.Exists(Path.Join(legacy, "Data")));
+    }
+
+    [Fact]
     public void MigrateLegacyData_DoesNotOverwriteCanonicalData()
     {
         var legacy = Path.Join(_root, "TypeWhisper");
         var userData = Path.Join(_root, "TypeWhisper-UserData");
         Directory.CreateDirectory(Path.Join(legacy, "Plugins", "com.legacy.plugin"));
+        Directory.CreateDirectory(Path.Join(legacy, "Plugins", "com.shared.plugin"));
         Directory.CreateDirectory(Path.Join(userData, "Plugins", "com.current.plugin"));
+        Directory.CreateDirectory(Path.Join(userData, "Plugins", "com.shared.plugin"));
         File.WriteAllText(Path.Join(legacy, "settings.json"), "legacy");
         File.WriteAllText(Path.Join(userData, "settings.json"), "current");
         File.WriteAllText(Path.Join(legacy, "Plugins", "com.legacy.plugin", "manifest.json"), "legacy-plugin");
+        File.WriteAllText(Path.Join(legacy, "Plugins", "com.shared.plugin", "manifest.json"), "legacy-shared");
+        File.WriteAllText(Path.Join(legacy, "Plugins", "com.shared.plugin", "legacy-only.json"), "legacy-only");
         File.WriteAllText(Path.Join(userData, "Plugins", "com.current.plugin", "manifest.json"), "current-plugin");
+        File.WriteAllText(Path.Join(userData, "Plugins", "com.shared.plugin", "manifest.json"), "current-shared");
 
         UserDataMigrationService.MigrateLegacyData(legacy, userData);
 
@@ -106,6 +154,48 @@ public sealed class UserDataMigrationServiceTests : IDisposable
         Assert.Equal("legacy", File.ReadAllText(Path.Join(legacy, "settings.json")));
         Assert.Equal("current-plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.current.plugin", "manifest.json")));
         Assert.Equal("legacy-plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.legacy.plugin", "manifest.json")));
+        Assert.Equal("current-shared", File.ReadAllText(Path.Join(userData, "Plugins", "com.shared.plugin", "manifest.json")));
+        Assert.Equal("legacy-only", File.ReadAllText(Path.Join(userData, "Plugins", "com.shared.plugin", "legacy-only.json")));
+        Assert.Equal("legacy-shared", File.ReadAllText(Path.Join(legacy, "Plugins", "com.shared.plugin", "manifest.json")));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_PartialCopyFailureKeepsSourceAndCanRetry()
+    {
+        var legacy = Path.Join(_root, "TypeWhisper");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+        var legacyData = Path.Join(legacy, "Data");
+        var userDataData = Path.Join(userData, "Data");
+        Directory.CreateDirectory(legacyData);
+        File.WriteAllText(Path.Join(legacyData, "first.db"), "first");
+        File.WriteAllText(Path.Join(legacyData, "second.db"), "second");
+        File.WriteAllText(Path.Join(legacyData, "third.db"), "third");
+        var copyCount = 0;
+
+        Assert.Throws<IOException>(() => UserDataMigrationService.MigrateLegacyData(
+            legacy,
+            userData,
+            moveDirectory: (_, _) => throw new IOException("Simulated cross-volume directory move."),
+            copyFile: (source, target) =>
+            {
+                File.Copy(source, target);
+                copyCount++;
+                if (copyCount == 2)
+                    throw new IOException("Simulated interrupted copy.");
+            }));
+
+        Assert.Single(Directory.GetFiles(userDataData, "*.db"));
+        Assert.Equal(2, Directory.GetFiles(legacyData, "*.db").Length);
+        Assert.Empty(Directory.GetFiles(userDataData, "*.typewhisper-migration.tmp"));
+
+        UserDataMigrationService.MigrateLegacyData(
+            legacy,
+            userData,
+            moveDirectory: (_, _) => throw new IOException("Simulated cross-volume directory move."),
+            copyFile: (source, target) => File.Copy(source, target));
+
+        Assert.Equal(3, Directory.GetFiles(userDataData, "*.db").Length);
+        Assert.False(Directory.Exists(legacyData));
     }
 
     public void Dispose()

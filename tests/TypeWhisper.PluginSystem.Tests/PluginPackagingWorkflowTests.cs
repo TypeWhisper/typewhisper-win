@@ -14,6 +14,28 @@ public sealed class PluginPackagingWorkflowTests
         Assert.DoesNotContain("publish/${{ matrix.rid }}/Plugins", workflow, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(".github", "workflows", "release.yml")]
+    [InlineData(".github", "workflows", "package-dry-run.yml")]
+    public void InstallerWorkflows_ValidatePortablePackage(params string[] workflowPath)
+    {
+        var workflow = TestFile.ReadProjectFile(workflowPath);
+
+        Assert.Contains("eng/Test-PortablePackage.ps1", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PortablePackageValidator_RequiresVelopackRuntimeLayout()
+    {
+        var script = TestFile.ReadProjectFile("eng", "Test-PortablePackage.ps1");
+
+        Assert.Contains("*-Portable.zip", script, StringComparison.Ordinal);
+        Assert.Contains(".portable", script, StringComparison.Ordinal);
+        Assert.Contains("TypeWhisper.exe", script, StringComparison.Ordinal);
+        Assert.Contains("Update.exe", script, StringComparison.Ordinal);
+        Assert.Contains("current/TypeWhisper.exe", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void StorePackageWorkflow_DoesNotBuildBundledPlugins()
     {
