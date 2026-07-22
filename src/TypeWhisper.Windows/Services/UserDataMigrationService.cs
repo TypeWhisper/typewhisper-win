@@ -6,14 +6,29 @@ namespace TypeWhisper.Windows.Services;
 
 internal static class UserDataMigrationService
 {
+    private const string MigrationTempSuffix = ".typewhisper-migration.tmp";
     private static readonly string[] DirectoryNames = ["Data", "Logs", "Models", "Plugins", "PluginData"];
     private static readonly string[] FileNames = ["settings.json", "settings.json.bak", "api-token"];
 
     public static void MigrateLegacyDataIfNeeded() =>
         MigrateLegacyData(TypeWhisperEnvironment.LegacyBasePath, TypeWhisperEnvironment.BasePath);
 
-    internal static void MigrateLegacyData(string legacyBasePath, string userDataBasePath)
+    internal static void MigrateLegacyData(string legacyBasePath, string userDataBasePath) =>
+        MigrateLegacyData(
+            legacyBasePath,
+            userDataBasePath,
+            Directory.Move,
+            static (source, target) => File.Copy(source, target));
+
+    internal static void MigrateLegacyData(
+        string legacyBasePath,
+        string userDataBasePath,
+        Action<string, string> moveDirectory,
+        Action<string, string> copyFile)
     {
+        ArgumentNullException.ThrowIfNull(moveDirectory);
+        ArgumentNullException.ThrowIfNull(copyFile);
+
         var legacyRoot = Normalize(legacyBasePath);
         var userDataRoot = Normalize(userDataBasePath);
 
@@ -23,20 +38,32 @@ internal static class UserDataMigrationService
         Directory.CreateDirectory(userDataRoot);
 
         foreach (var name in DirectoryNames)
-            MoveWithoutOverwrite(Path.Join(legacyRoot, name), Path.Join(userDataRoot, name));
+            MoveWithoutOverwrite(
+                Path.Join(legacyRoot, name),
+                Path.Join(userDataRoot, name),
+                moveDirectory,
+                copyFile);
 
         foreach (var name in FileNames)
-            MoveWithoutOverwrite(Path.Join(legacyRoot, name), Path.Join(userDataRoot, name));
+            MoveWithoutOverwrite(
+                Path.Join(legacyRoot, name),
+                Path.Join(userDataRoot, name),
+                moveDirectory,
+                copyFile);
 
         MigrateLegacyAudio(Path.Join(legacyRoot, "Audio"), Path.Join(userDataRoot, "Audio"));
     }
 
-    private static void MoveWithoutOverwrite(string source, string target)
+    private static void MoveWithoutOverwrite(
+        string source,
+        string target,
+        Action<string, string> moveDirectory,
+        Action<string, string> copyFile)
     {
         if (File.Exists(source))
         {
             if (!File.Exists(target) && !Directory.Exists(target))
-                File.Move(source, target);
+                CopyFileWithoutOverwrite(source, target, copyFile);
 
             return;
         }
@@ -46,23 +73,66 @@ internal static class UserDataMigrationService
 
         if (!Directory.Exists(target))
         {
-            Directory.Move(source, target);
-            return;
+            try
+            {
+                moveDirectory(source, target);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (!Directory.Exists(source))
+                {
+                    if (Directory.Exists(target))
+                        return;
+
+                    throw;
+                }
+            }
         }
 
+        if (File.Exists(target))
+            return;
+
+        Directory.CreateDirectory(target);
         foreach (var entry in Directory.GetFileSystemEntries(source))
         {
             var destination = GetSafeChildPath(target, entry);
-            if (File.Exists(destination) || Directory.Exists(destination))
-                continue;
-
-            if (Directory.Exists(entry))
-                Directory.Move(entry, destination);
-            else
-                File.Move(entry, destination);
+            MoveWithoutOverwrite(entry, destination, moveDirectory, copyFile);
         }
 
         TryDeleteDirectoryIfEmpty(source);
+    }
+
+    private static void CopyFileWithoutOverwrite(
+        string source,
+        string target,
+        Action<string, string> copyFile)
+    {
+        if (File.Exists(target) || Directory.Exists(target))
+            return;
+
+        var targetDirectory = Path.GetDirectoryName(target)
+            ?? throw new InvalidOperationException("User data target has no parent directory.");
+        Directory.CreateDirectory(targetDirectory);
+
+        var temporaryTarget = target + MigrationTempSuffix;
+        if (Directory.Exists(temporaryTarget))
+            throw new IOException($"Migration temporary path is a directory: '{temporaryTarget}'.");
+
+        if (File.Exists(temporaryTarget))
+            File.Delete(temporaryTarget);
+
+        try
+        {
+            copyFile(source, temporaryTarget);
+            File.Move(temporaryTarget, target);
+            File.Delete(source);
+        }
+        catch
+        {
+            TryDeleteMigrationTempFile(temporaryTarget);
+            throw;
+        }
     }
 
     internal static void MigrateLegacyAudio(string legacyAudioPath, string audioPath)
@@ -153,6 +223,19 @@ internal static class UserDataMigrationService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Trace.TraceWarning("Could not delete empty legacy user data directory '{0}': {1}", path, ex.Message);
+        }
+    }
+
+    private static void TryDeleteMigrationTempFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning("Could not delete user data migration temporary file '{0}': {1}", path, ex.Message);
         }
     }
 }
