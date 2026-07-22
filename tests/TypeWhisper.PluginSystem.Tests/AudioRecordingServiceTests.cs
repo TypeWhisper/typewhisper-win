@@ -201,11 +201,14 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
         sut.StartRecording();
         var firstCapture = Assert.Single(captures.Created);
+        Assert.True(firstCapture.Started);
         firstCapture.RaiseData(bytes, bytes.Length);
         Assert.NotNull(sut.StopRecording());
 
         sut.StartRecording();
         var secondCapture = Assert.Single(captures.Created.Skip(1));
+        Assert.NotSame(firstCapture, secondCapture);
+        Assert.True(secondCapture.Started);
         secondCapture.RaiseData(bytes, bytes.Length);
         Assert.NotNull(sut.StopRecording());
 
