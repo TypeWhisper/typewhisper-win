@@ -171,14 +171,28 @@ public sealed class PluginPackagingWorkflowTests
         using var process = new Process { StartInfo = startInfo };
         Assert.True(process.Start(), "Expected PowerShell validator process to start.");
 
-        var standardOutput = process.StandardOutput.ReadToEndAsync();
-        var standardError = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var standardOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var standardError = process.StandardError.ReadToEndAsync(timeout.Token);
 
-        return new PowerShellResult(
-            process.ExitCode,
-            await standardOutput,
-            await standardError);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+
+            return new PowerShellResult(
+                process.ExitCode,
+                await standardOutput,
+                await standardError);
+        }
+        catch (OperationCanceledException exception) when (timeout.IsCancellationRequested)
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+
+            throw new TimeoutException(
+                "Portable package validator did not finish within 30 seconds.",
+                exception);
+        }
     }
 
     private static void AssertPortableValidationFailed(PowerShellResult result, string expectedMessage)
