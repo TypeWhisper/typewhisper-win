@@ -131,7 +131,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         if: steps.requirements.outputs.exists == 'true'
         with:
           python-version: '3.12'
