@@ -41,6 +41,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 {
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
+    private readonly IDictionaryService? _dictionary;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
     private TranscriptionAccelerationPreference? _activeModelAccelerationPreference;
@@ -107,7 +108,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                 var (pluginId, _) = ParsePluginModelId(_activeModelId);
                 var plugin = FindTranscriptionEngine(pluginId);
                 if (plugin is not null)
-                    return new PluginTranscriptionEngineAdapter(plugin);
+                    return new PluginTranscriptionEngineAdapter(plugin, _dictionary);
             }
 
             return NoOpTranscriptionEngine.Instance;
@@ -129,10 +130,14 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Initializes a new instance of the ModelManagerService class.
     /// </summary>
-    public ModelManagerService(PluginManager pluginManager, ISettingsService settings)
+    public ModelManagerService(
+        PluginManager pluginManager,
+        ISettingsService settings,
+        IDictionaryService? dictionary = null)
     {
         _pluginManager = pluginManager;
         _settings = settings;
+        _dictionary = dictionary;
     }
 
     /// <summary>
@@ -783,11 +788,18 @@ internal sealed class NoOpTranscriptionEngine : ITranscriptionEngine
 internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
 {
     private readonly ITranscriptionEnginePlugin _plugin;
+    private readonly IDictionaryService? _dictionary;
 
     /// <summary>
     /// Performs plugin transcription engine adapter.
     /// </summary>
-    public PluginTranscriptionEngineAdapter(ITranscriptionEnginePlugin plugin) => _plugin = plugin;
+    public PluginTranscriptionEngineAdapter(
+        ITranscriptionEnginePlugin plugin,
+        IDictionaryService? dictionary = null)
+    {
+        _plugin = plugin;
+        _dictionary = dictionary;
+    }
 
     /// <summary>
     /// Gets whether a transcription model is currently loaded.
@@ -815,7 +827,12 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
     {
         var wavBytes = WavEncoder.Encode(audioSamples);
         var translate = task == TranscriptionTask.Translate && _plugin.SupportsTranslation;
-        var result = await _plugin.TranscribeAsync(wavBytes, language, translate, null, cancellationToken);
+        var result = await _plugin.TranscribeAsync(
+            wavBytes,
+            language,
+            translate,
+            GetDictionaryPrompt(),
+            cancellationToken);
         return new TranscriptionResult
         {
             Text = result.Text,
@@ -838,7 +855,7 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
         var wavBytes = WavEncoder.Encode(audioSamples);
         var translate = task == TranscriptionTask.Translate && _plugin.SupportsTranslation;
         var result = await _plugin.TranscribeWithLanguageHintsAsync(
-            wavBytes, languageHints, translate, null, cancellationToken);
+            wavBytes, languageHints, translate, GetDictionaryPrompt(), cancellationToken);
         return new TranscriptionResult
         {
             Text = result.Text,
@@ -848,4 +865,7 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
             Segments = result.Segments.Select(seg => new TranscriptionSegment(seg.Text, seg.Start, seg.End)).ToList()
         };
     }
+
+    private string? GetDictionaryPrompt() =>
+        _plugin.SupportsDictionaryTerms ? _dictionary?.GetTermsForPrompt() : null;
 }

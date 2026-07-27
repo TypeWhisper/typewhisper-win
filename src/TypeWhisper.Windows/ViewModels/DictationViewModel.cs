@@ -983,11 +983,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         var isPluginModel = _modelManager.ActiveModelId is not null
             && ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
+        var activeTranscriptionPlugin = _modelManager.ActiveTranscriptionPlugin;
+        var dictionaryPrompt = activeTranscriptionPlugin?.SupportsDictionaryTerms == true
+            ? _dictionary.GetTermsForPrompt()
+            : null;
 
         var liveTranscriptionMode = LiveTranscriptionStartupPolicy.Select(
             _settings.Current,
             isPluginModel,
-            _modelManager.ActiveTranscriptionPlugin);
+            activeTranscriptionPlugin,
+            dictionaryPrompt);
 
         if (liveTranscriptionMode is LiveTranscriptionStartupMode.PluginStreaming
             or LiveTranscriptionStartupMode.PluginPollingFallback)

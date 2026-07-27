@@ -19,7 +19,8 @@ internal static class LiveTranscriptionStartupPolicy
     public static LiveTranscriptionStartupMode Select(
         AppSettings settings,
         bool isPluginModel,
-        ITranscriptionEnginePlugin? plugin)
+        ITranscriptionEnginePlugin? plugin,
+        string? prompt = null)
     {
         if (!settings.LiveTranscriptionEnabled)
             return LiveTranscriptionStartupMode.None;
@@ -30,7 +31,7 @@ internal static class LiveTranscriptionStartupPolicy
         if (plugin is null)
             return LiveTranscriptionStartupMode.None;
 
-        if (plugin.SupportsStreaming)
+        if (plugin.SupportsStreamingForPrompt(prompt))
             return LiveTranscriptionStartupMode.PluginStreaming;
 
         if (plugin.SupportsModelDownload || settings.OnlineAsrBatchLiveTranscriptionEnabled)

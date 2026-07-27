@@ -80,8 +80,11 @@ public sealed class StreamingHandler : IDisposable
         var ct = _cts.Token;
 
         var plugin = _modelManager.ActiveTranscriptionPlugin;
+        var prompt = plugin?.SupportsDictionaryTerms == true
+            ? _dictionary.GetTermsForPrompt()
+            : null;
 
-        if (plugin is not null && plugin.SupportsStreaming)
+        if (plugin is not null && plugin.SupportsStreamingForPrompt(prompt))
         {
             _audio.SamplesAvailable += OnStreamingSamplesAvailable;
             _streamingTask = RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
