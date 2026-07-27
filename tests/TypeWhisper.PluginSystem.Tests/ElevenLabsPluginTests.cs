@@ -43,8 +43,16 @@ public class ElevenLabsPluginTests
         Assert.Equal([ElevenLabsPlugin.DefaultModelId], sut.TranscriptionModels.Select(m => m.Id).ToArray());
         Assert.True(sut.IsConfigured);
         Assert.True(sut.SupportsStreaming);
+        Assert.True(sut.SupportsDictionaryTerms);
+        Assert.True(sut.SupportsStreamingForPrompt(null));
+        Assert.False(sut.SupportsStreamingForPrompt("TypeWhisper"));
         Assert.False(sut.SupportsTranslation);
         Assert.Contains("de", sut.SupportedLanguages);
+        Assert.Equal(ElevenLabsTranscriptionMode.Automatic, sut.TranscriptionMode);
+        Assert.False(sut.TagAudioEvents);
+        Assert.True(sut.NoVerbatim);
+        Assert.Equal(ElevenLabsPlugin.DefaultSpeakerCount, sut.SpeakerCount);
+        Assert.True(sut.UseDictionaryTerms);
     }
 
     [Fact]
@@ -52,11 +60,15 @@ public class ElevenLabsPluginTests
     {
         var host = new TestPluginHostServices();
         host.SetSetting("selectedModel", "scribe_v1");
+        host.SetSetting("transcriptionMode", "legacy-mode");
+        host.SetSetting("numSpeakers", 33);
 
         var sut = new ElevenLabsPlugin();
         await sut.ActivateAsync(host);
 
         Assert.Equal(ElevenLabsPlugin.DefaultModelId, sut.SelectedModelId);
+        Assert.Equal(ElevenLabsTranscriptionMode.Automatic, sut.TranscriptionMode);
+        Assert.Equal(ElevenLabsPlugin.DefaultSpeakerCount, sut.SpeakerCount);
     }
 
     [Fact]
@@ -86,6 +98,38 @@ public class ElevenLabsPluginTests
         Assert.False(host.Secrets.ContainsKey("api-key"));
         Assert.Equal(2, host.NotifyCapabilitiesChangedCount);
         Assert.False(sut.IsConfigured);
+    }
+
+    [Fact]
+    public async Task TranscriptionSettings_PersistAndNotifyCapabilityChanges()
+    {
+        var host = new TestPluginHostServices();
+        var sut = new ElevenLabsPlugin();
+        await sut.ActivateAsync(host);
+
+        sut.SetTranscriptionMode(ElevenLabsTranscriptionMode.RestOnly);
+        sut.SetTagAudioEvents(true);
+        sut.SetNoVerbatim(false);
+        sut.SetSpeakerCount(ElevenLabsPlugin.AutomaticSpeakerCount);
+        sut.SetUseDictionaryTerms(false);
+
+        Assert.False(sut.SupportsStreaming);
+        Assert.False(sut.SupportsDictionaryTerms);
+        Assert.Equal("restOnly", host.GetSetting<string>("transcriptionMode"));
+        Assert.True(host.GetSetting<bool>("tagAudioEvents"));
+        Assert.False(host.GetSetting<bool>("noVerbatim"));
+        Assert.Equal(ElevenLabsPlugin.AutomaticSpeakerCount, host.GetSetting<int>("numSpeakers"));
+        Assert.False(host.GetSetting<bool>("useDictionaryTerms"));
+        Assert.Equal(2, host.NotifyCapabilitiesChangedCount);
+
+        var reloaded = new ElevenLabsPlugin();
+        await reloaded.ActivateAsync(host);
+
+        Assert.Equal(ElevenLabsTranscriptionMode.RestOnly, reloaded.TranscriptionMode);
+        Assert.True(reloaded.TagAudioEvents);
+        Assert.False(reloaded.NoVerbatim);
+        Assert.Equal(ElevenLabsPlugin.AutomaticSpeakerCount, reloaded.SpeakerCount);
+        Assert.False(reloaded.UseDictionaryTerms);
     }
 
     [Fact]
@@ -126,6 +170,12 @@ public class ElevenLabsPluginTests
             Assert.Contains("TypeWhisper", body);
             Assert.Contains("ElevenLabs", body);
             Assert.DoesNotContain("bad<term", body);
+            Assert.Contains("tag_audio_events", body);
+            Assert.Contains("false", body);
+            Assert.Contains("no_verbatim", body);
+            Assert.Contains("true", body);
+            Assert.Contains("num_speakers", body);
+            Assert.Contains("1", body);
 
             return JsonResponse("""
                 {
@@ -161,18 +211,58 @@ public class ElevenLabsPluginTests
     }
 
     [Fact]
+    public async Task TranscribeAsync_AppliesCustomOptionsAndOmitsAutomaticSpeakerCount()
+    {
+        var handler = new CapturingHandler((_, body) =>
+        {
+            Assert.NotNull(body);
+            Assert.Contains("tag_audio_events", body);
+            Assert.Contains("true", body);
+            Assert.Contains("no_verbatim", body);
+            Assert.Contains("false", body);
+            Assert.DoesNotContain("num_speakers", body);
+            return JsonResponse("""{"language_code":"en","text":"Hello","words":[]}""");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "eleven-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new ElevenLabsPlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetTagAudioEvents(true);
+        sut.SetNoVerbatim(false);
+        sut.SetSpeakerCount(ElevenLabsPlugin.AutomaticSpeakerCount);
+
+        await sut.TranscribeAsync([1, 2, 3], "en", false, null, CancellationToken.None);
+    }
+
+    [Fact]
     public void ExtractKeyterms_FiltersUnsupportedTerms()
     {
         var terms = ElevenLabsPlugin.ExtractKeyterms(
-            "TypeWhisper, TypeWhisper, too many words in this single keyterm, bad<term, ElevenLabs");
+            "TypeWhisper\nElevenLabs, TypeWhisper, too many words in this single keyterm, bad<term");
 
         Assert.Equal(["TypeWhisper", "ElevenLabs"], terms);
     }
 
     [Fact]
+    public void ExtractKeyterms_LimitsRequestToOneThousandTerms()
+    {
+        var prompt = string.Join(",", Enumerable.Range(1, 1005).Select(index => $"Term{index}"));
+
+        var terms = ElevenLabsPlugin.ExtractKeyterms(prompt);
+
+        Assert.Equal(1000, terms.Count);
+        Assert.Equal("Term1", terms[0]);
+        Assert.Equal("Term1000", terms[^1]);
+    }
+
+    [Fact]
     public void BuildRealtimeUri_UsesScribeRealtimeAndVad()
     {
-        var uri = ElevenLabsStreamingSession.BuildRealtimeUri("scribe_v2_realtime", "de").AbsoluteUri;
+        var uri = ElevenLabsStreamingSession.BuildRealtimeUri(
+            "scribe_v2_realtime",
+            "de",
+            noVerbatim: true).AbsoluteUri;
 
         Assert.StartsWith("wss://api.elevenlabs.io/v1/speech-to-text/realtime?", uri);
         Assert.Contains("model_id=scribe_v2_realtime", uri);
@@ -181,6 +271,64 @@ public class ElevenLabsPluginTests
         Assert.Contains("include_timestamps=true", uri);
         Assert.Contains("include_language_detection=true", uri);
         Assert.Contains("language_code=de", uri);
+        Assert.Contains("no_verbatim=true", uri);
+        Assert.DoesNotContain("keyterms", uri);
+        Assert.DoesNotContain("tag_audio_events", uri);
+        Assert.DoesNotContain("num_speakers", uri);
+    }
+
+    [Fact]
+    public void SettingsView_ExposesAllOptionsWithStableAutomationIds()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "plugins",
+            "TypeWhisper.Plugin.ElevenLabs",
+            "ElevenLabsSettingsView.xaml");
+
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTranscriptionModel\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTranscriptionMode\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTagAudioEvents\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsNoVerbatim\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsSpeakerCount\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsUseDictionaryTerms\"",
+            xaml);
+        Assert.DoesNotContain("Visibility=\"Collapsed\"", xaml);
+    }
+
+    [Fact]
+    public void SettingsLocalization_EnglishAndGermanExposeTheSameKeys()
+    {
+        var english = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            TestFile.ReadProjectFile(
+                "plugins",
+                "TypeWhisper.Plugin.ElevenLabs",
+                "Localization",
+                "en.json"));
+        var german = JsonSerializer.Deserialize<Dictionary<string, string>>(
+            TestFile.ReadProjectFile(
+                "plugins",
+                "TypeWhisper.Plugin.ElevenLabs",
+                "Localization",
+                "de.json"));
+
+        Assert.NotNull(english);
+        Assert.NotNull(german);
+        Assert.Equal(
+            english.Keys.OrderBy(key => key),
+            german.Keys.OrderBy(key => key));
+        Assert.Contains("20%", english["Settings.DictionaryTermsHint"]);
+        Assert.Contains("20 %", german["Settings.DictionaryTermsHint"]);
     }
 
     [Fact]

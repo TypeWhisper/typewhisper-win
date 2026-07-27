@@ -54,6 +54,19 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     bool SupportsStreaming => false;
 
     /// <summary>
+    /// Whether the host may pass active TypeWhisper dictionary terms through the transcription prompt.
+    /// </summary>
+    bool SupportsDictionaryTerms => false;
+
+    /// <summary>
+    /// Whether this engine can use real-time streaming for the supplied prompt.
+    /// Defaults to <see cref="SupportsStreaming"/> for backward compatibility.
+    /// Plugins that opt into <see cref="SupportsDictionaryTerms"/> must override this when
+    /// their streaming transport cannot preserve prompt terms.
+    /// </summary>
+    bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming;
+
+    /// <summary>
     /// Opens a real-time streaming session (e.g. WebSocket). The host feeds PCM16 audio via the session.
     /// Only called when <see cref="SupportsStreaming"/> is true.
     /// </summary>

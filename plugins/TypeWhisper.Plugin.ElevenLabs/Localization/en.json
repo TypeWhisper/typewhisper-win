@@ -1,4 +1,5 @@
 {
+  "Settings.ApiKey": "API Key",
   "Settings.Test": "Test",
   "Settings.Saved": "Saved",
   "Settings.EnterApiKey": "Please enter an API key first",
@@ -8,5 +9,17 @@
   "Settings.ApiKeyInvalid": "Invalid API key",
   "Settings.TranscriptionModel": "Transcription Model",
   "Settings.ModelHint": "Scribe v2 is used for file transcription; live dictation uses Scribe v2 Realtime.",
+  "Settings.TranscriptionMode": "Transcription Mode",
+  "Settings.ModeAutomatic": "Automatic (Realtime with REST fallback)",
+  "Settings.ModeRestOnly": "REST only (Batch Scribe v2)",
+  "Settings.TranscriptionModeHint": "Automatic uses realtime when possible. REST only avoids realtime concurrency limits and always uses batch transcription.",
+  "Settings.TagAudioEvents": "Include audio events such as [coughs] and [mouse clicks]",
+  "Settings.NoVerbatim": "Clean up filler words and verbal stumbles",
+  "Settings.TranscriptCleanupHint": "Audio events and transcript cleanup can both be enabled. ElevenLabs decides which annotations remain in that combination.",
+  "Settings.SpeakerCount": "Number of Speakers",
+  "Settings.SpeakerAutomatic": "Automatic",
+  "Settings.RestOnlyOptionsHint": "Audio events and speaker count apply to REST requests only. Transcript cleanup also applies to realtime.",
+  "Settings.UseDictionaryTerms": "Use active TypeWhisper dictionary terms",
+  "Settings.DictionaryTermsHint": "Using dictionary terms routes this dictation through REST, supports up to 1,000 valid terms, and adds 20% to the ElevenLabs transcription cost.",
   "Settings.Error": "Error: {0}"
 }

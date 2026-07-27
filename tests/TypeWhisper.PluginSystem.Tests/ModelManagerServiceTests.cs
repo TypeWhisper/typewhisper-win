@@ -393,6 +393,36 @@ public class ModelManagerServiceTests
         Assert.Equal(1, statusChangedCount);
     }
 
+    [Theory]
+    [InlineData(true, "TypeWhisper, ElevenLabs")]
+    [InlineData(false, null)]
+    public async Task Engine_PassesDictionaryTermsOnlyToOptInPlugin(
+        bool supportsDictionaryTerms,
+        string? expectedPrompt)
+    {
+        const string pluginId = "com.typewhisper.test";
+        const string modelId = "whisper";
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            modelIds: [modelId])
+        {
+            SupportsDictionaryTerms = supportsDictionaryTerms
+        };
+        var dictionary = new Mock<IDictionaryService>();
+        dictionary.Setup(service => service.GetTermsForPrompt())
+            .Returns("TypeWhisper, ElevenLabs");
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object, dictionary.Object);
+
+        await sut.LoadModelAsync(ModelManagerService.GetPluginModelId(pluginId, modelId));
+        await sut.Engine.TranscribeAsync([0f, 0f], "en");
+
+        Assert.Equal(expectedPrompt, plugin.LastPrompt);
+    }
+
     private PluginManager CreatePluginManager(params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -447,6 +477,8 @@ public class ModelManagerServiceTests
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
+        public bool SupportsDictionaryTerms { get; init; }
+        public string? LastPrompt { get; private set; }
         public string? LastLoadedModelId { get; private set; }
         public int LoadCallCount { get; private set; }
         public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
@@ -486,8 +518,16 @@ public class ModelManagerServiceTests
             return Task.CompletedTask;
         }
 
-        public Task<PluginTranscriptionResult> TranscribeAsync(byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct) =>
-            Task.FromResult(new PluginTranscriptionResult("ok", language ?? "en", 1));
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct)
+        {
+            LastPrompt = prompt;
+            return Task.FromResult(new PluginTranscriptionResult("ok", language ?? "en", 1));
+        }
 
         public void Dispose() { }
     }

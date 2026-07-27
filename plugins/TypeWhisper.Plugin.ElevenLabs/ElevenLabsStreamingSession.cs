@@ -30,11 +30,12 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         string apiKey,
         string realtimeModelId,
         string? language,
+        bool noVerbatim,
         CancellationToken ct)
     {
         var session = new ElevenLabsStreamingSession();
         session._ws.Options.SetRequestHeader("xi-api-key", apiKey);
-        await session._ws.ConnectAsync(BuildRealtimeUri(realtimeModelId, language), ct);
+        await session._ws.ConnectAsync(BuildRealtimeUri(realtimeModelId, language, noVerbatim), ct);
         session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
         return session;
     }
@@ -94,7 +95,7 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
         }
     }
 
-    internal static Uri BuildRealtimeUri(string realtimeModelId, string? language)
+    internal static Uri BuildRealtimeUri(string realtimeModelId, string? language, bool noVerbatim)
     {
         var query = new List<string>
         {
@@ -103,6 +104,7 @@ internal sealed class ElevenLabsStreamingSession : IStreamingSession
             "commit_strategy=vad",
             "include_timestamps=true",
             "include_language_detection=true",
+            $"no_verbatim={(noVerbatim ? "true" : "false")}",
         };
 
         if (!string.IsNullOrWhiteSpace(language))

@@ -7,17 +7,31 @@ using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.ElevenLabs;
 
+internal enum ElevenLabsTranscriptionMode
+{
+    Automatic,
+    RestOnly
+}
+
 /// <summary>
 /// Provides eleven labs plugin behavior.
 /// </summary>
 public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
 {
     internal const string DefaultModelId = "scribe_v2";
+    internal const int AutomaticSpeakerCount = 0;
+    internal const int DefaultSpeakerCount = 1;
     private const string BaseUrl = "https://api.elevenlabs.io";
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
+    private const string TranscriptionModeSettingName = "transcriptionMode";
+    private const string TagAudioEventsSettingName = "tagAudioEvents";
+    private const string NoVerbatimSettingName = "noVerbatim";
+    private const string SpeakerCountSettingName = "numSpeakers";
+    private const string UseDictionaryTermsSettingName = "useDictionaryTerms";
 
     private static readonly char[] InvalidKeytermCharacters = ['<', '>', '{', '}', '[', ']', '\\'];
+    private static readonly char[] KeytermSeparators = [',', '\r', '\n'];
 
     private static readonly IReadOnlyList<ElevenLabsModelEntry> ModelEntries =
     [
@@ -43,6 +57,11 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
+    private ElevenLabsTranscriptionMode _transcriptionMode = ElevenLabsTranscriptionMode.Automatic;
+    private bool _tagAudioEvents;
+    private bool _noVerbatim = true;
+    private int _speakerCount = DefaultSpeakerCount;
+    private bool _useDictionaryTerms = true;
 
     /// <summary>
     /// Initializes a new instance of the ElevenLabsPlugin class.
@@ -70,7 +89,7 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -80,6 +99,12 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
         _host = host;
         _apiKey = await host.LoadSecretAsync(ApiKeySecretName);
         _selectedModelId = NormalizeModelId(host.GetSetting<string>(SelectedModelSettingName));
+        _transcriptionMode = NormalizeTranscriptionMode(host.GetSetting<string>(TranscriptionModeSettingName));
+        _tagAudioEvents = host.GetSetting<bool?>(TagAudioEventsSettingName) ?? false;
+        _noVerbatim = host.GetSetting<bool?>(NoVerbatimSettingName) ?? true;
+        _speakerCount = NormalizeSpeakerCount(
+            host.GetSetting<int?>(SpeakerCountSettingName) ?? DefaultSpeakerCount);
+        _useDictionaryTerms = host.GetSetting<bool?>(UseDictionaryTermsSettingName) ?? true;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -130,7 +155,16 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets whether the provider supports live streaming transcription.
     /// </summary>
-    public bool SupportsStreaming => true;
+    public bool SupportsStreaming => _transcriptionMode == ElevenLabsTranscriptionMode.Automatic;
+    /// <summary>
+    /// Gets whether TypeWhisper may add active dictionary terms to transcription prompts.
+    /// </summary>
+    public bool SupportsDictionaryTerms => _useDictionaryTerms;
+    /// <summary>
+    /// Gets whether realtime streaming is suitable for the supplied prompt.
+    /// </summary>
+    public bool SupportsStreamingForPrompt(string? prompt) =>
+        SupportsStreaming && ExtractKeyterms(prompt).Count == 0;
     /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
@@ -168,6 +202,12 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
         if (NormalizeLanguage(language) is { } normalizedLanguage)
             form.Add(new StringContent(normalizedLanguage), "language_code");
 
+        form.Add(new StringContent(FormatBoolean(_tagAudioEvents)), "tag_audio_events");
+        form.Add(new StringContent(FormatBoolean(_noVerbatim)), "no_verbatim");
+
+        if (_speakerCount != AutomaticSpeakerCount)
+            form.Add(new StringContent(_speakerCount.ToString(System.Globalization.CultureInfo.InvariantCulture)), "num_speakers");
+
         foreach (var term in ExtractKeyterms(prompt))
             form.Add(new StringContent(term), "keyterms");
 
@@ -189,12 +229,15 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     {
         if (!IsConfigured || _selectedModelId is null)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
+        if (!SupportsStreaming)
+            throw new NotSupportedException("Realtime streaming is disabled by the selected transcription mode.");
 
         var entry = ResolveModelEntry(_selectedModelId);
         return await ElevenLabsStreamingSession.ConnectAsync(
             _apiKey!,
             entry.RealtimeModelId,
             NormalizeLanguage(language),
+            _noVerbatim,
             ct);
     }
 
@@ -202,6 +245,11 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
 
     internal string? ApiKey => _apiKey;
     internal IPluginLocalization? Loc => _host?.Localization;
+    internal ElevenLabsTranscriptionMode TranscriptionMode => _transcriptionMode;
+    internal bool TagAudioEvents => _tagAudioEvents;
+    internal bool NoVerbatim => _noVerbatim;
+    internal int SpeakerCount => _speakerCount;
+    internal bool UseDictionaryTerms => _useDictionaryTerms;
 
     internal async Task SetApiKeyAsync(string apiKey)
     {
@@ -236,6 +284,54 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
         {
             return false;
         }
+    }
+
+    internal void SetTranscriptionMode(ElevenLabsTranscriptionMode mode)
+    {
+        if (_transcriptionMode == mode)
+            return;
+
+        _transcriptionMode = mode;
+        _host?.SetSetting(TranscriptionModeSettingName, FormatTranscriptionMode(mode));
+        _host?.NotifyCapabilitiesChanged();
+    }
+
+    internal void SetTagAudioEvents(bool enabled)
+    {
+        if (_tagAudioEvents == enabled)
+            return;
+
+        _tagAudioEvents = enabled;
+        _host?.SetSetting(TagAudioEventsSettingName, enabled);
+    }
+
+    internal void SetNoVerbatim(bool enabled)
+    {
+        if (_noVerbatim == enabled)
+            return;
+
+        _noVerbatim = enabled;
+        _host?.SetSetting(NoVerbatimSettingName, enabled);
+    }
+
+    internal void SetSpeakerCount(int speakerCount)
+    {
+        var normalized = NormalizeSpeakerCount(speakerCount);
+        if (_speakerCount == normalized)
+            return;
+
+        _speakerCount = normalized;
+        _host?.SetSetting(SpeakerCountSettingName, normalized);
+    }
+
+    internal void SetUseDictionaryTerms(bool enabled)
+    {
+        if (_useDictionaryTerms == enabled)
+            return;
+
+        _useDictionaryTerms = enabled;
+        _host?.SetSetting(UseDictionaryTermsSettingName, enabled);
+        _host?.NotifyCapabilitiesChanged();
     }
 
     internal static PluginTranscriptionResult ParseRestResponse(string json, string? fallbackLanguage)
@@ -291,13 +387,15 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var terms = new List<string>();
-        foreach (var part in prompt.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        foreach (var part in prompt.Split(
+            KeytermSeparators,
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var term = part.Trim();
             if (term.Length == 0
                 || term.Length >= 50
                 || term.IndexOfAny(InvalidKeytermCharacters) >= 0
-                || term.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 5
+                || term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length > 5
                 || !seen.Add(term))
             {
                 continue;
@@ -326,6 +424,23 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
 
     private static string NormalizeModelId(string? modelId) =>
         ModelEntries.Any(m => m.Id == modelId) ? modelId! : DefaultModelId;
+
+    private static ElevenLabsTranscriptionMode NormalizeTranscriptionMode(string? mode) =>
+        mode switch
+        {
+            "restOnly" => ElevenLabsTranscriptionMode.RestOnly,
+            _ => ElevenLabsTranscriptionMode.Automatic
+        };
+
+    private static string FormatTranscriptionMode(ElevenLabsTranscriptionMode mode) =>
+        mode == ElevenLabsTranscriptionMode.RestOnly ? "restOnly" : "automatic";
+
+    private static int NormalizeSpeakerCount(int speakerCount) =>
+        speakerCount is AutomaticSpeakerCount or >= 1 and <= 32
+            ? speakerCount
+            : DefaultSpeakerCount;
+
+    private static string FormatBoolean(bool value) => value ? "true" : "false";
 
     private static ElevenLabsModelEntry ResolveModelEntry(string modelId) =>
         ModelEntries.FirstOrDefault(m => m.Id == modelId)

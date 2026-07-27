@@ -22,6 +22,15 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public void DictionaryAndPromptCapabilities_DefaultToBackwardCompatibleValues()
+    {
+        ITranscriptionEnginePlugin plugin = new DelayedStreamingPlugin();
+
+        Assert.False(plugin.SupportsDictionaryTerms);
+        Assert.True(plugin.SupportsStreamingForPrompt("TypeWhisper"));
+    }
+
+    [Fact]
     public void SupportedLanguages_DefaultIsEmpty()
     {
         var mock = new Mock<ITranscriptionEnginePlugin> { CallBase = true };
@@ -490,6 +499,33 @@ public class LiveTranscriptionStartupPolicyTests
         Assert.Equal(LiveTranscriptionStartupMode.PluginStreaming, mode);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PromptIncompatibleStreamingPlugin_UsesConfiguredBatchFallback(
+        bool batchPreviewEnabled)
+    {
+        var plugin = new FakePolicyTranscriptionPlugin(
+            supportsStreaming: true,
+            supportsModelDownload: false,
+            rejectNonEmptyPrompt: true);
+
+        var mode = LiveTranscriptionStartupPolicy.Select(
+            AppSettings.Default with
+            {
+                OnlineAsrBatchLiveTranscriptionEnabled = batchPreviewEnabled
+            },
+            isPluginModel: true,
+            plugin,
+            prompt: "TypeWhisper");
+
+        Assert.Equal(
+            batchPreviewEnabled
+                ? LiveTranscriptionStartupMode.PluginPollingFallback
+                : LiveTranscriptionStartupMode.None,
+            mode);
+    }
+
     [Fact]
     public void DownloadablePlugin_UsesPollingFallback()
     {
@@ -542,10 +578,16 @@ public class LiveTranscriptionStartupPolicyTests
 
     private sealed class FakePolicyTranscriptionPlugin : ITranscriptionEnginePlugin
     {
-        public FakePolicyTranscriptionPlugin(bool supportsStreaming, bool supportsModelDownload)
+        private readonly bool _rejectNonEmptyPrompt;
+
+        public FakePolicyTranscriptionPlugin(
+            bool supportsStreaming,
+            bool supportsModelDownload,
+            bool rejectNonEmptyPrompt = false)
         {
             SupportsStreaming = supportsStreaming;
             SupportsModelDownload = supportsModelDownload;
+            _rejectNonEmptyPrompt = rejectNonEmptyPrompt;
         }
 
         public string PluginId => "com.test.policy";
@@ -560,6 +602,8 @@ public class LiveTranscriptionStartupPolicyTests
         public bool SupportsTranslation => false;
         public bool SupportsStreaming { get; }
         public bool SupportsModelDownload { get; }
+        public bool SupportsStreamingForPrompt(string? prompt) =>
+            SupportsStreaming && (!_rejectNonEmptyPrompt || string.IsNullOrWhiteSpace(prompt));
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;

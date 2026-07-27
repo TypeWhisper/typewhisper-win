@@ -587,6 +587,33 @@ public class HttpApiServiceTests : IDisposable
         Assert.Single(json["segments"].EnumerateArray());
     }
 
+    [Theory]
+    [InlineData(true, "Explicit API context\nTypeWhisper, ElevenLabs")]
+    [InlineData(false, "Explicit API context")]
+    public async Task TranscribeAddsDictionaryOnlyForOptInPluginAndKeepsExplicitPrompt(
+        bool supportsDictionaryTerms,
+        string expectedPrompt)
+    {
+        var plugin = new FakeTranscriptionPlugin
+        {
+            SupportsDictionaryTerms = supportsDictionaryTerms
+        };
+        var service = CreateService(plugin);
+        await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/terms",
+            """{"terms":["TypeWhisper","ElevenLabs"],"replace":true}"""), CancellationToken.None);
+        var request = MultipartTranscribeRequest(
+            ("engine", null, null, "mock"u8.ToArray()),
+            ("prompt", null, null, "Explicit API context"u8.ToArray()),
+            ("file", "audio.wav", "audio/wav", WavEncoder.Encode([0f, 0f, 0f, 0f])));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(expectedPrompt, plugin.LastPrompt);
+    }
+
     [Fact]
     public async Task TranscribeRawBodyNormalizesNumbersByDefault()
     {
@@ -1352,6 +1379,7 @@ public class HttpApiServiceTests : IDisposable
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("tiny", "Tiny")];
         public string? SelectedModelId { get; private set; } = "tiny";
         public bool SupportsTranslation => true;
+        public bool SupportsDictionaryTerms { get; init; }
         public TranscriptionAccelerationPreference AccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
         public TranscriptionAccelerationStatus? AccelerationStatusOverride { get; init; }
