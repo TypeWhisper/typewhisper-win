@@ -60,6 +60,9 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
 
     /// <summary>
     /// Whether this engine can use real-time streaming for the supplied prompt.
+    /// Defaults to <see cref="SupportsStreaming"/> for backward compatibility.
+    /// Plugins that opt into <see cref="SupportsDictionaryTerms"/> must override this when
+    /// their streaming transport cannot preserve prompt terms.
     /// </summary>
     bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming;
 

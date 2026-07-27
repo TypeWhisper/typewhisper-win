@@ -285,11 +285,24 @@ public class ElevenLabsPluginTests
             "TypeWhisper.Plugin.ElevenLabs",
             "ElevenLabsSettingsView.xaml");
 
-        Assert.Contains("ElevenLabsTranscriptionMode", xaml);
-        Assert.Contains("ElevenLabsTagAudioEvents", xaml);
-        Assert.Contains("ElevenLabsNoVerbatim", xaml);
-        Assert.Contains("ElevenLabsSpeakerCount", xaml);
-        Assert.Contains("ElevenLabsUseDictionaryTerms", xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTranscriptionModel\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTranscriptionMode\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsTagAudioEvents\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsNoVerbatim\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsSpeakerCount\"",
+            xaml);
+        Assert.Contains(
+            "AutomationProperties.AutomationId=\"ElevenLabsUseDictionaryTerms\"",
+            xaml);
         Assert.DoesNotContain("Visibility=\"Collapsed\"", xaml);
     }
 
