@@ -480,13 +480,13 @@
   {
     "id": "com.typewhisper.elevenlabs",
     "name": "ElevenLabs",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Cloud transcription via ElevenLabs Scribe with real-time WebSocket streaming",
     "category": "transcription",
-    "size": 22085,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.elevenlabs-1.0.0.zip",
+    "size": 26919,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.elevenlabs-1.0.1.zip",
     "iconSystemName": "waveform.badge.mic",
     "requiresApiKey": true,
     "descriptions": {
@@ -495,7 +495,7 @@
     "categories": [
       "transcription"
     ],
-    "sha256": "35745870e563a540e9674501c3af7e4e19f5a58c6b40af36f1363b8008d525af"
+    "sha256": "30288244a5ecad77d0f8dda173157ef362ca3de483f51810e3c4797f0ae533c9"
   },
   {
     "id": "com.typewhisper.assemblyai",
