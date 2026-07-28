@@ -33,6 +33,7 @@ public sealed class SettingsWindowWizardLifetimeTests
         Assert.Contains("wizard.Closed += OnSetupWizardClosed;", source);
         Assert.Contains("wizard.Closed -= OnSetupWizardClosed;", source);
         Assert.Contains("_viewModel.SetupWizardRequested -= OnSetupWizardRequested;", source);
+        Assert.Contains("_viewModel.OnWindowClosed();", source);
 
         var ownerIndex = source.IndexOf("wizard.Owner = this;", StringComparison.Ordinal);
         var showIndex = source.IndexOf("wizard.Show();", StringComparison.Ordinal);

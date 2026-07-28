@@ -16,6 +16,71 @@ public sealed class AppStartupPerformanceTests
     }
 
     [Fact]
+    public void OnStartup_DoesNotEagerLoadTheSelectedLocalModel()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+        var startup = TestFile.ExtractBlock(source, "protected override", 16000);
+
+        Assert.DoesNotContain("Auto-load previously selected model", startup);
+        Assert.DoesNotContain("modelManager.LoadModelAsync(settings.Current.SelectedModelId)", startup);
+        Assert.Contains("modelManager.MigrateSettings()", startup);
+    }
+
+    [Fact]
+    public void OnStartup_RendersTheAppShellBeforePluginDiscovery()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+        var startup = TestFile.ExtractBlock(source, "protected override", 16000);
+
+        Assert.Contains("protected override async void OnStartup", startup);
+        Assert.Contains("await Dispatcher.Yield(DispatcherPriority.ContextIdle);", startup);
+        Assert.Contains("await Task.Run(() => pluginManager.InitializeAsync());", startup);
+        Assert.DoesNotContain("InitializeAsync().GetAwaiter().GetResult()", startup);
+
+        var trayIndex = startup.IndexOf("_trayIcon.Initialize();", StringComparison.Ordinal);
+        var windowIndex = startup.IndexOf("mainWindow.Show();", StringComparison.Ordinal);
+        var yieldIndex = startup.IndexOf(
+            "await Dispatcher.Yield(DispatcherPriority.ContextIdle);",
+            StringComparison.Ordinal);
+        var pluginsIndex = startup.IndexOf(
+            "await Task.Run(() => pluginManager.InitializeAsync());",
+            StringComparison.Ordinal);
+
+        Assert.True(
+            trayIndex >= 0
+            && trayIndex < windowIndex
+            && windowIndex < yieldIndex
+            && yieldIndex < pluginsIndex,
+            "The tray and overlay shell must render before plugin discovery starts.");
+    }
+
+    [Fact]
+    public void SettingsWindow_DefersMicrophoneRefreshAndPreviewUntilLoaded()
+    {
+        var window = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "SettingsWindow.xaml.cs");
+        var settings = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "SettingsViewModel.cs");
+        var constructor = TestFile.ExtractBlock(settings, "public SettingsViewModel(", 2600);
+
+        Assert.Contains("Loaded += OnLoaded;", window);
+        Assert.Contains("EnsureMicrophonesLoadedAsync", window);
+        Assert.DoesNotContain("RefreshMicrophones();", constructor);
+    }
+
+    [Fact]
     public void NonFatalStartupAndAudioFilters_UseSharedFatalExceptionFilter()
     {
         var appSource = TestFile.ReadProjectFile(

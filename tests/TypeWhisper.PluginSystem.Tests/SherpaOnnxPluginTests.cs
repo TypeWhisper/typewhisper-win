@@ -108,7 +108,8 @@ public class SherpaOnnxPluginTests
             var installer = new FakeCudaRuntimeInstaller(isInstalled: true);
             var sut = new SherpaOnnxPlugin(
                 installer,
-                (_, _, _) => throw new InvalidOperationException("CUDA provider failed to initialize."));
+                (_, _, _) => throw new InvalidOperationException("CUDA provider failed to initialize."),
+                new FakeCudaRuntimeProbe(new CudaRuntimeProbeResult(true, null)));
             var host = new FakePluginHostServices(tempDir);
             CreateParakeetModelFiles(tempDir);
 
@@ -131,6 +132,94 @@ public class SherpaOnnxPluginTests
     }
 
     [Fact]
+    public async Task LoadModelAsync_ExplicitCudaProbeFailure_DoesNotLoadNativeRuntimeInHostProcess()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-probe-{Guid.NewGuid():N}");
+        try
+        {
+            var installer = new FakeCudaRuntimeInstaller(isInstalled: true);
+            var probe = new FakeCudaRuntimeProbe(
+                new CudaRuntimeProbeResult(false, "Native probe exited with code 0xC0000409."));
+            var recognizerFactoryCalled = false;
+            var sut = new SherpaOnnxPlugin(
+                installer,
+                (_, _, _) =>
+                {
+                    recognizerFactoryCalled = true;
+                    throw new InvalidOperationException("Recognizer must not be created after probe failure.");
+                },
+                probe);
+            var host = new FakePluginHostServices(tempDir);
+            CreateParakeetModelFiles(tempDir);
+
+            await sut.ActivateAsync(host);
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sut.LoadModelAsync("parakeet-tdt-0.6b", CancellationToken.None));
+
+            Assert.Contains("0xC0000409", ex.Message);
+            Assert.False(recognizerFactoryCalled);
+            Assert.Equal(1, probe.CallCount);
+            Assert.Equal(TranscriptionAccelerationBackend.Cpu, sut.AccelerationStatus.ActiveBackend);
+            Assert.Equal("CUDA unavailable", sut.AccelerationStatus.DisplayText);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CudaProbeCache_InvalidatesWhenTheNativeRuntimeChanges()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-probe-cache-{Guid.NewGuid():N}");
+        var pluginDir = Path.Join(tempDir, "plugin");
+        var modelDir = Path.Join(tempDir, "model");
+        var runtimeDir = Path.Join(tempDir, "runtime");
+        var executablePath = Path.Join(tempDir, "TypeWhisper.exe");
+        var cachePath = Path.Join(runtimeDir, ".typewhisper-cuda-probe-success");
+        try
+        {
+            Directory.CreateDirectory(pluginDir);
+            Directory.CreateDirectory(modelDir);
+            Directory.CreateDirectory(runtimeDir);
+            File.WriteAllText(executablePath, "host");
+            File.WriteAllText(Path.Join(pluginDir, "TypeWhisper.Plugin.SherpaOnnx.dll"), "plugin");
+            File.WriteAllText(Path.Join(modelDir, "encoder.onnx"), "model");
+            var runtimeDll = Path.Join(runtimeDir, "onnxruntime.dll");
+            File.WriteAllText(runtimeDll, "runtime-v1");
+
+            var first = SherpaCudaRuntimeProbe.BuildCacheFingerprint(
+                "parakeet-tdt-0.6b",
+                executablePath,
+                pluginDir,
+                modelDir,
+                runtimeDir);
+            SherpaCudaRuntimeProbe.RecordCachedSuccess(cachePath, first);
+
+            Assert.True(SherpaCudaRuntimeProbe.IsCachedSuccess(cachePath, first));
+
+            File.AppendAllText(runtimeDll, "-changed");
+            var second = SherpaCudaRuntimeProbe.BuildCacheFingerprint(
+                "parakeet-tdt-0.6b",
+                executablePath,
+                pluginDir,
+                modelDir,
+                runtimeDir);
+
+            Assert.NotEqual(first, second);
+            Assert.False(SherpaCudaRuntimeProbe.IsCachedSuccess(cachePath, second));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task LoadModelAsync_AutoCudaAndCpuFailureReportsCpuFallbackFailure()
     {
         var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-load-{Guid.NewGuid():N}");
@@ -140,7 +229,8 @@ public class SherpaOnnxPluginTests
             var sut = new SherpaOnnxPlugin(
                 installer,
                 (_, _, provider) => throw new InvalidOperationException(
-                    $"{provider} provider failed to initialize."));
+                    $"{provider} provider failed to initialize."),
+                new FakeCudaRuntimeProbe(new CudaRuntimeProbeResult(true, null)));
             var host = new FakePluginHostServices(tempDir);
             CreateParakeetModelFiles(tempDir);
 
@@ -360,6 +450,21 @@ public class SherpaOnnxPluginTests
 
             IsInstalled = true;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeCudaRuntimeProbe(CudaRuntimeProbeResult result) : ISherpaCudaRuntimeProbe
+    {
+        public int CallCount { get; private set; }
+
+        public Task<CudaRuntimeProbeResult> ProbeAsync(
+            string modelId,
+            string modelDirectory,
+            string runtimeDirectory,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult(result);
         }
     }
 

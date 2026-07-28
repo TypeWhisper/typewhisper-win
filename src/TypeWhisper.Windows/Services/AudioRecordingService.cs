@@ -1,5 +1,6 @@
 using NAudio;
 using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
 using TypeWhisper.Core.Models;
 
@@ -19,7 +20,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private const float AgcMinGain = 1f;
     private const float NormalizationTarget = 0.707f;
     private static readonly TimeSpan StopDrainDuration = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan DefaultDevicePollInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan FallbackDevicePollInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Minimum per-chunk RMS level to consider as containing speech.
@@ -29,7 +30,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private readonly IAudioInputDeviceProvider _deviceProvider;
     private readonly IAudioInputCaptureFactory _captureFactory;
+    private readonly IAudioInputDeviceChangeNotifier? _deviceChangeNotifier;
     private readonly TimeSpan _devicePollInterval;
+    private readonly object _deviceInfoCacheLock = new();
+    private readonly object _deviceChangeCheckLock = new();
     private IAudioInputCapture? _waveIn;
     private IAudioInputCapture? _previewWaveIn;
     private List<float>? _sampleBuffer;
@@ -49,6 +53,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private float _preGainPeakRms;
     private float _currentRmsLevel;
     private System.Timers.Timer? _devicePollTimer;
+    private IReadOnlyList<AudioInputDeviceInfo> _cachedDeviceInfos = [];
+    private bool _hasDeviceInfoCache;
+    private bool _deviceNotificationsStarted;
+    private int _deviceChangeRefreshQueued;
     private string _lastKnownDeviceSignature = "";
     private bool _lastKnownHasDevices;
     private bool _lastKnownPreferredDeviceAvailable;
@@ -63,7 +71,13 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Initializes a new instance of the AudioRecordingService class.
     /// </summary>
     public AudioRecordingService()
-        : this(new WaveInAudioInputDeviceProvider(), new WaveInAudioInputCaptureFactory(), DefaultDevicePollInterval)
+        : this(
+            new WaveInAudioInputDeviceProvider(),
+            new FallbackAudioInputCaptureFactory(
+                new WasapiAudioInputCaptureFactory(),
+                new WaveInAudioInputCaptureFactory()),
+            FallbackDevicePollInterval,
+            new WasapiAudioInputDeviceChangeNotifier())
     {
     }
 
@@ -71,10 +85,20 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         IAudioInputDeviceProvider deviceProvider,
         IAudioInputCaptureFactory captureFactory,
         TimeSpan devicePollInterval)
+        : this(deviceProvider, captureFactory, devicePollInterval, deviceChangeNotifier: null)
+    {
+    }
+
+    internal AudioRecordingService(
+        IAudioInputDeviceProvider deviceProvider,
+        IAudioInputCaptureFactory captureFactory,
+        TimeSpan devicePollInterval,
+        IAudioInputDeviceChangeNotifier? deviceChangeNotifier)
     {
         _deviceProvider = deviceProvider;
         _captureFactory = captureFactory;
         _devicePollInterval = devicePollInterval;
+        _deviceChangeNotifier = deviceChangeNotifier;
     }
 
     /// <summary>
@@ -241,13 +265,28 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// Returns available input devices.
     /// </summary>
     public IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableInputDevices() =>
-        GetAvailableDevices(_deviceProvider);
+        TryGetDeviceInfos()
+            .Select(device => (device.DeviceNumber, device.Name))
+            .ToList();
 
     /// <summary>
     /// Returns available input devices with stable ids when available.
     /// </summary>
     internal IReadOnlyList<AudioInputDeviceInfo> GetAvailableInputDeviceInfos() =>
-        GetAvailableDeviceInfos(_deviceProvider);
+        TryGetDeviceInfos();
+
+    internal bool TryGetCachedAvailableInputDeviceInfos(
+        out IReadOnlyList<AudioInputDeviceInfo> deviceInfos)
+    {
+        lock (_deviceInfoCacheLock)
+        {
+            deviceInfos = _cachedDeviceInfos;
+            return _hasDeviceInfoCache;
+        }
+    }
+
+    internal IReadOnlyList<AudioInputDeviceInfo> RefreshAvailableInputDeviceInfos() =>
+        TryGetDeviceInfos(refresh: true);
 
     /// <summary>
     /// Starts recording.
@@ -471,7 +510,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             return;
 
         var captureFailed = e.Exception is not null;
-        var activeDeviceAvailable = IsActiveDeviceAvailable(GetDeviceSnapshot());
+        var activeDeviceAvailable = IsActiveDeviceAvailable(GetDeviceSnapshot(refresh: true));
         AudioCaptureDiagnostics.Log(
             $"RecordingStopped captureFailed={captureFailed} activeAvailable={activeDeviceAvailable} exception={e.Exception?.GetType().Name}:{e.Exception?.Message}");
 
@@ -674,28 +713,32 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private AudioInputDeviceInfo? TryGetDeviceInfo(int deviceNumber)
     {
-        if (deviceNumber < 0 || deviceNumber >= _deviceProvider.DeviceCount)
+        if (deviceNumber < 0)
             return null;
 
-        try
-        {
-            return _deviceProvider.GetDeviceInfo(deviceNumber);
-        }
-        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException or MmException)
-        {
-            return null;
-        }
+        return TryGetDeviceInfos()
+            .FirstOrDefault(device => device.DeviceNumber == deviceNumber);
     }
 
-    private IReadOnlyList<AudioInputDeviceInfo> TryGetDeviceInfos()
+    private IReadOnlyList<AudioInputDeviceInfo> TryGetDeviceInfos(bool refresh = false)
     {
-        try
+        lock (_deviceInfoCacheLock)
         {
-            return _deviceProvider.GetDeviceInfos();
-        }
-        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException or MmException)
-        {
-            return [];
+            if (!refresh && _hasDeviceInfoCache)
+                return _cachedDeviceInfos;
+
+            try
+            {
+                _cachedDeviceInfos = [.. _deviceProvider.GetDeviceInfos()];
+                _hasDeviceInfoCache = true;
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"Device info refresh failed {ex.GetType().Name}: {ex.Message}");
+            }
+
+            return _cachedDeviceInfos;
         }
     }
 
@@ -728,9 +771,22 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void StartDevicePolling()
     {
+        if (_disposed || _deviceNotificationsStarted || _devicePollTimer is not null)
+            return;
+
         UpdateKnownDeviceSnapshot();
-        _devicePollTimer?.Dispose();
-        _devicePollTimer = null;
+
+        if (_deviceChangeNotifier is not null)
+        {
+            _deviceChangeNotifier.DevicesChanged += OnDeviceChangeNotification;
+            if (_deviceChangeNotifier.Start())
+            {
+                _deviceNotificationsStarted = true;
+                return;
+            }
+
+            _deviceChangeNotifier.DevicesChanged -= OnDeviceChangeNotification;
+        }
 
         if (_devicePollInterval == Timeout.InfiniteTimeSpan || _devicePollInterval <= TimeSpan.Zero)
             return;
@@ -739,6 +795,47 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         _devicePollTimer.Elapsed += (_, _) => CheckForDeviceChanges();
         _devicePollTimer.AutoReset = true;
         _devicePollTimer.Start();
+    }
+
+    private void OnDeviceChangeNotification(object? sender, EventArgs e)
+    {
+        if (_disposed)
+            return;
+
+        var previousState = Interlocked.CompareExchange(
+            ref _deviceChangeRefreshQueued,
+            1,
+            0);
+        if (previousState == 0)
+        {
+            ThreadPool.QueueUserWorkItem(
+                static state => ((AudioRecordingService)state!).ProcessDeviceChangeNotification(),
+                this);
+            return;
+        }
+
+        // State 2 records one follow-up pass. Additional endpoint callbacks
+        // arriving before that pass completes are intentionally coalesced.
+        Interlocked.CompareExchange(ref _deviceChangeRefreshQueued, 2, 1);
+    }
+
+    private void ProcessDeviceChangeNotification()
+    {
+        while (!_disposed)
+        {
+            Interlocked.Exchange(ref _deviceChangeRefreshQueued, 1);
+            CheckForDeviceChanges();
+
+            if (Interlocked.CompareExchange(
+                    ref _deviceChangeRefreshQueued,
+                    0,
+                    1) == 1)
+            {
+                return;
+            }
+        }
+
+        Interlocked.Exchange(ref _deviceChangeRefreshQueued, 0);
     }
 
     private void UpdateKnownDeviceSnapshot()
@@ -752,67 +849,70 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     internal void CheckForDeviceChanges()
     {
-        try
+        lock (_deviceChangeCheckLock)
         {
-            var snapshot = GetDeviceSnapshot();
-            var signature = BuildDeviceSignature(snapshot);
-            if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
+            try
             {
-                // The device list is unchanged, but the system default endpoint
-                // may have moved (or a migration was deferred while recording).
-                EnsureActiveDeviceIsPreferred(snapshot);
-                return;
-            }
+                var snapshot = GetDeviceSnapshot(refresh: true);
+                var signature = BuildDeviceSignature(snapshot);
+                if (_lastKnownSnapshotInitialized && signature == _lastKnownDeviceSignature)
+                {
+                    // The device list is unchanged, but the system default endpoint
+                    // may have moved (or a migration was deferred while recording).
+                    EnsureActiveDeviceIsPreferred(snapshot);
+                    return;
+                }
 
-            var previousHadDevices = _lastKnownHasDevices;
-            var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
-            var currentHasDevices = snapshot.Count > 0;
-            var currentPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
+                var previousHadDevices = _lastKnownHasDevices;
+                var previousPreferredDeviceAvailable = _lastKnownPreferredDeviceAvailable;
+                var currentHasDevices = snapshot.Count > 0;
+                var currentPreferredDeviceAvailable = IsPreferredDeviceAvailable(snapshot);
 
-            _lastKnownDeviceSignature = signature;
-            _lastKnownHasDevices = currentHasDevices;
-            _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
-            _lastKnownSnapshotInitialized = true;
+                _lastKnownDeviceSignature = signature;
+                _lastKnownHasDevices = currentHasDevices;
+                _lastKnownPreferredDeviceAvailable = currentPreferredDeviceAvailable;
+                _lastKnownSnapshotInitialized = true;
 
-            DevicesChanged?.Invoke(this, EventArgs.Empty);
+                DevicesChanged?.Invoke(this, EventArgs.Empty);
 
-            if (!currentHasDevices)
-            {
-                if (_isWarmedUp || _waveIn is not null)
+                if (!currentHasDevices)
+                {
+                    if (_isWarmedUp || _waveIn is not null)
+                        HandleDeviceLost();
+                    return;
+                }
+
+                if (_isWarmedUp && !IsActiveDeviceAvailable(snapshot))
+                {
                     HandleDeviceLost();
-                return;
-            }
+                    WarmUp();
+                    if (!previousHadDevices
+                        || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
+                    {
+                        RaiseDeviceAvailableIfDeviceLossWasReported();
+                    }
+                    return;
+                }
 
-            if (_isWarmedUp && !IsActiveDeviceAvailable(snapshot))
-            {
-                HandleDeviceLost();
-                WarmUp();
+                if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
+                {
+                    EnsureActiveDeviceIsPreferred(snapshot);
+                }
+                else if (!_isWarmedUp)
+                {
+                    WarmUp();
+                }
+
                 if (!previousHadDevices
                     || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
                 {
                     RaiseDeviceAvailableIfDeviceLossWasReported();
                 }
-                return;
             }
-
-            if (_isWarmedUp && currentPreferredDeviceAvailable && !IsActiveDevicePreferred())
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
             {
-                EnsureActiveDeviceIsPreferred(snapshot);
+                AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
             }
-            else if (!_isWarmedUp)
-            {
-                WarmUp();
-            }
-
-            if (!previousHadDevices
-                || (!previousPreferredDeviceAvailable && currentPreferredDeviceAvailable))
-            {
-                RaiseDeviceAvailableIfDeviceLossWasReported();
-            }
-        }
-        catch (Exception ex) when (IsNonFatalAudioException(ex))
-        {
-            AudioCaptureDiagnostics.Log($"Device change check failed {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -918,10 +1018,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
-    private IReadOnlyList<AudioInputDeviceSnapshot> GetDeviceSnapshot()
+    private IReadOnlyList<AudioInputDeviceSnapshot> GetDeviceSnapshot(bool refresh = false)
     {
         var devices = new List<AudioInputDeviceSnapshot>();
-        var deviceInfos = TryGetDeviceInfos();
+        var deviceInfos = TryGetDeviceInfos(refresh);
         if (deviceInfos.Count > 0)
         {
             foreach (var info in deviceInfos)
@@ -1144,11 +1244,18 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         if (!_disposed)
         {
+            _disposed = true;
             _devicePollTimer?.Dispose();
+            _devicePollTimer = null;
+            if (_deviceChangeNotifier is not null)
+            {
+                if (_deviceNotificationsStarted)
+                    _deviceChangeNotifier.DevicesChanged -= OnDeviceChangeNotification;
+                _deviceChangeNotifier.Dispose();
+            }
             _isRecording = false;
             StopPreview();
             DisposeWaveIn();
-            _disposed = true;
         }
     }
 
@@ -1257,6 +1364,12 @@ internal interface IAudioInputDeviceProvider
     /// when it cannot be determined.
     /// </summary>
     string? GetDefaultDeviceName();
+}
+
+internal interface IAudioInputDeviceChangeNotifier : IDisposable
+{
+    event EventHandler? DevicesChanged;
+    bool Start();
 }
 
 internal interface IAudioInputCaptureFactory
@@ -1380,6 +1493,85 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
 
         return names;
     }
+}
+
+internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceChangeNotifier, IMMNotificationClient
+{
+    private MMDeviceEnumerator? _enumerator;
+
+    public event EventHandler? DevicesChanged;
+
+    public bool Start()
+    {
+        if (_enumerator is not null)
+            return true;
+
+        MMDeviceEnumerator? enumerator = null;
+        try
+        {
+            enumerator = new MMDeviceEnumerator();
+            var result = enumerator.RegisterEndpointNotificationCallback(this);
+            if (result < 0)
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"Audio endpoint notification registration failed HRESULT=0x{result:X8}");
+                enumerator.Dispose();
+                return false;
+            }
+
+            _enumerator = enumerator;
+            return true;
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Audio endpoint notification registration failed {ex.GetType().Name}: {ex.Message}");
+            enumerator?.Dispose();
+            return false;
+        }
+    }
+
+    public void OnDeviceStateChanged(string deviceId, DeviceState newState) =>
+        RaiseDevicesChanged();
+
+    public void OnDeviceAdded(string pwstrDeviceId) =>
+        RaiseDevicesChanged();
+
+    public void OnDeviceRemoved(string deviceId) =>
+        RaiseDevicesChanged();
+
+    public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+    {
+        if (flow == DataFlow.Capture)
+            RaiseDevicesChanged();
+    }
+
+    public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) =>
+        RaiseDevicesChanged();
+
+    public void Dispose()
+    {
+        var enumerator = Interlocked.Exchange(ref _enumerator, null);
+        if (enumerator is null)
+            return;
+
+        try
+        {
+            enumerator.UnregisterEndpointNotificationCallback(this);
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Audio endpoint notification unregister failed {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            enumerator.Dispose();
+        }
+    }
+
+    private void RaiseDevicesChanged() =>
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
 }
 
 internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
@@ -1530,6 +1722,151 @@ internal sealed class WasapiAudioInputCaptureFactory : IAudioInputCaptureFactory
         {
             WasapiAudioInputDeviceResolver.DisposeDevices(devices);
         }
+    }
+}
+
+internal sealed class FallbackAudioInputCaptureFactory(
+    IAudioInputCaptureFactory primaryFactory,
+    IAudioInputCaptureFactory fallbackFactory) : IAudioInputCaptureFactory
+{
+    public IAudioInputCapture Create(
+        int deviceNumber,
+        WaveFormat waveFormat,
+        int bufferMilliseconds) =>
+        new FallbackAudioInputCapture(
+            primaryFactory,
+            fallbackFactory,
+            deviceNumber,
+            waveFormat,
+            bufferMilliseconds);
+}
+
+internal sealed class FallbackAudioInputCapture : IAudioInputCapture
+{
+    private readonly IAudioInputCaptureFactory _fallbackFactory;
+    private readonly int _deviceNumber;
+    private readonly WaveFormat _requestedWaveFormat;
+    private readonly int _bufferMilliseconds;
+    private IAudioInputCapture? _capture;
+    private bool _usingFallback;
+    private bool _disposed;
+
+    public FallbackAudioInputCapture(
+        IAudioInputCaptureFactory primaryFactory,
+        IAudioInputCaptureFactory fallbackFactory,
+        int deviceNumber,
+        WaveFormat waveFormat,
+        int bufferMilliseconds)
+    {
+        _fallbackFactory = fallbackFactory;
+        _deviceNumber = deviceNumber;
+        _requestedWaveFormat = waveFormat;
+        _bufferMilliseconds = bufferMilliseconds;
+
+        try
+        {
+            _capture = primaryFactory.Create(deviceNumber, waveFormat, bufferMilliseconds);
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Primary microphone capture creation failed; using fallback {ex.GetType().Name}: {ex.Message}");
+            _usingFallback = true;
+            _capture = fallbackFactory.Create(deviceNumber, waveFormat, bufferMilliseconds);
+        }
+
+        AttachCapture();
+    }
+
+    public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
+    public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
+
+    public WaveFormat WaveFormat =>
+        _capture?.WaveFormat ?? throw new ObjectDisposedException(nameof(FallbackAudioInputCapture));
+
+    public void StartRecording()
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            _capture!.StartRecording();
+        }
+        catch (Exception ex) when (!_usingFallback && NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Primary microphone capture start failed; using fallback {ex.GetType().Name}: {ex.Message}");
+            SwitchToFallback();
+            _capture!.StartRecording();
+        }
+    }
+
+    public void StopRecording()
+    {
+        ThrowIfDisposed();
+        _capture!.StopRecording();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        var capture = _capture;
+        _capture = null;
+        if (capture is null)
+            return;
+
+        DetachCapture(capture);
+        capture.Dispose();
+    }
+
+    private void SwitchToFallback()
+    {
+        var primaryCapture = _capture!;
+        _capture = null;
+        DetachCapture(primaryCapture);
+        try
+        {
+            primaryCapture.Dispose();
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Primary microphone capture cleanup failed {ex.GetType().Name}: {ex.Message}");
+        }
+
+        _usingFallback = true;
+        _capture = _fallbackFactory.Create(
+            _deviceNumber,
+            _requestedWaveFormat,
+            _bufferMilliseconds);
+        AttachCapture();
+    }
+
+    private void AttachCapture()
+    {
+        _capture!.DataAvailable += OnDataAvailable;
+        _capture.RecordingStopped += OnRecordingStopped;
+    }
+
+    private void DetachCapture(IAudioInputCapture capture)
+    {
+        capture.DataAvailable -= OnDataAvailable;
+        capture.RecordingStopped -= OnRecordingStopped;
+    }
+
+    private void OnDataAvailable(object? sender, AudioInputDataAvailableEventArgs e) =>
+        DataAvailable?.Invoke(this, e);
+
+    private void OnRecordingStopped(object? sender, AudioInputRecordingStoppedEventArgs e) =>
+        RecordingStopped?.Invoke(this, e);
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(FallbackAudioInputCapture));
     }
 }
 

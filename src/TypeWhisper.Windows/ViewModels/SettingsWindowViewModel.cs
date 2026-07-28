@@ -85,6 +85,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private readonly DispatcherTimer _indicatorPreviewTimer = new(DispatcherPriority.Background);
     private readonly DateTime _indicatorPreviewStartedAt = DateTime.UtcNow;
     private bool _isSyncingUpdateChannel;
+    private bool _isWindowLoaded;
     private double _indicatorPreviewPhase;
 
     [ObservableProperty] private UserControl? _currentSection;
@@ -549,7 +550,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         CurrentSection = section;
         CurrentRoute = route;
         _lastOpenedRoute = route;
-        UpdateMicrophonePreviewForRoute(Settings, previousRoute, route);
+        UpdateMicrophonePreviewForRoute(Settings, previousRoute, route, _isWindowLoaded);
 
         if (route is SettingsRoute.Dictation or SettingsRoute.Integrations)
             ModelManager.RefreshPluginAvailability();
@@ -558,13 +559,37 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     internal static void UpdateMicrophonePreviewForRoute(
         SettingsViewModel settings,
         SettingsRoute previousRoute,
-        SettingsRoute route)
+        SettingsRoute route,
+        bool canStartPreview = true)
     {
         if (previousRoute == SettingsRoute.Dictation && route != SettingsRoute.Dictation)
             settings.StopMicrophonePreview();
 
-        if (route == SettingsRoute.Dictation)
+        if (canStartPreview && route == SettingsRoute.Dictation)
             settings.StartMicrophonePreview();
+    }
+
+    /// <summary>
+    /// Starts work that should only run while the settings window is visible.
+    /// </summary>
+    public void OnWindowLoaded()
+    {
+        _isWindowLoaded = true;
+        UpdateMicrophonePreviewForRoute(Settings, CurrentRoute, CurrentRoute);
+        SyncIndicatorPreviewTimer(CurrentRoute);
+    }
+
+    /// <summary>
+    /// Stops window-scoped work and releases cached section controls.
+    /// </summary>
+    public void OnWindowClosed()
+    {
+        _isWindowLoaded = false;
+        Settings.StopMicrophonePreview();
+        SyncIndicatorPreviewTimer(CurrentRoute);
+        CurrentSection = null;
+        _sectionCache.Clear();
+        _sectionFactories.Clear();
     }
 
     internal bool FocusInstalledPlugin(string pluginId)
@@ -669,7 +694,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
     private void SyncIndicatorPreviewTimer(SettingsRoute route)
     {
-        if (route == SettingsRoute.Appearance)
+        if (_isWindowLoaded && route == SettingsRoute.Appearance)
         {
             if (!_indicatorPreviewTimer.IsEnabled)
                 _indicatorPreviewTimer.Start();

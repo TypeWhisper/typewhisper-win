@@ -13,20 +13,116 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class AudioRecordingServiceDeviceChangeTests
 {
     [Fact]
-    public void DefaultMicrophoneCapture_UsesWaveInInsteadOfWasapi()
+    public void DefaultMicrophoneCapture_UsesWasapiWithWaveInFallback()
     {
         var source = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Services",
             "AudioRecordingService.cs");
-        var defaultConstructor = TestFile.ExtractBlock(source, "public AudioRecordingService()", 260);
+        var defaultConstructor = TestFile.ExtractBlock(source, "public AudioRecordingService()", 420);
         var staticDeviceList = TestFile.ExtractBlock(source, "public static IReadOnlyList<(int DeviceNumber, string Name)> GetAvailableDevices()", 180);
 
         Assert.Contains("new WaveInAudioInputDeviceProvider()", defaultConstructor);
+        Assert.Contains("new FallbackAudioInputCaptureFactory(", defaultConstructor);
+        Assert.Contains("new WasapiAudioInputCaptureFactory()", defaultConstructor);
         Assert.Contains("new WaveInAudioInputCaptureFactory()", defaultConstructor);
-        Assert.DoesNotContain("WasapiAudioInput", defaultConstructor);
+        Assert.DoesNotContain("new WasapiAudioInputDeviceProvider()", defaultConstructor);
         Assert.Contains("new WaveInAudioInputDeviceProvider()", staticDeviceList);
+    }
+
+    [Fact]
+    public void FallbackCapture_UsesWaveInWhenWasapiStartFails()
+    {
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            StartException = new InvalidOperationException("WASAPI activation failed.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory();
+        var factory = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        using var capture = factory.Create(
+            deviceNumber: 0,
+            new WaveFormat(16000, 16, 1),
+            bufferMilliseconds: 30);
+
+        capture.StartRecording();
+
+        Assert.True(Assert.Single(wasapi.Created).Disposed);
+        Assert.True(Assert.Single(waveIn.Created).Started);
+    }
+
+    [Fact]
+    public void FallbackCapture_ForwardsWaveInAudioToTheRecordingService()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            StartException = new InvalidOperationException("WASAPI activation failed.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory();
+        var captures = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        using var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan);
+        sut.NormalizationEnabled = false;
+        var source = new short[] { 8192, 16384 };
+        var bytes = new byte[source.Length * sizeof(short)];
+        Buffer.BlockCopy(source, 0, bytes, 0, bytes.Length);
+
+        sut.StartRecording();
+        Assert.True(sut.IsRecording);
+        Assert.Single(waveIn.Created).RaiseData(bytes, bytes.Length);
+        var samples = sut.StopRecording();
+
+        Assert.NotNull(samples);
+        Assert.Equal(source.Length, samples.Length);
+    }
+
+    [Fact]
+    public void DefaultDeviceMonitoring_UsesWasapiNotificationsInsteadOfTwoSecondPolling()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "AudioRecordingService.cs");
+        var defaultConstructor = TestFile.ExtractBlock(source, "public AudioRecordingService()", 360);
+
+        Assert.Contains("new WasapiAudioInputDeviceChangeNotifier()", defaultConstructor);
+        Assert.DoesNotContain("TimeSpan.FromSeconds(2)", source);
+        Assert.Contains("RegisterEndpointNotificationCallback", source);
+        Assert.Contains("UnregisterEndpointNotificationCallback", source);
+    }
+
+    [Fact]
+    public async Task DeviceChangeNotification_RefreshesCachedDevicesWithoutPeriodicPolling()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        var notifier = new FakeAudioInputDeviceChangeNotifier();
+        using var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan,
+            notifier);
+        Assert.True(sut.WarmUp());
+        var initialDeviceInfoRequests = devices.DeviceInfoRequestCount;
+
+        Assert.Equal("USB Microphone", Assert.Single(sut.GetAvailableInputDeviceInfos()).Name);
+        Assert.Equal("USB Microphone", Assert.Single(sut.GetAvailableInputDeviceInfos()).Name);
+        Assert.Equal(initialDeviceInfoRequests, devices.DeviceInfoRequestCount);
+
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        sut.DevicesChanged += (_, _) => changed.TrySetResult();
+        devices.SetDevices("Built-in Microphone");
+
+        notifier.RaiseDevicesChanged();
+        await changed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, notifier.StartCount);
+        Assert.Equal(initialDeviceInfoRequests + 1, devices.DeviceInfoRequestCount);
+        Assert.Equal("Built-in Microphone", Assert.Single(sut.GetAvailableInputDeviceInfos()).Name);
     }
 
     [Fact]
@@ -827,7 +923,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
     }
 
     [Fact]
-    public void RefreshMicrophones_MigratesLegacyMicrophoneWithoutReentrantSettingsLoad()
+    public async Task RefreshMicrophones_MigratesLegacyMicrophoneWithoutReentrantSettingsLoad()
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
@@ -849,7 +945,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
             new FakeAudioInputDevice("built-in", "Built-in Microphone"),
             new FakeAudioInputDevice("usb", "USB Microphone"));
 
-        sut.RefreshMicrophonesCommand.Execute(null);
+        await sut.RefreshMicrophonesCommand.ExecuteAsync(null);
 
         Assert.Equal(1, settings.SaveCount);
         Assert.Equal(0, settingsReloadCount);
@@ -952,6 +1048,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         SpeechFeedbackService speech,
         Action<Action>? dispatchToUi = null)
     {
+        audio.RefreshAvailableInputDeviceInfos();
         var api = new ApiServerController(Mock.Of<ILocalApiServer>(), settings);
         var cli = new CliInstallService();
         return new SettingsViewModel(settings, audio, api, cli, speech, dispatchToUi: dispatchToUi ?? (action => action()));
@@ -1266,6 +1363,8 @@ internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
 
     public int DeviceNameRequestCount { get; private set; }
 
+    public int DeviceInfoRequestCount { get; private set; }
+
     public string? DefaultDeviceName { get; set; }
 
     public string GetDeviceName(int deviceNumber)
@@ -1283,6 +1382,7 @@ internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
 
     public IReadOnlyList<AudioInputDeviceInfo> GetDeviceInfos()
     {
+        DeviceInfoRequestCount++;
         return _devices
             .Select((_, index) => ToDeviceInfo(index))
             .ToList();
@@ -1312,14 +1412,38 @@ internal sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider
             _devices[deviceNumber].Name == DefaultDeviceName);
 }
 
+internal sealed class FakeAudioInputDeviceChangeNotifier : IAudioInputDeviceChangeNotifier
+{
+    public event EventHandler? DevicesChanged;
+
+    public int StartCount { get; private set; }
+
+    public bool Start()
+    {
+        StartCount++;
+        return true;
+    }
+
+    public void RaiseDevicesChanged() =>
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
+
+    public void Dispose()
+    {
+    }
+}
+
 internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
 {
     public List<FakeAudioInputCapture> Created { get; } = [];
     public WaveFormat? ActualWaveFormat { get; set; }
+    public Exception? StartException { get; set; }
 
     public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
     {
-        var capture = new FakeAudioInputCapture(deviceNumber, ActualWaveFormat ?? waveFormat);
+        var capture = new FakeAudioInputCapture(deviceNumber, ActualWaveFormat ?? waveFormat)
+        {
+            StartException = StartException
+        };
         Created.Add(capture);
         return capture;
     }
@@ -1332,11 +1456,18 @@ internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFor
     public bool Started { get; private set; }
     public bool Stopped { get; private set; }
     public bool Disposed { get; private set; }
+    public Exception? StartException { get; init; }
 
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
-    public void StartRecording() => Started = true;
+    public void StartRecording()
+    {
+        if (StartException is not null)
+            throw StartException;
+
+        Started = true;
+    }
 
     public void StopRecording() => Stopped = true;
 

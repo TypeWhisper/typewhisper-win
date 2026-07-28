@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Windows;
+using System.Windows.Threading;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views.Sections;
 using Wpf.Ui.Controls;
@@ -12,6 +14,7 @@ public partial class SettingsWindow : FluentWindow
 {
     private readonly SettingsWindowViewModel _viewModel;
     private WelcomeWindow? _setupWizard;
+    private bool _isClosed;
 
     /// <summary>
     /// Initializes a new instance of the SettingsWindow class.
@@ -39,11 +42,28 @@ public partial class SettingsWindow : FluentWindow
         viewModel.RegisterSection(SettingsRoute.License, () => new LicenseSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.About, () => new InfoSection { DataContext = viewModel });
 
-        viewModel.NavigateToDefault();
-
         _viewModel.SetupWizardRequested += OnSetupWizardRequested;
+        Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
+
+        // Let WPF render the settings shell before constructing the selected
+        // section or enumerating audio hardware.
+        await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+        if (_isClosed)
+            return;
+
+        if (_viewModel.CurrentSection is null)
+            _viewModel.NavigateToDefault();
+
+        await _viewModel.Settings.EnsureMicrophonesLoadedAsync();
+        if (!_isClosed)
+            _viewModel.OnWindowLoaded();
     }
 
     private void OnSetupWizardRequested(object? sender, EventArgs e)
@@ -77,7 +97,10 @@ public partial class SettingsWindow : FluentWindow
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _isClosed = true;
+        Loaded -= OnLoaded;
         _viewModel.SetupWizardRequested -= OnSetupWizardRequested;
+        _viewModel.OnWindowClosed();
         _setupWizard = null;
     }
 }

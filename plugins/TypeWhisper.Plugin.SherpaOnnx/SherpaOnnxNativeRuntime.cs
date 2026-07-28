@@ -41,6 +41,15 @@ internal static class SherpaOnnxNativeRuntime
         }
     }
 
+    public static void ConfigureBundledRuntime()
+    {
+        lock (Sync)
+        {
+            RegisterResolverUnsafe();
+            _cudaRuntimeDirectory = null;
+        }
+    }
+
     private static void RegisterResolverUnsafe()
     {
         _bundledRuntimeDirectory ??= ResolveBundledRuntimeDirectory(
