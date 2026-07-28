@@ -16,12 +16,16 @@ namespace TypeWhisper.Plugin.OpenAi;
 public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ITtsProviderPlugin
 {
     private const string BaseUrl = "https://api.openai.com";
+    private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
+    private const string PluginVersionValue = "1.1.1";
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
     private const string SelectedVoiceSettingName = "selectedVoice";
     private const string TtsInstructionsSettingName = "ttsInstructions";
     private const string ReasoningEffortSettingName = "reasoningEffort";
     private const string FetchedLlmModelsSettingName = "fetchedLLMModels";
+    private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
+    private const string FetchedChatGptModelsSettingName = "fetchedChatGPTModels";
     private const string AuthModeSettingName = "authMode";
     private const string SelectedLlmModelSettingName = "selectedLLMModel";
     private const string TemperatureModeSettingName = "llmTemperatureMode";
@@ -41,13 +45,15 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private string? _apiKey;
     private string? _selectedModelId;
     private string? _selectedApiModelName;
-    private string _selectedResponseFormat = "verbose_json";
     private string? _selectedVoiceId;
     private string _ttsInstructions = "";
     private string _reasoningEffort = "medium";
     private string _temperatureMode = TemperatureModeProviderDefault;
     private double _temperatureValue = 0.3;
     private List<OpenAiFetchedModel> _fetchedLlmModels = [];
+    private List<OpenAiFetchedModel> _fetchedTranscriptionModels = [];
+    private List<OpenAiChatGptModel> _fetchedChatGptModels = [];
+    private IReadOnlyList<TranscriptionModelEntry> _availableTranscriptionModelEntries = [];
     private OpenAiAuthMode _authMode = OpenAiAuthMode.ApiKey;
     private string? _selectedLlmModelId;
     private string? _oauthAccessToken;
@@ -57,12 +63,34 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private string? _oauthPlanType;
     private DateTimeOffset? _oauthExpiresAt;
 
-    private static readonly IReadOnlyList<TranscriptionModelEntry> TranscriptionModelEntries =
+    private static readonly IReadOnlyList<TranscriptionModelEntry> FallbackTranscriptionModelEntries =
     [
+        new(
+            "gpt-transcribe",
+            "GPT Transcribe",
+            "gpt-transcribe",
+            ResponseFormat: null,
+            SupportsTranslation: false,
+            LanguageFormat: TranscriptionLanguageFormat.Plural,
+            SupportsDictionaryTerms: true),
         new("whisper-1", "Whisper 1", "whisper-1", "verbose_json", SupportsTranslation: true),
         new("gpt-4o-transcribe", "GPT-4o Transcribe", "gpt-4o-transcribe", "json", SupportsTranslation: false),
         new("gpt-4o-mini-transcribe", "GPT-4o Mini Transcribe", "gpt-4o-mini-transcribe", "json", SupportsTranslation: false),
-        new(OpenAiRealtimeStreamingSession.ModelId, "GPT Realtime Whisper", OpenAiRealtimeStreamingSession.ModelId, "json", SupportsTranslation: false, SupportsStreaming: true),
+        new(
+            OpenAiRealtimeStreamingSession.LiveModelId,
+            "GPT Live Transcribe",
+            OpenAiRealtimeStreamingSession.LiveModelId,
+            "json",
+            SupportsTranslation: false,
+            Transport: TranscriptionTransport.Realtime,
+            LanguageFormat: TranscriptionLanguageFormat.Plural),
+        new(
+            OpenAiRealtimeStreamingSession.LegacyModelId,
+            "GPT Realtime Whisper",
+            OpenAiRealtimeStreamingSession.LegacyModelId,
+            "json",
+            SupportsTranslation: false,
+            Transport: TranscriptionTransport.Realtime),
     ];
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
@@ -76,7 +104,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         new("o4-mini", "o4-mini"),
     ];
 
-    private static readonly IReadOnlyList<PluginModelInfo> ChatGptModels =
+    private static readonly IReadOnlyList<PluginModelInfo> FallbackChatGptModels =
     [
         new("gpt-5.5", "GPT-5.5"),
         new("gpt-5.4", "GPT-5.4"),
@@ -118,7 +146,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.1.1";
+    public string PluginVersion => PluginVersionValue;
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -138,12 +166,22 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         _temperatureMode = NormalizeTemperatureMode(host.GetSetting<string>(TemperatureModeSettingName));
         _temperatureValue = NormalizeTemperatureValue(host.GetSetting<double?>(TemperatureValueSettingName));
         _fetchedLlmModels = host.GetSetting<List<OpenAiFetchedModel>>(FetchedLlmModelsSettingName) ?? [];
+        _fetchedTranscriptionModels =
+            host.GetSetting<List<OpenAiFetchedModel>>(FetchedTranscriptionModelsSettingName) ?? [];
+        _fetchedChatGptModels =
+            host.GetSetting<List<OpenAiChatGptModel>>(FetchedChatGptModelsSettingName) ?? [];
         _oauthAccountId = host.GetSetting<string>(OAuthAccountIdSettingName);
         _oauthPlanType = host.GetSetting<string>(OAuthPlanTypeSettingName);
         _oauthExpiresAt = LoadExpiresAt(host);
 
-        SelectModelCore(host.GetSetting<string>(SelectedModelSettingName) ?? TranscriptionModelEntries[0].Id, persist: false);
-        NormalizeSelectedLlmModel(persist: false);
+        ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: false);
+        SelectModelCore(
+            host.GetSetting<string>(SelectedModelSettingName)
+                ?? FallbackTranscriptionModelEntries[0].Id,
+            persist: false);
+        NormalizeSelectedLlmModel(
+            persist: false,
+            preserveUnknownWhenCatalogUnavailable: true);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -179,8 +217,10 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     /// <summary>
     /// Gets the transcription models exposed by this provider.
     /// </summary>
-    public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
-        TranscriptionModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList();
+    public IReadOnlyList<PluginModelInfo> TranscriptionModels =>
+        AvailableTranscriptionModelEntries
+            .Select(model => new PluginModelInfo(model.Id, model.DisplayName))
+            .ToList();
 
     /// <summary>
     /// Gets the currently selected provider model identifier.
@@ -202,6 +242,13 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         && SelectedModelEntry is { SupportsStreaming: true };
 
     /// <summary>
+    /// Gets whether active dictionary terms can be passed to the selected transcription model.
+    /// </summary>
+    public bool SupportsDictionaryTerms =>
+        IsConfigured
+        && SelectedModelEntry is { SupportsDictionaryTerms: true };
+
+    /// <summary>
     /// Selects the provider model used for subsequent requests.
     /// </summary>
     public void SelectModel(string modelId) => SelectModelCore(modelId, persist: true);
@@ -209,41 +256,96 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     /// <summary>
     /// Transcribes PCM audio using the selected provider configuration.
     /// </summary>
-    public async Task<PluginTranscriptionResult> TranscribeAsync(
-        byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
+    public Task<PluginTranscriptionResult> TranscribeAsync(
+        byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct) =>
+        TranscribeWithLanguageHintsAsync(
+            wavAudio,
+            NormalizeLanguage(language) is { } normalizedLanguage ? [normalizedLanguage] : [],
+            translate,
+            prompt,
+            ct);
+
+    /// <summary>
+    /// Transcribes PCM audio using ordered language hints.
+    /// </summary>
+    public async Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
+        byte[] wavAudio,
+        IReadOnlyList<string> languageHints,
+        bool translate,
+        string? prompt,
+        CancellationToken ct)
     {
-        if (!IsConfigured || _selectedApiModelName is null)
+        if (!IsConfigured || _selectedApiModelName is null || SelectedModelEntry is not { } entry)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
 
-        if (_selectedModelId == OpenAiRealtimeStreamingSession.ModelId)
-        {
-            if (translate)
-                throw new InvalidOperationException("GPT Realtime Whisper does not support translation.");
+        if (translate && !entry.SupportsTranslation)
+            throw new InvalidOperationException($"{entry.DisplayName} does not support translation.");
 
+        var normalizedLanguageHints = NormalizeLanguageHints(languageHints);
+        if (entry.Transport == TranscriptionTransport.Realtime)
+        {
             return await OpenAiRealtimeStreamingSession.TranscribeWavAsync(
                 _apiKey!,
+                entry.ApiModelName,
                 wavAudio,
-                NormalizeLanguage(language),
+                normalizedLanguageHints,
+                prompt,
+                ct);
+        }
+
+        if (entry.LanguageFormat == TranscriptionLanguageFormat.Plural)
+        {
+            return await OpenAiTranscriptionClient.TranscribeAsync(
+                _httpClient,
+                BaseUrl,
+                _apiKey!,
+                entry.ApiModelName,
+                wavAudio,
+                normalizedLanguageHints,
+                entry.ResponseFormat,
                 prompt,
                 ct);
         }
 
         return await OpenAiTranscriptionHelper.TranscribeAsync(
-            _httpClient, BaseUrl, _apiKey!, _selectedApiModelName,
-            wavAudio, NormalizeLanguage(language), translate, _selectedResponseFormat, ct, prompt);
+            _httpClient,
+            BaseUrl,
+            _apiKey!,
+            entry.ApiModelName,
+            wavAudio,
+            normalizedLanguageHints.FirstOrDefault(),
+            translate,
+            entry.ResponseFormat ?? "json",
+            ct,
+            prompt);
     }
 
     /// <summary>
     /// Opens a streaming transcription session for live audio.
     /// </summary>
-    public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
+    public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
+        StartStreamingWithLanguageHintsAsync(
+            NormalizeLanguage(language) is { } normalizedLanguage ? [normalizedLanguage] : [],
+            ct);
+
+    /// <summary>
+    /// Opens a streaming transcription session with ordered language hints.
+    /// </summary>
+    public async Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(
+        IReadOnlyList<string> languageHints,
+        CancellationToken ct)
     {
         if (!IsConfigured)
             throw new InvalidOperationException("API key not configured");
-        if (_selectedModelId != OpenAiRealtimeStreamingSession.ModelId)
-            throw new NotSupportedException("Select GPT Realtime Whisper to use OpenAI realtime streaming.");
+        if (SelectedModelEntry is not { Transport: TranscriptionTransport.Realtime } entry)
+            throw new NotSupportedException("Select an OpenAI realtime transcription model to use streaming.");
 
-        return await OpenAiRealtimeStreamingSession.ConnectAsync(_apiKey!, NormalizeLanguage(language), prompt: null, ct);
+        return await OpenAiRealtimeStreamingSession.ConnectAsync(
+            _apiKey!,
+            entry.ApiModelName,
+            NormalizeLanguageHints(languageHints),
+            prompt: null,
+            ct);
     }
 
     // ILlmProviderPlugin
@@ -266,7 +368,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     /// </summary>
     public IReadOnlyList<PluginModelInfo> SupportedModels =>
         _authMode == OpenAiAuthMode.ChatGpt
-            ? ChatGptModels
+            ? AvailableChatGptModels
             : _fetchedLlmModels.Count > 0
             ? _fetchedLlmModels.Select(model => new PluginModelInfo(model.Id, model.Id)).ToList()
             : FallbackLlmModels;
@@ -373,50 +475,142 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     {
         if (_authMode == OpenAiAuthMode.ChatGpt)
         {
+            var chatGptModels = await FetchChatGptModelsAsync(ct);
+            if (chatGptModels is null || chatGptModels.Count == 0)
+                return [];
+
+            _fetchedChatGptModels = chatGptModels.ToList();
+            _host?.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
             NormalizeSelectedLlmModel(persist: true);
             _host?.NotifyCapabilitiesChanged();
             return SupportedModels;
         }
 
-        var models = await FetchLlmModelsAsync(ct);
-        if (models.Count == 0)
+        var models = await FetchApiModelsAsync(ct);
+        if (models is null)
             return [];
 
-        _fetchedLlmModels = models.ToList();
+        _fetchedLlmModels = models
+            .Where(model => IsChatModel(model.Id))
+            .OrderBy(model => model.Id, StringComparer.Ordinal)
+            .ToList();
+        _fetchedTranscriptionModels = models
+            .Where(model => CreateDiscoveredTranscriptionModelEntry(model.Id) is not null)
+            .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+        _host?.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
+        ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
         NormalizeSelectedLlmModel(persist: true);
         _host?.NotifyCapabilitiesChanged();
         return SupportedModels;
     }
 
-    internal async Task<IReadOnlyList<OpenAiFetchedModel>> FetchLlmModelsAsync(CancellationToken ct = default)
+    internal async Task<IReadOnlyList<OpenAiFetchedModel>?> FetchApiModelsAsync(
+        CancellationToken ct = default)
     {
         if (!IsConfigured)
-            return [];
+            return null;
 
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
         try
         {
-            var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
-                return [];
+                return null;
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var decoded = JsonSerializer.Deserialize<OpenAiModelsResponse>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (decoded?.Data is not { } apiModels)
+                return null;
 
-            return decoded?.Data
-                .Where(model => IsChatModel(model.Id))
-                .OrderBy(model => model.Id, StringComparer.Ordinal)
-                .ToList()
-                ?? [];
+            return apiModels
+                .OfType<OpenAiFetchedModel>()
+                .Where(model => !string.IsNullOrWhiteSpace(model.Id))
+                .ToList();
         }
-        catch
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return [];
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    internal async Task<IReadOnlyList<OpenAiChatGptModel>?> FetchChatGptModelsAsync(
+        CancellationToken ct = default)
+    {
+        if (!HasChatGptCredentials)
+            return null;
+
+        try
+        {
+            var accessToken = await ValidOAuthAccessTokenAsync(ct);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{ChatGptModelsEndpoint}?client_version={Uri.EscapeDataString(PluginVersionValue)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.UserAgent.ParseAdd($"TypeWhisper-OpenAI-Plugin/{PluginVersionValue}");
+            request.Headers.TryAddWithoutValidation("originator", "typewhisper");
+            if (!string.IsNullOrWhiteSpace(_oauthAccountId))
+                request.Headers.TryAddWithoutValidation("ChatGPT-Account-Id", _oauthAccountId);
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var decoded = JsonSerializer.Deserialize<OpenAiChatGptModelsResponse>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (decoded?.Models is not { } catalogModels)
+                return null;
+
+            var visibleModels = catalogModels
+                .OfType<OpenAiChatGptModel>()
+                .Where(IsVisibleChatGptModel)
+                .DistinctBy(model => model.Slug, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(model => model.Priority ?? int.MaxValue)
+                .ThenBy(model => model.Slug, StringComparer.Ordinal)
+                .ToList();
+            if (visibleModels.Count == 0)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(_oauthPlanType))
+                return visibleModels;
+
+            var planModels = visibleModels
+                .Where(model => model.AvailableInPlans is not { Count: > 0 }
+                    || model.AvailableInPlans.Contains(_oauthPlanType, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            return planModels.Count > 0 ? planModels : visibleModels;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -448,6 +642,10 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             && !excludeContains.Any(fragment => lowered.Contains(fragment, StringComparison.Ordinal));
     }
 
+    internal static bool IsVisibleChatGptModel(OpenAiChatGptModel model) =>
+        !string.IsNullOrWhiteSpace(model.Slug)
+        && !string.Equals(model.Visibility, "hide", StringComparison.OrdinalIgnoreCase);
+
     internal void SetAuthMode(OpenAiAuthMode mode)
     {
         if (_authMode == mode)
@@ -455,7 +653,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 
         _authMode = mode;
         _host?.SetSetting(AuthModeSettingName, mode.ToStorageValue());
-        NormalizeSelectedLlmModel(persist: true);
+        NormalizeSelectedLlmModel(
+            persist: true,
+            preserveUnknownWhenCatalogUnavailable: true);
         _host?.NotifyCapabilitiesChanged();
     }
 
@@ -504,6 +704,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         var tokens = await OpenAiOAuthClient.ExchangeAuthorizationCodeAsync(_httpClient, code, pkce, ct);
         await StoreOAuthTokensAsync(tokens, preferredAccountId: null);
         SetAuthMode(OpenAiAuthMode.ChatGpt);
+        await RefreshAvailableLlmModelsAsync(ct);
     }
 
     internal async Task ImportExistingLoginAsync(string? authFilePath = null)
@@ -529,6 +730,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             ExpiresIn: null);
         await StoreOAuthTokensAsync(tokens, store.Tokens.AccountId);
         SetAuthMode(OpenAiAuthMode.ChatGpt);
+        await RefreshAvailableLlmModelsAsync();
     }
 
     internal async Task ClearChatGptLoginAsync()
@@ -539,6 +741,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         _oauthAccountId = null;
         _oauthPlanType = null;
         _oauthExpiresAt = null;
+        _fetchedChatGptModels = [];
 
         if (_host is not null)
         {
@@ -548,6 +751,8 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             _host.SetSetting<string?>(OAuthAccountIdSettingName, null);
             _host.SetSetting<string?>(OAuthPlanTypeSettingName, null);
             _host.SetSetting<DateTimeOffset?>(OAuthExpiresAtSettingName, null);
+            _host.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
+            NormalizeSelectedLlmModel(persist: true);
             _host.NotifyCapabilitiesChanged();
         }
     }
@@ -614,6 +819,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     {
         var normalized = NormalizeApiKey(apiKey);
         var wasConfigured = IsConfigured;
+        var hadFetchedModels = _fetchedLlmModels.Count > 0 || _fetchedTranscriptionModels.Count > 0;
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
 
         _apiKey = normalized;
@@ -624,7 +830,16 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             else
                 await _host.StoreSecretAsync(ApiKeySecretName, normalized);
 
-            if (changed && wasConfigured != IsConfigured)
+            if (changed)
+            {
+                _fetchedLlmModels = [];
+                _fetchedTranscriptionModels = [];
+                _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+                _host.SetSetting(FetchedTranscriptionModelsSettingName, _fetchedTranscriptionModels);
+                ApplyTranscriptionCatalog(_fetchedTranscriptionModels, persist: true);
+            }
+
+            if (changed && (wasConfigured != IsConfigured || hadFetchedModels))
                 _host.NotifyCapabilitiesChanged();
         }
     }
@@ -658,20 +873,104 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         _httpClient.Dispose();
     }
 
+    private IReadOnlyList<TranscriptionModelEntry> AvailableTranscriptionModelEntries =>
+        _availableTranscriptionModelEntries.Count > 0
+            ? _availableTranscriptionModelEntries
+            : FallbackTranscriptionModelEntries;
+
+    private IReadOnlyList<PluginModelInfo> AvailableChatGptModels =>
+        _fetchedChatGptModels.Count > 0
+            ? _fetchedChatGptModels
+                .Select(model => new PluginModelInfo(
+                    model.Slug,
+                    string.IsNullOrWhiteSpace(model.DisplayName)
+                        ? model.Slug
+                        : model.DisplayName))
+                .ToList()
+            : FallbackChatGptModels;
+
     private TranscriptionModelEntry? SelectedModelEntry =>
-        TranscriptionModelEntries.FirstOrDefault(m => m.Id == _selectedModelId);
+        AvailableTranscriptionModelEntries.FirstOrDefault(model =>
+            string.Equals(model.Id, _selectedModelId, StringComparison.OrdinalIgnoreCase));
 
     private void SelectModelCore(string modelId, bool persist)
     {
-        var entry = TranscriptionModelEntries.FirstOrDefault(m => m.Id == modelId)
-            ?? TranscriptionModelEntries[0];
+        var entry = AvailableTranscriptionModelEntries.FirstOrDefault(model =>
+                string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase))
+            ?? AvailableTranscriptionModelEntries.FirstOrDefault(model =>
+                string.Equals(
+                    model.Id,
+                    FallbackTranscriptionModelEntries[0].Id,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? AvailableTranscriptionModelEntries[0];
         _selectedModelId = entry.Id;
         _selectedApiModelName = entry.ApiModelName;
-        _selectedResponseFormat = entry.ResponseFormat;
 
         if (persist)
             _host?.SetSetting(SelectedModelSettingName, entry.Id);
     }
+
+    private void ApplyTranscriptionCatalog(
+        IReadOnlyList<OpenAiFetchedModel> models,
+        bool persist)
+    {
+        var discoveredModels = models
+            .Select(model => CreateDiscoveredTranscriptionModelEntry(model.Id))
+            .Where(model => model is not null)
+            .Select(model => model!)
+            .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(model => TranscriptionModelFamilyOrder(model.Id))
+            .ThenBy(model => IsBaseTranscriptionModel(model.Id) ? 0 : 1)
+            .ThenBy(model => model.Id, StringComparer.Ordinal)
+            .ToList();
+        _availableTranscriptionModelEntries = discoveredModels.Count > 0
+            ? discoveredModels
+            : FallbackTranscriptionModelEntries;
+
+        if (_selectedModelId is not null)
+            SelectModelCore(_selectedModelId, persist);
+    }
+
+    private static TranscriptionModelEntry? CreateDiscoveredTranscriptionModelEntry(string modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId)
+            || modelId.Contains("diarize", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var template = FallbackTranscriptionModelEntries.FirstOrDefault(candidate =>
+            MatchesModelFamily(modelId, candidate.Id));
+        return template is null
+            ? null
+            : template with
+            {
+                Id = modelId,
+                DisplayName = string.Equals(modelId, template.Id, StringComparison.OrdinalIgnoreCase)
+                    ? template.DisplayName
+                    : modelId,
+                ApiModelName = modelId,
+            };
+    }
+
+    private static bool MatchesModelFamily(string modelId, string baseModelId) =>
+        string.Equals(modelId, baseModelId, StringComparison.OrdinalIgnoreCase)
+        || modelId.StartsWith($"{baseModelId}-", StringComparison.OrdinalIgnoreCase);
+
+    private static int TranscriptionModelFamilyOrder(string modelId)
+    {
+        for (var index = 0; index < FallbackTranscriptionModelEntries.Count; index++)
+        {
+            if (MatchesModelFamily(modelId, FallbackTranscriptionModelEntries[index].Id))
+                return index;
+        }
+
+        return int.MaxValue;
+    }
+
+    private static bool IsBaseTranscriptionModel(string modelId) =>
+        FallbackTranscriptionModelEntries.Any(model =>
+            string.Equals(model.Id, modelId, StringComparison.OrdinalIgnoreCase));
 
     private HttpRequestMessage CreateTtsRequest(string text)
     {
@@ -702,12 +1001,18 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private async Task StoreOAuthTokensAsync(OpenAiOAuthTokenResponse tokens, string? preferredAccountId)
     {
         var metadata = OpenAiOAuthClient.ExtractMetadata(tokens, preferredAccountId);
+        var accountChanged = !string.Equals(
+            _oauthAccountId,
+            metadata.AccountId,
+            StringComparison.Ordinal);
         _oauthAccessToken = tokens.AccessToken;
         _oauthRefreshToken = tokens.RefreshToken;
         _oauthIdToken = tokens.IdToken;
         _oauthAccountId = metadata.AccountId;
         _oauthPlanType = metadata.PlanType;
         _oauthExpiresAt = metadata.ExpiresAt;
+        if (accountChanged)
+            _fetchedChatGptModels = [];
 
         if (_host is null)
             return;
@@ -721,18 +1026,27 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         _host.SetSetting(OAuthAccountIdSettingName, _oauthAccountId);
         _host.SetSetting(OAuthPlanTypeSettingName, _oauthPlanType);
         _host.SetSetting(OAuthExpiresAtSettingName, _oauthExpiresAt);
+        if (accountChanged)
+            _host.SetSetting(FetchedChatGptModelsSettingName, _fetchedChatGptModels);
         NormalizeSelectedLlmModel(persist: true);
         _host.NotifyCapabilitiesChanged();
     }
 
-    private void NormalizeSelectedLlmModel(bool persist)
+    private void NormalizeSelectedLlmModel(
+        bool persist,
+        bool preserveUnknownWhenCatalogUnavailable = false)
     {
         var available = SupportedModels;
         if (available.Count == 0)
             return;
 
+        var hasFetchedCatalog = _authMode == OpenAiAuthMode.ChatGpt
+            ? _fetchedChatGptModels.Count > 0
+            : _fetchedLlmModels.Count > 0;
         if (_selectedLlmModelId is null
-            || available.All(model => !string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
+            || (!preserveUnknownWhenCatalogUnavailable || hasFetchedCatalog)
+            && available.All(model =>
+                !string.Equals(model.Id, _selectedLlmModelId, StringComparison.Ordinal)))
         {
             _selectedLlmModelId = available.First().Id;
         }
@@ -769,10 +1083,31 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
 
-    private static string? NormalizeLanguage(string? language) =>
-        string.IsNullOrWhiteSpace(language) || language.Equals("auto", StringComparison.OrdinalIgnoreCase)
+    private static string? NormalizeLanguage(string? language)
+    {
+        var normalizedLanguage = language?.Trim();
+        return string.IsNullOrWhiteSpace(normalizedLanguage)
+            || normalizedLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase)
             ? null
-            : language;
+            : normalizedLanguage;
+    }
+
+    private static IReadOnlyList<string> NormalizeLanguageHints(IReadOnlyList<string> languageHints)
+    {
+        var normalizedLanguageHints = new List<string>();
+        foreach (var languageHint in languageHints)
+        {
+            if (NormalizeLanguage(languageHint) is not { } normalizedLanguage
+                || normalizedLanguageHints.Contains(normalizedLanguage, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            normalizedLanguageHints.Add(normalizedLanguage);
+        }
+
+        return normalizedLanguageHints;
+    }
 
     private static string NormalizeReasoningEffort(string? effort) =>
         effort is "low" or "medium" or "high" or "xhigh" ? effort : "medium";
@@ -795,9 +1130,27 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         string Id,
         string DisplayName,
         string ApiModelName,
-        string ResponseFormat,
+        string? ResponseFormat,
         bool SupportsTranslation,
-        bool SupportsStreaming = false);
+        TranscriptionTransport Transport = TranscriptionTransport.Rest,
+        TranscriptionLanguageFormat LanguageFormat = TranscriptionLanguageFormat.Singular,
+        bool SupportsDictionaryTerms = false)
+    {
+        public bool SupportsStreaming => Transport == TranscriptionTransport.Realtime;
+    }
 
-    private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel> Data);
+    private enum TranscriptionTransport
+    {
+        Rest,
+        Realtime,
+    }
+
+    private enum TranscriptionLanguageFormat
+    {
+        Singular,
+        Plural,
+    }
+
+    private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel?> Data);
+    private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel?> Models);
 }
