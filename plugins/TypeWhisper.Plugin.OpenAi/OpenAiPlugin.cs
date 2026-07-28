@@ -529,6 +529,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
                 return null;
 
             return apiModels
+                .OfType<OpenAiFetchedModel>()
                 .Where(model => !string.IsNullOrWhiteSpace(model.Id))
                 .ToList();
         }
@@ -577,6 +578,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
                 return null;
 
             var visibleModels = catalogModels
+                .OfType<OpenAiChatGptModel>()
                 .Where(IsVisibleChatGptModel)
                 .DistinctBy(model => model.Slug, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(model => model.Priority ?? int.MaxValue)
@@ -1149,6 +1151,6 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         Plural,
     }
 
-    private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel> Data);
-    private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel> Models);
+    private sealed record OpenAiModelsResponse(List<OpenAiFetchedModel?> Data);
+    private sealed record OpenAiChatGptModelsResponse(List<OpenAiChatGptModel?> Models);
 }

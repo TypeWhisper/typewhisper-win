@@ -534,6 +534,7 @@ public class OpenAiPluginTests
             return Task.FromResult(JsonResponse("""
             {
               "data": [
+                null,
                 { "id": "whisper-1", "owned_by": "openai" },
                 { "id": "gpt-transcribe", "owned_by": "openai" },
                 { "id": "gpt-4o-mini-transcribe", "owned_by": "openai" },
@@ -636,6 +637,7 @@ public class OpenAiPluginTests
             return Task.FromResult(JsonResponse("""
             {
               "models": [
+                null,
                 {
                   "slug": "gpt-5.6-sol",
                   "display_name": "GPT-5.6-Sol",
