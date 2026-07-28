@@ -40,8 +40,11 @@ public sealed class SettingsWindowWizardLifetimeTests
             "TypeWhisper.Windows",
             "ViewModels",
             "SettingsWindowViewModel.cs");
-        Assert.Contains("_sectionCache.Clear();", viewModelSource);
-        Assert.DoesNotContain("_sectionFactories.Clear();", viewModelSource);
+        var onWindowClosed = TestFile.ExtractBlock(
+            viewModelSource,
+            "public void OnWindowClosed()");
+        Assert.Contains("_sectionCache.Clear();", onWindowClosed);
+        Assert.DoesNotContain("_sectionFactories.Clear();", onWindowClosed);
 
         var ownerIndex = source.IndexOf("wizard.Owner = this;", StringComparison.Ordinal);
         var showIndex = source.IndexOf("wizard.Show();", StringComparison.Ordinal);
