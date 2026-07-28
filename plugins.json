@@ -349,20 +349,20 @@
   {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.0.4",
+    "version": "1.1.0",
     "author": "TypeWhisper",
     "description": "Soniox speech-to-text transcription engine",
     "category": "transcription",
     "requiresApiKey": true,
-    "size": 25041,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.soniox-1.0.4.zip",
+    "size": 273683,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.soniox-1.1.0.zip",
     "categories": [
       "transcription"
     ],
     "minHostVersion": null,
     "iconSystemName": null,
     "descriptions": null,
-    "sha256": "7fd2ff54fee4288e67caf527ea1838a6c04f49411083b8c0dd5e5bb4b37b473b"
+    "sha256": "3b9ed6c130ce34796a467dd57cfaaa778152b6d3a3e97c1d9d1c92705639dba4"
   },
   {
     "id": "com.typewhisper.cloudflare-asr",
