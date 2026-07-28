@@ -525,13 +525,22 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             var decoded = JsonSerializer.Deserialize<OpenAiModelsResponse>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (decoded?.Data is not { } apiModels)
+                return null;
 
-            return decoded?.Data
+            return apiModels
                 .Where(model => !string.IsNullOrWhiteSpace(model.Id))
-                .ToList()
-                ?? null;
+                .ToList();
         }
-        catch
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
         {
             return null;
         }
@@ -564,14 +573,15 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             var decoded = JsonSerializer.Deserialize<OpenAiChatGptModelsResponse>(
                 json,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (decoded?.Models is not { } catalogModels)
+                return null;
 
-            var visibleModels = decoded?.Models
+            var visibleModels = catalogModels
                 .Where(IsVisibleChatGptModel)
                 .DistinctBy(model => model.Slug, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(model => model.Priority ?? int.MaxValue)
                 .ThenBy(model => model.Slug, StringComparer.Ordinal)
-                .ToList()
-                ?? [];
+                .ToList();
             if (visibleModels.Count == 0)
                 return null;
 
@@ -584,7 +594,19 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
                 .ToList();
             return planModels.Count > 0 ? planModels : visibleModels;
         }
-        catch
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
         {
             return null;
         }
@@ -915,12 +937,11 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             return null;
         }
 
-        foreach (var template in FallbackTranscriptionModelEntries)
-        {
-            if (!MatchesModelFamily(modelId, template.Id))
-                continue;
-
-            return template with
+        var template = FallbackTranscriptionModelEntries.FirstOrDefault(candidate =>
+            MatchesModelFamily(modelId, candidate.Id));
+        return template is null
+            ? null
+            : template with
             {
                 Id = modelId,
                 DisplayName = string.Equals(modelId, template.Id, StringComparison.OrdinalIgnoreCase)
@@ -928,9 +949,6 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
                     : modelId,
                 ApiModelName = modelId,
             };
-        }
-
-        return null;
     }
 
     private static bool MatchesModelFamily(string modelId, string baseModelId) =>
