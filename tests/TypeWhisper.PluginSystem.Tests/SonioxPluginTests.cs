@@ -1,8 +1,10 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using TypeWhisper.Core.Audio;
 using TypeWhisper.Plugin.Soniox;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -26,8 +28,25 @@ public class SonioxPluginTests
         var manifest = LoadManifest();
         var sut = new SonioxPlugin();
 
-        Assert.Equal("1.0.4", manifest.GetProperty("version").GetString());
-        Assert.Equal("1.0.4", sut.PluginVersion);
+        Assert.Equal("1.1.0", manifest.GetProperty("version").GetString());
+        Assert.Equal("1.1.0", sut.PluginVersion);
+    }
+
+    [Fact]
+    public void CreateCompressedUpload_ProducesM4aMetadataAndContainer()
+    {
+        var samples = Enumerable.Range(0, 32_000)
+            .Select(index => (float)(Math.Sin(index * 2 * Math.PI * 440 / 16_000) * 0.25))
+            .ToArray();
+        var wavAudio = WavEncoder.Encode(samples);
+
+        var upload = SonioxPlugin.CreateCompressedUpload(wavAudio);
+
+        Assert.Equal("audio.m4a", upload.FileName);
+        Assert.Equal("audio/mp4", upload.ContentType);
+        Assert.Equal(SonioxUploadFormat.M4a, upload.Format);
+        Assert.True(upload.Data.AsSpan().IndexOf("ftyp"u8) >= 0);
+        Assert.True(upload.Data.Length < wavAudio.Length);
     }
 
     [Fact]
@@ -226,8 +245,8 @@ public class SonioxPluginTests
                 Assert.NotNull(body);
                 var multipartBody = Encoding.UTF8.GetString(body);
                 Assert.Contains("name=file", multipartBody);
-                Assert.Contains("filename=audio.wav", multipartBody);
-                return JsonResponse("""{ "id": "84c32fc6-4fb5-4e7a-b656-b5ec70493753", "filename": "audio.wav", "size": 3 }""", HttpStatusCode.Created);
+                AssertMultipartUpload(multipartBody, "audio.m4a", "audio/mp4");
+                return JsonResponse("""{ "id": "84c32fc6-4fb5-4e7a-b656-b5ec70493753", "filename": "audio.m4a", "size": 3 }""", HttpStatusCode.Created);
             }
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
@@ -272,7 +291,15 @@ public class SonioxPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "soniox-key";
         using var httpClient = new HttpClient(handler);
-        var sut = new SonioxPlugin(httpClient, pollDelay: TimeSpan.Zero, maxPollAttempts: 3);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 3,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [1, 2, 3],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
         await sut.ActivateAsync(host);
 
         var result = await sut.TranscribeWithLanguageHintsAsync(
@@ -285,6 +312,485 @@ public class SonioxPluginTests
         Assert.Equal(["Hallo Welt"], result.Segments.Select(s => s.Text).ToArray());
         Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/73d4357d-cad2-4338-a60d-ec6f2044f721", seen);
         Assert.Contains("DELETE https://api.soniox.com/v1/files/84c32fc6-4fb5-4e7a-b656-b5ec70493753", seen);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_EncoderFailureFallsBackToWavBeforeRequest()
+    {
+        string? uploadBody = null;
+        var handler = new SonioxFlowHandler(
+            inspectCreateBody: _ => { },
+            inspectUploadBody: body => uploadBody = body);
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => throw new COMException("encoder unavailable"));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "en",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+        await sut.LastCleanupTask;
+
+        Assert.Equal("Hello", result.Text);
+        Assert.NotNull(uploadBody);
+        AssertMultipartUpload(uploadBody, "audio.wav", "audio/wav");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.UnsupportedMediaType, "invalid_request")]
+    [InlineData(HttpStatusCode.BadRequest, "invalid_audio_file")]
+    public async Task TranscribeAsync_RetriesUploadRejectionOnceWithWav(
+        HttpStatusCode firstStatusCode,
+        string firstErrorType)
+    {
+        var uploadBodies = new List<string>();
+        var createCount = 0;
+        var handler = new CapturingHandler((request, body) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadBodies.Add(Encoding.UTF8.GetString(body ?? []));
+                if (uploadBodies.Count == 1)
+                {
+                    return JsonResponse(
+                        JsonSerializer.Serialize(new
+                        {
+                            status_code = (int)firstStatusCode,
+                            error_type = firstErrorType,
+                            message = "Compressed audio rejected"
+                        }),
+                        firstStatusCode);
+                }
+
+                return JsonResponse("""{ "id": "file-wav" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+            {
+                createCount++;
+                return JsonResponse("""{ "id": "job-wav", "status": "queued" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-wav")
+                return JsonResponse("""{ "status": "completed", "audio_duration_ms": 1000 }""");
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-wav/transcript")
+                return JsonResponse("""{ "text": "WAV fallback", "tokens": [] }""");
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "en",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+        await sut.LastCleanupTask;
+
+        Assert.Equal("WAV fallback", result.Text);
+        Assert.Equal(2, uploadBodies.Count);
+        AssertMultipartUpload(uploadBodies[0], "audio.m4a", "audio/mp4");
+        AssertMultipartUpload(uploadBodies[1], "audio.wav", "audio/wav");
+        Assert.Equal(1, createCount);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "unauthenticated")]
+    [InlineData(HttpStatusCode.TooManyRequests, "rate_limit_exceeded")]
+    public async Task TranscribeAsync_DoesNotRetryNonAudioUploadFailures(
+        HttpStatusCode statusCode,
+        string errorType)
+    {
+        var uploadCount = 0;
+        var handler = new CapturingHandler((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
+                return JsonResponse(
+                    JsonSerializer.Serialize(new
+                    {
+                        status_code = (int)statusCode,
+                        error_type = errorType,
+                        message = "Do not retry"
+                    }),
+                    statusCode);
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() =>
+            sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None));
+
+        Assert.Equal(statusCode, ex.StatusCode);
+        Assert.Contains(errorType, ex.Message);
+        Assert.Equal(1, uploadCount);
+    }
+
+    [Theory]
+    [InlineData("organization_balance_exhausted")]
+    [InlineData("invalid_audio")]
+    public async Task TranscribeAsync_DoesNotRetryOtherTerminalJobErrors(string errorType)
+    {
+        var uploadCount = 0;
+        var createCount = 0;
+        var handler = new CapturingHandler((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
+                return JsonResponse("""{ "id": "file-m4a" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+            {
+                createCount++;
+                return JsonResponse("""{ "id": "job-m4a", "status": "queued" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-m4a")
+            {
+                return JsonResponse(
+                    JsonSerializer.Serialize(new
+                    {
+                        status = "failed",
+                        error_type = errorType,
+                        error_message = "Do not retry"
+                    }));
+            }
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None));
+
+        Assert.Contains(errorType, ex.Message);
+        Assert.Equal(1, uploadCount);
+        Assert.Equal(1, createCount);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_AsyncInvalidAudioRetriesWholeTransactionWithSnapshotParameters()
+    {
+        var seen = new List<string>();
+        var uploadBodies = new List<string>();
+        var createBodies = new List<string>();
+        var uploadCount = 0;
+        var createCount = 0;
+        SonioxPlugin? sut = null;
+        var handler = new AsyncCapturingHandler(async (request, body, _) =>
+        {
+            seen.Add($"{request.Method} {request.RequestUri}");
+            Assert.Equal("api.soniox.com", request.RequestUri?.Host);
+            Assert.Equal("Bearer initial-key", request.Headers.Authorization?.ToString());
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
+                uploadBodies.Add(Encoding.UTF8.GetString(body ?? []));
+                return uploadCount == 1
+                    ? JsonResponse("""{ "id": "file-m4a" }""", HttpStatusCode.Created)
+                    : JsonResponse("""{ "id": "file-wav" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+            {
+                createCount++;
+                createBodies.Add(Encoding.UTF8.GetString(body ?? []));
+                return createCount == 1
+                    ? JsonResponse("""{ "id": "job-m4a", "status": "queued" }""", HttpStatusCode.Created)
+                    : JsonResponse("""{ "id": "job-wav", "status": "queued" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-m4a")
+            {
+                sut!.SetRegion("eu");
+                await sut.SetApiKeyAsync("replacement-key");
+                return JsonResponse("""
+                    {
+                      "status": "failed",
+                      "error_type": "invalid_audio_file",
+                      "error_message": "Cannot decode M4A",
+                      "request_id": "req-m4a"
+                    }
+                    """);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-wav")
+                return JsonResponse("""{ "status": "completed", "audio_duration_ms": 1000 }""");
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-wav/transcript")
+                return JsonResponse("""{ "text": "Recovered transcript", "tokens": [] }""");
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "initial-key";
+        using var httpClient = new HttpClient(handler);
+        sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeWithLanguageHintsAsync(
+            [1, 2, 3],
+            [" de ", "en", "DE"],
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+        await sut.LastCleanupTask;
+
+        Assert.Equal("Recovered transcript", result.Text);
+        Assert.Equal(2, uploadBodies.Count);
+        AssertMultipartUpload(uploadBodies[0], "audio.m4a", "audio/mp4");
+        AssertMultipartUpload(uploadBodies[1], "audio.wav", "audio/wav");
+        Assert.Equal(2, createBodies.Count);
+
+        using var firstCreate = JsonDocument.Parse(createBodies[0]);
+        using var secondCreate = JsonDocument.Parse(createBodies[1]);
+        Assert.Equal("stt-async-v5", firstCreate.RootElement.GetProperty("model").GetString());
+        Assert.Equal("stt-async-v5", secondCreate.RootElement.GetProperty("model").GetString());
+        Assert.Equal(["de", "en"], firstCreate.RootElement.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
+        Assert.Equal(["de", "en"], secondCreate.RootElement.GetProperty("language_hints").EnumerateArray().Select(e => e.GetString()!).ToArray());
+        Assert.Equal("file-m4a", firstCreate.RootElement.GetProperty("file_id").GetString());
+        Assert.Equal("file-wav", secondCreate.RootElement.GetProperty("file_id").GetString());
+
+        Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/job-m4a", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/files/file-m4a", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/job-wav", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/files/file-wav", seen);
+        Assert.Equal("eu", sut.RegionId);
+        Assert.Equal("replacement-key", sut.ApiKey);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_WavAttemptFailureSurfacesSecondErrorWithoutThirdAttempt()
+    {
+        var seen = new List<string>();
+        var uploadCount = 0;
+        var createCount = 0;
+        var handler = new CapturingHandler((request, _) =>
+        {
+            seen.Add($"{request.Method} {request.RequestUri}");
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
+                return uploadCount == 1
+                    ? JsonResponse("""{ "id": "file-m4a" }""", HttpStatusCode.Created)
+                    : JsonResponse("""{ "id": "file-wav" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+            {
+                createCount++;
+                return createCount == 1
+                    ? JsonResponse("""{ "id": "job-m4a", "status": "queued" }""", HttpStatusCode.Created)
+                    : JsonResponse("""{ "id": "job-wav", "status": "queued" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-m4a")
+            {
+                return JsonResponse("""
+                    {
+                      "status": "error",
+                      "error_type": "invalid_audio_file",
+                      "error_message": "first-attempt-error",
+                      "request_id": "req-first"
+                    }
+                    """);
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-wav")
+            {
+                return JsonResponse("""
+                    {
+                      "status": "failed",
+                      "error_type": "organization_balance_exhausted",
+                      "error_message": "second-attempt-error",
+                      "request_id": "req-second"
+                    }
+                    """);
+            }
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None));
+
+        Assert.Contains("organization_balance_exhausted", ex.Message);
+        Assert.Contains("second-attempt-error", ex.Message);
+        Assert.Contains("req-second", ex.Message);
+        Assert.DoesNotContain("first-attempt-error", ex.Message);
+        Assert.Equal(2, uploadCount);
+        Assert.Equal(2, createCount);
+        Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/job-m4a", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/files/file-m4a", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/transcriptions/job-wav", seen);
+        Assert.Contains("DELETE https://api.soniox.com/v1/files/file-wav", seen);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_CanceledBeforeCompressionSkipsEncoderAndRequests()
+    {
+        var encoderCalled = false;
+        var handler = new CapturingHandler((request, _) =>
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}"));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            compressedUploadFactory: _ =>
+            {
+                encoderCalled = true;
+                return new SonioxTranscriptionUpload(
+                    [9, 8, 7],
+                    "audio.m4a",
+                    "audio/mp4",
+                    SonioxUploadFormat.M4a);
+            });
+        await sut.ActivateAsync(host);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, cts.Token));
+
+        Assert.False(encoderCalled);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_CancellationDuringPollingDoesNotRetry()
+    {
+        var uploadCount = 0;
+        using var cts = new CancellationTokenSource();
+        var handler = new CapturingHandler((request, _) =>
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
+                return JsonResponse("""{ "id": "file-m4a" }""", HttpStatusCode.Created);
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+                return JsonResponse("""{ "id": "job-m4a", "status": "queued" }""", HttpStatusCode.Created);
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/v1/transcriptions/job-m4a")
+            {
+                cts.Cancel();
+                return JsonResponse("""{ "status": "processing" }""");
+            }
+
+            if (request.Method == HttpMethod.Delete)
+                return JsonResponse("""{}""");
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
+        });
+
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "soniox-key";
+        using var httpClient = new HttpClient(handler);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
+        await sut.ActivateAsync(host);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, cts.Token));
+
+        Assert.Equal(1, uploadCount);
     }
 
     [Fact]
@@ -556,13 +1062,21 @@ public class SonioxPluginTests
     [Fact]
     public async Task TranscribeAsync_PollTimeoutThrowsTimeoutException()
     {
+        var uploadCount = 0;
+        var createCount = 0;
         var handler = new CapturingHandler((request, _) =>
         {
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                uploadCount++;
                 return JsonResponse("""{ "id": "84c32fc6-4fb5-4e7a-b656-b5ec70493753" }""", HttpStatusCode.Created);
+            }
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
+            {
+                createCount++;
                 return JsonResponse("""{ "id": "73d4357d-cad2-4338-a60d-ec6f2044f721", "status": "queued" }""", HttpStatusCode.Created);
+            }
 
             if (request.Method == HttpMethod.Get)
                 return JsonResponse("""{ "status": "processing" }""");
@@ -573,13 +1087,23 @@ public class SonioxPluginTests
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "soniox-key";
         using var httpClient = new HttpClient(handler);
-        var sut = new SonioxPlugin(httpClient, pollDelay: TimeSpan.Zero, maxPollAttempts: 2);
+        var sut = new SonioxPlugin(
+            httpClient,
+            pollDelay: TimeSpan.Zero,
+            maxPollAttempts: 2,
+            compressedUploadFactory: _ => new SonioxTranscriptionUpload(
+                [9, 8, 7],
+                "audio.m4a",
+                "audio/mp4",
+                SonioxUploadFormat.M4a));
         await sut.ActivateAsync(host);
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None));
 
         Assert.Contains("did not complete", ex.Message);
+        Assert.Equal(1, uploadCount);
+        Assert.Equal(1, createCount);
     }
 
     private static JsonElement LoadManifest()
@@ -599,14 +1123,33 @@ public class SonioxPluginTests
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
-    private sealed class SonioxFlowHandler(Action<string> inspectCreateBody) : HttpMessageHandler
+    private static void AssertMultipartUpload(string body, string fileName, string contentType)
+    {
+        Assert.True(
+            body.Contains($"filename={fileName}", StringComparison.Ordinal)
+            || body.Contains($"filename=\"{fileName}\"", StringComparison.Ordinal),
+            $"Multipart body did not contain filename {fileName}.");
+        Assert.Contains($"Content-Type: {contentType}", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class SonioxFlowHandler(
+        Action<string> inspectCreateBody,
+        Action<string>? inspectUploadBody = null) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/files")
+            {
+                if (inspectUploadBody is not null)
+                {
+                    var body = await request.Content!.ReadAsStringAsync(cancellationToken);
+                    inspectUploadBody(body);
+                }
+
                 return JsonResponse("""{ "id": "84c32fc6-4fb5-4e7a-b656-b5ec70493753" }""", HttpStatusCode.Created);
+            }
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/v1/transcriptions")
             {
