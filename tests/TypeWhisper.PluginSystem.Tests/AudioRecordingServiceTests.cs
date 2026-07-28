@@ -1,4 +1,5 @@
 using Moq;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -52,6 +53,32 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public void FallbackCapture_DoesNotMaskFallbackCreationFailureDuringCleanup()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            StartException = new InvalidOperationException("WASAPI activation failed.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory
+        {
+            CreateException = new InvalidOperationException("WaveIn creation failed.")
+        };
+        var captures = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        using var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan);
+
+        var exception = Record.Exception(sut.StartRecording);
+
+        Assert.Null(exception);
+        Assert.False(sut.IsRecording);
+        Assert.True(Assert.Single(wasapi.Created).Disposed);
+        Assert.Empty(waveIn.Created);
+    }
+
+    [Fact]
     public void FallbackCapture_ForwardsWaveInAudioToTheRecordingService()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
@@ -90,9 +117,22 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         var defaultConstructor = TestFile.ExtractBlock(source, "public AudioRecordingService()", 360);
 
         Assert.Contains("new WasapiAudioInputDeviceChangeNotifier()", defaultConstructor);
-        Assert.DoesNotContain("TimeSpan.FromSeconds(2)", source);
+        Assert.Contains(
+            "FallbackDevicePollInterval = TimeSpan.FromSeconds(30);",
+            source);
         Assert.Contains("RegisterEndpointNotificationCallback", source);
         Assert.Contains("UnregisterEndpointNotificationCallback", source);
+    }
+
+    [Fact]
+    public void WasapiDeviceNotifications_IgnoreUnrelatedEndpointProperties()
+    {
+        Assert.True(WasapiAudioInputDeviceChangeNotifier.IsRelevantCaptureProperty(
+            PropertyKeys.PKEY_Device_FriendlyName));
+        Assert.True(WasapiAudioInputDeviceChangeNotifier.IsRelevantCaptureProperty(
+            PropertyKeys.PKEY_AudioEngine_DeviceFormat));
+        Assert.False(WasapiAudioInputDeviceChangeNotifier.IsRelevantCaptureProperty(
+            PropertyKeys.PKEY_Device_IconPath));
     }
 
     [Fact]
@@ -934,10 +974,10 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         var settings = new FakeSettingsService(AppSettings.Default with { SelectedMicrophoneDevice = 1 });
         using var pluginManager = TestPluginManagerFactory.Create(settings);
         using var speech = new SpeechFeedbackService(settings, pluginManager, new FakeTtsProvider("windows-sapi", "System Voice"));
-        var settingsReloadCount = 0;
+        var uiDispatchCount = 0;
         var sut = CreateSettingsViewModel(settings, audio, speech, action =>
         {
-            settingsReloadCount++;
+            uiDispatchCount++;
             action();
         });
 
@@ -948,7 +988,7 @@ public sealed class SettingsViewModelMicrophoneDeviceTests
         await sut.RefreshMicrophonesCommand.ExecuteAsync(null);
 
         Assert.Equal(1, settings.SaveCount);
-        Assert.Equal(0, settingsReloadCount);
+        Assert.Equal(1, uiDispatchCount);
         Assert.Equal("usb", sut.SelectedMicrophoneItem?.Id);
         Assert.Equal([new MicrophonePriorityItem("usb", "USB Microphone")], settings.Current.MicrophonePriorityList);
     }
@@ -1436,10 +1476,14 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
 {
     public List<FakeAudioInputCapture> Created { get; } = [];
     public WaveFormat? ActualWaveFormat { get; set; }
+    public Exception? CreateException { get; set; }
     public Exception? StartException { get; set; }
 
     public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
     {
+        if (CreateException is not null)
+            throw CreateException;
+
         var capture = new FakeAudioInputCapture(deviceNumber, ActualWaveFormat ?? waveFormat)
         {
             StartException = StartException

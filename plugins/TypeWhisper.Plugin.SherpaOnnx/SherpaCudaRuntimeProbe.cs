@@ -103,6 +103,9 @@ internal sealed class SherpaCudaRuntimeProbe(
             if (process is null)
                 return new CudaRuntimeProbeResult(false, "CUDA safety probe process could not be started.");
 
+            // Drain stderr while the child is running. Waiting first can
+            // deadlock when a failed native load fills the redirected pipe.
+            var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(ProbeTimeout);
             try
@@ -122,7 +125,7 @@ internal sealed class SherpaCudaRuntimeProbe(
                 throw;
             }
 
-            var standardError = await process.StandardError.ReadToEndAsync(cancellationToken);
+            var standardError = await standardErrorTask;
             if (process.ExitCode == 0)
             {
                 RecordCachedSuccess(successCachePath, fingerprint);

@@ -40,7 +40,8 @@ public sealed class AppStartupPerformanceTests
 
         Assert.Contains("protected override async void OnStartup", startup);
         Assert.Contains("await Dispatcher.Yield(DispatcherPriority.ContextIdle);", startup);
-        Assert.Contains("await Task.Run(() => pluginManager.InitializeAsync());", startup);
+        Assert.Contains("await RunTrackedStartupWorkAsync(", startup);
+        Assert.Contains("token => pluginManager.InitializeAsync(token)", startup);
         Assert.DoesNotContain("InitializeAsync().GetAwaiter().GetResult()", startup);
 
         var trayIndex = startup.IndexOf("_trayIcon.Initialize();", StringComparison.Ordinal);
@@ -49,7 +50,7 @@ public sealed class AppStartupPerformanceTests
             "await Dispatcher.Yield(DispatcherPriority.ContextIdle);",
             StringComparison.Ordinal);
         var pluginsIndex = startup.IndexOf(
-            "await Task.Run(() => pluginManager.InitializeAsync());",
+            "token => pluginManager.InitializeAsync(token)",
             StringComparison.Ordinal);
 
         Assert.True(
@@ -58,6 +59,21 @@ public sealed class AppStartupPerformanceTests
             && windowIndex < yieldIndex
             && yieldIndex < pluginsIndex,
             "The tray and overlay shell must render before plugin discovery starts.");
+    }
+
+    [Fact]
+    public void OnExit_CancelsAndDrainsTrackedStartupWorkBeforeServiceDisposal()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+        var onExit = TestFile.ExtractBlock(source, "protected override void OnExit", 2200);
+
+        Assert.Contains("_startupCancellation.Cancel();", onExit);
+        Assert.Contains("startupTask is { IsCompleted: false }", onExit);
+        Assert.Contains("startupTask.ContinueWith(", onExit);
+        Assert.Contains("((ServiceProvider)state!).Dispose()", onExit);
     }
 
     [Fact]

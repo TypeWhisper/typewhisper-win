@@ -172,6 +172,44 @@ public class SherpaOnnxPluginTests
     }
 
     [Fact]
+    public async Task LoadModelAsync_AutoCudaProbeFailure_PreservesUnavailableStatusAfterCpuFallback()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-probe-fallback-{Guid.NewGuid():N}");
+        try
+        {
+            var installer = new FakeCudaRuntimeInstaller(isInstalled: true);
+            var probe = new FakeCudaRuntimeProbe(
+                new CudaRuntimeProbeResult(false, "Native probe exited with code 0xC0000409."));
+            string? loadedProvider = null;
+            var sut = new SherpaOnnxPlugin(
+                installer,
+                (_, _, provider) =>
+                {
+                    loadedProvider = provider;
+                    return null!;
+                },
+                probe);
+            var host = new FakePluginHostServices(tempDir);
+            CreateParakeetModelFiles(tempDir);
+
+            await sut.ActivateAsync(host);
+            sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Auto);
+
+            await sut.LoadModelAsync("parakeet-tdt-0.6b", CancellationToken.None);
+
+            Assert.Equal("cpu", loadedProvider);
+            Assert.Equal(TranscriptionAccelerationBackend.Cpu, sut.AccelerationStatus.ActiveBackend);
+            Assert.Equal("CUDA unavailable", sut.AccelerationStatus.DisplayText);
+            Assert.Contains("0xC0000409", sut.AccelerationStatus.Detail);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void CudaProbeCache_InvalidatesWhenTheNativeRuntimeChanges()
     {
         var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-probe-cache-{Guid.NewGuid():N}");

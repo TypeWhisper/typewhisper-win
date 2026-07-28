@@ -35,6 +35,14 @@ public sealed class SettingsWindowWizardLifetimeTests
         Assert.Contains("_viewModel.SetupWizardRequested -= OnSetupWizardRequested;", source);
         Assert.Contains("_viewModel.OnWindowClosed();", source);
 
+        var viewModelSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "SettingsWindowViewModel.cs");
+        Assert.Contains("_sectionCache.Clear();", viewModelSource);
+        Assert.DoesNotContain("_sectionFactories.Clear();", viewModelSource);
+
         var ownerIndex = source.IndexOf("wizard.Owner = this;", StringComparison.Ordinal);
         var showIndex = source.IndexOf("wizard.Show();", StringComparison.Ordinal);
         Assert.True(ownerIndex >= 0 && ownerIndex < showIndex, "The wizard owner must be set before it is shown.");

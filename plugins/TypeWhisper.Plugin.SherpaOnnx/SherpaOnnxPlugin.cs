@@ -293,6 +293,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
 
         var provider = await ResolveProviderForLoadAsync(ct);
         var providerForLoad = provider;
+        string? cudaProbeFallbackDetail = null;
         if (string.Equals(provider, "cuda", StringComparison.OrdinalIgnoreCase)
             && !SherpaCudaRuntimeProbe.IsProbeProcess)
         {
@@ -319,6 +320,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                     PluginLogLevel.Warning,
                     $"CUDA safety probe failed for {modelId}; falling back to CPU: {detail}");
                 providerForLoad = "cpu";
+                cudaProbeFallbackDetail = detail;
             }
         }
 
@@ -329,7 +331,9 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 UnloadRecognizerUnsafe();
 
                 var activeProvider = providerForLoad;
-                var accelerationStatus = CreateLoadedAccelerationStatus(activeProvider);
+                var accelerationStatus = cudaProbeFallbackDetail is not null
+                    ? CreateCudaUnavailableStatus(cudaProbeFallbackDetail)
+                    : CreateLoadedAccelerationStatus(activeProvider);
 
                 try
                 {

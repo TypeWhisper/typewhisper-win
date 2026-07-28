@@ -22,6 +22,8 @@ namespace TypeWhisper.Windows;
 public partial class App : Application
 {
     private ServiceProvider? _serviceProvider;
+    private readonly CancellationTokenSource _startupCancellation = new();
+    private Task? _startupBackgroundTask;
     private HistoryRetentionCoordinator? _historyRetentionCoordinator;
     private TrayIconService? _trayIcon;
     private SettingsWindow? _settingsWindow;
@@ -143,7 +145,12 @@ public partial class App : Application
         var pluginRegistry = _serviceProvider.GetRequiredService<PluginRegistryService>();
         try
         {
-            await Task.Run(() => pluginRegistry.ApplyPendingUpdatesAsync());
+            await RunTrackedStartupWorkAsync(
+                token => pluginRegistry.ApplyPendingUpdatesAsync(token));
+        }
+        catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception ex) when (IsNonFatalStartupException(ex))
         {
@@ -151,11 +158,23 @@ public partial class App : Application
             LogCrash(ex);
         }
 
+        if (_startupCancellation.IsCancellationRequested
+            || Dispatcher.HasShutdownStarted
+            || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
         // Initialize plugins (must happen after settings.Load so enabled state is available)
         var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();
         try
         {
-            await Task.Run(() => pluginManager.InitializeAsync());
+            await RunTrackedStartupWorkAsync(
+                token => pluginManager.InitializeAsync(token));
+        }
+        catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception ex) when (IsNonFatalStartupException(ex))
         {
@@ -239,6 +258,21 @@ public partial class App : Application
         var updateService = _serviceProvider.GetRequiredService<UpdateService>();
         updateService.Initialize();
         _ = updateService.CheckForUpdatesAsync();
+    }
+
+    private async Task RunTrackedStartupWorkAsync(Func<CancellationToken, Task> work)
+    {
+        var token = _startupCancellation.Token;
+        var task = Task.Run(() => work(token), token);
+        Volatile.Write(ref _startupBackgroundTask, task);
+        try
+        {
+            await task;
+        }
+        finally
+        {
+            _ = Interlocked.CompareExchange(ref _startupBackgroundTask, null, task);
+        }
     }
 
     private void RunTrayActionOnUiThread(Action action)
@@ -349,8 +383,12 @@ public partial class App : Application
         if (!SupporterDiscordService.CanHandleCallbackUri(uri))
             return;
 
-        var licenseService = _serviceProvider!.GetRequiredService<LicenseService>();
-        var supporterDiscord = _serviceProvider.GetRequiredService<SupporterDiscordService>();
+        var serviceProvider = Volatile.Read(ref _serviceProvider);
+        if (serviceProvider is null)
+            return;
+
+        var licenseService = serviceProvider.GetRequiredService<LicenseService>();
+        var supporterDiscord = serviceProvider.GetRequiredService<SupporterDiscordService>();
         var handled = await supporterDiscord.HandleCallbackUriAsync(uri, licenseService);
         if (!handled)
             return;
@@ -576,10 +614,31 @@ public partial class App : Application
     /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        _startupCancellation.Cancel();
         _protocolCallbackTimer?.Stop();
         _historyRetentionCoordinator?.HandleShutdown();
         _trayIcon?.Dispose();
-        _serviceProvider?.Dispose();
+
+        var serviceProvider = Interlocked.Exchange(ref _serviceProvider, null);
+        Services = null!;
+        var startupTask = Volatile.Read(ref _startupBackgroundTask);
+        if (serviceProvider is not null)
+        {
+            if (startupTask is { IsCompleted: false })
+            {
+                _ = startupTask.ContinueWith(
+                    static (_, state) => ((ServiceProvider)state!).Dispose(),
+                    serviceProvider,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+            else
+            {
+                serviceProvider.Dispose();
+            }
+        }
+
         base.OnExit(e);
     }
 

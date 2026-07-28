@@ -197,9 +197,11 @@ public sealed class PluginManager : IDisposable
     /// Discovers plugins from the configured search directories, restores enabled
     /// state from settings, and activates all enabled plugins.
     /// </summary>
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var loadedPlugins = _loader.DiscoverAndLoad(_searchDirectories);
+        ct.ThrowIfCancellationRequested();
         var discovered = PreferLaterSearchDirectoryPlugins(loadedPlugins);
         UnloadDiscardedSearchDirectoryPlugins(loadedPlugins, discovered);
 
@@ -215,6 +217,8 @@ public sealed class PluginManager : IDisposable
 
         foreach (var plugin in discovered)
         {
+            ct.ThrowIfCancellationRequested();
+
             // Default to enabled for marketplace-installed plugins
             var isEnabled = !enabledState.TryGetValue(plugin.Manifest.Id, out var state) || state;
 
@@ -224,6 +228,7 @@ public sealed class PluginManager : IDisposable
             }
         }
 
+        ct.ThrowIfCancellationRequested();
         RebuildCapabilityIndices();
         MigrateApiKeys();
     }

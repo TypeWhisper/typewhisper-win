@@ -589,7 +589,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SyncIndicatorPreviewTimer(CurrentRoute);
         CurrentSection = null;
         _sectionCache.Clear();
-        _sectionFactories.Clear();
     }
 
     internal bool FocusInstalledPlugin(string pluginId)

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Threading;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views.Sections;
 using Wpf.Ui.Controls;
@@ -52,18 +53,26 @@ public partial class SettingsWindow : FluentWindow
     {
         Loaded -= OnLoaded;
 
-        // Let WPF render the settings shell before constructing the selected
-        // section or enumerating audio hardware.
-        await Dispatcher.Yield(DispatcherPriority.ContextIdle);
-        if (_isClosed)
-            return;
+        try
+        {
+            // Let WPF render the settings shell before constructing the selected
+            // section or enumerating audio hardware.
+            await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+            if (_isClosed)
+                return;
 
-        if (_viewModel.CurrentSection is null)
-            _viewModel.NavigateToDefault();
+            if (_viewModel.CurrentSection is null)
+                _viewModel.NavigateToDefault();
 
-        await _viewModel.Settings.EnsureMicrophonesLoadedAsync();
-        if (!_isClosed)
-            _viewModel.OnWindowLoaded();
+            await _viewModel.Settings.EnsureMicrophonesLoadedAsync();
+            if (!_isClosed)
+                _viewModel.OnWindowLoaded();
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Deferred settings initialization failed: {ex}");
+        }
     }
 
     private void OnSetupWizardRequested(object? sender, EventArgs e)

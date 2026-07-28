@@ -425,7 +425,7 @@ public partial class SettingsViewModel : ObservableObject
 
             var availableDevices = await Task.Run(
                 () => _audio.RefreshAvailableInputDeviceInfos());
-            ApplyMicrophones(availableDevices);
+            _dispatchToUi(() => ApplyMicrophones(availableDevices));
             _microphonesInitialized =
                 _audio.TryGetCachedAvailableInputDeviceInfos(out _);
         }

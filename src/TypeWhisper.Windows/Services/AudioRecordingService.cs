@@ -1497,6 +1497,8 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
 
 internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceChangeNotifier, IMMNotificationClient
 {
+    private readonly object _captureEndpointIdsLock = new();
+    private readonly HashSet<string> _captureEndpointIds = new(StringComparer.OrdinalIgnoreCase);
     private MMDeviceEnumerator? _enumerator;
 
     public event EventHandler? DevicesChanged;
@@ -1510,11 +1512,13 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         try
         {
             enumerator = new MMDeviceEnumerator();
+            RefreshCaptureEndpointIds(enumerator);
             var result = enumerator.RegisterEndpointNotificationCallback(this);
             if (result < 0)
             {
                 AudioCaptureDiagnostics.Log(
                     $"Audio endpoint notification registration failed HRESULT=0x{result:X8}");
+                ClearCaptureEndpointIds();
                 enumerator.Dispose();
                 return false;
             }
@@ -1526,28 +1530,44 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         {
             AudioCaptureDiagnostics.Log(
                 $"Audio endpoint notification registration failed {ex.GetType().Name}: {ex.Message}");
+            ClearCaptureEndpointIds();
             enumerator?.Dispose();
             return false;
         }
     }
 
-    public void OnDeviceStateChanged(string deviceId, DeviceState newState) =>
-        RaiseDevicesChanged();
+    public void OnDeviceStateChanged(string deviceId, DeviceState newState)
+    {
+        if (IsCaptureEndpoint(deviceId))
+            RaiseDevicesChanged();
+    }
 
-    public void OnDeviceAdded(string pwstrDeviceId) =>
-        RaiseDevicesChanged();
+    public void OnDeviceAdded(string pwstrDeviceId)
+    {
+        if (IsCaptureEndpoint(pwstrDeviceId))
+            RaiseDevicesChanged();
+    }
 
-    public void OnDeviceRemoved(string deviceId) =>
-        RaiseDevicesChanged();
+    public void OnDeviceRemoved(string deviceId)
+    {
+        if (ForgetCaptureEndpoint(deviceId))
+            RaiseDevicesChanged();
+    }
 
     public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
     {
         if (flow == DataFlow.Capture)
+        {
+            RememberCaptureEndpoint(defaultDeviceId);
             RaiseDevicesChanged();
+        }
     }
 
-    public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key) =>
-        RaiseDevicesChanged();
+    public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key)
+    {
+        if (IsRelevantCaptureProperty(key) && IsCaptureEndpoint(pwstrDeviceId))
+            RaiseDevicesChanged();
+    }
 
     public void Dispose()
     {
@@ -1567,7 +1587,84 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
         finally
         {
             enumerator.Dispose();
+            ClearCaptureEndpointIds();
         }
+    }
+
+    internal static bool IsRelevantCaptureProperty(PropertyKey key) =>
+        key.Equals(PropertyKeys.PKEY_Device_FriendlyName)
+        || key.Equals(PropertyKeys.PKEY_DeviceInterface_FriendlyName)
+        || key.Equals(PropertyKeys.PKEY_Device_DeviceDesc)
+        || key.Equals(PropertyKeys.PKEY_AudioEngine_DeviceFormat)
+        || key.Equals(PropertyKeys.PKEY_AudioEngine_OEMFormat);
+
+    private void RefreshCaptureEndpointIds(MMDeviceEnumerator enumerator)
+    {
+        var endpointIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.All))
+        {
+            using (device)
+                endpointIds.Add(device.ID);
+        }
+
+        lock (_captureEndpointIdsLock)
+        {
+            _captureEndpointIds.Clear();
+            _captureEndpointIds.UnionWith(endpointIds);
+        }
+    }
+
+    private bool IsCaptureEndpoint(string? deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return false;
+
+        lock (_captureEndpointIdsLock)
+        {
+            if (_captureEndpointIds.Contains(deviceId))
+                return true;
+        }
+
+        var enumerator = Volatile.Read(ref _enumerator);
+        if (enumerator is null)
+            return false;
+
+        try
+        {
+            using var device = enumerator.GetDevice(deviceId);
+            if (device.DataFlow != DataFlow.Capture)
+                return false;
+
+            RememberCaptureEndpoint(deviceId);
+            return true;
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Audio endpoint classification failed {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private void RememberCaptureEndpoint(string? deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+            return;
+
+        lock (_captureEndpointIdsLock)
+            _captureEndpointIds.Add(deviceId);
+    }
+
+    private bool ForgetCaptureEndpoint(string deviceId)
+    {
+        lock (_captureEndpointIdsLock)
+            return _captureEndpointIds.Remove(deviceId);
+    }
+
+    private void ClearCaptureEndpointIds()
+    {
+        lock (_captureEndpointIdsLock)
+            _captureEndpointIds.Clear();
     }
 
     private void RaiseDevicesChanged() =>
@@ -1838,11 +1935,35 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         }
 
         _usingFallback = true;
-        _capture = _fallbackFactory.Create(
-            _deviceNumber,
-            _requestedWaveFormat,
-            _bufferMilliseconds);
-        AttachCapture();
+        try
+        {
+            _capture = _fallbackFactory.Create(
+                _deviceNumber,
+                _requestedWaveFormat,
+                _bufferMilliseconds);
+            AttachCapture();
+        }
+        catch
+        {
+            var failedCapture = _capture;
+            _capture = null;
+            _disposed = true;
+            if (failedCapture is not null)
+            {
+                try
+                {
+                    DetachCapture(failedCapture);
+                    failedCapture.Dispose();
+                }
+                catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+                {
+                    AudioCaptureDiagnostics.Log(
+                        $"Fallback microphone capture cleanup failed {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            throw;
+        }
     }
 
     private void AttachCapture()
