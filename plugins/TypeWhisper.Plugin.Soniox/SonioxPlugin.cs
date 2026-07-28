@@ -1,8 +1,13 @@
+using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Controls;
+using NAudio.MediaFoundation;
+using NAudio.Wave;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -19,6 +24,10 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private const string RegionSettingKey = "region";
     private const string ApiKeySecretName = "api-key";
     private const string SonioxAsyncModelId = "stt-async-v5";
+    private const string InvalidAudioFileErrorType = "invalid_audio_file";
+    private const string ErrorTypeDataKey = "TypeWhisper.Soniox.ErrorType";
+    private const string IsFileUploadDataKey = "TypeWhisper.Soniox.IsFileUpload";
+    private const int TranscriptionUploadBitRate = 48_000;
     private const int DefaultMaxPollAttempts = 3600;
     private const int MaxSubtitleSegmentCharacters = 84;
     private const int MinSentenceSegmentCharacters = 20;
@@ -58,6 +67,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     private readonly TimeSpan _initialPollDelay;
     private readonly TimeSpan _maxPollDelay;
     private readonly int _maxPollAttempts;
+    private readonly Func<byte[], SonioxTranscriptionUpload> _compressedUploadFactory;
     private readonly SemaphoreSlim _apiKeyWriteLock = new(1, 1);
 
     private IPluginHostServices? _host;
@@ -77,7 +87,8 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     internal SonioxPlugin(
         HttpClient httpClient,
         TimeSpan? pollDelay = null,
-        int maxPollAttempts = DefaultMaxPollAttempts)
+        int maxPollAttempts = DefaultMaxPollAttempts,
+        Func<byte[], SonioxTranscriptionUpload>? compressedUploadFactory = null)
     {
         if (maxPollAttempts <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxPollAttempts), "Poll attempts must be positive.");
@@ -88,6 +99,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         _initialPollDelay = pollDelay ?? DefaultInitialPollDelay;
         _maxPollDelay = pollDelay ?? DefaultMaxPollDelay;
         _maxPollAttempts = maxPollAttempts;
+        _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
     }
 
     private string BaseUrl => ResolveRegion(_region).BaseUrl;
@@ -105,7 +117,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.4";
+    public string PluginVersion => "1.1.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -207,32 +219,63 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         if (string.IsNullOrEmpty(apiKey))
             throw new InvalidOperationException("Plugin not configured. API key required.");
 
+        var normalizedLanguageHints = languageHints
+            .Select(NormalizeLanguage)
+            .Where(static language => language is not null)
+            .Select(static language => language!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var context = new SonioxTranscriptionContext(
+            BaseUrl,
+            apiKey,
+            SonioxAsyncModelId,
+            normalizedLanguageHints);
+        var preferredUpload = CreatePreferredUpload(wavAudio, ct);
+
+        try
+        {
+            return await TranscribeUploadAsync(preferredUpload, context, ct);
+        }
+        catch (Exception ex) when (
+            preferredUpload.Format == SonioxUploadFormat.M4a
+            && ShouldRetryWithWav(ex))
+        {
+            ct.ThrowIfCancellationRequested();
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"Soniox rejected the M4A upload; retrying the complete transaction with WAV: {ex.Message}");
+            return await TranscribeUploadAsync(CreateWavUpload(wavAudio), context, ct);
+        }
+    }
+
+    private async Task<PluginTranscriptionResult> TranscribeUploadAsync(
+        SonioxTranscriptionUpload upload,
+        SonioxTranscriptionContext context,
+        CancellationToken ct)
+    {
         string? fileId = null;
         string? transcriptionId = null;
 
         try
         {
-            fileId = await UploadFileAsync(wavAudio, apiKey, ct);
-            var normalizedLanguageHints = languageHints
-                .Select(NormalizeLanguage)
-                .Where(static language => language is not null)
-                .Select(static language => language!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            transcriptionId = await CreateTranscriptionAsync(fileId, normalizedLanguageHints, apiKey, ct);
-            var completedDetails = await WaitUntilCompletedAsync(transcriptionId, apiKey, ct);
-            var transcriptJson = await FetchTranscriptAsync(transcriptionId, apiKey, ct);
-            var result = ParseTranscript(transcriptJson, completedDetails, normalizedLanguageHints.FirstOrDefault());
+            fileId = await UploadFileAsync(upload, context, ct);
+            transcriptionId = await CreateTranscriptionAsync(fileId, context, ct);
+            var completedDetails = await WaitUntilCompletedAsync(transcriptionId, context, ct);
+            var transcriptJson = await FetchTranscriptAsync(transcriptionId, context, ct);
+            var result = ParseTranscript(
+                transcriptJson,
+                completedDetails,
+                context.LanguageHints.FirstOrDefault());
 
             // Deleting the uploaded file and the transcription is best-effort housekeeping the
             // caller does not need to wait for. Run it off the critical path so the two extra
             // round-trips do not add to perceived dictation latency.
-            _lastCleanupTask = CleanupInBackgroundAsync(transcriptionId, fileId, apiKey);
+            _lastCleanupTask = CleanupInBackgroundAsync(transcriptionId, fileId, context);
             return result;
         }
         catch
         {
-            await CleanupAsync(transcriptionId, fileId, apiKey);
+            await CleanupAfterFailureAsync(transcriptionId, fileId, context);
             throw;
         }
     }
@@ -370,18 +413,89 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         }
     }
 
-    private async Task<string> UploadFileAsync(byte[] wavAudio, string apiKey, CancellationToken ct)
+    private SonioxTranscriptionUpload CreatePreferredUpload(byte[] wavAudio, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        try
+        {
+            return _compressedUploadFactory(wavAudio);
+        }
+        catch (Exception ex) when (IsExpectedCompressionFailure(ex))
+        {
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"Soniox M4A encoding failed; falling back to WAV: {ex.Message}");
+            return CreateWavUpload(wavAudio);
+        }
+    }
+
+    private static bool IsExpectedCompressionFailure(Exception ex) =>
+        ex is InvalidDataException
+        or IOException
+        or InvalidOperationException
+        or COMException
+        or NotSupportedException;
+
+    internal static SonioxTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
+    {
+        ArgumentNullException.ThrowIfNull(wavAudio);
+
+        using var input = new MemoryStream(wavAudio, writable: false);
+        using var reader = new WaveFileReader(input);
+        using var output = new MemoryStream();
+        MediaFoundationEncoder.EncodeToAac(reader, output, TranscriptionUploadBitRate);
+
+        var bytes = output.ToArray();
+        if (bytes.Length == 0)
+            throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
+
+        return new SonioxTranscriptionUpload(
+            bytes,
+            "audio.m4a",
+            "audio/mp4",
+            SonioxUploadFormat.M4a);
+    }
+
+    private static SonioxTranscriptionUpload CreateWavUpload(byte[] wavAudio) =>
+        new(wavAudio, "audio.wav", "audio/wav", SonioxUploadFormat.Wav);
+
+    private static bool ShouldRetryWithWav(Exception ex) =>
+        ex switch
+        {
+            HttpRequestException httpException
+                when IsFileUploadException(httpException)
+                && (httpException.StatusCode == HttpStatusCode.UnsupportedMediaType
+                    || IsInvalidAudioFile(GetErrorType(httpException))) => true,
+            InvalidOperationException jobException
+                when IsInvalidAudioFile(GetErrorType(jobException)) => true,
+            _ => false
+        };
+
+    private static bool IsFileUploadException(Exception ex) =>
+        ex.Data[IsFileUploadDataKey] is true;
+
+    private static string? GetErrorType(Exception ex) =>
+        ex.Data[ErrorTypeDataKey] as string;
+
+    private static bool IsInvalidAudioFile(string? errorType) =>
+        string.Equals(errorType, InvalidAudioFileErrorType, StringComparison.OrdinalIgnoreCase);
+
+    private async Task<string> UploadFileAsync(
+        SonioxTranscriptionUpload upload,
+        SonioxTranscriptionContext context,
+        CancellationToken ct)
     {
         using var form = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(wavAudio);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        form.Add(fileContent, "file", "audio.wav");
+        var fileContent = new ByteArrayContent(upload.Data);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(upload.ContentType);
+        form.Add(fileContent, "file", upload.FileName);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/files");
-        AddAuthorization(request, apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{context.BaseUrl}/v1/files");
+        AddAuthorization(request, context.ApiKey);
         request.Content = form;
 
-        var json = await SendJsonAsync(request, "Soniox file upload", ct);
+        var json = await SendJsonAsync(request, "Soniox file upload", ct, isFileUpload: true);
         using var doc = JsonDocument.Parse(json);
         return GetString(doc.RootElement, "id")
             ?? throw new InvalidOperationException("Soniox file upload response did not include a file id.");
@@ -389,21 +503,20 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private async Task<string> CreateTranscriptionAsync(
         string fileId,
-        IReadOnlyList<string> languageHints,
-        string apiKey,
+        SonioxTranscriptionContext context,
         CancellationToken ct)
     {
         var payload = new Dictionary<string, object?>
         {
-            ["model"] = SonioxAsyncModelId,
+            ["model"] = context.ModelId,
             ["file_id"] = fileId,
         };
 
-        if (languageHints.Count > 0)
-            payload["language_hints"] = languageHints;
+        if (context.LanguageHints.Count > 0)
+            payload["language_hints"] = context.LanguageHints;
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/v1/transcriptions");
-        AddAuthorization(request, apiKey);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{context.BaseUrl}/v1/transcriptions");
+        AddAuthorization(request, context.ApiKey);
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         var json = await SendJsonAsync(request, "Soniox transcription creation", ct);
@@ -412,15 +525,20 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ?? throw new InvalidOperationException("Soniox transcription response did not include a transcription id.");
     }
 
-    private async Task<JsonElement> WaitUntilCompletedAsync(string transcriptionId, string apiKey, CancellationToken ct)
+    private async Task<JsonElement> WaitUntilCompletedAsync(
+        string transcriptionId,
+        SonioxTranscriptionContext context,
+        CancellationToken ct)
     {
         var delay = _initialPollDelay;
         for (var attempt = 0; attempt < _maxPollAttempts; attempt++)
         {
             ct.ThrowIfCancellationRequested();
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/transcriptions/{transcriptionId}");
-            AddAuthorization(request, apiKey);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{context.BaseUrl}/v1/transcriptions/{transcriptionId}");
+            AddAuthorization(request, context.ApiKey);
 
             var json = await SendJsonAsync(request, "Soniox transcription status", ct);
             using var doc = JsonDocument.Parse(json);
@@ -430,8 +548,16 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
                 return root.Clone();
 
-            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Soniox transcription failed: {ExtractApiError(root)}");
+            if (string.Equals(status, "error", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                var error = ExtractApiErrorDetails(root);
+                var exception = new InvalidOperationException(
+                    $"Soniox transcription failed: {FormatApiError(error)}");
+                if (!string.IsNullOrWhiteSpace(error.ErrorType))
+                    exception.Data[ErrorTypeDataKey] = error.ErrorType;
+                throw exception;
+            }
 
             if (attempt < _maxPollAttempts - 1 && delay > TimeSpan.Zero)
             {
@@ -446,47 +572,88 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             $"Soniox transcription {transcriptionId} did not complete within the configured polling window.");
     }
 
-    private async Task<string> FetchTranscriptAsync(string transcriptionId, string apiKey, CancellationToken ct)
+    private async Task<string> FetchTranscriptAsync(
+        string transcriptionId,
+        SonioxTranscriptionContext context,
+        CancellationToken ct)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"{BaseUrl}/v1/transcriptions/{transcriptionId}/transcript");
-        AddAuthorization(request, apiKey);
+            $"{context.BaseUrl}/v1/transcriptions/{transcriptionId}/transcript");
+        AddAuthorization(request, context.ApiKey);
 
         return await SendJsonAsync(request, "Soniox transcript retrieval", ct);
     }
 
-    private async Task<string> SendJsonAsync(HttpRequestMessage request, string operation, CancellationToken ct)
+    private async Task<string> SendJsonAsync(
+        HttpRequestMessage request,
+        string operation,
+        CancellationToken ct,
+        bool isFileUpload = false)
     {
         using var response = await _httpClient.SendAsync(request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException(
-                $"{operation} error {(int)response.StatusCode}: {ExtractApiError(json)}");
+            var error = ExtractApiErrorDetails(json);
+            var exception = new HttpRequestException(
+                $"{operation} error {(int)response.StatusCode}: {FormatApiError(error)}",
+                inner: null,
+                response.StatusCode);
+            if (!string.IsNullOrWhiteSpace(error.ErrorType))
+                exception.Data[ErrorTypeDataKey] = error.ErrorType;
+            if (isFileUpload)
+                exception.Data[IsFileUploadDataKey] = true;
+            throw exception;
         }
 
         return json;
     }
 
-    private async Task CleanupAsync(string? transcriptionId, string? fileId, string apiKey)
+    private async Task CleanupAsync(
+        string? transcriptionId,
+        string? fileId,
+        SonioxTranscriptionContext context)
     {
         if (transcriptionId is not null)
-            await DeleteBestEffortAsync($"{BaseUrl}/v1/transcriptions/{transcriptionId}", "transcription", apiKey);
+        {
+            await DeleteBestEffortAsync(
+                $"{context.BaseUrl}/v1/transcriptions/{transcriptionId}",
+                "transcription",
+                context.ApiKey);
+        }
 
         if (fileId is not null)
-            await DeleteBestEffortAsync($"{BaseUrl}/v1/files/{fileId}", "file", apiKey);
+            await DeleteBestEffortAsync($"{context.BaseUrl}/v1/files/{fileId}", "file", context.ApiKey);
     }
 
-    private async Task CleanupInBackgroundAsync(string? transcriptionId, string? fileId, string apiKey)
+    private async Task CleanupAfterFailureAsync(
+        string? transcriptionId,
+        string? fileId,
+        SonioxTranscriptionContext context)
+    {
+        try
+        {
+            await CleanupAsync(transcriptionId, fileId, context);
+        }
+        catch (Exception ex)
+        {
+            _host?.Log(PluginLogLevel.Warning, $"Soniox failure cleanup failed: {ex.Message}");
+        }
+    }
+
+    private async Task CleanupInBackgroundAsync(
+        string? transcriptionId,
+        string? fileId,
+        SonioxTranscriptionContext context)
     {
         // Yield so the transcript is returned to the caller before cleanup round-trips run.
         await Task.Yield();
 
         try
         {
-            await CleanupAsync(transcriptionId, fileId, apiKey);
+            await CleanupAsync(transcriptionId, fileId, context);
         }
         catch (Exception ex)
         {
@@ -712,19 +879,28 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
     private static string ExtractApiError(string json)
+        => FormatApiError(ExtractApiErrorDetails(json));
+
+    private static SonioxErrorDetails ExtractApiErrorDetails(string json)
     {
         try
         {
             using var doc = JsonDocument.Parse(json);
-            return ExtractApiError(doc.RootElement);
+            return ExtractApiErrorDetails(doc.RootElement);
         }
         catch (JsonException)
         {
-            return string.IsNullOrWhiteSpace(json) ? "Unknown error" : json;
+            return new SonioxErrorDetails(
+                ErrorType: null,
+                Message: string.IsNullOrWhiteSpace(json) ? "Unknown error" : json,
+                RequestId: null);
         }
     }
 
     private static string ExtractApiError(JsonElement root)
+        => FormatApiError(ExtractApiErrorDetails(root));
+
+    private static SonioxErrorDetails ExtractApiErrorDetails(JsonElement root)
     {
         var errorType = GetString(root, "error_type");
         var message = GetString(root, "error_message")
@@ -732,15 +908,19 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             ?? GetNestedErrorMessage(root)
             ?? "Unknown error";
         var requestId = GetString(root, "request_id");
+        return new SonioxErrorDetails(errorType, message, requestId);
+    }
 
+    private static string FormatApiError(SonioxErrorDetails error)
+    {
         var sb = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(errorType))
-            sb.Append(errorType).Append(": ");
+        if (!string.IsNullOrWhiteSpace(error.ErrorType))
+            sb.Append(error.ErrorType).Append(": ");
 
-        sb.Append(message);
+        sb.Append(error.Message);
 
-        if (!string.IsNullOrWhiteSpace(requestId))
-            sb.Append(" (request_id: ").Append(requestId).Append(')');
+        if (!string.IsNullOrWhiteSpace(error.RequestId))
+            sb.Append(" (request_id: ").Append(error.RequestId).Append(')');
 
         return sb.ToString();
     }
@@ -798,6 +978,14 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
 
     private static HttpClient CreateHttpClient() => new() { Timeout = TimeSpan.FromMinutes(5) };
 
+    private sealed record SonioxTranscriptionContext(
+        string BaseUrl,
+        string ApiKey,
+        string ModelId,
+        IReadOnlyList<string> LanguageHints);
+
+    private sealed record SonioxErrorDetails(string? ErrorType, string Message, string? RequestId);
+
     private sealed record SonioxTimedToken(string Text, double Start, double End);
 
     /// <summary>A Soniox data-residency region and its REST base URL.</summary>
@@ -812,3 +1000,15 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
         _apiKeyWriteLock.Dispose();
     }
 }
+
+internal enum SonioxUploadFormat
+{
+    Wav,
+    M4a
+}
+
+internal sealed record SonioxTranscriptionUpload(
+    byte[] Data,
+    string FileName,
+    string ContentType,
+    SonioxUploadFormat Format);
