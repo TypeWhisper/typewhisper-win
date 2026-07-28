@@ -11,7 +11,9 @@ namespace TypeWhisper.Plugin.OpenAi;
 
 internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
 {
-    internal const string ModelId = "gpt-realtime-whisper";
+    internal const string LegacyModelId = "gpt-realtime-whisper";
+    internal const string LiveModelId = "gpt-live-transcribe";
+    internal const string LiveDelay = "low";
     internal const int SourceSampleRate = 16_000;
     internal const int TargetSampleRate = 24_000;
 
@@ -38,7 +40,8 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
     /// </summary>
     public static async Task<OpenAiRealtimeStreamingSession> ConnectAsync(
         string apiKey,
-        string? language,
+        string modelId,
+        IReadOnlyList<string> languageHints,
         string? prompt,
         CancellationToken ct)
     {
@@ -48,7 +51,7 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         var collector = new OpenAiRealtimeTranscriptCollector();
         var session = new OpenAiRealtimeStreamingSession(ws, collector);
         session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
-        await session.SendTextAsync(CreateSessionUpdatePayload(language, prompt), ct);
+        await session.SendTextAsync(CreateSessionUpdatePayload(modelId, languageHints, prompt), ct);
         return session;
     }
 
@@ -57,12 +60,13 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
     /// </summary>
     public static async Task<PluginTranscriptionResult> TranscribeWavAsync(
         string apiKey,
+        string modelId,
         byte[] wavAudio,
-        string? language,
+        IReadOnlyList<string> languageHints,
         string? prompt,
         CancellationToken ct)
     {
-        await using var session = await ConnectAsync(apiKey, language, prompt, ct);
+        await using var session = await ConnectAsync(apiKey, modelId, languageHints, prompt, ct);
         var pcm = ExtractPcm16Data(wavAudio);
         const int chunkBytes = SourceSampleRate * sizeof(short) / 5; // 200ms
         for (var offset = 0; offset < pcm.Length; offset += chunkBytes)
@@ -73,7 +77,14 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
 
         await session.FinalizeAsync(ct);
         await session.WaitForCompletedTranscriptAsync(TimeSpan.FromSeconds(10), ct);
-        return new PluginTranscriptionResult(session._collector.CurrentText, language, 0, NoSpeechProbability: null);
+        var fallbackLanguage = IsLiveModel(modelId)
+            ? null
+            : languageHints.FirstOrDefault();
+        return new PluginTranscriptionResult(
+            session._collector.CurrentText,
+            fallbackLanguage,
+            0,
+            NoSpeechProbability: null);
     }
 
     internal static Uri BuildRealtimeUri() =>
@@ -93,15 +104,28 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
         return ws;
     }
 
-    internal static string CreateSessionUpdatePayload(string? language, string? prompt)
+    internal static string CreateSessionUpdatePayload(
+        string modelId,
+        IReadOnlyList<string> languageHints,
+        string? prompt)
     {
         var transcription = new Dictionary<string, object?>
         {
-            ["model"] = ModelId
+            ["model"] = modelId
         };
 
-        if (!string.IsNullOrWhiteSpace(language))
+        if (IsLiveModel(modelId))
+        {
+            if (languageHints.Count > 0)
+                transcription["languages"] = languageHints;
+            if (!string.IsNullOrWhiteSpace(prompt))
+                transcription["prompt"] = prompt;
+            transcription["delay"] = LiveDelay;
+        }
+        else if (languageHints.FirstOrDefault() is { } language)
+        {
             transcription["language"] = language;
+        }
 
         var payload = new Dictionary<string, object?>
         {
@@ -127,6 +151,10 @@ internal sealed class OpenAiRealtimeStreamingSession : IStreamingSession
 
         return JsonSerializer.Serialize(payload);
     }
+
+    internal static bool IsLiveModel(string modelId) =>
+        string.Equals(modelId, LiveModelId, StringComparison.OrdinalIgnoreCase)
+        || modelId.StartsWith($"{LiveModelId}-", StringComparison.OrdinalIgnoreCase);
 
     internal static string CreateAudioAppendPayload(ReadOnlySpan<byte> pcm16Audio)
     {
