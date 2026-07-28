@@ -89,6 +89,7 @@ public partial class OpenAiSettingsView : UserControl
     {
         var key = ApiKeyBox.Password;
         await _plugin.SetApiKeyAsync(key);
+        UpdateAuthModePanels();
         StatusText.Text = string.IsNullOrWhiteSpace(key) ? "" : L("Settings.Saved");
         StatusText.Foreground = Brushes.Gray;
     }
@@ -273,7 +274,7 @@ public partial class OpenAiSettingsView : UserControl
         }
         finally
         {
-            RefreshLlmModelsButton.IsEnabled = true;
+            UpdateAuthModePanels();
         }
     }
 
@@ -315,7 +316,9 @@ public partial class OpenAiSettingsView : UserControl
         ChatGptSection.Visibility = isChatGpt ? Visibility.Visible : Visibility.Collapsed;
         TtsSection.Visibility = isChatGpt ? Visibility.Collapsed : Visibility.Visible;
         RefreshLlmModelsButton.Visibility = Visibility.Visible;
-        RefreshLlmModelsButton.IsEnabled = !isChatGpt || _plugin.HasChatGptCredentials;
+        RefreshLlmModelsButton.IsEnabled = isChatGpt
+            ? _plugin.HasChatGptCredentials
+            : _plugin.IsConfigured;
         RemoveLoginButton.Visibility = _plugin.HasChatGptCredentials ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -324,7 +327,6 @@ public partial class OpenAiSettingsView : UserControl
         if (_hasRefreshedModelsOnLoad)
             return;
 
-        _hasRefreshedModelsOnLoad = true;
         if ((_plugin.AuthMode == OpenAiAuthMode.ApiKey && !_plugin.IsConfigured)
             || (_plugin.AuthMode == OpenAiAuthMode.ChatGpt && !_plugin.HasChatGptCredentials))
         {
@@ -332,6 +334,7 @@ public partial class OpenAiSettingsView : UserControl
         }
 
         await _plugin.RefreshAvailableLlmModelsAsync();
+        _hasRefreshedModelsOnLoad = true;
         RefreshLlmModels();
         UpdateAuthModePanels();
     }
