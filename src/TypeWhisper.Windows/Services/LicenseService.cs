@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
 
@@ -25,6 +26,10 @@ public sealed partial class LicenseService : ObservableObject
     private static readonly byte[] Entropy = "TypeWhisper.License.v2"u8.ToArray();
     private static readonly TimeSpan CommercialValidationInterval = TimeSpan.FromDays(7);
     private static readonly TimeSpan SupporterValidationInterval = TimeSpan.FromDays(30);
+    private static readonly Regex IndividualDeviceCountPattern = new(
+        @"(?<!\d)3 devices?\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
     private static readonly Dictionary<string, CommercialLicenseTier> KnownCommercialBenefitIds = new(StringComparer.OrdinalIgnoreCase)
     {
         ["a4c0b152-0b91-4588-b8f8-779870affba9"] = CommercialLicenseTier.Individual,
@@ -927,7 +932,7 @@ public sealed partial class LicenseService : ObservableObject
             description.Contains("single-seat") ||
             description.Contains("single seat") ||
             description.Contains("freelancer") ||
-            description.Contains("3 device"))
+            IndividualDeviceCountPattern.IsMatch(description))
         {
             return CommercialLicenseTier.Individual;
         }
