@@ -230,7 +230,7 @@ public sealed class SonioxPlugin : ITranscriptionEnginePlugin
             apiKey,
             SonioxAsyncModelId,
             normalizedLanguageHints);
-        var preferredUpload = CreatePreferredUpload(wavAudio, ct);
+        var preferredUpload = await Task.Run(() => CreatePreferredUpload(wavAudio, ct), ct);
 
         try
         {
