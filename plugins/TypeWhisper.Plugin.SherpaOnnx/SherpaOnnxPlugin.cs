@@ -41,6 +41,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private readonly HttpClient _httpClient = new();
     private readonly Func<string, string, string, OfflineRecognizer>? _recognizerFactory;
     private ISherpaCudaRuntimeInstaller? _cudaRuntimeInstaller;
+    private ISherpaCudaRuntimeProbe? _cudaRuntimeProbe;
     private IPluginHostServices? _host;
     private OfflineRecognizer? _recognizer;
     private string? _loadedModelId;
@@ -67,9 +68,18 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     internal SherpaOnnxPlugin(
         ISherpaCudaRuntimeInstaller cudaRuntimeInstaller,
         Func<string, string, string, OfflineRecognizer>? recognizerFactory)
+        : this(cudaRuntimeInstaller, recognizerFactory, cudaRuntimeProbe: null)
+    {
+    }
+
+    internal SherpaOnnxPlugin(
+        ISherpaCudaRuntimeInstaller cudaRuntimeInstaller,
+        Func<string, string, string, OfflineRecognizer>? recognizerFactory,
+        ISherpaCudaRuntimeProbe? cudaRuntimeProbe)
     {
         _cudaRuntimeInstaller = cudaRuntimeInstaller;
         _recognizerFactory = recognizerFactory;
+        _cudaRuntimeProbe = cudaRuntimeProbe;
     }
 
     // Canary-specific state
@@ -157,6 +167,15 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         _host = host;
         _cudaRuntimeInstaller ??= new SherpaCudaRuntimeInstaller(host.PluginAssetDirectory, _httpClient);
+        if (_cudaRuntimeProbe is null
+            && Environment.ProcessPath is { } hostExecutablePath
+            && Path.GetDirectoryName(typeof(SherpaOnnxPlugin).Assembly.Location) is { } pluginDirectory)
+        {
+            _cudaRuntimeProbe = new SherpaCudaRuntimeProbe(
+                hostExecutablePath,
+                pluginDirectory,
+                host.PluginAssetDirectory);
+        }
         SherpaOnnxNativeRuntime.RegisterResolver();
         MigrateModelFiles();
         return Task.CompletedTask;
@@ -273,6 +292,37 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             throw new FileNotFoundException($"Model files not found for: {modelId}");
 
         var provider = await ResolveProviderForLoadAsync(ct);
+        var providerForLoad = provider;
+        string? cudaProbeFallbackDetail = null;
+        if (string.Equals(provider, "cuda", StringComparison.OrdinalIgnoreCase)
+            && !SherpaCudaRuntimeProbe.IsProbeProcess)
+        {
+            var probeResult = _cudaRuntimeProbe is null
+                ? new CudaRuntimeProbeResult(
+                    false,
+                    "CUDA safety probe is unavailable in this TypeWhisper installation.")
+                : await _cudaRuntimeProbe.ProbeAsync(
+                    modelId,
+                    dir,
+                    _cudaRuntimeInstaller?.RuntimeDirectory ?? string.Empty,
+                    ct);
+
+            if (!probeResult.Success)
+            {
+                var detail = probeResult.ErrorMessage ?? "Native CUDA safety probe failed.";
+                _accelerationStatus = CreateCudaUnavailableStatus(detail);
+                SherpaOnnxNativeRuntime.ConfigureBundledRuntime();
+
+                if (_accelerationPreference != TranscriptionAccelerationPreference.Auto)
+                    throw new InvalidOperationException(detail);
+
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    $"CUDA safety probe failed for {modelId}; falling back to CPU: {detail}");
+                providerForLoad = "cpu";
+                cudaProbeFallbackDetail = detail;
+            }
+        }
 
         await Task.Run(() =>
         {
@@ -280,8 +330,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             {
                 UnloadRecognizerUnsafe();
 
-                var activeProvider = provider;
-                var accelerationStatus = CreateLoadedAccelerationStatus(activeProvider);
+                var activeProvider = providerForLoad;
+                var accelerationStatus = cudaProbeFallbackDetail is not null
+                    ? CreateCudaUnavailableStatus(cudaProbeFallbackDetail)
+                    : CreateLoadedAccelerationStatus(activeProvider);
 
                 try
                 {

@@ -31,8 +31,10 @@ public partial class SettingsViewModel : ObservableObject
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly Action<Action> _dispatchToUi;
     private readonly object _previewLevelLock = new();
+    private readonly SemaphoreSlim _microphoneRefreshGate = new(1, 1);
     private float _pendingPreviewLevel;
     private bool _previewLevelDispatchQueued;
+    private bool _microphonesInitialized;
 
     [ObservableProperty] private string _toggleHotkey = "";
     [ObservableProperty] private string _pushToTalkHotkey = "";
@@ -366,7 +368,7 @@ public partial class SettingsViewModel : ObservableObject
         LoadFromSettings(_settings.Current);
         RefreshSpokenFeedbackProviders();
         AutostartEnabled = StartupService.IsEnabled;
-        RefreshMicrophones();
+        RefreshMicrophonesFromCache();
         RefreshApiServerStatus();
         RefreshCliState();
         RefreshApiExamples();
@@ -400,13 +402,56 @@ public partial class SettingsViewModel : ObservableObject
         };
     }
 
+    /// <summary>
+    /// Loads microphone devices once the settings window has rendered.
+    /// </summary>
+    public Task EnsureMicrophonesLoadedAsync() =>
+        RefreshMicrophonesAsync(skipIfInitialized: true);
+
     [RelayCommand]
-    private void RefreshMicrophones()
+    private Task RefreshMicrophonesAsync() =>
+        RefreshMicrophonesAsync(skipIfInitialized: false);
+
+    private async Task RefreshMicrophonesAsync(bool skipIfInitialized)
+    {
+        if (skipIfInitialized && _microphonesInitialized)
+            return;
+
+        await _microphoneRefreshGate.WaitAsync();
+        try
+        {
+            if (skipIfInitialized && _microphonesInitialized)
+                return;
+
+            var availableDevices = await Task.Run(
+                () => _audio.RefreshAvailableInputDeviceInfos());
+            _dispatchToUi(() => ApplyMicrophones(availableDevices));
+            _microphonesInitialized =
+                _audio.TryGetCachedAvailableInputDeviceInfos(out _);
+        }
+        finally
+        {
+            _microphoneRefreshGate.Release();
+        }
+    }
+
+    private void RefreshMicrophonesFromCache()
+    {
+        if (_audio.TryGetCachedAvailableInputDeviceInfos(out var availableDevices))
+        {
+            ApplyMicrophones(availableDevices);
+            _microphonesInitialized = true;
+            return;
+        }
+
+        ApplyMicrophones([]);
+    }
+
+    private void ApplyMicrophones(IReadOnlyList<AudioInputDeviceInfo> availableDevices)
     {
         var selectedDevice = SelectedMicrophoneDevice;
         Microphones.Clear();
         Microphones.Add(new MicrophoneItem(null, Loc.Instance["Microphone.Default"]));
-        var availableDevices = _audio.GetAvailableInputDeviceInfos();
         foreach (var device in availableDevices)
         {
             Microphones.Add(new MicrophoneItem(device.DeviceNumber, device.Name, device.Id));
@@ -1119,7 +1164,7 @@ public partial class SettingsViewModel : ObservableObject
         ReplaceCollection(HistoryRetentionOptions, BuildHistoryRetentionOptions());
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
         if (refreshMicrophones)
-            RefreshMicrophones();
+            RefreshMicrophonesFromCache();
     }
 
     private string? ResolveLastTranslationTarget()
@@ -1212,7 +1257,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var wasPreviewing = _audio.IsPreviewing;
         StopMicrophonePreview();
-        RefreshMicrophones();
+        RefreshMicrophonesFromCache();
         _audio.SetMicrophonePriorityList(_microphonePriorityList);
         _audio.SetMicrophoneDevice(SelectedMicrophoneDevice);
         if (wasPreviewing)

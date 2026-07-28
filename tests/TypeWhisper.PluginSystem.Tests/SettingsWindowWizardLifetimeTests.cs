@@ -33,6 +33,18 @@ public sealed class SettingsWindowWizardLifetimeTests
         Assert.Contains("wizard.Closed += OnSetupWizardClosed;", source);
         Assert.Contains("wizard.Closed -= OnSetupWizardClosed;", source);
         Assert.Contains("_viewModel.SetupWizardRequested -= OnSetupWizardRequested;", source);
+        Assert.Contains("_viewModel.OnWindowClosed();", source);
+
+        var viewModelSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "SettingsWindowViewModel.cs");
+        var onWindowClosed = TestFile.ExtractBlock(
+            viewModelSource,
+            "public void OnWindowClosed()");
+        Assert.Contains("_sectionCache.Clear();", onWindowClosed);
+        Assert.DoesNotContain("_sectionFactories.Clear();", onWindowClosed);
 
         var ownerIndex = source.IndexOf("wizard.Owner = this;", StringComparison.Ordinal);
         var showIndex = source.IndexOf("wizard.Show();", StringComparison.Ordinal);

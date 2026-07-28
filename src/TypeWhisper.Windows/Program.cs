@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Core;
 #if TYPEWHISPER_STORE
 using Windows.ApplicationModel;
@@ -39,6 +40,12 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (NativeModelProbe.TryRun(args, out var probeExitCode))
+        {
+            Environment.ExitCode = probeExitCode;
+            return;
+        }
+
         var isStartupActivation = false;
 #if TYPEWHISPER_STORE
         try

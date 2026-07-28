@@ -197,31 +197,61 @@ public sealed class PluginManager : IDisposable
     /// Discovers plugins from the configured search directories, restores enabled
     /// state from settings, and activates all enabled plugins.
     /// </summary>
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var loadedPlugins = _loader.DiscoverAndLoad(_searchDirectories);
-        var discovered = PreferLaterSearchDirectoryPlugins(loadedPlugins);
-        UnloadDiscardedSearchDirectoryPlugins(loadedPlugins, discovered);
+        await InitializeLoadedPluginsAsync(loadedPlugins, ct);
+    }
+
+    internal async Task InitializeLoadedPluginsAsync(
+        IReadOnlyList<LoadedPlugin> loadedPlugins,
+        CancellationToken ct)
+    {
+        IReadOnlyList<LoadedPlugin> stagedPlugins = loadedPlugins;
+        var activatedPlugins = new List<LoadedPlugin>();
+        IReadOnlyList<LoadedPlugin> discovered;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            discovered = PreferLaterSearchDirectoryPlugins(loadedPlugins);
+            UnloadDiscardedSearchDirectoryPlugins(loadedPlugins, discovered);
+            stagedPlugins = discovered;
+
+            Debug.WriteLine($"[PluginManager] Discovered {discovered.Count} plugin(s)");
+
+            var enabledState = _settings.Current.PluginEnabledState;
+
+            foreach (var plugin in discovered)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Default to enabled for marketplace-installed plugins
+                var isEnabled = !enabledState.TryGetValue(plugin.Manifest.Id, out var state) || state;
+
+                if (isEnabled)
+                {
+                    await ActivatePluginAsync(plugin);
+                    lock (_lock)
+                    {
+                        if (_activatedPlugins.Contains(plugin.Manifest.Id))
+                            activatedPlugins.Add(plugin);
+                    }
+                }
+            }
+
+            ct.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await RollbackInitializationAsync(stagedPlugins, activatedPlugins);
+            throw;
+        }
 
         lock (_lock)
         {
             _allPlugins.Clear();
             _allPlugins.AddRange(discovered);
-        }
-
-        Debug.WriteLine($"[PluginManager] Discovered {discovered.Count} plugin(s)");
-
-        var enabledState = _settings.Current.PluginEnabledState;
-
-        foreach (var plugin in discovered)
-        {
-            // Default to enabled for marketplace-installed plugins
-            var isEnabled = !enabledState.TryGetValue(plugin.Manifest.Id, out var state) || state;
-
-            if (isEnabled)
-            {
-                await ActivatePluginAsync(plugin);
-            }
         }
 
         RebuildCapabilityIndices();
@@ -339,6 +369,55 @@ public sealed class PluginManager : IDisposable
         catch (Exception ex)
         {
             Debug.WriteLine($"[PluginManager] Failed to deactivate plugin {plugin.Manifest.Id}: {ex.Message}");
+        }
+    }
+
+    private async Task RollbackInitializationAsync(
+        IReadOnlyList<LoadedPlugin> stagedPlugins,
+        IReadOnlyList<LoadedPlugin> activatedPlugins)
+    {
+        foreach (var plugin in activatedPlugins.Reverse())
+        {
+            try
+            {
+                await plugin.Instance.DeactivateAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[PluginManager] Failed to deactivate cancelled startup plugin {plugin.Manifest.Id}: {ex.Message}");
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    _hostServices.Remove(plugin.Manifest.Id);
+                    _activatedPlugins.Remove(plugin.Manifest.Id);
+                }
+            }
+        }
+
+        foreach (var plugin in stagedPlugins)
+        {
+            try
+            {
+                plugin.Instance.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[PluginManager] Failed to dispose cancelled startup plugin {plugin.Manifest.Id}: {ex.Message}");
+            }
+
+            try
+            {
+                plugin.LoadContext.Unload();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    $"[PluginManager] Failed to unload cancelled startup plugin {plugin.Manifest.Id}: {ex.Message}");
+            }
         }
     }
 

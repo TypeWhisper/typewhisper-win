@@ -22,6 +22,8 @@ namespace TypeWhisper.Windows;
 public partial class App : Application
 {
     private ServiceProvider? _serviceProvider;
+    private readonly CancellationTokenSource _startupCancellation = new();
+    private Task? _startupBackgroundTask;
     private HistoryRetentionCoordinator? _historyRetentionCoordinator;
     private TrayIconService? _trayIcon;
     private SettingsWindow? _settingsWindow;
@@ -38,7 +40,7 @@ public partial class App : Application
     /// <summary>
     /// Initializes application services, plugin discovery, error handling, and startup windows.
     /// </summary>
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         AudioCaptureDiagnostics.Reset();
@@ -102,20 +104,86 @@ public partial class App : Application
         Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
             ?? Loc.Instance.DetectSystemLanguage();
 
+        // Configure feedback before the overlay graph is created.
+        var soundService = _serviceProvider.GetRequiredService<SoundService>();
+        soundService.IsEnabled = settings.Current.SoundFeedbackEnabled;
+        settings.SettingsChanged += s => soundService.IsEnabled = s.SoundFeedbackEnabled;
+
+        var speechFeedback = _serviceProvider.GetRequiredService<SpeechFeedbackService>();
+        speechFeedback.IsEnabled = settings.Current.SpokenFeedbackEnabled;
+        settings.SettingsChanged += s => speechFeedback.IsEnabled = s.SpokenFeedbackEnabled;
+
+        // Publish the native shell before plugin discovery. The tray is the
+        // primary idle surface, while the transparent overlay creates the
+        // window handle needed by hotkeys later in startup.
+        _trayIcon = _serviceProvider.GetRequiredService<TrayIconService>();
+        _trayIcon.Initialize();
+        _trayIcon.ShowSettingsRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow());
+        _trayIcon.ShowFileTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true));
+        _trayIcon.ShowRecentTranscriptionsRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette());
+        _trayIcon.CopyLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(async () =>
+            await _serviceProvider!.GetRequiredService<DictationViewModel>().CopyLastTranscriptionToClipboardAsync());
+        _trayIcon.ReadBackLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<DictationViewModel>().ReadBackLastTranscription());
+        _trayIcon.ToggleRecorderRequested += (_, _) => RunTrayActionOnUiThread(() =>
+            _serviceProvider!.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
+        _trayIcon.ExitRequested += (_, _) => Shutdown();
+        _trayIcon.UpdateCheckRequested += (_, _) => RunTrayActionOnUiThread(async () =>
+        {
+            var update = _serviceProvider!.GetRequiredService<UpdateService>();
+            await update.CheckForUpdatesAsync();
+            if (!update.IsUpdateAvailable)
+                _trayIcon.ShowBalloon(Loc.Instance["Update.NoUpdate"], Loc.Instance["Update.NoUpdateMessage"]);
+        });
+
+        var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+        mainWindow.Show();
+        await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+
         // Apply staged plugin updates before plugin assemblies are loaded.
         var pluginRegistry = _serviceProvider.GetRequiredService<PluginRegistryService>();
         try
         {
-            pluginRegistry.ApplyPendingUpdatesAsync().GetAwaiter().GetResult();
+            await RunTrackedStartupWorkAsync(
+                token => pluginRegistry.ApplyPendingUpdatesAsync(token));
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (IsNonFatalStartupException(ex))
         {
             System.Diagnostics.Debug.WriteLine($"[PluginRegistry] Failed to apply pending updates at startup: {ex.Message}");
+            LogCrash(ex);
+        }
+
+        if (_startupCancellation.IsCancellationRequested
+            || Dispatcher.HasShutdownStarted
+            || Dispatcher.HasShutdownFinished)
+        {
+            return;
         }
 
         // Initialize plugins (must happen after settings.Load so enabled state is available)
         var pluginManager = _serviceProvider.GetRequiredService<PluginManager>();
-        pluginManager.InitializeAsync().GetAwaiter().GetResult();
+        try
+        {
+            await RunTrackedStartupWorkAsync(
+                token => pluginManager.InitializeAsync(token));
+        }
+        catch (OperationCanceledException) when (_startupCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (IsNonFatalStartupException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine($"[PluginManager] Failed to initialize plugins at startup: {ex.Message}");
+            LogCrash(ex);
+        }
+
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            return;
 
         // Validate commercial/supporter licensing state in the background.
         var supporterDiscord = _serviceProvider.GetRequiredService<SupporterDiscordService>();
@@ -136,46 +204,8 @@ public partial class App : Application
                     System.Diagnostics.Debug.WriteLine($"Plugin registry check failed: {t.Exception?.Message}");
             });
 
-        // Setup sound service
-        var soundService = _serviceProvider.GetRequiredService<SoundService>();
-        soundService.IsEnabled = settings.Current.SoundFeedbackEnabled;
-        settings.SettingsChanged += s => soundService.IsEnabled = s.SoundFeedbackEnabled;
-
-        // Setup spoken feedback service
-        var speechFeedback = _serviceProvider.GetRequiredService<SpeechFeedbackService>();
-        speechFeedback.IsEnabled = settings.Current.SpokenFeedbackEnabled;
-        settings.SettingsChanged += s => speechFeedback.IsEnabled = s.SpokenFeedbackEnabled;
-
         _historyRetentionCoordinator = _serviceProvider.GetRequiredService<HistoryRetentionCoordinator>();
         _historyRetentionCoordinator.Initialize();
-
-        // Setup tray icon
-        _trayIcon = _serviceProvider.GetRequiredService<TrayIconService>();
-        _trayIcon.Initialize();
-        _trayIcon.ShowSettingsRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow());
-        _trayIcon.ShowFileTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true));
-        _trayIcon.ShowRecentTranscriptionsRequested += (_, _) => RunTrayActionOnUiThread(() =>
-            _serviceProvider!.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette());
-        _trayIcon.CopyLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(async () =>
-            await _serviceProvider!.GetRequiredService<DictationViewModel>().CopyLastTranscriptionToClipboardAsync());
-        _trayIcon.ReadBackLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() =>
-            _serviceProvider!.GetRequiredService<DictationViewModel>().ReadBackLastTranscription());
-        _trayIcon.ToggleRecorderRequested += (_, _) => RunTrayActionOnUiThread(() =>
-            _serviceProvider!.GetRequiredService<AudioRecorderViewModel>().ToggleRecordingCommand.Execute(null));
-        _trayIcon.ExitRequested += (_, _) => Shutdown();
-
-        // Manual update check from tray menu
-        _trayIcon.UpdateCheckRequested += (_, _) => RunTrayActionOnUiThread(async () =>
-        {
-            var update = _serviceProvider!.GetRequiredService<UpdateService>();
-            await update.CheckForUpdatesAsync();
-            if (!update.IsUpdateAvailable)
-                _trayIcon.ShowBalloon(Loc.Instance["Update.NoUpdate"], Loc.Instance["Update.NoUpdateMessage"]);
-        });
-
-        // Create and show overlay window
-        var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
-        mainWindow.Show();
 
         // Initialize hotkey service (needs window handle)
         var hotkeyService = _serviceProvider.GetRequiredService<HotkeyService>();
@@ -217,20 +247,6 @@ public partial class App : Application
         modelManager.MigrateSettings();
         MigrateWorkflowModelOverrides(_serviceProvider);
 
-        // Auto-load previously selected model (after plugin initialization)
-        if (!string.IsNullOrEmpty(settings.Current.SelectedModelId))
-        {
-            if (modelManager.IsDownloaded(settings.Current.SelectedModelId))
-            {
-                _ = modelManager.LoadModelAsync(settings.Current.SelectedModelId)
-                    .ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                            System.Diagnostics.Debug.WriteLine($"Auto-load model failed: {t.Exception?.Message}");
-                    });
-            }
-        }
-
         if (settings.Current.WatchFolderAutoStart
             && !string.IsNullOrWhiteSpace(settings.Current.WatchFolderPath))
         {
@@ -242,6 +258,21 @@ public partial class App : Application
         var updateService = _serviceProvider.GetRequiredService<UpdateService>();
         updateService.Initialize();
         _ = updateService.CheckForUpdatesAsync();
+    }
+
+    private async Task RunTrackedStartupWorkAsync(Func<CancellationToken, Task> work)
+    {
+        var token = _startupCancellation.Token;
+        var task = Task.Run(() => work(token), token);
+        Volatile.Write(ref _startupBackgroundTask, task);
+        try
+        {
+            await task;
+        }
+        finally
+        {
+            _ = Interlocked.CompareExchange(ref _startupBackgroundTask, null, task);
+        }
     }
 
     private void RunTrayActionOnUiThread(Action action)
@@ -352,8 +383,12 @@ public partial class App : Application
         if (!SupporterDiscordService.CanHandleCallbackUri(uri))
             return;
 
-        var licenseService = _serviceProvider!.GetRequiredService<LicenseService>();
-        var supporterDiscord = _serviceProvider.GetRequiredService<SupporterDiscordService>();
+        var serviceProvider = Volatile.Read(ref _serviceProvider);
+        if (serviceProvider is null)
+            return;
+
+        var licenseService = serviceProvider.GetRequiredService<LicenseService>();
+        var supporterDiscord = serviceProvider.GetRequiredService<SupporterDiscordService>();
         var handled = await supporterDiscord.HandleCallbackUriAsync(uri, licenseService);
         if (!handled)
             return;
@@ -579,10 +614,31 @@ public partial class App : Application
     /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        _startupCancellation.Cancel();
         _protocolCallbackTimer?.Stop();
         _historyRetentionCoordinator?.HandleShutdown();
         _trayIcon?.Dispose();
-        _serviceProvider?.Dispose();
+
+        var serviceProvider = Interlocked.Exchange(ref _serviceProvider, null);
+        Services = null!;
+        var startupTask = Volatile.Read(ref _startupBackgroundTask);
+        if (serviceProvider is not null)
+        {
+            if (startupTask is { IsCompleted: false })
+            {
+                _ = startupTask.ContinueWith(
+                    static (_, state) => ((ServiceProvider)state!).Dispose(),
+                    serviceProvider,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+            }
+            else
+            {
+                serviceProvider.Dispose();
+            }
+        }
+
         base.OnExit(e);
     }
 

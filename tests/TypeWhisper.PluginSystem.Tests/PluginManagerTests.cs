@@ -196,6 +196,39 @@ public class PluginManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InitializeLoadedPluginsAsync_CancellationRollsBackActivatedAndStagedPlugins()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var first = CreateLoadedPlugin(
+            "com.test.first",
+            "1.0.0",
+            @"C:\Plugins\com.test.first",
+            cancellation.Cancel);
+        var second = CreateLoadedPlugin(
+            "com.test.second",
+            "1.0.0",
+            @"C:\Plugins\com.test.second");
+        var firstInstance = Assert.IsType<MultiRolePlugin>(first.Instance);
+        var secondInstance = Assert.IsType<MultiRolePlugin>(second.Instance);
+        var manager = CreateManager();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            manager.InitializeLoadedPluginsAsync([first, second], cancellation.Token));
+
+        Assert.Empty(manager.AllPlugins);
+        Assert.Empty(manager.LlmProviders);
+        Assert.Empty(manager.TranscriptionEngines);
+        Assert.False(manager.IsEnabled(first.Manifest.Id));
+        Assert.False(manager.IsEnabled(second.Manifest.Id));
+        Assert.Equal(1, firstInstance.ActivateCount);
+        Assert.Equal(1, firstInstance.DeactivateCount);
+        Assert.Equal(1, firstInstance.DisposeCount);
+        Assert.Equal(0, secondInstance.ActivateCount);
+        Assert.Equal(0, secondInstance.DeactivateCount);
+        Assert.Equal(1, secondInstance.DisposeCount);
+    }
+
+    [Fact]
     public void CapabilityIndices_IncludeAdditionalRolesWithoutDuplicatingAllPlugins()
     {
         var manager = CreateManager();
@@ -243,9 +276,13 @@ public class PluginManagerTests : IDisposable
         Assert.True(eventFired);
     }
 
-    private static LoadedPlugin CreateLoadedPlugin(string id, string version, string pluginDirectory)
+    private static LoadedPlugin CreateLoadedPlugin(
+        string id,
+        string version,
+        string pluginDirectory,
+        Action? onActivate = null)
     {
-        var plugin = new MultiRolePlugin(id, version);
+        var plugin = new MultiRolePlugin(id, version, onActivate);
         var manifest = new PluginManifest
         {
             Id = plugin.PluginId,
@@ -286,6 +323,7 @@ public class PluginManagerTests : IDisposable
         private readonly ProfileRole _duplicateProfileRole;
         private readonly string _pluginId;
         private readonly string _pluginVersion;
+        private readonly Action? _onActivate;
         private bool _includeAdditionalRoles = true;
 
         public MultiRolePlugin()
@@ -293,10 +331,14 @@ public class PluginManagerTests : IDisposable
         {
         }
 
-        public MultiRolePlugin(string pluginId, string pluginVersion)
+        public MultiRolePlugin(
+            string pluginId,
+            string pluginVersion,
+            Action? onActivate = null)
         {
             _pluginId = pluginId;
             _pluginVersion = pluginVersion;
+            _onActivate = onActivate;
             _profileRole = new ProfileRole(pluginId, "openai-compatible-profile-a", "Profile A");
             _duplicateProfileRole = new ProfileRole(pluginId, "openai-compatible-profile-a", "Profile A Duplicate");
         }
@@ -317,11 +359,23 @@ public class PluginManagerTests : IDisposable
             _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
         public IReadOnlyList<ILlmProviderPlugin> AdditionalLlmProviders =>
             _includeAdditionalRoles ? [_profileRole, _duplicateProfileRole] : [];
+        public int ActivateCount { get; private set; }
+        public int DeactivateCount { get; private set; }
         public int DisposeCount { get; private set; }
 
         public void ClearAdditionalRoles() => _includeAdditionalRoles = false;
-        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
-        public Task DeactivateAsync() => Task.CompletedTask;
+        public Task ActivateAsync(IPluginHostServices host)
+        {
+            ActivateCount++;
+            _onActivate?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task DeactivateAsync()
+        {
+            DeactivateCount++;
+            return Task.CompletedTask;
+        }
         public UserControl? CreateSettingsView() => null;
         public void SelectModel(string modelId) { }
         public Task<PluginTranscriptionResult> TranscribeAsync(
