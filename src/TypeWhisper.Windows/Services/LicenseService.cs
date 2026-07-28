@@ -927,7 +927,7 @@ public sealed partial class LicenseService : ObservableObject
             description.Contains("single-seat") ||
             description.Contains("single seat") ||
             description.Contains("freelancer") ||
-            description.Contains("2 device"))
+            description.Contains("3 device"))
         {
             return CommercialLicenseTier.Individual;
         }
