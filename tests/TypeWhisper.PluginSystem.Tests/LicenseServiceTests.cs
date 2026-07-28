@@ -28,7 +28,11 @@ public sealed class LicenseServiceTests : IDisposable
 
         Assert.Equal(
             CommercialLicenseTier.Individual,
-            LicenseService.DetectCommercialTier("legacy", "Freelancer single-seat license for 2 devices"));
+            LicenseService.DetectCommercialTier("legacy", "Legacy commercial license for 3 devices"));
+        Assert.Null(
+            LicenseService.DetectCommercialTier("legacy", "Legacy commercial license for 2 devices"));
+        Assert.Null(
+            LicenseService.DetectCommercialTier("legacy", "Legacy commercial license for 13 devices"));
         Assert.Equal(
             CommercialLicenseTier.Team,
             LicenseService.DetectCommercialTier("legacy", "Small teams up to 10 devices"));
