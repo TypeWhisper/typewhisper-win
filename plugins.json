@@ -1,25 +1,25 @@
 [
   {
     "id": "com.typewhisper.openai",
-    "name": "OpenAI",
-    "version": "1.0.1",
-    "minHostVersion": null,
+    "name": "OpenAI / ChatGPT",
+    "version": "1.1.1",
+    "minHostVersion": "1.0.0",
     "author": "TypeWhisper",
-    "description": "OpenAI Whisper transcription and GPT translation",
+    "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",
     "category": "transcription",
-    "size": 13887,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.0.1.zip",
+    "size": 62141,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.1.1.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
-      "de": "OpenAI Whisper Transkription und GPT Uebersetzung"
+      "de": "OpenAI-Transkription, Promptverarbeitung und Text-to-Speech mit dynamischen API- und ChatGPT-Modellkatalogen. STT/TTS benötigen einen API-Key; Prompts können den ChatGPT-Login nutzen."
     },
     "categories": [
       "transcription",
       "llm",
       "tts"
     ],
-    "sha256": "c2426ad0a4f1002d1e003b872cdc7b32145be433416513568b96fa1ba6368348"
+    "sha256": "6f82f8e2061860aeb7841b613aaa43b93386d426e877f8862196dbc413942299"
   },
   {
     "id": "com.typewhisper.groq",
