@@ -198,7 +198,12 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
         var manager = CreateManager();
         if (loadedPlugins is not null)
             TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", loadedPlugins.ToList());
-        var service = new PluginRegistryService(manager, _loader, _settings.Object, CreateMockHttpClient(json), pluginsPath);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(json),
+            pluginsPath ?? _pluginsRoot);
         var viewModel = new PluginsViewModel(manager, service);
 
         await viewModel.RefreshRegistryCommand.ExecuteAsync(null);
