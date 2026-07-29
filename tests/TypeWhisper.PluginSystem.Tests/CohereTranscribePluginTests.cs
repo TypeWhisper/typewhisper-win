@@ -608,6 +608,71 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
+    public async Task TranscribeAsync_RestartsUnexpectedlyStoppedSidecar()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        var host = new FakePluginHostServices(temp.Path);
+
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+        Assert.Equal(1, server.StartCount);
+
+        await server.StopAsync();
+        Assert.Equal("Not loaded", sut.AccelerationStatus.DisplayText);
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "de",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+
+        Assert.Equal("lokal", result.Text);
+        Assert.True(server.IsRunning);
+        Assert.Equal(2, server.StartCount);
+        Assert.Equal(CohereModelCatalog.DefaultModelId, server.LastConfiguration?.ModelId);
+        Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_RestartsSidecarThatExitsDuringRequest()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+        server.FailNextTranscriptionAndStop = true;
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "de",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+
+        Assert.Equal("lokal", result.Text);
+        Assert.True(server.IsRunning);
+        Assert.Equal(2, server.StartCount);
+        Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
+    }
+
+    [Fact]
     public async Task PluginLifecycle_LoadsStoresAndRemovesOptionalHuggingFaceToken()
     {
         using var temp = new TempDirectory();
@@ -888,11 +953,14 @@ public sealed class CohereTranscribePluginTests
         public CrispAsrBackend? ActiveBackend { get; private set; }
         public CrispAsrServerConfiguration? LastConfiguration { get; private set; }
         public string? LastLanguage { get; private set; }
+        public int StartCount { get; private set; }
+        public bool FailNextTranscriptionAndStop { get; set; }
 
         public Task StartAsync(
             CrispAsrServerConfiguration configuration,
             CancellationToken cancellationToken)
         {
+            StartCount++;
             LastConfiguration = configuration;
             ActiveBackend = configuration.Backend;
             IsRunning = true;
@@ -905,6 +973,14 @@ public sealed class CohereTranscribePluginTests
             CancellationToken cancellationToken)
         {
             LastLanguage = language;
+            if (FailNextTranscriptionAndStop)
+            {
+                FailNextTranscriptionAndStop = false;
+                IsRunning = false;
+                ActiveBackend = null;
+                throw new HttpRequestException("CrispASR stopped during transcription.");
+            }
+
             return Task.FromResult(new PluginTranscriptionResult("lokal", language, 1, null));
         }
 

@@ -131,7 +131,10 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the active acceleration status.
     /// </summary>
-    public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
+    public TranscriptionAccelerationStatus AccelerationStatus =>
+        _loadedModelId is not null && _server?.IsRunning != true
+            ? CreatePendingStatus(_accelerationPreference)
+            : _accelerationStatus;
 
     /// <summary>
     /// Activates the plugin and prepares its isolated asset storage.
@@ -437,21 +440,60 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
             throw new NotSupportedException("Cohere Transcribe does not support speech translation.");
 
         var normalizedLanguage = NormalizeLanguage(language);
+        var restartAttempted = false;
 
-        await _gate.WaitAsync(cancellationToken);
-        try
+        while (true)
         {
-            if (_loadedModelId is null)
-                throw new InvalidOperationException("No Cohere Transcribe model is loaded.");
+            string? modelToRestart = null;
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_loadedModelId is null)
+                    throw new InvalidOperationException("No Cohere Transcribe model is loaded.");
 
-            return await GetServer().TranscribeAsync(
-                wavAudio,
-                normalizedLanguage,
-                cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
+                var server = GetServer();
+                if (!server.IsRunning)
+                {
+                    if (restartAttempted)
+                        throw new InvalidOperationException("The local Cohere Transcribe model is not loaded.");
+
+                    modelToRestart = _loadedModelId;
+                    _loadedModelId = null;
+                    _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+                }
+                else
+                {
+                    try
+                    {
+                        return await server.TranscribeAsync(
+                            wavAudio,
+                            normalizedLanguage,
+                            cancellationToken);
+                    }
+                    catch (Exception exception) when (
+                        exception is not OperationCanceledException
+                        && !restartAttempted
+                        && !server.IsRunning)
+                    {
+                        modelToRestart = _loadedModelId;
+                        _loadedModelId = null;
+                        _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+                    }
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            if (modelToRestart is null)
+                throw new InvalidOperationException("The local Cohere Transcribe model is not loaded.");
+
+            restartAttempted = true;
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"CrispASR stopped unexpectedly; restarting {modelToRestart} before transcription.");
+            await LoadModelAsync(modelToRestart, cancellationToken);
         }
     }
 
