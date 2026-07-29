@@ -1,0 +1,10 @@
+{
+  "Settings.HuggingFaceToken": "Hugging-Face-Token (optional)",
+  "Settings.HuggingFaceTokenHint": "Wird sicher per Windows-DPAPI gespeichert und nur für Modell-Downloads an huggingface.co gesendet. Öffentliche Downloads funktionieren auch ohne Token. Die Anmeldung kann Rate-Limits zuverlässiger machen, garantiert aber keine höhere Übertragungsgeschwindigkeit.",
+  "Settings.Save": "Speichern",
+  "Settings.Remove": "Entfernen",
+  "Settings.Saved": "Token sicher gespeichert.",
+  "Settings.Removed": "Token entfernt.",
+  "Settings.InvalidToken": "Der Token darf keine Leerzeichen oder Zeilenumbrüche enthalten.",
+  "Settings.SaveFailed": "Der Token konnte nicht sicher gespeichert werden. Bitte erneut versuchen."
+}

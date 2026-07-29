@@ -256,6 +256,41 @@ public class ModelManagerServiceTests
         Assert.Equal(expectedPreference, plugin.AccelerationPreferenceAtLoad);
     }
 
+    [Fact]
+    public async Task DownloadAndLoadModelAsync_AppliesSavedAccelerationPreferenceBeforeDownloading()
+    {
+        const string pluginId = "com.typewhisper.cohere-transcribe";
+        const string modelId = "cohere-transcribe-03-2026-q5_0";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            ModelDownloaded = false
+        };
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        await sut.DownloadAndLoadModelAsync(fullModelId);
+
+        Assert.Equal(1, plugin.DownloadCallCount);
+        Assert.Equal(
+            TranscriptionAccelerationPreference.Cpu,
+            plugin.AccelerationPreferenceAtDownload);
+        Assert.Equal(
+            TranscriptionAccelerationPreference.Cpu,
+            plugin.AccelerationPreferenceAtLoad);
+    }
+
     [Theory]
     [InlineData("Vulkan unavailable", AppSettings.LocalModelAccelerationAmdVulkan)]
     [InlineData("ROCm unavailable", AppSettings.LocalModelAccelerationAmdRocm)]
@@ -481,15 +516,18 @@ public class ModelManagerServiceTests
         public string? LastPrompt { get; private set; }
         public string? LastLoadedModelId { get; private set; }
         public int LoadCallCount { get; private set; }
+        public int DownloadCallCount { get; private set; }
         public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
+        public TranscriptionAccelerationPreference? AccelerationPreferenceAtDownload { get; private set; }
         public TranscriptionAccelerationPreference? AccelerationPreferenceAtLoad { get; private set; }
         public TranscriptionAccelerationStatus? AccelerationStatusOverride { get; init; }
         public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
             ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
         public Exception? LoadException { get; init; }
         public Exception? DownloadStatusException { get; init; }
+        public bool ModelDownloaded { get; init; } = true;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -502,7 +540,18 @@ public class ModelManagerServiceTests
             if (DownloadStatusException is not null)
                 throw DownloadStatusException;
 
-            return true;
+            return ModelDownloaded;
+        }
+
+        public Task DownloadModelAsync(
+            string modelId,
+            IProgress<double>? progress,
+            CancellationToken ct)
+        {
+            DownloadCallCount++;
+            AccelerationPreferenceAtDownload = LastAccelerationPreference;
+            progress?.Report(1);
+            return Task.CompletedTask;
         }
 
         public Task LoadModelAsync(string modelId, CancellationToken ct)

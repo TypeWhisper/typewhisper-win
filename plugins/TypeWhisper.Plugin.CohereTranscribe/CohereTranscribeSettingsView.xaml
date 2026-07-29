@@ -1,0 +1,29 @@
+<UserControl x:Class="TypeWhisper.Plugin.CohereTranscribe.CohereTranscribeSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="0,4" MaxWidth="520">
+        <TextBlock x:Name="TokenLabel" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <PasswordBox x:Name="TokenBox"
+                     MaxLength="500"
+                     AutomationProperties.LabeledBy="{Binding ElementName=TokenLabel}"
+                     PasswordChanged="OnPasswordChanged" />
+        <TextBlock x:Name="TokenHintText"
+                   Margin="0,4,0,0"
+                   FontSize="11"
+                   Foreground="Gray"
+                   TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button x:Name="SaveButton"
+                    Padding="12,4"
+                    Click="OnSaveClick" />
+            <Button x:Name="RemoveButton"
+                    Margin="8,0,0,0"
+                    Padding="12,4"
+                    Click="OnRemoveClick" />
+        </StackPanel>
+        <TextBlock x:Name="StatusText"
+                   Margin="0,6,0,0"
+                   FontSize="12"
+                   TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>
