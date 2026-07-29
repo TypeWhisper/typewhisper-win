@@ -588,6 +588,7 @@ $os = Get-CimInstance Win32_OperatingSystem |
                     if len(parts := [part.strip() for part in line.split(",")]) == 3
                 ]
         except (OSError, subprocess.SubprocessError, ValueError):
+            # NVIDIA metadata is optional; the WMI hardware snapshot remains usable.
             pass
     return hardware
 
@@ -927,6 +928,7 @@ class CrispAsrProcess:
                     if response.status == 200:
                         return
             except (OSError, urllib.error.URLError):
+                # Connection failures are expected until the server binds its port.
                 pass
             time.sleep(0.25)
         raise TimeoutError(
