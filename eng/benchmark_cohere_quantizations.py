@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Benchmark the local Cohere Transcribe GGUF variants through TypeWhisper.
+"""Benchmark the local Cohere Transcribe GGUF variants on Windows.
 
 The runner downloads a pinned subset of the public FLEURS test corpus, prepares
-the selected models through TypeWhisper's local API, and records accuracy,
-throughput, wall time, peak CrispASR working set, and silence/noise behavior.
-It intentionally uses only the Python standard library.
+the selected models through TypeWhisper's local API, then starts one persistent
+CrispASR process per quantization. It records accuracy, throughput, model load
+time, peak CrispASR working set, and silence/noise behavior. It intentionally
+uses only the Python standard library.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ import os
 import platform
 import random
 import re
+import secrets
+import socket
 import statistics
 import struct
 import subprocess
@@ -34,7 +37,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCRIPT_VERSION = 1
+SCRIPT_VERSION = 2
 EUROPE_DATASET = (
     "FluidInference/fleurs",
     "8944693da251acbaf2f9686bddc4fedce8bd2edd",
@@ -49,6 +52,20 @@ DEFAULT_MODELS = [
     "cohere-transcribe-03-2026-q6_k",
     "cohere-transcribe-03-2026-q8_0",
 ]
+MODEL_FILES = {
+    "cohere-transcribe-03-2026-q4_k": "cohere-transcribe-q4_k.gguf",
+    "cohere-transcribe-03-2026-q5_0": "cohere-transcribe-q5_0.gguf",
+    "cohere-transcribe-03-2026-q6_k": "cohere-transcribe-q6_k.gguf",
+    "cohere-transcribe-03-2026-q8_0": "cohere-transcribe-q8_0.gguf",
+}
+CRISPASR_VERSION = "0.8.24"
+BACKENDS = {
+    "nvidia-cuda": ("cuda", "cuda", False),
+    "amd-vulkan": ("vulkan", "vulkan", False),
+    "cpu": ("cpu", "cpu", True),
+}
+VAD_MODEL_FILE = "ggml-silero-v6.2.0.bin"
+LANGUAGE_ID_MODEL_FILE = "ecapa-lid-107-f16.gguf"
 LANGUAGES = {
     "de_de": ("de", EUROPE_DATASET, "wer"),
     "en_us": ("en", EUROPE_DATASET, "wer"),
@@ -81,7 +98,10 @@ class Sample:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark Cohere GGUF quantizations through the TypeWhisper API."
+        description=(
+            "Benchmark Cohere GGUF quantizations with one persistent CrispASR "
+            "process per model."
+        )
     )
     parser.add_argument("--api-url", default="http://127.0.0.1:8978")
     parser.add_argument(
@@ -113,25 +133,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("artifacts/cohere-quantization-benchmark/results.json"),
+        default=Path("artifacts/cohere-quantization-benchmark/direct-results.json"),
     )
     parser.add_argument(
         "--markdown-output",
         type=Path,
-        default=Path("artifacts/cohere-quantization-benchmark/results.md"),
+        default=Path("artifacts/cohere-quantization-benchmark/direct-results.md"),
     )
     parser.add_argument(
-        "--backend",
-        default="configured in TypeWhisper",
+        "--asset-root",
+        type=Path,
         help=(
-            "Expected active backend reported by TypeWhisper, for example "
-            "nvidia-cuda, amd-vulkan, or cpu."
+            "Cohere plugin data root. Auto-detected from TypeWhisper Store, "
+            "desktop, or development data when exactly one candidate exists."
         ),
     )
     parser.add_argument(
-        "--allow-dictionary",
+        "--backend",
+        choices=["nvidia-cuda", "amd-vulkan", "cpu"],
+        default="nvidia-cuda",
+        help="CrispASR runtime and GPU backend to benchmark.",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=min(max((os.cpu_count() or 2) // 2, 1), 12),
+        help="CrispASR inference threads (default matches the plugin heuristic).",
+    )
+    parser.add_argument(
+        "--stop-typewhisper-sidecar",
         action="store_true",
-        help="Allow enabled dictionary terms or corrections to modify benchmark output.",
+        help=(
+            "Stop a TypeWhisper-owned CrispASR process under the selected asset "
+            "root before starting the direct benchmark."
+        ),
     )
     parser.add_argument(
         "--no-prepare-models",
@@ -145,6 +180,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--checkpoint-every", type=int, default=10)
     parser.add_argument("--request-timeout", type=int, default=7_200)
+    parser.add_argument("--startup-timeout", type=int, default=900)
     parser.add_argument("--download-retries", type=int, default=4)
     parser.add_argument("--download-workers", type=int, default=8)
     args = parser.parse_args()
@@ -162,6 +198,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--samples must be positive.")
     if args.checkpoint_every <= 0:
         parser.error("--checkpoint-every must be positive.")
+    if args.threads <= 0:
+        parser.error("--threads must be positive.")
+    if args.startup_timeout <= 0:
+        parser.error("--startup-timeout must be positive.")
     if args.download_workers <= 0:
         parser.error("--download-workers must be positive.")
     return args
@@ -363,7 +403,7 @@ def multipart_body(
     return b"".join(chunks), boundary
 
 
-def transcribe(
+def typewhisper_transcribe(
     args: argparse.Namespace,
     model: str,
     sample: Sample,
@@ -525,23 +565,444 @@ $os = Get-CimInstance Win32_OperatingSystem |
         )
         if windows:
             hardware["windows"] = windows
+        try:
+            nvidia_smi = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.total,driver_version",
+                    "--format=csv,noheader,nounits",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ).stdout.strip()
+            if nvidia_smi:
+                hardware["nvidia_smi"] = [
+                    {
+                        "name": parts[0],
+                        "memory_total_mib": int(parts[1]),
+                        "driver_version": parts[2],
+                    }
+                    for line in nvidia_smi.splitlines()
+                    if len(parts := [part.strip() for part in line.split(",")]) == 3
+                ]
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
     return hardware
 
 
-def crispasr_peak_working_set() -> int | None:
+def crispasr_peak_working_set(process_id: int) -> int | None:
     if os.name != "nt":
         return None
     value = powershell_json(
-        """
-$process = Get-Process crispasr -ErrorAction SilentlyContinue |
-  Sort-Object StartTime -Descending |
-  Select-Object -First 1
-if ($process) {
+        f"""
+$process = Get-Process -Id {process_id} -ErrorAction SilentlyContinue
+if ($process) {{
   [long]$process.PeakWorkingSet64 | ConvertTo-Json -Compress
-}
+}}
 """
     )
     return int(value) if value is not None else None
+
+
+def is_same_or_under(path: Path, root: Path) -> bool:
+    normalized_path = os.path.normcase(str(path.resolve()))
+    normalized_root = os.path.normcase(str(root.resolve())).rstrip("\\/")
+    return normalized_path == normalized_root or normalized_path.startswith(
+        normalized_root + os.sep
+    )
+
+
+def runtime_executable(asset_root: Path, backend: str) -> Path | None:
+    runtime_id = BACKENDS[backend][0]
+    runtime_root = (
+        asset_root / "Runtimes" / "CrispASR" / CRISPASR_VERSION / runtime_id
+    )
+    return next(runtime_root.rglob("crispasr.exe"), None) if runtime_root.is_dir() else None
+
+
+def model_path(asset_root: Path, model: str) -> Path:
+    try:
+        file_name = MODEL_FILES[model]
+    except KeyError as error:
+        raise RuntimeError(f"Unknown Cohere benchmark model: {model}") from error
+    return asset_root / "Models" / model / file_name
+
+
+def auxiliary_paths(asset_root: Path) -> tuple[Path, Path, Path]:
+    auxiliary_root = (
+        asset_root
+        / "Models"
+        / "cohere-transcribe-03-2026-q5_0"
+        / "Auxiliary"
+    )
+    return (
+        auxiliary_root / LANGUAGE_ID_MODEL_FILE,
+        auxiliary_root / VAD_MODEL_FILE,
+        asset_root / "Cache" / "CrispASR",
+    )
+
+
+def asset_root_candidates() -> list[Path]:
+    local_app_data_value = os.environ.get("LOCALAPPDATA")
+    if not local_app_data_value:
+        return []
+
+    local_app_data = Path(local_app_data_value)
+    candidates = [
+        local_app_data
+        / "TypeWhisper-UserData"
+        / "PluginData"
+        / "com.typewhisper.cohere-transcribe",
+        local_app_data
+        / "TypeWhisper-DevUserData"
+        / "PluginData"
+        / "com.typewhisper.cohere-transcribe",
+    ]
+    packages_root = local_app_data / "Packages"
+    if packages_root.is_dir():
+        candidates.extend(
+            package
+            / "LocalCache"
+            / "Local"
+            / "TypeWhisper-UserData"
+            / "PluginData"
+            / "com.typewhisper.cohere-transcribe"
+            for package in packages_root.glob("TypeWhisper.TypeWhisper_*")
+        )
+
+    unique: dict[str, Path] = {}
+    for candidate in candidates:
+        if candidate.is_dir():
+            unique[os.path.normcase(str(candidate.resolve()))] = candidate.resolve()
+    return list(unique.values())
+
+
+def validate_asset_root(
+    asset_root: Path,
+    models: list[str],
+    backend: str,
+) -> list[str]:
+    missing = [
+        str(path)
+        for path in (model_path(asset_root, model) for model in models)
+        if not path.is_file()
+    ]
+    language_id_path, vad_path, _ = auxiliary_paths(asset_root)
+    missing.extend(
+        str(path) for path in (language_id_path, vad_path) if not path.is_file()
+    )
+    if runtime_executable(asset_root, backend) is None:
+        missing.append(
+            str(
+                asset_root
+                / "Runtimes"
+                / "CrispASR"
+                / CRISPASR_VERSION
+                / BACKENDS[backend][0]
+                / "**"
+                / "crispasr.exe"
+            )
+        )
+    return missing
+
+
+def discover_asset_root(
+    requested_root: Path | None,
+    models: list[str],
+    backend: str,
+) -> Path:
+    if requested_root is not None:
+        root = requested_root.expanduser().resolve()
+        if not root.is_dir():
+            raise RuntimeError(f"Cohere asset root does not exist: {root}")
+        missing = validate_asset_root(root, models, backend)
+        if missing:
+            raise RuntimeError(
+                "The selected Cohere asset root is incomplete:\n  "
+                + "\n  ".join(missing)
+            )
+        return root
+
+    candidates = [
+        candidate
+        for candidate in asset_root_candidates()
+        if not validate_asset_root(candidate, models, backend)
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        discovered = asset_root_candidates()
+        details = "\n  ".join(str(path) for path in discovered) or "(none)"
+        raise RuntimeError(
+            "No complete Cohere asset root was found. Prepare every requested "
+            f"model and the {backend} runtime in TypeWhisper, or pass "
+            f"--asset-root explicitly. Discovered roots:\n  {details}"
+        )
+    raise RuntimeError(
+        "Multiple complete Cohere asset roots were found. Pass --asset-root "
+        "explicitly:\n  "
+        + "\n  ".join(str(path) for path in candidates)
+    )
+
+
+def matching_crispasr_processes(asset_root: Path) -> list[dict[str, Any]]:
+    if os.name != "nt":
+        return []
+    value = powershell_json(
+        """
+$processes = @(
+  Get-CimInstance Win32_Process -Filter "Name='crispasr.exe'" |
+    Select-Object ProcessId,ExecutablePath
+)
+ConvertTo-Json -InputObject $processes -Compress -Depth 3
+"""
+    )
+    if not value:
+        return []
+    processes = value if isinstance(value, list) else [value]
+    return [
+        process
+        for process in processes
+        if process.get("ExecutablePath")
+        and is_same_or_under(Path(process["ExecutablePath"]), asset_root)
+    ]
+
+
+def stop_typewhisper_sidecar(
+    asset_root: Path,
+    allow_stop: bool,
+) -> list[int]:
+    processes = matching_crispasr_processes(asset_root)
+    if not processes:
+        return []
+    process_ids = sorted(int(process["ProcessId"]) for process in processes)
+    if not allow_stop:
+        raise RuntimeError(
+            "TypeWhisper currently owns a CrispASR process under the selected "
+            "asset root. Close TypeWhisper or pass --stop-typewhisper-sidecar; "
+            "the TypeWhisper app itself remains open."
+        )
+
+    subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Stop-Process -Id "
+            + ",".join(str(process_id) for process_id in process_ids)
+            + " -Force -ErrorAction Stop",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    deadline = time.monotonic() + 10
+    while matching_crispasr_processes(asset_root):
+        if time.monotonic() >= deadline:
+            raise RuntimeError("The TypeWhisper CrispASR sidecar did not stop.")
+        time.sleep(0.25)
+    return process_ids
+
+
+class CrispAsrProcess:
+    def __init__(
+        self,
+        args: argparse.Namespace,
+        model: str,
+    ) -> None:
+        self.args = args
+        self.model = model
+        self.api_key = secrets.token_hex(32)
+        self.base_url: str | None = None
+        self.process: subprocess.Popen[str] | None = None
+        self.log_handle: Any = None
+        self.log_path = args.output.parent / "logs" / f"{model}-{args.backend}.log"
+        self.executable = runtime_executable(args.asset_root, args.backend)
+        if self.executable is None:
+            raise RuntimeError(
+                f"The CrispASR {args.backend} runtime is missing under {args.asset_root}."
+            )
+
+    def start(self) -> dict[str, Any]:
+        model_file = model_path(self.args.asset_root, self.model)
+        language_id_file, vad_file, cache_directory = auxiliary_paths(
+            self.args.asset_root
+        )
+        cache_directory.mkdir(parents=True, exist_ok=True)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_handle = self.log_path.open(
+            "w",
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            port = int(reservation.getsockname()[1])
+        self.base_url = f"http://127.0.0.1:{port}"
+
+        _, gpu_backend, no_gpu = BACKENDS[self.args.backend]
+        command = [
+            str(self.executable),
+            "--server",
+            "--backend",
+            "cohere",
+            "--model",
+            str(model_file),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--language",
+            "auto",
+            "--lid-backend",
+            "ecapa",
+            "--lid-model",
+            str(language_id_file),
+            "--vad",
+            "--vad-model",
+            str(vad_file),
+            "--strict-pipeline",
+            "--require-vad",
+            "--threads",
+            str(self.args.threads),
+            "--gpu-backend",
+            gpu_backend,
+        ]
+        if no_gpu:
+            command.append("--no-gpu")
+
+        environment = os.environ.copy()
+        environment["CRISPASR_API_KEYS"] = self.api_key
+        environment["CRISPASR_CACHE_DIR"] = str(cache_directory)
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        started = time.perf_counter()
+        self.process = subprocess.Popen(
+            command,
+            cwd=self.executable.parent,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=self.log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=creation_flags,
+        )
+
+        try:
+            self._wait_until_ready()
+        except Exception:
+            exit_code = self.process.poll()
+            log_tail = self._log_tail()
+            self.stop()
+            raise RuntimeError(
+                f"CrispASR failed to start for {self.model}; "
+                f"exit code {exit_code}. Log tail:\n{log_tail}"
+            )
+        return {
+            "model": self.model,
+            "process_id": self.process.pid,
+            "executable": str(self.executable),
+            "backend": self.args.backend,
+            "threads": self.args.threads,
+            "startup_seconds": time.perf_counter() - started,
+            "log_path": str(self.log_path),
+        }
+
+    def _wait_until_ready(self) -> None:
+        assert self.process is not None
+        assert self.base_url is not None
+        deadline = time.monotonic() + self.args.startup_timeout
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                raise RuntimeError("CrispASR exited during startup.")
+            try:
+                with urllib.request.urlopen(
+                    self.base_url + "/health",
+                    timeout=2,
+                ) as response:
+                    if response.status == 200:
+                        return
+            except (OSError, urllib.error.URLError):
+                pass
+            time.sleep(0.25)
+        raise TimeoutError(
+            f"CrispASR did not become ready within {self.args.startup_timeout} seconds."
+        )
+
+    def transcribe(self, sample: Sample) -> tuple[dict[str, Any], float]:
+        if self.process is None or self.process.poll() is not None:
+            raise RuntimeError("CrispASR is not running.")
+        assert self.base_url is not None
+        fields = {
+            "model": self.model,
+            "response_format": "verbose_json",
+        }
+        if sample.language_hint != "auto":
+            fields["language"] = sample.language_hint
+        body, boundary = multipart_body(
+            fields,
+            sample.audio_path.name,
+            sample.audio_path.read_bytes(),
+        )
+        request = urllib.request.Request(
+            self.base_url + "/v1/audio/transcriptions",
+            data=body,
+            method="POST",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(
+                request,
+                timeout=self.args.request_timeout,
+            ) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            response_body = error.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"CrispASR returned HTTP {error.code}: {response_body}"
+            ) from error
+        return result, time.perf_counter() - started
+
+    def peak_working_set(self) -> int | None:
+        if self.process is None:
+            return None
+        return crispasr_peak_working_set(self.process.pid)
+
+    def _log_tail(self) -> str:
+        if self.log_handle is not None:
+            self.log_handle.flush()
+        try:
+            return "\n".join(
+                self.log_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                ).splitlines()[-80:]
+            )
+        except OSError:
+            return "(log unavailable)"
+
+    def stop(self) -> None:
+        process = self.process
+        self.process = None
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
+        if self.log_handle is not None:
+            self.log_handle.close()
+            self.log_handle = None
 
 
 def git_revision() -> str | None:
@@ -580,8 +1041,12 @@ def initial_result(
         "schema_version": SCRIPT_VERSION,
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "source_revision": git_revision(),
-        "api_url": args.api_url,
+        "mode": "direct-crispasr",
+        "typewhisper_api_url_for_preparation": args.api_url,
+        "asset_root": str(args.asset_root),
+        "crispasr_version": CRISPASR_VERSION,
         "backend": args.backend,
+        "threads": args.threads,
         "models": args.models,
         "languages": args.languages,
         "samples_per_language": args.samples,
@@ -592,8 +1057,19 @@ def initial_result(
             FULL_DATASET[0]: FULL_DATASET[1],
         },
         "normalization": "Unicode NFKC + casefold + punctuation/symbol removal",
+        "timing": (
+            "Client wall time around each direct localhost CrispASR request; "
+            "one persistent server process per model"
+        ),
+        "post_processing": {
+            "mode": "raw CrispASR response",
+            "typewhisper_dictionary": False,
+            "typewhisper_corrections": False,
+            "number_normalization": False,
+        },
         "hardware": collect_hardware(),
         "preparation": [],
+        "stopped_typewhisper_sidecar_process_ids": [],
         "warmups": [],
         "runs": [],
         "negative_tests": [],
@@ -611,6 +1087,10 @@ def load_or_create_result(
         result = json.loads(args.output.read_text(encoding="utf-8"))
         expected = {
             "schema_version": SCRIPT_VERSION,
+            "mode": "direct-crispasr",
+            "asset_root": str(args.asset_root),
+            "backend": args.backend,
+            "threads": args.threads,
             "models": args.models,
             "languages": args.languages,
             "samples_per_language": args.samples,
@@ -693,14 +1173,16 @@ def markdown_report(result: dict[str, Any]) -> str:
         "# Cohere Transcribe quantization benchmark",
         "",
         f"- Source revision: `{result.get('source_revision')}`",
-        f"- Backend: `{result['backend']}`",
+        f"- Mode: `{result.get('mode')}`",
+        f"- Runtime: CrispASR `{result.get('crispasr_version')}`",
+        f"- Backend: `{result['backend']}` with {result.get('threads')} threads",
         f"- Samples: {result['samples_per_language']} per language",
         f"- Sample manifest SHA-256: `{result['sample_manifest_sha256']}`",
         "",
         "## Aggregate",
         "",
-        "| Model | Non-CJK macro WER | CJK macro CER | Weighted RTFx | Wall RTFx | Peak working set |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Model | Model size | Non-CJK macro WER | CJK macro CER | RTFx | Startup | Peak working set |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for model in result["models"]:
         model_rows = [row for row in rows if row["model"] == model]
@@ -708,18 +1190,21 @@ def markdown_report(result: dict[str, Any]) -> str:
         cjk = [row["cer"] for row in model_rows if row["language"] in CJK_LANGUAGES]
         audio_seconds = sum(row["audio_seconds"] for row in model_rows)
         processing_seconds = sum(row["processing_seconds"] for row in model_rows)
-        wall_seconds = sum(row["wall_seconds"] for row in model_rows)
+        runtime_status = result["model_runtime_status"].get(model, {})
         lines.append(
             "| "
             + " | ".join(
                 [
                     f"`{model}`",
+                    gibibytes(runtime_status.get("model_file_size_bytes")),
                     percent(statistics.mean(non_cjk)) if non_cjk else "n/a",
                     percent(statistics.mean(cjk)) if cjk else "n/a",
                     f"{audio_seconds / processing_seconds:.2f}x"
                     if processing_seconds
                     else "n/a",
-                    f"{audio_seconds / wall_seconds:.2f}x" if wall_seconds else "n/a",
+                    f"{runtime_status['startup_seconds']:.2f} s"
+                    if runtime_status.get("startup_seconds") is not None
+                    else "n/a",
                     gibibytes(
                         result["model_peak_working_set_bytes"].get(model)
                     ),
@@ -733,8 +1218,8 @@ def markdown_report(result: dict[str, Any]) -> str:
             "",
             "## Per-language results",
             "",
-            "| Model | Language | Primary | WER | CER | RTFx | Wall RTFx | Empty | Clips |",
-            "|---|---|---|---:|---:|---:|---:|---:|---:|",
+            "| Model | Language | Primary | WER | CER | RTFx | Empty | Clips |",
+            "|---|---|---|---:|---:|---:|---:|---:|",
         ]
     )
     for row in rows:
@@ -749,7 +1234,6 @@ def markdown_report(result: dict[str, Any]) -> str:
                     percent(row["wer"]),
                     percent(row["cer"]),
                     f"{row['rtfx']:.2f}x",
-                    f"{row['wall_rtfx']:.2f}x",
                     str(row["empty_results"]),
                     str(row["clips"]),
                 ]
@@ -809,69 +1293,24 @@ def validate_models(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     return models
 
 
-def validate_post_processing(args: argparse.Namespace) -> dict[str, Any]:
-    terms = api_request(args, "GET", "/v1/dictionary/terms")
-    corrections = api_request(args, "GET", "/v1/dictionary/corrections")
-    term_count = int(terms.get("count", len(terms.get("terms", []))))
-    correction_count = int(
-        corrections.get("count", len(corrections.get("corrections", [])))
-    )
-    if not args.allow_dictionary and (term_count or correction_count):
-        raise RuntimeError(
-            "The benchmark requires an empty TypeWhisper dictionary. "
-            f"Found {term_count} terms and {correction_count} corrections. "
-            "Use a clean profile or pass --allow-dictionary to record a non-standard run."
-        )
-    return {
-        "dictionary_terms": term_count,
-        "dictionary_corrections": correction_count,
-        "number_normalization": False,
-        "dictionary_override_allowed": bool(args.allow_dictionary),
-    }
-
-
-def validate_active_backend(
-    args: argparse.Namespace,
-    model: str,
-) -> dict[str, Any]:
-    status = api_request(args, "GET", "/v1/status")
-    acceleration = status.get("acceleration") or {}
-    active_backend = acceleration.get("active_backend")
-    if (
-        args.backend != "configured in TypeWhisper"
-        and active_backend != args.backend
-    ):
-        raise RuntimeError(
-            f"{model} loaded with backend {active_backend!r}, "
-            f"but {args.backend!r} was requested."
-        )
-    return status
-
-
 def benchmark(args: argparse.Namespace) -> int:
     print("Preparing pinned FLEURS samples...", flush=True)
     samples = prepare_samples(args)
     manifest_hash = sample_manifest_sha256(samples)
-    result = load_or_create_result(args, samples, manifest_hash)
-    result.setdefault("model_runtime_status", {})
     models_before = validate_models(args)
-    result["post_processing"] = validate_post_processing(args)
     first_sample = samples[0]
-
-    prepared_models = {entry["model"] for entry in result["preparation"]}
+    preparation: list[dict[str, Any]] = []
     if not args.no_prepare_models:
         print("Preparing model downloads...", flush=True)
         for model in args.models:
-            if model in prepared_models:
-                continue
             started = time.perf_counter()
-            response, request_wall = transcribe(
+            response, request_wall = typewhisper_transcribe(
                 args,
                 model,
                 first_sample,
                 await_download=True,
             )
-            result["preparation"].append(
+            preparation.append(
                 {
                     "model": model,
                     "downloaded_before": bool(models_before[model].get("downloaded")),
@@ -880,19 +1319,47 @@ def benchmark(args: argparse.Namespace) -> int:
                     "processing_time_seconds": response.get("processing_time"),
                 }
             )
-            checkpoint(args, result)
             print(f"  prepared {model}", flush=True)
-    elif args.no_prepare_models:
+
+    models_after = validate_models(args)
+    if args.no_prepare_models:
         missing_downloads = [
             model
             for model in args.models
-            if not models_before[model].get("downloaded")
+            if not models_after[model].get("downloaded")
         ]
         if missing_downloads:
             raise RuntimeError(
                 "Download these models in TypeWhisper first: "
                 + ", ".join(missing_downloads)
             )
+
+    args.asset_root = discover_asset_root(
+        args.asset_root,
+        args.models,
+        args.backend,
+    )
+    print(f"Using Cohere assets: {args.asset_root}", flush=True)
+    stopped_process_ids = stop_typewhisper_sidecar(
+        args.asset_root,
+        args.stop_typewhisper_sidecar,
+    )
+    if stopped_process_ids:
+        print(
+            "Stopped TypeWhisper CrispASR sidecar: "
+            + ", ".join(str(process_id) for process_id in stopped_process_ids),
+            flush=True,
+        )
+
+    result = load_or_create_result(args, samples, manifest_hash)
+    result["preparation"] = preparation
+    result["stopped_typewhisper_sidecar_process_ids"] = sorted(
+        set(result.get("stopped_typewhisper_sidecar_process_ids", []))
+        | set(stopped_process_ids)
+    )
+    result.setdefault("model_runtime_status", {})
+    result["runs"] = [run for run in result["runs"] if not run.get("error")]
+    checkpoint(args, result)
 
     completed = {result_key(run) for run in result["runs"]}
     completed_negative = {
@@ -902,126 +1369,133 @@ def benchmark(args: argparse.Namespace) -> int:
 
     try:
         for model in args.models:
+            pending_speech = any(
+                (model, sample.language, sample.sample_id) not in completed
+                for sample in samples
+            )
+            pending_negative = any(
+                (model, sample.sample_id) not in completed_negative
+                for sample in negative_samples
+            )
+            if (
+                not pending_speech
+                and not pending_negative
+                and model in result["model_peak_working_set_bytes"]
+            ):
+                print(f"Skipping completed {model}.", flush=True)
+                continue
+
             print(f"Benchmarking {model}...", flush=True)
-            if not any(warmup["model"] == model for warmup in result["warmups"]):
-                first_response, first_wall = transcribe(
-                    args,
+            server = CrispAsrProcess(args, model)
+            try:
+                runtime_status = server.start()
+                runtime_status["model_file_size_bytes"] = model_path(
+                    args.asset_root,
                     model,
-                    first_sample,
-                    await_download=False,
-                )
-                second_response, second_wall = transcribe(
-                    args,
-                    model,
-                    first_sample,
-                    await_download=False,
-                )
+                ).stat().st_size
+                result["model_runtime_status"][model] = runtime_status
+
+                first_response, first_wall = server.transcribe(first_sample)
+                second_response, second_wall = server.transcribe(first_sample)
+                result["warmups"] = [
+                    warmup
+                    for warmup in result["warmups"]
+                    if warmup["model"] != model
+                ]
                 result["warmups"].append(
                     {
                         "model": model,
-                        "load_and_first_inference_wall_seconds": first_wall,
-                        "first_processing_time_seconds": first_response.get(
-                            "processing_time"
+                        "server_startup_seconds": runtime_status[
+                            "startup_seconds"
+                        ],
+                        "load_and_first_inference_wall_seconds": (
+                            runtime_status["startup_seconds"] + first_wall
                         ),
+                        "first_inference_seconds": first_wall,
+                        "first_output": first_response.get("text", ""),
                         "second_warmup_wall_seconds": second_wall,
-                        "second_processing_time_seconds": second_response.get(
-                            "processing_time"
-                        ),
+                        "second_output": second_response.get("text", ""),
                     }
                 )
                 checkpoint(args, result)
-            else:
-                transcribe(
-                    args,
-                    model,
-                    first_sample,
-                    await_download=False,
-                )
-            result["model_runtime_status"][model] = validate_active_backend(
-                args,
-                model,
-            )
-            checkpoint(args, result)
 
-            model_samples = [sample for sample in samples]
-            for index, sample in enumerate(model_samples, start=1):
-                key = (model, sample.language, sample.sample_id)
-                if key in completed:
-                    continue
-                try:
-                    response, wall_seconds = transcribe(
-                        args,
-                        model,
-                        sample,
-                        await_download=False,
-                    )
-                    metrics = score(sample.reference, response.get("text", ""))
-                    result["runs"].append(
+                model_samples = list(samples)
+                for index, sample in enumerate(model_samples, start=1):
+                    key = (model, sample.language, sample.sample_id)
+                    if key in completed:
+                        continue
+                    try:
+                        response, wall_seconds = server.transcribe(sample)
+                        metrics = score(
+                            sample.reference,
+                            response.get("text", ""),
+                        )
+                        result["runs"].append(
+                            {
+                                "model": model,
+                                "language": sample.language,
+                                "language_hint": sample.language_hint,
+                                "sample_id": sample.sample_id,
+                                "reference": sample.reference,
+                                "hypothesis": response.get("text", ""),
+                                "detected_language": response.get("language"),
+                                "duration_seconds": float(
+                                    response.get("duration")
+                                    or sample.duration_seconds
+                                ),
+                                "processing_time_seconds": wall_seconds,
+                                "wall_seconds": wall_seconds,
+                                **metrics,
+                            }
+                        )
+                        completed.add(key)
+                    except Exception as error:
+                        result["runs"].append(
+                            {
+                                "model": model,
+                                "language": sample.language,
+                                "language_hint": sample.language_hint,
+                                "sample_id": sample.sample_id,
+                                "reference": sample.reference,
+                                "duration_seconds": sample.duration_seconds,
+                                "error": str(error),
+                            }
+                        )
+                        if (
+                            server.process is None
+                            or server.process.poll() is not None
+                        ):
+                            raise
+                    if index % args.checkpoint_every == 0:
+                        checkpoint(args, result)
+                        print(
+                            f"  {index}/{len(model_samples)} speech clips",
+                            flush=True,
+                        )
+
+                for sample in negative_samples:
+                    key = (model, sample.sample_id)
+                    if key in completed_negative:
+                        continue
+                    response, wall_seconds = server.transcribe(sample)
+                    result["negative_tests"].append(
                         {
                             "model": model,
-                            "language": sample.language,
-                            "language_hint": sample.language_hint,
                             "sample_id": sample.sample_id,
-                            "reference": sample.reference,
-                            "hypothesis": response.get("text", ""),
-                            "detected_language": response.get("language"),
-                            "duration_seconds": float(
-                                response.get("duration") or sample.duration_seconds
-                            ),
-                            "processing_time_seconds": float(
-                                response.get("processing_time") or wall_seconds
-                            ),
+                            "text": response.get("text", ""),
+                            "processing_time_seconds": wall_seconds,
                             "wall_seconds": wall_seconds,
-                            **metrics,
                         }
                     )
-                except Exception as error:  # Continue to preserve long benchmark runs.
-                    result["runs"].append(
-                        {
-                            "model": model,
-                            "language": sample.language,
-                            "language_hint": sample.language_hint,
-                            "sample_id": sample.sample_id,
-                            "reference": sample.reference,
-                            "duration_seconds": sample.duration_seconds,
-                            "error": str(error),
-                        }
-                    )
-                completed.add(key)
-                if index % args.checkpoint_every == 0:
-                    checkpoint(args, result)
-                    print(
-                        f"  {index}/{len(model_samples)} speech clips",
-                        flush=True,
-                    )
-
-            for sample in negative_samples:
-                key = (model, sample.sample_id)
-                if key in completed_negative:
-                    continue
-                response, wall_seconds = transcribe(
-                    args,
-                    model,
-                    sample,
-                    await_download=False,
-                )
-                result["negative_tests"].append(
-                    {
-                        "model": model,
-                        "sample_id": sample.sample_id,
-                        "text": response.get("text", ""),
-                        "processing_time_seconds": float(
-                            response.get("processing_time") or wall_seconds
-                        ),
-                        "wall_seconds": wall_seconds,
-                    }
-                )
-                completed_negative.add(key)
-
-            result["model_peak_working_set_bytes"][model] = (
-                crispasr_peak_working_set()
-            )
-            checkpoint(args, result)
+                    completed_negative.add(key)
+            finally:
+                peak_working_set = server.peak_working_set()
+                if peak_working_set is not None:
+                    result["model_peak_working_set_bytes"][
+                        model
+                    ] = peak_working_set
+                server.stop()
+                checkpoint(args, result)
     except KeyboardInterrupt:
         checkpoint(args, result)
         print("\nInterrupted; checkpoint saved.", file=sys.stderr)
