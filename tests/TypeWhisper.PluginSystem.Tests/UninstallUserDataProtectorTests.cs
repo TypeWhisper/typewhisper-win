@@ -1,4 +1,5 @@
 using System.IO;
+using TypeWhisper.Windows;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -69,6 +70,36 @@ public sealed class UninstallUserDataProtectorTests : IDisposable
 
         Assert.Contains(".OnBeforeUninstallFastCallback", source);
         Assert.Contains("UninstallUserDataProtector.ProtectLegacyAudioDirectory()", source);
+    }
+
+    [Fact]
+    public void Program_DisablesStartupAutoApplyForPortableLayout()
+    {
+        var source = TestFile.ReadProjectFile("src", "TypeWhisper.Windows", "Program.cs");
+
+        Assert.Contains(
+            ".SetAutoApplyOnStartup(!IsPortableLayout(AppContext.BaseDirectory))",
+            source);
+    }
+
+    [Fact]
+    public void IsPortableLayout_DetectsPackageRootMarker()
+    {
+        var packageRoot = Path.Join(_root, "portable");
+        var contentDirectory = Path.Join(packageRoot, "current");
+        Directory.CreateDirectory(contentDirectory);
+        File.WriteAllText(Path.Join(packageRoot, ".portable"), string.Empty);
+
+        Assert.True(Program.IsPortableLayout(contentDirectory));
+    }
+
+    [Fact]
+    public void IsPortableLayout_RejectsLayoutWithoutMarker()
+    {
+        var contentDirectory = Path.Join(_root, "installed", "current");
+        Directory.CreateDirectory(contentDirectory);
+
+        Assert.False(Program.IsPortableLayout(contentDirectory));
     }
 
     [Fact]

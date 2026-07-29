@@ -16,6 +16,47 @@ public sealed class AppStartupPerformanceTests
     }
 
     [Fact]
+    public void OnStartup_SkipsAutomaticUpdateCheckWhenPolicyDisallowsIt()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+        var updateBlock = TestFile.ExtractBlock(source, "// Check for updates in background", 420);
+
+        Assert.Contains("updateService.Initialize();", updateBlock);
+        Assert.Contains("if (updateService.ShouldCheckAutomatically)", updateBlock);
+        Assert.Contains("_ = updateService.CheckForUpdatesAsync();", updateBlock);
+    }
+
+    [Fact]
+    public void ManualUpdateChecks_RemainAvailableOutsideAutomaticPolicy()
+    {
+        var appSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+        var trayCheckBlock = TestFile.ExtractBlock(
+            appSource,
+            "_trayIcon.UpdateCheckRequested",
+            520);
+        var settingsSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "SettingsWindowViewModel.cs");
+        var settingsCheckBlock = TestFile.ExtractBlock(
+            settingsSource,
+            "private async Task CheckForUpdatesAsync()",
+            700);
+
+        Assert.Contains("await update.CheckForUpdatesAsync();", trayCheckBlock);
+        Assert.DoesNotContain("ShouldCheckAutomatically", trayCheckBlock);
+        Assert.Contains("await _updateService.CheckForUpdatesAsync();", settingsCheckBlock);
+        Assert.DoesNotContain("ShouldCheckAutomatically", settingsCheckBlock);
+    }
+
+    [Fact]
     public void OnStartup_DoesNotEagerLoadTheSelectedLocalModel()
     {
         var source = TestFile.ReadProjectFile(
