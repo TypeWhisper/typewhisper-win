@@ -616,7 +616,7 @@
   {
     "id": "com.typewhisper.cohere-transcribe",
     "name": "Cohere Transcribe (Local)",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": "1.0.6",
     "author": "TypeWhisper",
     "description": "Offline Cohere Transcribe inference via a managed local CrispASR runtime",
@@ -624,9 +624,9 @@
     "categories": [
       "transcription"
     ],
-    "size": 39607,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.cohere-transcribe-1.0.0.zip",
-    "sha256": "2f87905970c8b9bca5df9b1e13b180d5979ed71d0a7e5101e48489d35c0b85a4",
+    "size": 42614,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.cohere-transcribe-1.0.1.zip",
+    "sha256": "dc61b53cece5d2b287012ca551b5789227b24d75610ef7134a3163642e6b9538",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null
