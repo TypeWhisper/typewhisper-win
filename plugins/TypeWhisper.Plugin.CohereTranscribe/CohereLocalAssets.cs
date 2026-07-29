@@ -21,6 +21,92 @@ internal sealed record RemoteArtifact(
     long SizeBytes,
     string Sha256);
 
+internal sealed record CohereModelDefinition(
+    string Id,
+    string DisplayName,
+    string SizeDescription,
+    long EstimatedSizeMB,
+    bool IsRecommended,
+    RemoteArtifact Artifact);
+
+internal static class CohereModelCatalog
+{
+    internal const string Revision = "2242638d5dfecc6f1dbe6c3a8713b97deb2e150f";
+    internal const string Q4KModelId = "cohere-transcribe-03-2026-q4_k";
+    internal const string DefaultModelId = "cohere-transcribe-03-2026-q5_0";
+    internal const string Q6KModelId = "cohere-transcribe-03-2026-q6_k";
+    internal const string Q8ModelId = "cohere-transcribe-03-2026-q8_0";
+
+    internal static readonly IReadOnlyList<CohereModelDefinition> All =
+    [
+        Create(
+            Q4KModelId,
+            "Cohere Transcribe 2B (Q4_K)",
+            "~1.5 GB + local runtime",
+            1_510,
+            false,
+            "cohere-transcribe-q4_k.gguf",
+            1_510_362_752,
+            "2931fc0ac6d6708eef5389aadf1ebd5eec7b8e764bac385be585e910c0e7b410"),
+        Create(
+            DefaultModelId,
+            "Cohere Transcribe 2B (Q5_0)",
+            "~1.7 GB + local runtime",
+            1_739,
+            true,
+            "cohere-transcribe-q5_0.gguf",
+            1_738_722_944,
+            "a09696c5cc2ed5052bf290c4f2beb35abc69c0d6986842042d92bebb22c9184e"),
+        Create(
+            Q6KModelId,
+            "Cohere Transcribe 2B (Q6_K)",
+            "~2.0 GB + local runtime",
+            1_982,
+            false,
+            "cohere-transcribe-q6_k.gguf",
+            1_981_355_648,
+            "0ad2634e0ba34efa38a47d4fd4cf34d7a2d738d8486d83b8d5a178f823109c52"),
+        Create(
+            Q8ModelId,
+            "Cohere Transcribe 2B (Q8_0)",
+            "~2.4 GB + local runtime",
+            2_424,
+            false,
+            "cohere-transcribe-q8_0.gguf",
+            2_423_803_520,
+            "c8620cb182a7c04e311e6c24e478b94f7ecd7f1b5230bf39fffa8daf94644f51")
+    ];
+
+    internal static bool Contains(string? modelId) =>
+        modelId is not null
+        && All.Any(model => string.Equals(model.Id, modelId, StringComparison.Ordinal));
+
+    internal static CohereModelDefinition Resolve(string modelId) =>
+        All.FirstOrDefault(model => string.Equals(model.Id, modelId, StringComparison.Ordinal))
+        ?? throw new ArgumentException($"Unknown model: {modelId}", nameof(modelId));
+
+    private static CohereModelDefinition Create(
+        string id,
+        string displayName,
+        string sizeDescription,
+        long estimatedSizeMB,
+        bool isRecommended,
+        string fileName,
+        long sizeBytes,
+        string sha256) =>
+        new(
+            id,
+            displayName,
+            sizeDescription,
+            estimatedSizeMB,
+            isRecommended,
+            new RemoteArtifact(
+                fileName,
+                $"https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/{Revision}/{fileName}",
+                sizeBytes,
+                sha256));
+}
+
 internal sealed record RuntimePackage(
     CrispAsrBackend Backend,
     string Id,
@@ -36,21 +122,24 @@ internal readonly record struct ArtifactTransferProgress(long BytesTransferred, 
 
 internal interface ICohereLocalAssetManager
 {
-    long ModelTransferSize { get; }
-
     void SetHuggingFaceToken(string? token);
 
-    bool IsModelInstalled();
+    long GetModelTransferSize(string modelId);
+
+    bool IsModelInstalled(string modelId);
 
     bool IsRuntimeInstalled(CrispAsrBackend backend);
 
     long GetRuntimeTransferSize(CrispAsrBackend backend);
 
-    CohereModelPaths GetModelPaths();
+    CohereModelPaths GetModelPaths(string modelId);
 
     string GetRuntimeExecutablePath(CrispAsrBackend backend);
 
-    Task EnsureModelAsync(IProgress<ArtifactTransferProgress>? progress, CancellationToken cancellationToken);
+    Task EnsureModelAsync(
+        string modelId,
+        IProgress<ArtifactTransferProgress>? progress,
+        CancellationToken cancellationToken);
 
     Task EnsureRuntimeAsync(
         CrispAsrBackend backend,
@@ -67,15 +156,9 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     private static readonly TimeSpan DefaultDownloadRetryDelay = TimeSpan.FromSeconds(1);
 
     internal const string CrispAsrVersion = "0.8.24";
-    internal const string CohereModelRevision = "2242638d5dfecc6f1dbe6c3a8713b97deb2e150f";
+    internal const string CohereModelRevision = CohereModelCatalog.Revision;
     internal const string VadModelRevision = "9ffd54a1e1ee413ddf265af9913beaf518d1639b";
     internal const string LanguageIdModelRevision = "95fb0613bf78c6e48305fccd9ce023ac15f0b5a6";
-
-    internal static readonly RemoteArtifact CohereModel = new(
-        "cohere-transcribe-q5_0.gguf",
-        $"https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/{CohereModelRevision}/cohere-transcribe-q5_0.gguf",
-        1_738_722_944,
-        "a09696c5cc2ed5052bf290c4f2beb35abc69c0d6986842042d92bebb22c9184e");
 
     internal static readonly RemoteArtifact VadModel = new(
         "ggml-silero-v6.2.0.bin",
@@ -115,9 +198,6 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             $"https://github.com/CrispStrobe/CrispASR/releases/download/v{CrispAsrVersion}/crispasr-windows-x86_64-vulkan.zip",
             35_580_185,
             "70956638045042b49f61f9f04ee9ceae9fc8b450f6f56a10fc98c2088207628a"));
-
-    private static readonly IReadOnlyList<RemoteArtifact> ModelArtifacts =
-        [CohereModel, VadModel, LanguageIdModel];
 
     private readonly string _assetRoot;
     private readonly HttpClient _httpClient;
@@ -161,17 +241,21 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("TypeWhisper-CohereTranscribe/1.0");
     }
 
-    public long ModelTransferSize => ModelArtifacts.Sum(static artifact => artifact.SizeBytes);
-
     public void SetHuggingFaceToken(string? token)
     {
         Volatile.Write(ref _huggingFaceToken, token);
     }
 
-    public bool IsModelInstalled()
+    public long GetModelTransferSize(string modelId) =>
+        CohereModelCatalog.Resolve(modelId).Artifact.SizeBytes
+        + VadModel.SizeBytes
+        + LanguageIdModel.SizeBytes;
+
+    public bool IsModelInstalled(string modelId)
     {
-        var paths = GetModelPaths();
-        return IsArtifactReady(CohereModel, paths.ModelPath)
+        var model = CohereModelCatalog.Resolve(modelId);
+        var paths = GetModelPaths(modelId);
+        return IsArtifactReady(model.Artifact, paths.ModelPath)
             && IsArtifactReady(VadModel, paths.VadModelPath)
             && IsArtifactReady(LanguageIdModel, paths.LanguageIdModelPath);
     }
@@ -194,13 +278,18 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     public long GetRuntimeTransferSize(CrispAsrBackend backend) =>
         GetRuntimePackage(backend).Archive.SizeBytes;
 
-    public CohereModelPaths GetModelPaths()
+    public CohereModelPaths GetModelPaths(string modelId)
     {
-        var modelDirectory = Path.Join(_assetRoot, "Models", "cohere-transcribe-03-2026-q5_0");
-        var auxiliaryDirectory = Path.Join(modelDirectory, "Auxiliary");
+        var model = CohereModelCatalog.Resolve(modelId);
+        var modelDirectory = Path.Join(_assetRoot, "Models", model.Id);
+        var auxiliaryDirectory = Path.Join(
+            _assetRoot,
+            "Models",
+            CohereModelCatalog.DefaultModelId,
+            "Auxiliary");
 
         return new CohereModelPaths(
-            Path.Join(modelDirectory, CohereModel.FileName),
+            Path.Join(modelDirectory, model.Artifact.FileName),
             Path.Join(auxiliaryDirectory, VadModel.FileName),
             Path.Join(auxiliaryDirectory, LanguageIdModel.FileName),
             Path.Join(_assetRoot, "Cache", "CrispASR"));
@@ -215,16 +304,19 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
     }
 
     public async Task EnsureModelAsync(
+        string modelId,
         IProgress<ArtifactTransferProgress>? progress,
         CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var paths = GetModelPaths();
+            var model = CohereModelCatalog.Resolve(modelId);
+            var transferSize = GetModelTransferSize(modelId);
+            var paths = GetModelPaths(modelId);
             var targets = new[]
             {
-                (Artifact: CohereModel, Path: paths.ModelPath),
+                (Artifact: model.Artifact, Path: paths.ModelPath),
                 (Artifact: VadModel, Path: paths.VadModelPath),
                 (Artifact: LanguageIdModel, Path: paths.LanguageIdModelPath)
             };
@@ -238,7 +330,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                     : new Progress<ArtifactTransferProgress>(value =>
                         progress.Report(new ArtifactTransferProgress(
                             completedBeforeArtifact + value.BytesTransferred,
-                            ModelTransferSize)));
+                            transferSize)));
 
                 await EnsureArtifactAsync(
                     target.Artifact,
@@ -247,7 +339,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                     cancellationToken);
 
                 completed += target.Artifact.SizeBytes;
-                progress?.Report(new ArtifactTransferProgress(completed, ModelTransferSize));
+                progress?.Report(new ArtifactTransferProgress(completed, transferSize));
             }
         }
         finally

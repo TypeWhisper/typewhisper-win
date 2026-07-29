@@ -39,14 +39,23 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
-    public void ModelMetadata_ExposesPinnedBalancedModelAndFourteenLanguages()
+    public void ModelMetadata_ExposesFourPinnedQuantizationsAndFourteenLanguages()
     {
         var sut = new CohereTranscribePlugin();
-        var model = Assert.Single(sut.TranscriptionModels);
+        var models = sut.TranscriptionModels;
 
-        Assert.Equal(CohereTranscribePlugin.ModelId, model.Id);
-        Assert.True(model.IsRecommended);
-        Assert.Equal(14, model.LanguageCount);
+        Assert.Equal(
+            [
+                "cohere-transcribe-03-2026-q4_k",
+                "cohere-transcribe-03-2026-q5_0",
+                "cohere-transcribe-03-2026-q6_k",
+                "cohere-transcribe-03-2026-q8_0"
+            ],
+            models.Select(model => model.Id));
+        Assert.Equal(
+            "cohere-transcribe-03-2026-q5_0",
+            Assert.Single(models, model => model.IsRecommended).Id);
+        Assert.All(models, model => Assert.Equal(14, model.LanguageCount));
         Assert.Equal(14, sut.SupportedLanguages.Count);
         Assert.Contains("de", sut.SupportedLanguages);
         Assert.Contains("ja", sut.SupportedLanguages);
@@ -56,32 +65,136 @@ public sealed class CohereTranscribePluginTests
     [Fact]
     public void DownloadDefinitions_AreRevisionPinnedAndSha256Pinned()
     {
-        Assert.Contains(
-            CohereLocalAssetManager.CohereModelRevision,
-            CohereLocalAssetManager.CohereModel.DownloadUrl);
-        Assert.Contains(
-            CohereLocalAssetManager.VadModelRevision,
-            CohereLocalAssetManager.VadModel.DownloadUrl);
-        Assert.Contains(
-            CohereLocalAssetManager.LanguageIdModelRevision,
-            CohereLocalAssetManager.LanguageIdModel.DownloadUrl);
+        const string modelRoot =
+            "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/"
+            + "2242638d5dfecc6f1dbe6c3a8713b97deb2e150f/";
+        var expectedModels = new (string Id, RemoteArtifact Artifact)[]
+        {
+            (
+                "cohere-transcribe-03-2026-q4_k",
+                new RemoteArtifact(
+                    "cohere-transcribe-q4_k.gguf",
+                    modelRoot + "cohere-transcribe-q4_k.gguf",
+                    1_510_362_752,
+                    "2931fc0ac6d6708eef5389aadf1ebd5eec7b8e764bac385be585e910c0e7b410")),
+            (
+                "cohere-transcribe-03-2026-q5_0",
+                new RemoteArtifact(
+                    "cohere-transcribe-q5_0.gguf",
+                    modelRoot + "cohere-transcribe-q5_0.gguf",
+                    1_738_722_944,
+                    "a09696c5cc2ed5052bf290c4f2beb35abc69c0d6986842042d92bebb22c9184e")),
+            (
+                "cohere-transcribe-03-2026-q6_k",
+                new RemoteArtifact(
+                    "cohere-transcribe-q6_k.gguf",
+                    modelRoot + "cohere-transcribe-q6_k.gguf",
+                    1_981_355_648,
+                    "0ad2634e0ba34efa38a47d4fd4cf34d7a2d738d8486d83b8d5a178f823109c52")),
+            (
+                "cohere-transcribe-03-2026-q8_0",
+                new RemoteArtifact(
+                    "cohere-transcribe-q8_0.gguf",
+                    modelRoot + "cohere-transcribe-q8_0.gguf",
+                    2_423_803_520,
+                    "c8620cb182a7c04e311e6c24e478b94f7ecd7f1b5230bf39fffa8daf94644f51"))
+        };
+        var actualModels = CohereModelCatalog.All
+            .Select(model => (model.Id, model.Artifact))
+            .ToArray();
 
+        Assert.Equal(expectedModels, actualModels);
+        Assert.Equal(
+            new RemoteArtifact(
+                "ggml-silero-v6.2.0.bin",
+                "https://huggingface.co/ggml-org/whisper-vad/resolve/"
+                + "9ffd54a1e1ee413ddf265af9913beaf518d1639b/"
+                + "ggml-silero-v6.2.0.bin",
+                885_098,
+                "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"),
+            CohereLocalAssetManager.VadModel);
+        Assert.Equal(
+            new RemoteArtifact(
+                "ecapa-lid-107-f16.gguf",
+                "https://huggingface.co/cstr/ecapa-lid-107-GGUF/resolve/"
+                + "95fb0613bf78c6e48305fccd9ce023ac15f0b5a6/"
+                + "ecapa-lid-107-f16.gguf",
+                42_838_944,
+                "59db30ba67cec2f36304f794420779c181124332246f75fc66c349f184110340"),
+            CohereLocalAssetManager.LanguageIdModel);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Cpu,
+                "cpu",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-cpu.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-cpu.zip",
+                    7_635_428,
+                    "a05456c9adac276289060ae83bd77ed7b4d87ccfd447aed804e497d76e73f8f8")),
+            CohereLocalAssetManager.CpuRuntime);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Cuda,
+                "cuda",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-cuda.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-cuda.zip",
+                    729_126_487,
+                    "832af6218508ac52fc71ac5653c433786bdfae81f775e2c77bfefd05df6f255b")),
+            CohereLocalAssetManager.CudaRuntime);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Vulkan,
+                "vulkan",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-vulkan.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-vulkan.zip",
+                    35_580_185,
+                    "70956638045042b49f61f9f04ee9ceae9fc8b450f6f56a10fc98c2088207628a")),
+            CohereLocalAssetManager.VulkanRuntime);
+    }
+
+    [Fact]
+    public void ModelPaths_KeepQuantizationsSeparateAndReuseAuxiliaryModels()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereLocalAssetManager(temp.Path);
+
+        var paths = CohereModelCatalog.All
+            .ToDictionary(model => model.Id, model => sut.GetModelPaths(model.Id));
+        var defaultPaths = paths[CohereModelCatalog.DefaultModelId];
+
+        Assert.Equal(
+            CohereModelCatalog.All.Select(model => model.Artifact.FileName),
+            CohereModelCatalog.All.Select(model => Path.GetFileName(paths[model.Id].ModelPath)));
+        Assert.Equal(
+            CohereModelCatalog.All.Count,
+            paths.Values.Select(path => path.ModelPath).Distinct(StringComparer.Ordinal).Count());
         Assert.All(
-            new[]
+            paths.Values,
+            path =>
             {
-                CohereLocalAssetManager.CohereModel,
-                CohereLocalAssetManager.VadModel,
-                CohereLocalAssetManager.LanguageIdModel,
-                CohereLocalAssetManager.CpuRuntime.Archive,
-                CohereLocalAssetManager.CudaRuntime.Archive,
-                CohereLocalAssetManager.VulkanRuntime.Archive
-            },
-            artifact =>
-            {
-                Assert.Equal(64, artifact.Sha256.Length);
-                Assert.True(artifact.SizeBytes > 0);
-                Assert.StartsWith("https://", artifact.DownloadUrl);
+                Assert.Equal(defaultPaths.VadModelPath, path.VadModelPath);
+                Assert.Equal(defaultPaths.LanguageIdModelPath, path.LanguageIdModelPath);
+                Assert.Equal(defaultPaths.CacheDirectory, path.CacheDirectory);
             });
+    }
+
+    [Fact]
+    public void SelectModel_AcceptsPublishedQuantizationsAndRejectsUnknownIds()
+    {
+        using var sut = new CohereTranscribePlugin();
+
+        foreach (var model in CohereModelCatalog.All)
+        {
+            sut.SelectModel(model.Id);
+            Assert.Equal(model.Id, sut.SelectedModelId);
+        }
+
+        Assert.Throws<ArgumentException>(() => sut.SelectModel("cohere-unknown"));
     }
 
     [Fact]
@@ -302,6 +415,7 @@ public sealed class CohereTranscribePluginTests
             @"C:\models\lid.gguf",
             @"C:\models\cache");
         var configuration = new CrispAsrServerConfiguration(
+            CohereTranscribePlugin.ModelId,
             @"C:\runtime\crispasr.exe",
             paths,
             CrispAsrBackend.Cuda,
@@ -309,23 +423,76 @@ public sealed class CohereTranscribePluginTests
         const string apiKey = "not-on-the-command-line";
 
         var startInfo = CrispAsrServer.BuildStartInfo(configuration, 43123, apiKey);
-        var arguments = startInfo.ArgumentList.ToArray();
+        var arguments = startInfo.Arguments;
 
-        AssertArgumentPair(arguments, "--host", "127.0.0.1");
-        AssertArgumentPair(arguments, "--port", "43123");
-        AssertArgumentPair(arguments, "--backend", "cohere");
-        AssertArgumentPair(arguments, "--model", paths.ModelPath);
-        AssertArgumentPair(arguments, "--lid-backend", "ecapa");
-        AssertArgumentPair(arguments, "--lid-model", paths.LanguageIdModelPath);
-        AssertArgumentPair(arguments, "--vad-model", paths.VadModelPath);
-        AssertArgumentPair(arguments, "--gpu-backend", "cuda");
+        Assert.Equal(Path.Join(Environment.SystemDirectory, "cmd.exe"), startInfo.FileName);
+        Assert.StartsWith("/d /s /v:off /c ", arguments, StringComparison.Ordinal);
+        Assert.Contains("\"%TYPEWHISPER_CRISPASR_EXECUTABLE%\"", arguments);
+        Assert.Contains("--host 127.0.0.1", arguments);
+        Assert.Contains("--port 43123", arguments);
+        Assert.Contains("--backend cohere", arguments);
+        Assert.Contains("--model \"%TYPEWHISPER_CRISPASR_MODEL%\"", arguments);
+        Assert.Contains("--lid-backend ecapa", arguments);
+        Assert.Contains("--lid-model \"%TYPEWHISPER_CRISPASR_LID_MODEL%\"", arguments);
+        Assert.Contains("--vad-model \"%TYPEWHISPER_CRISPASR_VAD_MODEL%\"", arguments);
+        Assert.Contains("--gpu-backend cuda", arguments);
         Assert.Contains("--strict-pipeline", arguments);
         Assert.Contains("--require-vad", arguments);
         Assert.DoesNotContain("--api-keys", arguments);
         Assert.DoesNotContain(apiKey, arguments);
+        Assert.Equal(@"C:\runtime", startInfo.WorkingDirectory);
         Assert.Equal(apiKey, startInfo.Environment["CRISPASR_API_KEYS"]);
+        Assert.Equal(paths.CacheDirectory, startInfo.Environment["CRISPASR_CACHE_DIR"]);
+        Assert.Equal(
+            configuration.ExecutablePath,
+            startInfo.Environment["TYPEWHISPER_CRISPASR_EXECUTABLE"]);
+        Assert.Equal(paths.ModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_MODEL"]);
+        Assert.Equal(paths.LanguageIdModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_LID_MODEL"]);
+        Assert.Equal(paths.VadModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_VAD_MODEL"]);
         Assert.True(startInfo.CreateNoWindow);
         Assert.Equal(System.Diagnostics.ProcessWindowStyle.Hidden, startInfo.WindowStyle);
+    }
+
+    [Fact]
+    public void ResolveUnpackagedChildPath_MapsMsixRedirectedLocalAppDataOnlyOnce()
+    {
+        const string localAppData = @"C:\Users\tester\AppData\Local";
+        const string packageFamilyName = "TypeWhisper.TypeWhisper_51tqb5623pxja";
+        var physicalLocalAppData = Path.Join(
+            localAppData,
+            "Packages",
+            packageFamilyName,
+            "LocalCache",
+            "Local");
+        var logicalPath = Path.Join(
+            localAppData,
+            "TypeWhisper-UserData",
+            "PluginData",
+            "com.typewhisper.cohere-transcribe",
+            "runtime",
+            "crispasr.exe");
+        var physicalPath = Path.Join(
+            physicalLocalAppData,
+            Path.GetRelativePath(localAppData, logicalPath));
+
+        Assert.Equal(
+            physicalPath,
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                logicalPath,
+                localAppData,
+                physicalLocalAppData));
+        Assert.Equal(
+            physicalPath,
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                physicalPath,
+                localAppData,
+                physicalLocalAppData));
+        Assert.Equal(
+            @"D:\Models\cohere.gguf",
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                @"D:\Models\cohere.gguf",
+                localAppData,
+                physicalLocalAppData));
     }
 
     [Fact]
@@ -387,8 +554,12 @@ public sealed class CohereTranscribePluginTests
         Assert.False(File.Exists(escapedPath));
     }
 
-    [Fact]
-    public async Task PluginLifecycle_UsesManagedCpuRuntimeAndNormalizesLanguage()
+    [Theory]
+    [InlineData(CohereModelCatalog.Q4KModelId)]
+    [InlineData(CohereModelCatalog.DefaultModelId)]
+    [InlineData(CohereModelCatalog.Q6KModelId)]
+    [InlineData(CohereModelCatalog.Q8ModelId)]
+    public async Task PluginLifecycle_UsesSelectedQuantizationAndManagedCpuRuntime(string modelId)
     {
         using var temp = new TempDirectory();
         var assets = new FakeAssetManager();
@@ -396,14 +567,15 @@ public sealed class CohereTranscribePluginTests
         using var sut = new CohereTranscribePlugin(assets, server);
         var host = new FakePluginHostServices(temp.Path);
         var downloadProgress = new List<double>();
+        var expectedModelPath = assets.GetModelPaths(modelId).ModelPath;
 
         await sut.ActivateAsync(host);
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
         await sut.DownloadModelAsync(
-            CohereTranscribePlugin.ModelId,
+            modelId,
             new InlineProgress<double>(downloadProgress.Add),
             CancellationToken.None);
-        await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, CancellationToken.None);
+        await sut.LoadModelAsync(modelId, CancellationToken.None);
         var result = await sut.TranscribeAsync(
             [1, 2, 3],
             "de-DE",
@@ -412,7 +584,10 @@ public sealed class CohereTranscribePluginTests
             CancellationToken.None);
 
         Assert.True(assets.ModelInstalled);
+        Assert.Equal(modelId, assets.LastEnsuredModelId);
         Assert.Equal([CrispAsrBackend.Cpu], assets.EnsuredRuntimes);
+        Assert.Equal(modelId, server.LastConfiguration?.ModelId);
+        Assert.Equal(expectedModelPath, server.LastConfiguration?.ModelPaths.ModelPath);
         Assert.Equal(CrispAsrBackend.Cpu, server.LastConfiguration?.Backend);
         Assert.Equal("de", server.LastLanguage);
         Assert.Equal("lokal", result.Text);
@@ -430,6 +605,71 @@ public sealed class CohereTranscribePluginTests
 
         await sut.UnloadModelAsync();
         Assert.False(server.IsRunning);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_RestartsUnexpectedlyStoppedSidecar()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        var host = new FakePluginHostServices(temp.Path);
+
+        await sut.ActivateAsync(host);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+        Assert.Equal(1, server.StartCount);
+
+        await server.StopAsync();
+        Assert.Equal("Not loaded", sut.AccelerationStatus.DisplayText);
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "de",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+
+        Assert.Equal("lokal", result.Text);
+        Assert.True(server.IsRunning);
+        Assert.Equal(2, server.StartCount);
+        Assert.Equal(CohereModelCatalog.DefaultModelId, server.LastConfiguration?.ModelId);
+        Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_RestartsSidecarThatExitsDuringRequest()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+        server.FailNextTranscriptionAndStop = true;
+
+        var result = await sut.TranscribeAsync(
+            [1, 2, 3],
+            "de",
+            translate: false,
+            prompt: null,
+            CancellationToken.None);
+
+        Assert.Equal("lokal", result.Text);
+        Assert.True(server.IsRunning);
+        Assert.Equal(2, server.StartCount);
+        Assert.Equal("Using CPU", sut.AccelerationStatus.DisplayText);
     }
 
     [Fact]
@@ -571,21 +811,12 @@ public sealed class CohereTranscribePluginTests
             StringComparison.Ordinal);
     }
 
-    private static void AssertArgumentPair(
-        IReadOnlyList<string> arguments,
-        string name,
-        string expectedValue)
-    {
-        var index = arguments.ToList().IndexOf(name);
-        Assert.True(index >= 0, $"Expected argument '{name}'.");
-        Assert.True(index + 1 < arguments.Count, $"Expected value after '{name}'.");
-        Assert.Equal(expectedValue, arguments[index + 1]);
-    }
-
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
-        public long ModelTransferSize => 100;
-        public bool ModelInstalled { get; private set; }
+        private readonly HashSet<string> _installedModelIds = [];
+
+        public bool ModelInstalled => _installedModelIds.Count > 0;
+        public string? LastEnsuredModelId { get; private set; }
         public string? HuggingFaceToken { get; private set; }
         public List<CrispAsrBackend> EnsuredRuntimes { get; } = [];
 
@@ -594,12 +825,13 @@ public sealed class CohereTranscribePluginTests
             HuggingFaceToken = token;
         }
 
-        public bool IsModelInstalled() => ModelInstalled;
+        public long GetModelTransferSize(string modelId) => 100;
+        public bool IsModelInstalled(string modelId) => _installedModelIds.Contains(modelId);
         public bool IsRuntimeInstalled(CrispAsrBackend backend) =>
             EnsuredRuntimes.Contains(backend);
         public long GetRuntimeTransferSize(CrispAsrBackend backend) => 20;
-        public CohereModelPaths GetModelPaths() => new(
-            @"C:\models\cohere.gguf",
+        public CohereModelPaths GetModelPaths(string modelId) => new(
+            $@"C:\models\{modelId}.gguf",
             @"C:\models\vad.bin",
             @"C:\models\lid.gguf",
             @"C:\models\cache");
@@ -607,10 +839,12 @@ public sealed class CohereTranscribePluginTests
             @"C:\runtime\crispasr.exe";
 
         public Task EnsureModelAsync(
+            string modelId,
             IProgress<ArtifactTransferProgress>? progress,
             CancellationToken cancellationToken)
         {
-            ModelInstalled = true;
+            LastEnsuredModelId = modelId;
+            _installedModelIds.Add(modelId);
             progress?.Report(new ArtifactTransferProgress(100, 100));
             return Task.CompletedTask;
         }
@@ -719,11 +953,14 @@ public sealed class CohereTranscribePluginTests
         public CrispAsrBackend? ActiveBackend { get; private set; }
         public CrispAsrServerConfiguration? LastConfiguration { get; private set; }
         public string? LastLanguage { get; private set; }
+        public int StartCount { get; private set; }
+        public bool FailNextTranscriptionAndStop { get; set; }
 
         public Task StartAsync(
             CrispAsrServerConfiguration configuration,
             CancellationToken cancellationToken)
         {
+            StartCount++;
             LastConfiguration = configuration;
             ActiveBackend = configuration.Backend;
             IsRunning = true;
@@ -736,6 +973,14 @@ public sealed class CohereTranscribePluginTests
             CancellationToken cancellationToken)
         {
             LastLanguage = language;
+            if (FailNextTranscriptionAndStop)
+            {
+                FailNextTranscriptionAndStop = false;
+                IsRunning = false;
+                ActiveBackend = null;
+                throw new HttpRequestException("CrispASR stopped during transcription.");
+            }
+
             return Task.FromResult(new PluginTranscriptionResult("lokal", language, 1, null));
         }
 

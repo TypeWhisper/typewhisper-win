@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.CohereTranscribe;
 /// </summary>
 public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 {
-    internal const string ModelId = "cohere-transcribe-03-2026-q5_0";
+    internal const string ModelId = CohereModelCatalog.DefaultModelId;
     internal const string HuggingFaceTokenSecretName = "hugging-face-token";
 
     private static readonly IReadOnlyList<string> Languages =
@@ -60,7 +60,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Gets the stable transcription provider identifier.
@@ -83,15 +83,15 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// Gets the available local Cohere transcription models.
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
-    [
-        new PluginModelInfo(ModelId, "Cohere Transcribe 2B (Q5_0)")
-        {
-            SizeDescription = "~1.7 GB + local runtime",
-            EstimatedSizeMB = 1_700,
-            IsRecommended = true,
-            LanguageCount = 14
-        }
-    ];
+        CohereModelCatalog.All
+            .Select(model => new PluginModelInfo(model.Id, model.DisplayName)
+            {
+                SizeDescription = model.SizeDescription,
+                EstimatedSizeMB = model.EstimatedSizeMB,
+                IsRecommended = model.IsRecommended,
+                LanguageCount = 14
+            })
+            .ToArray();
 
     /// <summary>
     /// Gets the currently selected model identifier.
@@ -131,7 +131,10 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the active acceleration status.
     /// </summary>
-    public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
+    public TranscriptionAccelerationStatus AccelerationStatus =>
+        _loadedModelId is not null && _server?.IsRunning != true
+            ? CreatePendingStatus(_accelerationPreference)
+            : _accelerationStatus;
 
     /// <summary>
     /// Activates the plugin and prepares its isolated asset storage.
@@ -170,9 +173,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         _assets.SetHuggingFaceToken(_huggingFaceToken);
 
         var persistedModel = host.GetSetting<string>("selectedModel");
-        _selectedModelId = string.Equals(persistedModel, ModelId, StringComparison.Ordinal)
-            ? persistedModel
-            : ModelId;
+        _selectedModelId = CohereModelCatalog.Contains(persistedModel) ? persistedModel : ModelId;
 
         host.Log(
             PluginLogLevel.Info,
@@ -196,7 +197,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     public UserControl? CreateSettingsView() => new CohereTranscribeSettingsView(this);
 
     /// <summary>
-    /// Selects the single Cohere Transcribe model.
+    /// Selects a Cohere Transcribe quantization.
     /// </summary>
     public void SelectModel(string modelId)
     {
@@ -211,7 +212,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     public bool IsModelDownloaded(string modelId)
     {
         ValidateModelId(modelId);
-        return _assets?.IsModelInstalled() == true;
+        return _assets?.IsModelInstalled(modelId) == true;
     }
 
     /// <summary>
@@ -236,7 +237,8 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
             var candidates = GetBackendCandidatesForCurrentMachine(_accelerationPreference);
             var initialBackend = candidates[0];
-            var totalBytes = assets.ModelTransferSize + assets.GetRuntimeTransferSize(initialBackend);
+            var modelTransferSize = assets.GetModelTransferSize(modelId);
+            var totalBytes = modelTransferSize + assets.GetRuntimeTransferSize(initialBackend);
 
             var modelProgress = progress is null
                 ? null
@@ -245,7 +247,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
                         ? 0
                         : Math.Clamp((double)value.BytesTransferred / totalBytes, 0, 1)));
 
-            await assets.EnsureModelAsync(modelProgress, cancellationToken);
+            await assets.EnsureModelAsync(modelId, modelProgress, cancellationToken);
 
             Exception? lastError = null;
             foreach (var backend in candidates)
@@ -253,12 +255,12 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
                 try
                 {
                     var runtimeSize = assets.GetRuntimeTransferSize(backend);
-                    var runtimeTotal = assets.ModelTransferSize + runtimeSize;
+                    var runtimeTotal = modelTransferSize + runtimeSize;
                     var runtimeProgress = progress is null
                         ? null
                         : new Progress<ArtifactTransferProgress>(value =>
                             progress.Report(Math.Clamp(
-                                (double)(assets.ModelTransferSize + value.BytesTransferred) / runtimeTotal,
+                                (double)(modelTransferSize + value.BytesTransferred) / runtimeTotal,
                                 0,
                                 1)));
 
@@ -301,7 +303,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         EnsureSupportedPlatform();
 
         var assets = GetAssets();
-        if (!assets.IsModelInstalled())
+        if (!assets.IsModelInstalled(modelId))
         {
             throw new FileNotFoundException(
                 "Cohere Transcribe model files are not downloaded. Download the model first.");
@@ -336,8 +338,9 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
                         "Starting the local Cohere Transcribe runtime.");
 
                     var configuration = new CrispAsrServerConfiguration(
+                        modelId,
                         assets.GetRuntimeExecutablePath(backend),
-                        assets.GetModelPaths(),
+                        assets.GetModelPaths(modelId),
                         backend,
                         GetRecommendedThreadCount(Environment.ProcessorCount));
 
@@ -437,21 +440,60 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
             throw new NotSupportedException("Cohere Transcribe does not support speech translation.");
 
         var normalizedLanguage = NormalizeLanguage(language);
+        var restartAttempted = false;
 
-        await _gate.WaitAsync(cancellationToken);
-        try
+        while (true)
         {
-            if (_loadedModelId is null)
-                throw new InvalidOperationException("No Cohere Transcribe model is loaded.");
+            string? modelToRestart = null;
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_loadedModelId is null)
+                    throw new InvalidOperationException("No Cohere Transcribe model is loaded.");
 
-            return await GetServer().TranscribeAsync(
-                wavAudio,
-                normalizedLanguage,
-                cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
+                var server = GetServer();
+                if (!server.IsRunning)
+                {
+                    if (restartAttempted)
+                        throw new InvalidOperationException("The local Cohere Transcribe model is not loaded.");
+
+                    modelToRestart = _loadedModelId;
+                    _loadedModelId = null;
+                    _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+                }
+                else
+                {
+                    try
+                    {
+                        return await server.TranscribeAsync(
+                            wavAudio,
+                            normalizedLanguage,
+                            cancellationToken);
+                    }
+                    catch (Exception exception) when (
+                        exception is not OperationCanceledException
+                        && !restartAttempted
+                        && !server.IsRunning)
+                    {
+                        modelToRestart = _loadedModelId;
+                        _loadedModelId = null;
+                        _accelerationStatus = CreatePendingStatus(_accelerationPreference);
+                    }
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            if (modelToRestart is null)
+                throw new InvalidOperationException("The local Cohere Transcribe model is not loaded.");
+
+            restartAttempted = true;
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"CrispASR stopped unexpectedly; restarting {modelToRestart} before transcription.");
+            await LoadModelAsync(modelToRestart, cancellationToken);
         }
     }
 
@@ -741,7 +783,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
     private static void ValidateModelId(string modelId)
     {
-        if (!string.Equals(modelId, ModelId, StringComparison.Ordinal))
+        if (!CohereModelCatalog.Contains(modelId))
             throw new ArgumentException($"Unknown model: {modelId}", nameof(modelId));
     }
 

@@ -21,6 +21,8 @@ artifacts/
 .agents/
 .claude/
 .venv
+__pycache__/
+*.pyc
 granite-speech-onnx/
 granite-speech-onnx-int8/
 granite-speech-genai/
