@@ -302,16 +302,9 @@ internal sealed class CrispAsrServer : ICrispAsrServer
 
     private static int ReserveLoopbackPort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
-        }
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
     private static string GetBackendName(CrispAsrBackend backend) =>

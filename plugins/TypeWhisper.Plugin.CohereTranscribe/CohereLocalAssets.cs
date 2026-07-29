@@ -715,7 +715,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch
+        catch (Exception exception) when (IsExpectedCleanupFailure(exception))
         {
         }
     }
@@ -727,8 +727,14 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
         }
-        catch
+        catch (Exception exception) when (IsExpectedCleanupFailure(exception))
         {
         }
     }
+
+    private static bool IsExpectedCleanupFailure(Exception exception) =>
+        exception is IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or System.Security.SecurityException;
 }
