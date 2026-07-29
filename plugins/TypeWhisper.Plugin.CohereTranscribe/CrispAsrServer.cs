@@ -6,10 +6,10 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using System.Text;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
+using Windows.Storage;
 
 namespace TypeWhisper.Plugin.CohereTranscribe;
 
@@ -37,8 +37,6 @@ internal interface ICrispAsrServer : IDisposable
 
 internal sealed class CrispAsrServer : ICrispAsrServer
 {
-    private const int ErrorSuccess = 0;
-    private const int ErrorInsufficientBuffer = 122;
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
@@ -208,27 +206,27 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         string apiKey)
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var packageFamilyName = TryGetCurrentPackageFamilyName();
+        var physicalLocalAppData = TryGetPhysicalLocalAppData();
         var executablePath = ResolveUnpackagedChildPath(
             configuration.ExecutablePath,
             localAppData,
-            packageFamilyName);
+            physicalLocalAppData);
         var modelPath = ResolveUnpackagedChildPath(
             configuration.ModelPaths.ModelPath,
             localAppData,
-            packageFamilyName);
+            physicalLocalAppData);
         var languageIdModelPath = ResolveUnpackagedChildPath(
             configuration.ModelPaths.LanguageIdModelPath,
             localAppData,
-            packageFamilyName);
+            physicalLocalAppData);
         var vadModelPath = ResolveUnpackagedChildPath(
             configuration.ModelPaths.VadModelPath,
             localAppData,
-            packageFamilyName);
+            physicalLocalAppData);
         var cacheDirectory = ResolveUnpackagedChildPath(
             configuration.ModelPaths.CacheDirectory,
             localAppData,
-            packageFamilyName);
+            physicalLocalAppData);
         var runtimeDirectory = Path.GetDirectoryName(executablePath)
             ?? AppContext.BaseDirectory;
         var backend = GetBackendName(configuration.Backend);
@@ -278,19 +276,14 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     internal static string ResolveUnpackagedChildPath(
         string path,
         string localAppData,
-        string? packageFamilyName)
+        string? physicalLocalAppData)
     {
         var resolvedPath = Path.GetFullPath(path);
-        if (string.IsNullOrWhiteSpace(localAppData) || string.IsNullOrWhiteSpace(packageFamilyName))
+        if (string.IsNullOrWhiteSpace(localAppData) || string.IsNullOrWhiteSpace(physicalLocalAppData))
             return resolvedPath;
 
         var localAppDataRoot = Path.GetFullPath(localAppData);
-        var physicalLocalAppDataRoot = Path.Join(
-            localAppDataRoot,
-            "Packages",
-            packageFamilyName,
-            "LocalCache",
-            "Local");
+        var physicalLocalAppDataRoot = Path.GetFullPath(physicalLocalAppData);
 
         if (IsSameOrUnderDirectory(resolvedPath, physicalLocalAppDataRoot)
             || !IsSameOrUnderDirectory(resolvedPath, localAppDataRoot))
@@ -314,19 +307,20 @@ internal sealed class CrispAsrServer : ICrispAsrServer
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? TryGetCurrentPackageFamilyName()
+    private static string? TryGetPhysicalLocalAppData()
     {
-        if (!OperatingSystem.IsWindows())
+        try
+        {
+            var localCachePath = ApplicationData.Current.LocalCacheFolder.Path;
+            return string.IsNullOrWhiteSpace(localCachePath)
+                ? null
+                : Path.Join(localCachePath, "Local");
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or COMException)
+        {
             return null;
-
-        uint length = 0;
-        var result = GetCurrentPackageFamilyName(ref length, null);
-        if (result != ErrorInsufficientBuffer || length == 0)
-            return null;
-
-        var familyName = new StringBuilder((int)length);
-        result = GetCurrentPackageFamilyName(ref length, familyName);
-        return result == ErrorSuccess ? familyName.ToString() : null;
+        }
     }
 
     private async Task WaitUntilReadyAsync(
@@ -408,8 +402,4 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             _ => throw new ArgumentOutOfRangeException(nameof(backend), backend, null)
         };
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetCurrentPackageFamilyName(
-        ref uint packageFamilyNameLength,
-        StringBuilder? packageFamilyName);
 }

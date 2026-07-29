@@ -342,6 +342,12 @@ public sealed class CohereTranscribePluginTests
     {
         const string localAppData = @"C:\Users\tester\AppData\Local";
         const string packageFamilyName = "TypeWhisper.TypeWhisper_51tqb5623pxja";
+        var physicalLocalAppData = Path.Join(
+            localAppData,
+            "Packages",
+            packageFamilyName,
+            "LocalCache",
+            "Local");
         var logicalPath = Path.Join(
             localAppData,
             "TypeWhisper-UserData",
@@ -350,11 +356,7 @@ public sealed class CohereTranscribePluginTests
             "runtime",
             "crispasr.exe");
         var physicalPath = Path.Join(
-            localAppData,
-            "Packages",
-            packageFamilyName,
-            "LocalCache",
-            "Local",
+            physicalLocalAppData,
             Path.GetRelativePath(localAppData, logicalPath));
 
         Assert.Equal(
@@ -362,19 +364,19 @@ public sealed class CohereTranscribePluginTests
             CrispAsrServer.ResolveUnpackagedChildPath(
                 logicalPath,
                 localAppData,
-                packageFamilyName));
+                physicalLocalAppData));
         Assert.Equal(
             physicalPath,
             CrispAsrServer.ResolveUnpackagedChildPath(
                 physicalPath,
                 localAppData,
-                packageFamilyName));
+                physicalLocalAppData));
         Assert.Equal(
             @"D:\Models\cohere.gguf",
             CrispAsrServer.ResolveUnpackagedChildPath(
                 @"D:\Models\cohere.gguf",
                 localAppData,
-                packageFamilyName));
+                physicalLocalAppData));
     }
 
     [Fact]
