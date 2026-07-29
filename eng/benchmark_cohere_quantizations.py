@@ -202,6 +202,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--threads must be positive.")
     if args.startup_timeout <= 0:
         parser.error("--startup-timeout must be positive.")
+    if args.request_timeout <= 0:
+        parser.error("--request-timeout must be positive.")
+    if args.download_retries <= 0:
+        parser.error("--download-retries must be positive.")
     if args.download_workers <= 0:
         parser.error("--download-workers must be positive.")
     return args
@@ -293,7 +297,13 @@ def prepare_samples(args: argparse.Namespace) -> list[Sample]:
 
         selected_entries = transcript_entries[: args.samples]
 
-        def download_audio(entry: tuple[str, str]) -> None:
+        def download_audio(
+            entry: tuple[str, str],
+            language: str = language,
+            language_dir: Path = language_dir,
+            repository: str = repository,
+            revision: str = revision,
+        ) -> None:
             sample_id, _ = entry
             audio_path = language_dir / f"{sample_id}.wav"
             download_file(
@@ -895,14 +905,14 @@ class CrispAsrProcess:
 
         try:
             self._wait_until_ready()
-        except Exception:
+        except Exception as error:
             exit_code = self.process.poll()
             log_tail = self._log_tail()
             self.stop()
             raise RuntimeError(
                 f"CrispASR failed to start for {self.model}; "
                 f"exit code {exit_code}. Log tail:\n{log_tail}"
-            )
+            ) from error
         return {
             "model": self.model,
             "process_id": self.process.pid,
@@ -1253,13 +1263,22 @@ def markdown_report(result: dict[str, Any]) -> str:
         ]
     )
     for run in result["negative_tests"]:
-        output = run.get("text", "").replace("|", "\\|").replace("\n", " ")
+        if run.get("error"):
+            output = f"ERROR: {run['error']}"
+            processing_time = "n/a"
+        else:
+            output = run.get("text") or ""
+            processing_time = f"{run['processing_time_seconds']:.3f} s"
+        output = output.replace("|", "\\|").replace("\n", " ")
         lines.append(
             f"| `{run['model']}` | {run['sample_id']} | "
-            f"`{output}` | {run['processing_time_seconds']:.3f} s |"
+            f"`{output}` | {processing_time} |"
         )
 
     errors = [run for run in result["runs"] if run.get("error")]
+    negative_errors = [
+        run for run in result["negative_tests"] if run.get("error")
+    ]
     lines.extend(
         [
             "",
@@ -1267,6 +1286,11 @@ def markdown_report(result: dict[str, Any]) -> str:
             "",
             f"- Successful speech clips: {len(result['runs']) - len(errors)}",
             f"- Failed speech clips: {len(errors)}",
+            (
+                "- Successful negative tests: "
+                f"{len(result['negative_tests']) - len(negative_errors)}"
+            ),
+            f"- Failed negative tests: {len(negative_errors)}",
             "",
         ]
     )
@@ -1361,6 +1385,9 @@ def benchmark(args: argparse.Namespace) -> int:
     )
     result.setdefault("model_runtime_status", {})
     result["runs"] = [run for run in result["runs"] if not run.get("error")]
+    result["negative_tests"] = [
+        run for run in result["negative_tests"] if not run.get("error")
+    ]
     checkpoint(args, result)
 
     completed = {result_key(run) for run in result["runs"]}
@@ -1428,9 +1455,10 @@ def benchmark(args: argparse.Namespace) -> int:
                         continue
                     try:
                         response, wall_seconds = server.transcribe(sample)
+                        hypothesis = response.get("text") or ""
                         metrics = score(
                             sample.reference,
-                            response.get("text", ""),
+                            hypothesis,
                         )
                         result["runs"].append(
                             {
@@ -1439,7 +1467,7 @@ def benchmark(args: argparse.Namespace) -> int:
                                 "language_hint": sample.language_hint,
                                 "sample_id": sample.sample_id,
                                 "reference": sample.reference,
-                                "hypothesis": response.get("text", ""),
+                                "hypothesis": hypothesis,
                                 "detected_language": response.get("language"),
                                 "duration_seconds": float(
                                     response.get("duration")
@@ -1479,12 +1507,31 @@ def benchmark(args: argparse.Namespace) -> int:
                     key = (model, sample.sample_id)
                     if key in completed_negative:
                         continue
-                    response, wall_seconds = server.transcribe(sample)
+                    try:
+                        response, wall_seconds = server.transcribe(sample)
+                    except Exception as error:
+                        result["negative_tests"].append(
+                            {
+                                "model": model,
+                                "sample_id": sample.sample_id,
+                                "error": str(error),
+                            }
+                        )
+                        print(
+                            f"  negative sample {sample.sample_id} failed: {error}",
+                            file=sys.stderr,
+                        )
+                        if (
+                            server.process is None
+                            or server.process.poll() is not None
+                        ):
+                            raise
+                        continue
                     result["negative_tests"].append(
                         {
                             "model": model,
                             "sample_id": sample.sample_id,
-                            "text": response.get("text", ""),
+                            "text": response.get("text") or "",
                             "processing_time_seconds": wall_seconds,
                             "wall_seconds": wall_seconds,
                         }
@@ -1506,7 +1553,10 @@ def benchmark(args: argparse.Namespace) -> int:
     checkpoint(args, result)
     print(markdown_report(result))
     errors = [run for run in result["runs"] if run.get("error")]
-    return 2 if errors else 0
+    negative_errors = [
+        run for run in result["negative_tests"] if run.get("error")
+    ]
+    return 2 if errors or negative_errors else 0
 
 
 def main() -> int:

@@ -46,14 +46,14 @@ public sealed class CohereTranscribePluginTests
 
         Assert.Equal(
             [
-                CohereModelCatalog.Q4KModelId,
-                CohereModelCatalog.DefaultModelId,
-                CohereModelCatalog.Q6KModelId,
-                CohereModelCatalog.Q8ModelId
+                "cohere-transcribe-03-2026-q4_k",
+                "cohere-transcribe-03-2026-q5_0",
+                "cohere-transcribe-03-2026-q6_k",
+                "cohere-transcribe-03-2026-q8_0"
             ],
             models.Select(model => model.Id));
         Assert.Equal(
-            CohereTranscribePlugin.ModelId,
+            "cohere-transcribe-03-2026-q5_0",
             Assert.Single(models, model => model.IsRecommended).Id);
         Assert.All(models, model => Assert.Equal(14, model.LanguageCount));
         Assert.Equal(14, sut.SupportedLanguages.Count);
@@ -65,36 +65,96 @@ public sealed class CohereTranscribePluginTests
     [Fact]
     public void DownloadDefinitions_AreRevisionPinnedAndSha256Pinned()
     {
-        Assert.Equal(4, CohereModelCatalog.All.Count);
-        Assert.All(
-            CohereModelCatalog.All,
-            model => Assert.Contains(
-                CohereLocalAssetManager.CohereModelRevision,
-                model.Artifact.DownloadUrl));
-        Assert.Contains(
-            CohereLocalAssetManager.VadModelRevision,
-            CohereLocalAssetManager.VadModel.DownloadUrl);
-        Assert.Contains(
-            CohereLocalAssetManager.LanguageIdModelRevision,
-            CohereLocalAssetManager.LanguageIdModel.DownloadUrl);
+        const string modelRoot =
+            "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF/resolve/"
+            + "2242638d5dfecc6f1dbe6c3a8713b97deb2e150f/";
+        var expectedModels = new (string Id, RemoteArtifact Artifact)[]
+        {
+            (
+                "cohere-transcribe-03-2026-q4_k",
+                new RemoteArtifact(
+                    "cohere-transcribe-q4_k.gguf",
+                    modelRoot + "cohere-transcribe-q4_k.gguf",
+                    1_510_362_752,
+                    "2931fc0ac6d6708eef5389aadf1ebd5eec7b8e764bac385be585e910c0e7b410")),
+            (
+                "cohere-transcribe-03-2026-q5_0",
+                new RemoteArtifact(
+                    "cohere-transcribe-q5_0.gguf",
+                    modelRoot + "cohere-transcribe-q5_0.gguf",
+                    1_738_722_944,
+                    "a09696c5cc2ed5052bf290c4f2beb35abc69c0d6986842042d92bebb22c9184e")),
+            (
+                "cohere-transcribe-03-2026-q6_k",
+                new RemoteArtifact(
+                    "cohere-transcribe-q6_k.gguf",
+                    modelRoot + "cohere-transcribe-q6_k.gguf",
+                    1_981_355_648,
+                    "0ad2634e0ba34efa38a47d4fd4cf34d7a2d738d8486d83b8d5a178f823109c52")),
+            (
+                "cohere-transcribe-03-2026-q8_0",
+                new RemoteArtifact(
+                    "cohere-transcribe-q8_0.gguf",
+                    modelRoot + "cohere-transcribe-q8_0.gguf",
+                    2_423_803_520,
+                    "c8620cb182a7c04e311e6c24e478b94f7ecd7f1b5230bf39fffa8daf94644f51"))
+        };
+        var actualModels = CohereModelCatalog.All
+            .Select(model => (model.Id, model.Artifact))
+            .ToArray();
 
-        Assert.All(
-            CohereModelCatalog.All
-                .Select(model => model.Artifact)
-                .Concat(
-                [
-                    CohereLocalAssetManager.VadModel,
-                    CohereLocalAssetManager.LanguageIdModel,
-                    CohereLocalAssetManager.CpuRuntime.Archive,
-                    CohereLocalAssetManager.CudaRuntime.Archive,
-                    CohereLocalAssetManager.VulkanRuntime.Archive
-                ]),
-            artifact =>
-            {
-                Assert.Equal(64, artifact.Sha256.Length);
-                Assert.True(artifact.SizeBytes > 0);
-                Assert.StartsWith("https://", artifact.DownloadUrl);
-            });
+        Assert.Equal(expectedModels, actualModels);
+        Assert.Equal(
+            new RemoteArtifact(
+                "ggml-silero-v6.2.0.bin",
+                "https://huggingface.co/ggml-org/whisper-vad/resolve/"
+                + "9ffd54a1e1ee413ddf265af9913beaf518d1639b/"
+                + "ggml-silero-v6.2.0.bin",
+                885_098,
+                "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"),
+            CohereLocalAssetManager.VadModel);
+        Assert.Equal(
+            new RemoteArtifact(
+                "ecapa-lid-107-f16.gguf",
+                "https://huggingface.co/cstr/ecapa-lid-107-GGUF/resolve/"
+                + "95fb0613bf78c6e48305fccd9ce023ac15f0b5a6/"
+                + "ecapa-lid-107-f16.gguf",
+                42_838_944,
+                "59db30ba67cec2f36304f794420779c181124332246f75fc66c349f184110340"),
+            CohereLocalAssetManager.LanguageIdModel);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Cpu,
+                "cpu",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-cpu.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-cpu.zip",
+                    7_635_428,
+                    "a05456c9adac276289060ae83bd77ed7b4d87ccfd447aed804e497d76e73f8f8")),
+            CohereLocalAssetManager.CpuRuntime);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Cuda,
+                "cuda",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-cuda.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-cuda.zip",
+                    729_126_487,
+                    "832af6218508ac52fc71ac5653c433786bdfae81f775e2c77bfefd05df6f255b")),
+            CohereLocalAssetManager.CudaRuntime);
+        Assert.Equal(
+            new RuntimePackage(
+                CrispAsrBackend.Vulkan,
+                "vulkan",
+                new RemoteArtifact(
+                    "crispasr-windows-x86_64-vulkan.zip",
+                    "https://github.com/CrispStrobe/CrispASR/releases/download/"
+                    + "v0.8.24/crispasr-windows-x86_64-vulkan.zip",
+                    35_580_185,
+                    "70956638045042b49f61f9f04ee9ceae9fc8b450f6f56a10fc98c2088207628a")),
+            CohereLocalAssetManager.VulkanRuntime);
     }
 
     [Fact]
@@ -380,7 +440,9 @@ public sealed class CohereTranscribePluginTests
         Assert.Contains("--require-vad", arguments);
         Assert.DoesNotContain("--api-keys", arguments);
         Assert.DoesNotContain(apiKey, arguments);
+        Assert.Equal(@"C:\runtime", startInfo.WorkingDirectory);
         Assert.Equal(apiKey, startInfo.Environment["CRISPASR_API_KEYS"]);
+        Assert.Equal(paths.CacheDirectory, startInfo.Environment["CRISPASR_CACHE_DIR"]);
         Assert.Equal(
             configuration.ExecutablePath,
             startInfo.Environment["TYPEWHISPER_CRISPASR_EXECUTABLE"]);
@@ -505,6 +567,7 @@ public sealed class CohereTranscribePluginTests
         using var sut = new CohereTranscribePlugin(assets, server);
         var host = new FakePluginHostServices(temp.Path);
         var downloadProgress = new List<double>();
+        var expectedModelPath = assets.GetModelPaths(modelId).ModelPath;
 
         await sut.ActivateAsync(host);
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
@@ -524,6 +587,7 @@ public sealed class CohereTranscribePluginTests
         Assert.Equal(modelId, assets.LastEnsuredModelId);
         Assert.Equal([CrispAsrBackend.Cpu], assets.EnsuredRuntimes);
         Assert.Equal(modelId, server.LastConfiguration?.ModelId);
+        Assert.Equal(expectedModelPath, server.LastConfiguration?.ModelPaths.ModelPath);
         Assert.Equal(CrispAsrBackend.Cpu, server.LastConfiguration?.Backend);
         Assert.Equal("de", server.LastLanguage);
         Assert.Equal("lokal", result.Text);

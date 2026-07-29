@@ -240,6 +240,8 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         var runtimeDirectory = Path.GetDirectoryName(executablePath)
             ?? AppContext.BaseDirectory;
         var backend = GetBackendName(configuration.Backend);
+        // cmd.exe /s strips the outermost quote pair. The doubled leading quote
+        // preserves the executable's quoted path, including paths with spaces.
         var command =
             "\"\"%TYPEWHISPER_CRISPASR_EXECUTABLE%\""
             + " --server"
