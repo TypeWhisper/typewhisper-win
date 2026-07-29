@@ -469,7 +469,10 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                     ? new FileInfo(destinationPath).Length
                     : 0;
                 if (rangeStart > rangeEnd)
+                {
+                    lastError = null;
                     break;
+                }
 
                 try
                 {
@@ -608,7 +611,8 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                     $"Incomplete byte range for {artifact.FileName}: expected {expectedBytes} bytes, received {written}.");
             }
 
-            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            inactivityCts.CancelAfter(_downloadInactivityTimeout);
+            await target.WriteAsync(buffer.AsMemory(0, read), inactivityCts.Token);
             written += read;
             inactivityCts.CancelAfter(_downloadInactivityTimeout);
             progress?.Report(new ArtifactTransferProgress(
@@ -616,7 +620,7 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
                 artifact.SizeBytes));
         }
 
-        await target.FlushAsync(cancellationToken);
+        await target.FlushAsync(inactivityCts.Token);
     }
 
     private static bool IsArtifactReady(RemoteArtifact artifact, string destinationPath)

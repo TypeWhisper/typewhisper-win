@@ -144,8 +144,29 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         _host = host;
         _assets ??= new CohereLocalAssetManager(host.PluginAssetDirectory);
         _server ??= new CrispAsrServer(host.Log);
-        _huggingFaceToken = NormalizeHuggingFaceToken(
-            await host.LoadSecretAsync(HuggingFaceTokenSecretName));
+        var storedToken = await host.LoadSecretAsync(HuggingFaceTokenSecretName);
+        try
+        {
+            _huggingFaceToken = NormalizeHuggingFaceToken(storedToken);
+        }
+        catch (ArgumentException)
+        {
+            _huggingFaceToken = null;
+            host.Log(
+                PluginLogLevel.Warning,
+                "Ignoring and removing the stored Hugging Face token because it is malformed.");
+            try
+            {
+                await host.DeleteSecretAsync(HuggingFaceTokenSecretName);
+            }
+            catch (Exception exception) when (IsExpectedSecretStorageFailure(exception))
+            {
+                host.Log(
+                    PluginLogLevel.Warning,
+                    $"The malformed Hugging Face token could not be removed: {exception.Message}");
+            }
+        }
+
         _assets.SetHuggingFaceToken(_huggingFaceToken);
 
         var persistedModel = host.GetSetting<string>("selectedModel");
@@ -515,8 +536,11 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     internal async Task SetHuggingFaceTokenAsync(string? token)
     {
         var normalized = NormalizeHuggingFaceToken(token);
-        if (string.Equals(_huggingFaceToken, normalized, StringComparison.Ordinal))
+        if (normalized is not null
+            && string.Equals(_huggingFaceToken, normalized, StringComparison.Ordinal))
+        {
             return;
+        }
 
         if (_host is not null)
         {
@@ -545,6 +569,14 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
         return normalized;
     }
+
+    internal static bool IsExpectedSecretStorageFailure(Exception exception) =>
+        exception is InvalidOperationException
+            or IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or System.Security.Cryptography.CryptographicException
+            or System.Security.SecurityException;
 
     internal static string? NormalizeLanguageOrNull(string? language)
     {

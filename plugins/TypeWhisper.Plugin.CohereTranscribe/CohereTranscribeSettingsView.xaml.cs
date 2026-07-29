@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -69,7 +68,8 @@ public partial class CohereTranscribeSettingsView : UserControl
             StatusText.Text = L("Settings.InvalidToken");
             StatusText.Foreground = Brushes.Red;
         }
-        catch (Exception exception) when (IsExpectedSecretStorageFailure(exception))
+        catch (Exception exception) when (
+            CohereTranscribePlugin.IsExpectedSecretStorageFailure(exception))
         {
             StatusText.Text = L("Settings.SaveFailed");
             StatusText.Foreground = Brushes.Red;
@@ -94,7 +94,8 @@ public partial class CohereTranscribeSettingsView : UserControl
             StatusText.Text = L("Settings.Removed");
             StatusText.Foreground = Brushes.Green;
         }
-        catch (Exception exception) when (IsExpectedSecretStorageFailure(exception))
+        catch (Exception exception) when (
+            CohereTranscribePlugin.IsExpectedSecretStorageFailure(exception))
         {
             StatusText.Text = L("Settings.SaveFailed");
             StatusText.Foreground = Brushes.Red;
@@ -115,14 +116,6 @@ public partial class CohereTranscribeSettingsView : UserControl
                 ? Visibility.Visible
                 : Visibility.Collapsed;
     }
-
-    private static bool IsExpectedSecretStorageFailure(Exception exception) =>
-        exception is InvalidOperationException
-            or IOException
-            or UnauthorizedAccessException
-            or NotSupportedException
-            or System.Security.Cryptography.CryptographicException
-            or System.Security.SecurityException;
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
 }

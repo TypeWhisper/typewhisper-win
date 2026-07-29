@@ -5,6 +5,7 @@
         <TextBlock x:Name="TokenLabel" FontWeight="SemiBold" Margin="0,0,0,4" />
         <PasswordBox x:Name="TokenBox"
                      MaxLength="500"
+                     AutomationProperties.LabeledBy="{Binding ElementName=TokenLabel}"
                      PasswordChanged="OnPasswordChanged" />
         <TextBlock x:Name="TokenHintText"
                    Margin="0,4,0,0"

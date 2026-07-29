@@ -175,7 +175,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
                 process.Kill(entireProcessTree: true);
 
             using var timeout = new CancellationTokenSource(ShutdownTimeout);
-            await process.WaitForExitAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

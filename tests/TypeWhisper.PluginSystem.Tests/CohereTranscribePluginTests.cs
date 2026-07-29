@@ -149,6 +149,37 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
+    public async Task DownloadVerifiedAsync_AcceptsCompletedRangeAfterLateStreamFailure()
+    {
+        using var temp = new TempDirectory();
+        var payload = Encoding.UTF8.GetBytes("completed-before-dispose");
+        var destination = Path.Join(temp.Path, "model.gguf.download");
+        var handler = new RangeDownloadHandler(payload, disposeFailuresRemaining: 1);
+        using var httpClient = new HttpClient(handler);
+        using var sut = new CohereLocalAssetManager(
+            temp.Path,
+            httpClient,
+            downloadChunkSizeBytes: 64,
+            downloadInactivityTimeout: TimeSpan.FromSeconds(5),
+            maxDownloadAttempts: 2,
+            downloadRetryDelay: TimeSpan.Zero);
+        var artifact = new RemoteArtifact(
+            "model.gguf",
+            "https://downloads.example/model.gguf",
+            payload.Length,
+            Convert.ToHexStringLower(SHA256.HashData(payload)));
+
+        await sut.DownloadVerifiedAsync(
+            artifact,
+            destination,
+            progress: null,
+            CancellationToken.None);
+
+        Assert.Equal(payload, await File.ReadAllBytesAsync(destination));
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task DownloadVerifiedAsync_SendsTokenOnlyToHuggingFace()
     {
         using var temp = new TempDirectory();
@@ -438,6 +469,46 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
+    public async Task ActivateAsync_IgnoresAndRemovesMalformedStoredHuggingFaceToken()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var sut = new CohereTranscribePlugin(assets, new FakeCrispAsrServer());
+        var host = new FakePluginHostServices(
+            temp.Path,
+            new Dictionary<string, string>
+            {
+                [CohereTranscribePlugin.HuggingFaceTokenSecretName] = "hf_bad token"
+            });
+
+        await sut.ActivateAsync(host);
+
+        Assert.Null(sut.HuggingFaceToken);
+        Assert.Null(assets.HuggingFaceToken);
+        Assert.DoesNotContain(
+            CohereTranscribePlugin.HuggingFaceTokenSecretName,
+            host.Secrets);
+        Assert.Contains(
+            host.Logs,
+            entry => entry.Level == PluginLogLevel.Warning
+                && entry.Message.Contains("malformed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SettingsView_LabelsTheOptionalTokenFieldForAssistiveTechnology()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "plugins",
+            "TypeWhisper.Plugin.CohereTranscribe",
+            "CohereTranscribeSettingsView.xaml");
+
+        Assert.Contains(
+            "AutomationProperties.LabeledBy=\"{Binding ElementName=TokenLabel}\"",
+            xaml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SetHuggingFaceTokenAsync_DoesNotApplyTokenWhenSecureStoreFails()
     {
         using var temp = new TempDirectory();
@@ -558,9 +629,11 @@ public sealed class CohereTranscribePluginTests
 
     private sealed class RangeDownloadHandler(
         byte[] payload,
-        int failuresRemaining = 0) : HttpMessageHandler
+        int failuresRemaining = 0,
+        int disposeFailuresRemaining = 0) : HttpMessageHandler
     {
         private int _failuresRemaining = failuresRemaining;
+        private int _disposeFailuresRemaining = disposeFailuresRemaining;
 
         public int RequestCount { get; private set; }
         public List<string> RequestedRanges { get; } = [];
@@ -589,10 +662,22 @@ public sealed class CohereTranscribePluginTests
                 RequestedRanges.Add($"bytes={start}-{end}");
 
             var segment = payload[(int)start..((int)end + 1)];
+            HttpContent content;
+            if (_disposeFailuresRemaining > 0)
+            {
+                _disposeFailuresRemaining--;
+                content = new StreamContent(new DisposeFailingMemoryStream(segment));
+                content.Headers.ContentLength = segment.Length;
+            }
+            else
+            {
+                content = new ByteArrayContent(segment);
+            }
+
             var response = new HttpResponseMessage(
                 requestedRange is null ? HttpStatusCode.OK : HttpStatusCode.PartialContent)
             {
-                Content = new ByteArrayContent(segment)
+                Content = content
             };
             if (requestedRange is not null)
             {
@@ -603,6 +688,23 @@ public sealed class CohereTranscribePluginTests
             }
 
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class DisposeFailingMemoryStream(byte[] buffer)
+        : MemoryStream(buffer, writable: false)
+    {
+        private bool _shouldFail = true;
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (_shouldFail)
+            {
+                _shouldFail = false;
+                throw new IOException("Simulated failure after the completed transfer.");
+            }
+
+            await base.DisposeAsync();
         }
     }
 
@@ -662,6 +764,7 @@ public sealed class CohereTranscribePluginTests
         }
 
         public Dictionary<string, string> Secrets { get; }
+        public List<(PluginLogLevel Level, string Message)> Logs { get; } = [];
         public Exception? StoreSecretException { get; init; }
         public Exception? DeleteSecretException { get; init; }
         public string PluginDataDirectory { get; }
@@ -694,7 +797,8 @@ public sealed class CohereTranscribePluginTests
         }
         public T? GetSetting<T>(string key) => default;
         public void SetSetting<T>(string key, T value) { }
-        public void Log(PluginLogLevel level, string message) { }
+        public void Log(PluginLogLevel level, string message) =>
+            Logs.Add((level, message));
         public void NotifyCapabilitiesChanged() { }
     }
 
