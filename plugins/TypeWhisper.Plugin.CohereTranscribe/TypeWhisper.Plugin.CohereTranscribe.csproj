@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <WindowsSdkPackageVersion>10.0.19041.57</WindowsSdkPackageVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -10,6 +11,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
+    <FrameworkReference Include="Microsoft.Windows.SDK.NET.Ref" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>

@@ -309,6 +309,9 @@ internal sealed class CrispAsrServer : ICrispAsrServer
 
     private static string? TryGetPhysicalLocalAppData()
     {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 10240))
+            return null;
+
         try
         {
             var localCachePath = ApplicationData.Current.LocalCacheFolder.Path;
