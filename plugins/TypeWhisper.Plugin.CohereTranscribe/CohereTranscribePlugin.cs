@@ -60,7 +60,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Gets the stable transcription provider identifier.

@@ -309,23 +309,72 @@ public sealed class CohereTranscribePluginTests
         const string apiKey = "not-on-the-command-line";
 
         var startInfo = CrispAsrServer.BuildStartInfo(configuration, 43123, apiKey);
-        var arguments = startInfo.ArgumentList.ToArray();
+        var arguments = startInfo.Arguments;
 
-        AssertArgumentPair(arguments, "--host", "127.0.0.1");
-        AssertArgumentPair(arguments, "--port", "43123");
-        AssertArgumentPair(arguments, "--backend", "cohere");
-        AssertArgumentPair(arguments, "--model", paths.ModelPath);
-        AssertArgumentPair(arguments, "--lid-backend", "ecapa");
-        AssertArgumentPair(arguments, "--lid-model", paths.LanguageIdModelPath);
-        AssertArgumentPair(arguments, "--vad-model", paths.VadModelPath);
-        AssertArgumentPair(arguments, "--gpu-backend", "cuda");
+        Assert.Equal(Path.Join(Environment.SystemDirectory, "cmd.exe"), startInfo.FileName);
+        Assert.StartsWith("/d /s /v:off /c ", arguments, StringComparison.Ordinal);
+        Assert.Contains("\"%TYPEWHISPER_CRISPASR_EXECUTABLE%\"", arguments);
+        Assert.Contains("--host 127.0.0.1", arguments);
+        Assert.Contains("--port 43123", arguments);
+        Assert.Contains("--backend cohere", arguments);
+        Assert.Contains("--model \"%TYPEWHISPER_CRISPASR_MODEL%\"", arguments);
+        Assert.Contains("--lid-backend ecapa", arguments);
+        Assert.Contains("--lid-model \"%TYPEWHISPER_CRISPASR_LID_MODEL%\"", arguments);
+        Assert.Contains("--vad-model \"%TYPEWHISPER_CRISPASR_VAD_MODEL%\"", arguments);
+        Assert.Contains("--gpu-backend cuda", arguments);
         Assert.Contains("--strict-pipeline", arguments);
         Assert.Contains("--require-vad", arguments);
         Assert.DoesNotContain("--api-keys", arguments);
         Assert.DoesNotContain(apiKey, arguments);
         Assert.Equal(apiKey, startInfo.Environment["CRISPASR_API_KEYS"]);
+        Assert.Equal(
+            configuration.ExecutablePath,
+            startInfo.Environment["TYPEWHISPER_CRISPASR_EXECUTABLE"]);
+        Assert.Equal(paths.ModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_MODEL"]);
+        Assert.Equal(paths.LanguageIdModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_LID_MODEL"]);
+        Assert.Equal(paths.VadModelPath, startInfo.Environment["TYPEWHISPER_CRISPASR_VAD_MODEL"]);
         Assert.True(startInfo.CreateNoWindow);
         Assert.Equal(System.Diagnostics.ProcessWindowStyle.Hidden, startInfo.WindowStyle);
+    }
+
+    [Fact]
+    public void ResolveUnpackagedChildPath_MapsMsixRedirectedLocalAppDataOnlyOnce()
+    {
+        const string localAppData = @"C:\Users\tester\AppData\Local";
+        const string packageFamilyName = "TypeWhisper.TypeWhisper_51tqb5623pxja";
+        var logicalPath = Path.Join(
+            localAppData,
+            "TypeWhisper-UserData",
+            "PluginData",
+            "com.typewhisper.cohere-transcribe",
+            "runtime",
+            "crispasr.exe");
+        var physicalPath = Path.Join(
+            localAppData,
+            "Packages",
+            packageFamilyName,
+            "LocalCache",
+            "Local",
+            Path.GetRelativePath(localAppData, logicalPath));
+
+        Assert.Equal(
+            physicalPath,
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                logicalPath,
+                localAppData,
+                packageFamilyName));
+        Assert.Equal(
+            physicalPath,
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                physicalPath,
+                localAppData,
+                packageFamilyName));
+        Assert.Equal(
+            @"D:\Models\cohere.gguf",
+            CrispAsrServer.ResolveUnpackagedChildPath(
+                @"D:\Models\cohere.gguf",
+                localAppData,
+                packageFamilyName));
     }
 
     [Fact]
@@ -569,17 +618,6 @@ public sealed class CohereTranscribePluginTests
             "'cohere-transcribe'  = 'TypeWhisper.Plugin.CohereTranscribe'",
             workflow,
             StringComparison.Ordinal);
-    }
-
-    private static void AssertArgumentPair(
-        IReadOnlyList<string> arguments,
-        string name,
-        string expectedValue)
-    {
-        var index = arguments.ToList().IndexOf(name);
-        Assert.True(index >= 0, $"Expected argument '{name}'.");
-        Assert.True(index + 1 < arguments.Count, $"Expected value after '{name}'.");
-        Assert.Equal(expectedValue, arguments[index + 1]);
     }
 
     private sealed class FakeAssetManager : ICohereLocalAssetManager

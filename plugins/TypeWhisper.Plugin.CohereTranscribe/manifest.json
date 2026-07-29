@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.cohere-transcribe",
   "name": "Cohere Transcribe (Local)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.6",
   "author": "TypeWhisper",
   "description": "Offline Cohere Transcribe inference via a managed local CrispASR runtime",

@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -34,6 +37,8 @@ internal interface ICrispAsrServer : IDisposable
 
 internal sealed class CrispAsrServer : ICrispAsrServer
 {
+    private const int ErrorSuccess = 0;
+    private const int ErrorInsufficientBuffer = 122;
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
@@ -202,11 +207,58 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         int port,
         string apiKey)
     {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var packageFamilyName = TryGetCurrentPackageFamilyName();
+        var executablePath = ResolveUnpackagedChildPath(
+            configuration.ExecutablePath,
+            localAppData,
+            packageFamilyName);
+        var modelPath = ResolveUnpackagedChildPath(
+            configuration.ModelPaths.ModelPath,
+            localAppData,
+            packageFamilyName);
+        var languageIdModelPath = ResolveUnpackagedChildPath(
+            configuration.ModelPaths.LanguageIdModelPath,
+            localAppData,
+            packageFamilyName);
+        var vadModelPath = ResolveUnpackagedChildPath(
+            configuration.ModelPaths.VadModelPath,
+            localAppData,
+            packageFamilyName);
+        var cacheDirectory = ResolveUnpackagedChildPath(
+            configuration.ModelPaths.CacheDirectory,
+            localAppData,
+            packageFamilyName);
+        var runtimeDirectory = Path.GetDirectoryName(executablePath)
+            ?? AppContext.BaseDirectory;
+        var backend = GetBackendName(configuration.Backend);
+        var command =
+            "\"\"%TYPEWHISPER_CRISPASR_EXECUTABLE%\""
+            + " --server"
+            + " --backend cohere"
+            + " --model \"%TYPEWHISPER_CRISPASR_MODEL%\""
+            + " --host 127.0.0.1"
+            + $" --port {port.ToString(CultureInfo.InvariantCulture)}"
+            + " --language auto"
+            + " --lid-backend ecapa"
+            + " --lid-model \"%TYPEWHISPER_CRISPASR_LID_MODEL%\""
+            + " --vad"
+            + " --vad-model \"%TYPEWHISPER_CRISPASR_VAD_MODEL%\""
+            + " --strict-pipeline"
+            + " --require-vad"
+            + $" --threads {configuration.ThreadCount.ToString(CultureInfo.InvariantCulture)}"
+            + $" --gpu-backend {backend}"
+            + (configuration.Backend == CrispAsrBackend.Cpu ? " --no-gpu" : string.Empty)
+            + "\"";
+
         var startInfo = new ProcessStartInfo
         {
-            FileName = configuration.ExecutablePath,
-            WorkingDirectory = Path.GetDirectoryName(configuration.ExecutablePath)
-                ?? AppContext.BaseDirectory,
+            // An executable launched directly by an MSIX desktop process inherits
+            // its packaged DLL search order. The intermediate command process makes
+            // CrispASR a grandchild, which Windows starts outside that environment.
+            FileName = Path.Join(Environment.SystemDirectory, "cmd.exe"),
+            Arguments = $"/d /s /v:off /c {command}",
+            WorkingDirectory = runtimeDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -214,27 +266,67 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             WindowStyle = ProcessWindowStyle.Hidden
         };
 
-        AddArgument(startInfo, "--server");
-        AddArgument(startInfo, "--backend", "cohere");
-        AddArgument(startInfo, "--model", configuration.ModelPaths.ModelPath);
-        AddArgument(startInfo, "--host", "127.0.0.1");
-        AddArgument(startInfo, "--port", port.ToString());
-        AddArgument(startInfo, "--language", "auto");
-        AddArgument(startInfo, "--lid-backend", "ecapa");
-        AddArgument(startInfo, "--lid-model", configuration.ModelPaths.LanguageIdModelPath);
-        AddArgument(startInfo, "--vad");
-        AddArgument(startInfo, "--vad-model", configuration.ModelPaths.VadModelPath);
-        AddArgument(startInfo, "--strict-pipeline");
-        AddArgument(startInfo, "--require-vad");
-        AddArgument(startInfo, "--threads", configuration.ThreadCount.ToString());
-        AddArgument(startInfo, "--gpu-backend", GetBackendName(configuration.Backend));
-
-        if (configuration.Backend == CrispAsrBackend.Cpu)
-            AddArgument(startInfo, "--no-gpu");
-
         startInfo.Environment["CRISPASR_API_KEYS"] = apiKey;
-        startInfo.Environment["CRISPASR_CACHE_DIR"] = configuration.ModelPaths.CacheDirectory;
+        startInfo.Environment["CRISPASR_CACHE_DIR"] = cacheDirectory;
+        startInfo.Environment["TYPEWHISPER_CRISPASR_EXECUTABLE"] = executablePath;
+        startInfo.Environment["TYPEWHISPER_CRISPASR_MODEL"] = modelPath;
+        startInfo.Environment["TYPEWHISPER_CRISPASR_LID_MODEL"] = languageIdModelPath;
+        startInfo.Environment["TYPEWHISPER_CRISPASR_VAD_MODEL"] = vadModelPath;
         return startInfo;
+    }
+
+    internal static string ResolveUnpackagedChildPath(
+        string path,
+        string localAppData,
+        string? packageFamilyName)
+    {
+        var resolvedPath = Path.GetFullPath(path);
+        if (string.IsNullOrWhiteSpace(localAppData) || string.IsNullOrWhiteSpace(packageFamilyName))
+            return resolvedPath;
+
+        var localAppDataRoot = Path.GetFullPath(localAppData);
+        var physicalLocalAppDataRoot = Path.Join(
+            localAppDataRoot,
+            "Packages",
+            packageFamilyName,
+            "LocalCache",
+            "Local");
+
+        if (IsSameOrUnderDirectory(resolvedPath, physicalLocalAppDataRoot)
+            || !IsSameOrUnderDirectory(resolvedPath, localAppDataRoot))
+        {
+            return resolvedPath;
+        }
+
+        return Path.Join(
+            physicalLocalAppDataRoot,
+            Path.GetRelativePath(localAppDataRoot, resolvedPath));
+    }
+
+    private static bool IsSameOrUnderDirectory(string path, string directory)
+    {
+        var normalizedDirectory = directory.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        return path.Equals(normalizedDirectory, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(
+                normalizedDirectory + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetCurrentPackageFamilyName()
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
+        uint length = 0;
+        var result = GetCurrentPackageFamilyName(ref length, null);
+        if (result != ErrorInsufficientBuffer || length == 0)
+            return null;
+
+        var familyName = new StringBuilder((int)length);
+        result = GetCurrentPackageFamilyName(ref length, familyName);
+        return result == ErrorSuccess ? familyName.ToString() : null;
     }
 
     private async Task WaitUntilReadyAsync(
@@ -316,9 +408,8 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             _ => throw new ArgumentOutOfRangeException(nameof(backend), backend, null)
         };
 
-    private static void AddArgument(ProcessStartInfo startInfo, params string[] values)
-    {
-        foreach (var value in values)
-            startInfo.ArgumentList.Add(value);
-    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetCurrentPackageFamilyName(
+        ref uint packageFamilyNameLength,
+        StringBuilder? packageFamilyName);
 }
