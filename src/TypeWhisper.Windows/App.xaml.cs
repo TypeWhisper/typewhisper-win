@@ -257,7 +257,8 @@ public partial class App : Application
         // Check for updates in background
         var updateService = _serviceProvider.GetRequiredService<UpdateService>();
         updateService.Initialize();
-        _ = updateService.CheckForUpdatesAsync();
+        if (updateService.ShouldCheckAutomatically)
+            _ = updateService.CheckForUpdatesAsync();
     }
 
     private async Task RunTrackedStartupWorkAsync(Func<CancellationToken, Task> work)

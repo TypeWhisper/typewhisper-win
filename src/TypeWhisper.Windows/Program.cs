@@ -58,6 +58,7 @@ public static class Program
         }
 #else
         VelopackApp.Build()
+            .SetAutoApplyOnStartup(!IsPortableLayout(AppContext.BaseDirectory))
             .OnFirstRun((_) => StartupService.Enable())
             .OnBeforeUninstallFastCallback((v) =>
             {
@@ -128,6 +129,16 @@ public static class Program
             if (restartArgs is not null)
                 StartRestartProcess(restartArgs);
         }
+    }
+
+    internal static bool IsPortableLayout(string appBaseDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(appBaseDirectory))
+            return false;
+
+        var contentDirectory = new DirectoryInfo(Path.GetFullPath(appBaseDirectory));
+        return contentDirectory.Parent is { } packageRoot
+            && File.Exists(Path.Combine(packageRoot.FullName, ".portable"));
     }
 
     private static void StartRestartProcess(IReadOnlyList<string> args)

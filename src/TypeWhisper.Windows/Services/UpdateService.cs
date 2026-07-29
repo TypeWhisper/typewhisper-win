@@ -62,6 +62,14 @@ public sealed class UpdateService
     public ReleaseChannel Channel { get; private set; } = ReleaseChannel.Stable;
 
     /// <summary>
+    /// Gets whether this installation should check for updates automatically.
+    /// </summary>
+    internal bool ShouldCheckAutomatically => ShouldCheckAutomaticallyFor(
+        _distributionKind,
+        _updateManager?.IsInstalled == true,
+        _updateManager?.IsPortable == true);
+
+    /// <summary>
     /// Raised when update available.
     /// </summary>
     public event EventHandler? UpdateAvailable;
@@ -98,8 +106,12 @@ public sealed class UpdateService
         _updateManager = null;
         try
         {
+            var velopackChannel = GetVelopackChannel(RuntimeInformation.OSArchitecture, resolvedChannel);
             _updateManager = new UpdateManager(
-                new GithubSource(TypeWhisperEnvironment.GithubRepoUrl, null, resolvedChannel != ReleaseChannel.Stable),
+                new AppReleaseGithubSource(
+                    TypeWhisperEnvironment.GithubRepoUrl,
+                    velopackChannel,
+                    resolvedChannel != ReleaseChannel.Stable),
                 CreateUpdateOptions(RuntimeInformation.OSArchitecture, resolvedChannel));
         }
         catch
@@ -187,6 +199,14 @@ public sealed class UpdateService
 
     internal static bool IsManagedByMicrosoftStore(AppDistributionKind distributionKind) =>
         distributionKind == AppDistributionKind.Store;
+
+    internal static bool ShouldCheckAutomaticallyFor(
+        AppDistributionKind distributionKind,
+        bool isInstalled,
+        bool isPortable) =>
+        distributionKind == AppDistributionKind.Direct
+        && isInstalled
+        && !isPortable;
 
     internal static ReleaseChannel InferReleaseChannel(string? version)
     {

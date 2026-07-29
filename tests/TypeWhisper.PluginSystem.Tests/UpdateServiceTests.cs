@@ -26,6 +26,23 @@ public class UpdateServiceTests
     }
 
     [Theory]
+    [InlineData(AppDistributionKind.Direct, true, false, true)]
+    [InlineData(AppDistributionKind.Direct, true, true, false)]
+    [InlineData(AppDistributionKind.Direct, false, false, false)]
+    [InlineData(AppDistributionKind.Store, true, false, false)]
+    [InlineData(AppDistributionKind.Store, true, true, false)]
+    public void ShouldCheckAutomaticallyFor_RequiresInstalledNonPortableDirectBuild(
+        AppDistributionKind distributionKind,
+        bool isInstalled,
+        bool isPortable,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            UpdateService.ShouldCheckAutomaticallyFor(distributionKind, isInstalled, isPortable));
+    }
+
+    [Theory]
     [InlineData("0.7.1-daily.20260423", ReleaseChannel.Daily)]
     [InlineData("0.7.1-DAILY.20260423+build", ReleaseChannel.Daily)]
     [InlineData("0.7.0-rc1", ReleaseChannel.ReleaseCandidate)]
@@ -75,6 +92,7 @@ public class UpdateServiceTests
     [InlineData("daily", "0.7.0", ReleaseChannel.Daily)]
     [InlineData(null, "0.7.1-daily.20260423", ReleaseChannel.Daily)]
     [InlineData("", "0.7.0-rc1", ReleaseChannel.ReleaseCandidate)]
+    [InlineData("null", "0.7.1-daily.20260423", ReleaseChannel.Daily)]
     [InlineData("unknown", "0.7.0", ReleaseChannel.Stable)]
     public void ResolveReleaseChannel_UsesSavedPreferenceBeforeInstalledVersion(
         string? configuredChannel,
