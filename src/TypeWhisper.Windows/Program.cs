@@ -138,7 +138,7 @@ public static class Program
 
         var contentDirectory = new DirectoryInfo(Path.GetFullPath(appBaseDirectory));
         return contentDirectory.Parent is { } packageRoot
-            && File.Exists(Path.Combine(packageRoot.FullName, ".portable"));
+            && File.Exists(Path.Join(packageRoot.FullName, ".portable"));
     }
 
     private static void StartRestartProcess(IReadOnlyList<string> args)
