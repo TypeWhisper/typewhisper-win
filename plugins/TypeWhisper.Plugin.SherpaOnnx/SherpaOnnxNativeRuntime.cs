@@ -15,9 +15,14 @@ internal static class SherpaOnnxNativeRuntime
         DllImportSearchPath.UseDllDirectoryForDependencies | DllImportSearchPath.SafeDirectories;
 
     private static readonly object Sync = new();
+    private static readonly Dictionary<string, IntPtr> LoadedCudaLibraries =
+        new(StringComparer.OrdinalIgnoreCase);
     private static bool _resolverRegistered;
     private static string? _bundledRuntimeDirectory;
     private static string? _cudaRuntimeDirectory;
+
+    internal static IReadOnlyList<string> CudaPreloadFileNames =>
+        SherpaCudaRuntimeInstaller.CudnnRuntimeFileNames;
 
     /// <summary>
     /// Performs register resolver.
@@ -82,6 +87,14 @@ internal static class SherpaOnnxNativeRuntime
 
         try
         {
+            if (_cudaRuntimeDirectory is not null)
+            {
+                // cuDNN 9 resolves its split component libraries by name. A packaged
+                // Windows host does not reliably honor a PATH update for those loads.
+                lock (Sync)
+                    PreloadCudaDependencies(runtimeDirectory, NativeLibrary.Load, LoadedCudaLibraries);
+            }
+
             return NativeLibrary.Load(
                 candidate,
                 typeof(SherpaOnnxNativeRuntime).Assembly,
@@ -123,6 +136,44 @@ internal static class SherpaOnnxNativeRuntime
     {
         var fileName = Path.GetFileNameWithoutExtension(libraryName);
         return string.Equals(fileName, SherpaNativeLibraryBaseName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static void PreloadCudaDependencies(
+        string runtimeDirectory,
+        Func<string, IntPtr> loadLibrary,
+        IDictionary<string, IntPtr> loadedLibraries)
+    {
+        var resolvedRuntimeDirectory = Path.GetFullPath(runtimeDirectory);
+        foreach (var fileName in CudaPreloadFileNames)
+        {
+            var libraryPath = Path.Join(resolvedRuntimeDirectory, fileName);
+            if (!File.Exists(libraryPath))
+            {
+                throw new DllNotFoundException(
+                    $"The sherpa-onnx CUDA runtime is missing {fileName} under '{resolvedRuntimeDirectory}'.");
+            }
+
+            if (loadedLibraries.ContainsKey(libraryPath))
+                continue;
+
+            try
+            {
+                var handle = loadLibrary(libraryPath);
+                if (handle == IntPtr.Zero)
+                    throw new DllNotFoundException($"The native loader returned an invalid handle for {fileName}.");
+
+                loadedLibraries.Add(libraryPath, handle);
+            }
+            catch (Exception ex) when (
+                ex is DllNotFoundException
+                    or BadImageFormatException
+                    or FileLoadException)
+            {
+                throw new DllNotFoundException(
+                    $"Unable to preload {fileName} from the sherpa-onnx CUDA runtime. Loader error: {ex.Message}",
+                    ex);
+            }
+        }
     }
 
     private static void PrependToPath(string runtimeDirectory)

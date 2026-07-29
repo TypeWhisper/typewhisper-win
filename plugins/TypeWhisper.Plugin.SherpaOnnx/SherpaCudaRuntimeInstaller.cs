@@ -42,6 +42,20 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         SherpaOnnxRuntimeDependencyFileName
     ];
 
+    internal static IReadOnlyList<string> CudnnRuntimeFileNames { get; } =
+    [
+        "cudnn64_9.dll",
+        "cudnn_ops64_9.dll",
+        "cudnn_cnn64_9.dll",
+        "cudnn_adv64_9.dll",
+        "cudnn_graph64_9.dll",
+        "cudnn_heuristic64_9.dll",
+        "cudnn_engines_runtime_compiled64_9.dll",
+        "cudnn_engines_precompiled64_9.dll",
+        "cudnn_engines_tensor_ir64_9.dll",
+        "cudnn_ext64_9.dll"
+    ];
+
     private static readonly CudaDependencyPackage[] CudaDependencyPackages =
     [
         new(
@@ -59,16 +73,7 @@ internal sealed class SherpaCudaRuntimeInstaller : ISherpaCudaRuntimeInstaller
         new(
             "nvidia-cudnn-cu12",
             "9.22.0.52",
-            [
-                "cudnn64_9.dll",
-                "cudnn_adv64_9.dll",
-                "cudnn_cnn64_9.dll",
-                "cudnn_engines_precompiled64_9.dll",
-                "cudnn_engines_runtime_compiled64_9.dll",
-                "cudnn_graph64_9.dll",
-                "cudnn_heuristic64_9.dll",
-                "cudnn_ops64_9.dll"
-            ])
+            CudnnRuntimeFileNames)
     ];
 
     private static readonly string[] RequiredFiles =

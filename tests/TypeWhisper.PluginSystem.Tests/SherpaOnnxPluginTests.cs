@@ -29,7 +29,7 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.0.4", manifest.Version);
+        Assert.Equal("1.0.5", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -390,6 +390,50 @@ public class SherpaOnnxPluginTests
         Assert.Equal(
             Path.Join("C:", "TypeWhisper", "Plugins", "com.typewhisper.sherpa-onnx", "runtimes", "win-x64", "native"),
             runtimeDirectory);
+    }
+
+    [Fact]
+    public void NativeRuntime_PreloadsCudnnComponentsByAbsolutePathOnce()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-cudnn-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            foreach (var fileName in SherpaOnnxNativeRuntime.CudaPreloadFileNames)
+                File.WriteAllBytes(Path.Join(tempDir, fileName), []);
+
+            var loadedPaths = new List<string>();
+            var handles = new Dictionary<string, IntPtr>(StringComparer.OrdinalIgnoreCase);
+
+            SherpaOnnxNativeRuntime.PreloadCudaDependencies(
+                tempDir,
+                path =>
+                {
+                    loadedPaths.Add(path);
+                    return new IntPtr(loadedPaths.Count);
+                },
+                handles);
+            SherpaOnnxNativeRuntime.PreloadCudaDependencies(
+                tempDir,
+                path =>
+                {
+                    loadedPaths.Add(path);
+                    return new IntPtr(loadedPaths.Count);
+                },
+                handles);
+
+            Assert.Equal(SherpaOnnxNativeRuntime.CudaPreloadFileNames.Count, loadedPaths.Count);
+            Assert.Equal(
+                SherpaOnnxNativeRuntime.CudaPreloadFileNames,
+                loadedPaths.Select(Path.GetFileName));
+            Assert.All(loadedPaths, path => Assert.True(Path.IsPathFullyQualified(path)));
+            Assert.Equal(loadedPaths.Count, handles.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
     }
 
     [Fact]
