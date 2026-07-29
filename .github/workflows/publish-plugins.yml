@@ -51,6 +51,7 @@ jobs:
             'script'             = 'TypeWhisper.Plugin.Script'
             'live-transcript'    = 'TypeWhisper.Plugin.LiveTranscript'
             'granite-speech'     = 'TypeWhisper.Plugin.GraniteSpeech'
+            'cohere-transcribe'  = 'TypeWhisper.Plugin.CohereTranscribe'
             'gemma-local'        = 'TypeWhisper.Plugin.GemmaLocal'
             'claude'             = 'TypeWhisper.Plugin.Claude'
             'openrouter'         = 'TypeWhisper.Plugin.OpenRouter'

@@ -1,0 +1,10 @@
+{
+  "Settings.HuggingFaceToken": "Hugging Face token (optional)",
+  "Settings.HuggingFaceTokenHint": "Stored securely with Windows DPAPI and sent only to huggingface.co for model downloads. Public downloads also work without a token. Authentication can improve rate-limit reliability but does not guarantee higher transfer speed.",
+  "Settings.Save": "Save",
+  "Settings.Remove": "Remove",
+  "Settings.Saved": "Token saved securely.",
+  "Settings.Removed": "Token removed.",
+  "Settings.InvalidToken": "The token must not contain spaces or line breaks.",
+  "Settings.SaveFailed": "The token could not be stored securely. Please try again."
+}

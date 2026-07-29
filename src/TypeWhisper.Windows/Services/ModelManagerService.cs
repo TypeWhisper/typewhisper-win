@@ -241,6 +241,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             SetStatus(modelId, ModelStatus.DownloadingModel(0));
 
+            plugin.SetAccelerationPreference(
+                GetAccelerationPreference(_settings.Current.LocalModelAcceleration));
             var progress = new Progress<double>(p => SetStatus(modelId, ModelStatus.DownloadingModel(p)));
             await plugin.DownloadModelAsync(pluginModelId, progress, cancellationToken);
         }
