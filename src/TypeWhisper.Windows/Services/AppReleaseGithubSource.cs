@@ -9,6 +9,7 @@ namespace TypeWhisper.Windows.Services;
 internal sealed class AppReleaseGithubSource : GithubSource
 {
     private const int ReleasesPerPage = 100;
+    private const int MaximumPages = 10;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -29,7 +30,7 @@ internal sealed class AppReleaseGithubSource : GithubSource
 
     protected override async Task<GithubRelease[]> GetReleases(bool includePrereleases)
     {
-        for (var page = 1; ; page++)
+        for (var page = 1; page <= MaximumPages; page++)
         {
             var releasesPath = $"repos{RepoUri.AbsolutePath}/releases?per_page={ReleasesPerPage}&page={page}";
             var releasesUri = new Uri(GetApiBaseUrl(RepoUri), releasesPath);
@@ -51,6 +52,8 @@ internal sealed class AppReleaseGithubSource : GithubSource
             if (releases.Length < ReleasesPerPage)
                 return [];
         }
+
+        return [];
     }
 
     private bool ContainsReleaseIndex(GithubRelease release) =>

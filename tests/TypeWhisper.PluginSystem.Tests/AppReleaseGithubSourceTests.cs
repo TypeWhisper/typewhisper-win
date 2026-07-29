@@ -180,6 +180,35 @@ public sealed class AppReleaseGithubSourceTests
     }
 
     [Fact]
+    public async Task GetReleaseFeed_StopsAfterMaximumNumberOfFullPages()
+    {
+        var fullPage = Enumerable.Range(1, 100)
+            .Select(index => CreateRelease(
+                $"Plugin {index}",
+                publishedAt: new DateTime(2026, 7, 29, 12, 0, 0, DateTimeKind.Utc).AddMinutes(-index),
+                prerelease: false,
+                [$"plugin-{index}.zip"]))
+            .ToArray();
+        var downloader = new FakeDownloader(_ => SerializeReleases(fullPage));
+        var source = new AppReleaseGithubSource(
+            RepositoryUrl,
+            "win-x64",
+            prerelease: false,
+            downloader);
+
+        var feed = await source.GetReleaseFeed(new TestLogger(), "TypeWhisper", "win-x64");
+
+        Assert.Empty(feed.Assets);
+        Assert.Equal(10, downloader.StringRequests.Count);
+        Assert.Contains(
+            downloader.StringRequests,
+            url => url.Contains("per_page=100&page=10", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            downloader.StringRequests,
+            url => url.Contains("per_page=100&page=11", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task DownloadReleaseEntry_UsesPackageFromTheSelectedAppRelease()
     {
         var packageUrl = $"https://example.test/v1.0.6/{PackageFileName}";
