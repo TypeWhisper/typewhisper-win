@@ -14,6 +14,7 @@ using Windows.Storage;
 namespace TypeWhisper.Plugin.CohereTranscribe;
 
 internal sealed record CrispAsrServerConfiguration(
+    string ModelId,
     string ExecutablePath,
     CohereModelPaths ModelPaths,
     CrispAsrBackend Backend,
@@ -49,6 +50,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
     private WindowsProcessJob? _processJob;
     private string? _baseUrl;
     private string? _apiKey;
+    private string? _modelId;
 
     internal CrispAsrServer(Action<PluginLogLevel, string> log)
     {
@@ -108,6 +110,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             await WaitUntilReadyAsync(process, _baseUrl, timeout.Token);
 
             ActiveBackend = configuration.Backend;
+            _modelId = configuration.ModelId;
             _log(
                 PluginLogLevel.Info,
                 $"CrispASR {CohereLocalAssetManager.CrispAsrVersion} is ready on loopback using {GetBackendName(configuration.Backend)}.");
@@ -134,8 +137,14 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         string? language,
         CancellationToken cancellationToken)
     {
-        if (!IsRunning || _baseUrl is null || _apiKey is null || _process is null)
+        if (!IsRunning
+            || _baseUrl is null
+            || _apiKey is null
+            || _modelId is null
+            || _process is null)
+        {
             throw new InvalidOperationException("The local Cohere Transcribe model is not loaded.");
+        }
 
         if (_process.HasExited)
         {
@@ -147,7 +156,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
             _httpClient,
             _baseUrl,
             _apiKey,
-            CohereTranscribePlugin.ModelId,
+            _modelId,
             wavAudio,
             language,
             translate: false,
@@ -164,6 +173,7 @@ internal sealed class CrispAsrServer : ICrispAsrServer
         _processJob = null;
         _baseUrl = null;
         _apiKey = null;
+        _modelId = null;
         ActiveBackend = null;
 
         if (process is null)

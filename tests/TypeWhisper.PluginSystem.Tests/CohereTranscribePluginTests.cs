@@ -39,14 +39,23 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
-    public void ModelMetadata_ExposesPinnedBalancedModelAndFourteenLanguages()
+    public void ModelMetadata_ExposesFourPinnedQuantizationsAndFourteenLanguages()
     {
         var sut = new CohereTranscribePlugin();
-        var model = Assert.Single(sut.TranscriptionModels);
+        var models = sut.TranscriptionModels;
 
-        Assert.Equal(CohereTranscribePlugin.ModelId, model.Id);
-        Assert.True(model.IsRecommended);
-        Assert.Equal(14, model.LanguageCount);
+        Assert.Equal(
+            [
+                CohereModelCatalog.Q4KModelId,
+                CohereModelCatalog.DefaultModelId,
+                CohereModelCatalog.Q6KModelId,
+                CohereModelCatalog.Q8ModelId
+            ],
+            models.Select(model => model.Id));
+        Assert.Equal(
+            CohereTranscribePlugin.ModelId,
+            Assert.Single(models, model => model.IsRecommended).Id);
+        Assert.All(models, model => Assert.Equal(14, model.LanguageCount));
         Assert.Equal(14, sut.SupportedLanguages.Count);
         Assert.Contains("de", sut.SupportedLanguages);
         Assert.Contains("ja", sut.SupportedLanguages);
@@ -56,9 +65,12 @@ public sealed class CohereTranscribePluginTests
     [Fact]
     public void DownloadDefinitions_AreRevisionPinnedAndSha256Pinned()
     {
-        Assert.Contains(
-            CohereLocalAssetManager.CohereModelRevision,
-            CohereLocalAssetManager.CohereModel.DownloadUrl);
+        Assert.Equal(4, CohereModelCatalog.All.Count);
+        Assert.All(
+            CohereModelCatalog.All,
+            model => Assert.Contains(
+                CohereLocalAssetManager.CohereModelRevision,
+                model.Artifact.DownloadUrl));
         Assert.Contains(
             CohereLocalAssetManager.VadModelRevision,
             CohereLocalAssetManager.VadModel.DownloadUrl);
@@ -67,21 +79,62 @@ public sealed class CohereTranscribePluginTests
             CohereLocalAssetManager.LanguageIdModel.DownloadUrl);
 
         Assert.All(
-            new[]
-            {
-                CohereLocalAssetManager.CohereModel,
-                CohereLocalAssetManager.VadModel,
-                CohereLocalAssetManager.LanguageIdModel,
-                CohereLocalAssetManager.CpuRuntime.Archive,
-                CohereLocalAssetManager.CudaRuntime.Archive,
-                CohereLocalAssetManager.VulkanRuntime.Archive
-            },
+            CohereModelCatalog.All
+                .Select(model => model.Artifact)
+                .Concat(
+                [
+                    CohereLocalAssetManager.VadModel,
+                    CohereLocalAssetManager.LanguageIdModel,
+                    CohereLocalAssetManager.CpuRuntime.Archive,
+                    CohereLocalAssetManager.CudaRuntime.Archive,
+                    CohereLocalAssetManager.VulkanRuntime.Archive
+                ]),
             artifact =>
             {
                 Assert.Equal(64, artifact.Sha256.Length);
                 Assert.True(artifact.SizeBytes > 0);
                 Assert.StartsWith("https://", artifact.DownloadUrl);
             });
+    }
+
+    [Fact]
+    public void ModelPaths_KeepQuantizationsSeparateAndReuseAuxiliaryModels()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereLocalAssetManager(temp.Path);
+
+        var paths = CohereModelCatalog.All
+            .ToDictionary(model => model.Id, model => sut.GetModelPaths(model.Id));
+        var defaultPaths = paths[CohereModelCatalog.DefaultModelId];
+
+        Assert.Equal(
+            CohereModelCatalog.All.Select(model => model.Artifact.FileName),
+            CohereModelCatalog.All.Select(model => Path.GetFileName(paths[model.Id].ModelPath)));
+        Assert.Equal(
+            CohereModelCatalog.All.Count,
+            paths.Values.Select(path => path.ModelPath).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(
+            paths.Values,
+            path =>
+            {
+                Assert.Equal(defaultPaths.VadModelPath, path.VadModelPath);
+                Assert.Equal(defaultPaths.LanguageIdModelPath, path.LanguageIdModelPath);
+                Assert.Equal(defaultPaths.CacheDirectory, path.CacheDirectory);
+            });
+    }
+
+    [Fact]
+    public void SelectModel_AcceptsPublishedQuantizationsAndRejectsUnknownIds()
+    {
+        using var sut = new CohereTranscribePlugin();
+
+        foreach (var model in CohereModelCatalog.All)
+        {
+            sut.SelectModel(model.Id);
+            Assert.Equal(model.Id, sut.SelectedModelId);
+        }
+
+        Assert.Throws<ArgumentException>(() => sut.SelectModel("cohere-unknown"));
     }
 
     [Fact]
@@ -302,6 +355,7 @@ public sealed class CohereTranscribePluginTests
             @"C:\models\lid.gguf",
             @"C:\models\cache");
         var configuration = new CrispAsrServerConfiguration(
+            CohereTranscribePlugin.ModelId,
             @"C:\runtime\crispasr.exe",
             paths,
             CrispAsrBackend.Cuda,
@@ -438,8 +492,12 @@ public sealed class CohereTranscribePluginTests
         Assert.False(File.Exists(escapedPath));
     }
 
-    [Fact]
-    public async Task PluginLifecycle_UsesManagedCpuRuntimeAndNormalizesLanguage()
+    [Theory]
+    [InlineData(CohereModelCatalog.Q4KModelId)]
+    [InlineData(CohereModelCatalog.DefaultModelId)]
+    [InlineData(CohereModelCatalog.Q6KModelId)]
+    [InlineData(CohereModelCatalog.Q8ModelId)]
+    public async Task PluginLifecycle_UsesSelectedQuantizationAndManagedCpuRuntime(string modelId)
     {
         using var temp = new TempDirectory();
         var assets = new FakeAssetManager();
@@ -451,10 +509,10 @@ public sealed class CohereTranscribePluginTests
         await sut.ActivateAsync(host);
         sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
         await sut.DownloadModelAsync(
-            CohereTranscribePlugin.ModelId,
+            modelId,
             new InlineProgress<double>(downloadProgress.Add),
             CancellationToken.None);
-        await sut.LoadModelAsync(CohereTranscribePlugin.ModelId, CancellationToken.None);
+        await sut.LoadModelAsync(modelId, CancellationToken.None);
         var result = await sut.TranscribeAsync(
             [1, 2, 3],
             "de-DE",
@@ -463,7 +521,9 @@ public sealed class CohereTranscribePluginTests
             CancellationToken.None);
 
         Assert.True(assets.ModelInstalled);
+        Assert.Equal(modelId, assets.LastEnsuredModelId);
         Assert.Equal([CrispAsrBackend.Cpu], assets.EnsuredRuntimes);
+        Assert.Equal(modelId, server.LastConfiguration?.ModelId);
         Assert.Equal(CrispAsrBackend.Cpu, server.LastConfiguration?.Backend);
         Assert.Equal("de", server.LastLanguage);
         Assert.Equal("lokal", result.Text);
@@ -624,8 +684,10 @@ public sealed class CohereTranscribePluginTests
 
     private sealed class FakeAssetManager : ICohereLocalAssetManager
     {
-        public long ModelTransferSize => 100;
-        public bool ModelInstalled { get; private set; }
+        private readonly HashSet<string> _installedModelIds = [];
+
+        public bool ModelInstalled => _installedModelIds.Count > 0;
+        public string? LastEnsuredModelId { get; private set; }
         public string? HuggingFaceToken { get; private set; }
         public List<CrispAsrBackend> EnsuredRuntimes { get; } = [];
 
@@ -634,12 +696,13 @@ public sealed class CohereTranscribePluginTests
             HuggingFaceToken = token;
         }
 
-        public bool IsModelInstalled() => ModelInstalled;
+        public long GetModelTransferSize(string modelId) => 100;
+        public bool IsModelInstalled(string modelId) => _installedModelIds.Contains(modelId);
         public bool IsRuntimeInstalled(CrispAsrBackend backend) =>
             EnsuredRuntimes.Contains(backend);
         public long GetRuntimeTransferSize(CrispAsrBackend backend) => 20;
-        public CohereModelPaths GetModelPaths() => new(
-            @"C:\models\cohere.gguf",
+        public CohereModelPaths GetModelPaths(string modelId) => new(
+            $@"C:\models\{modelId}.gguf",
             @"C:\models\vad.bin",
             @"C:\models\lid.gguf",
             @"C:\models\cache");
@@ -647,10 +710,12 @@ public sealed class CohereTranscribePluginTests
             @"C:\runtime\crispasr.exe";
 
         public Task EnsureModelAsync(
+            string modelId,
             IProgress<ArtifactTransferProgress>? progress,
             CancellationToken cancellationToken)
         {
-            ModelInstalled = true;
+            LastEnsuredModelId = modelId;
+            _installedModelIds.Add(modelId);
             progress?.Report(new ArtifactTransferProgress(100, 100));
             return Task.CompletedTask;
         }
