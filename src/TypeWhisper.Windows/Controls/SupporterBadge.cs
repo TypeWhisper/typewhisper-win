@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Controls;
 
@@ -35,8 +36,18 @@ public sealed class SupporterBadge : Border
         CornerRadius = new CornerRadius(10);
         Padding = new Thickness(8, 3, 8, 3);
         Visibility = Visibility.Collapsed;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         UpdateVisual();
     }
+
+    private void OnLoaded(object sender, RoutedEventArgs e) =>
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) =>
+        Loc.Instance.LanguageChanged -= OnLanguageChanged;
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => UpdateVisual();
 
     private static void OnTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -54,9 +65,9 @@ public sealed class SupporterBadge : Border
         Visibility = Visibility.Visible;
         var (icon, color, label) = Tier switch
         {
-            SupporterTier.Bronze => ("\u2764", Color.FromRgb(0xCD, 0x7F, 0x32), "Bronze"),
-            SupporterTier.Silver => ("\u2B50", Color.FromRgb(0xC0, 0xC0, 0xC0), "Silver"),
-            SupporterTier.Gold => ("\uD83D\uDC51", Color.FromRgb(0xFF, 0xD7, 0x00), "Gold"),
+            SupporterTier.Bronze => ("\u2764", Color.FromRgb(0xCD, 0x7F, 0x32), Loc.Instance["License.SupporterBronzeName"]),
+            SupporterTier.Silver => ("\u2B50", Color.FromRgb(0xC0, 0xC0, 0xC0), Loc.Instance["License.SupporterSilverName"]),
+            SupporterTier.Gold => ("\uD83D\uDC51", Color.FromRgb(0xFF, 0xD7, 0x00), Loc.Instance["License.SupporterGoldName"]),
             _ => ("", Colors.Transparent, "")
         };
 

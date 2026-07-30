@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -156,7 +157,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
             {
                 HandleSupporterEntitlementRemoved();
                 ClaimState = SupporterDiscordClaimState.Failed;
-                ErrorMessage = "An active supporter or commercial license is required before you can claim Discord status.";
+                ErrorMessage = Loc.Instance["License.DiscordEntitlementRequired"];
                 PersistStatus();
                 return null;
             }
@@ -176,7 +177,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 var json = await response.Content.ReadAsStringAsync(ct);
                 if (!response.IsSuccessStatusCode)
                 {
-                    var message = ParseDiscordError(json, $"Discord claim start failed (HTTP {(int)response.StatusCode})");
+                    var message = ParseDiscordError(
+                        json,
+                        Loc.Instance.GetString("License.DiscordClaimStartFailedFormat", (int)response.StatusCode));
                     if (ShouldRetryWithNextClaimProof(message))
                     {
                         lastRecoverableMessage = message;
@@ -187,7 +190,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 }
 
                 var payload = JsonSerializer.Deserialize<SupporterDiscordStartResponse>(json)
-                    ?? throw new InvalidOperationException("Discord claim start failed: empty response.");
+                    ?? throw new InvalidOperationException(Loc.Instance["License.DiscordClaimEmptyResponse"]);
 
                 SessionId = payload.SessionId;
                 ClaimActivationId = proof.ActivationId;
@@ -201,7 +204,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
                     return claimUrl;
 
                 ClaimState = SupporterDiscordClaimState.Failed;
-                ErrorMessage = "Discord claim start failed: no claim URL was returned.";
+                ErrorMessage = Loc.Instance["License.DiscordClaimNoUrl"];
                 PersistStatus();
                 return null;
             }
@@ -290,10 +293,12 @@ public sealed partial class SupporterDiscordService : ObservableObject
             using var response = await _http.GetAsync(url, ct);
             var json = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException(ParseDiscordError(json, $"Discord status refresh failed (HTTP {(int)response.StatusCode})"));
+                throw new InvalidOperationException(ParseDiscordError(
+                    json,
+                    Loc.Instance.GetString("License.DiscordStatusRefreshFailedFormat", (int)response.StatusCode)));
 
             var payload = JsonSerializer.Deserialize<SupporterDiscordStatusResponse>(json)
-                ?? throw new InvalidOperationException("Discord status refresh failed: empty response.");
+                ?? throw new InvalidOperationException(Loc.Instance["License.DiscordStatusEmptyResponse"]);
 
             IsHelperUnavailable = false;
             ClaimState = payload.Status switch
@@ -306,7 +311,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
             };
             DiscordUsername = payload.DiscordUsername;
             LinkedRoles = payload.LinkedRoles ?? Array.Empty<string>();
-            ErrorMessage = payload.ErrorMessage;
+            ErrorMessage = NormalizeOptionalDiscordError(payload.ErrorMessage);
             SessionId = string.IsNullOrWhiteSpace(payload.SessionId) ? SessionId : payload.SessionId;
             PersistStatus();
         }
@@ -371,7 +376,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
             SessionId = payload.SessionId;
 
         IsHelperUnavailable = false;
-        ErrorMessage = payload.ErrorMessage;
+        ErrorMessage = NormalizeOptionalDiscordError(payload.ErrorMessage);
         ClaimState = payload.Status?.ToLowerInvariant() switch
         {
             "linked" or "pending" => SupporterDiscordClaimState.Pending,
@@ -442,19 +447,19 @@ public sealed partial class SupporterDiscordService : ObservableObject
         {
             ClaimState = SupporterDiscordClaimState.Unavailable;
             IsHelperUnavailable = true;
-            ErrorMessage = "Local helper unavailable";
+            ErrorMessage = Loc.Instance["License.DiscordHelperUnavailable"];
             return;
         }
 
         IsHelperUnavailable = false;
         if (ClaimState == SupporterDiscordClaimState.Linked)
         {
-            ErrorMessage = ex.Message;
+            ErrorMessage = Loc.Instance.GetString("License.DiscordOperationFailedFormat", ex.Message);
         }
         else
         {
             ClaimState = SupporterDiscordClaimState.Failed;
-            ErrorMessage = ex.Message;
+            ErrorMessage = Loc.Instance.GetString("License.DiscordOperationFailedFormat", ex.Message);
         }
     }
 
@@ -501,16 +506,20 @@ public sealed partial class SupporterDiscordService : ObservableObject
     {
         if (string.Equals(message.Trim(), "Not found", StringComparison.OrdinalIgnoreCase))
         {
-            return "The supporter entitlement could not be found. Try refreshing the supporter license and reconnecting Discord.";
+            return Loc.Instance["License.DiscordEntitlementNotFound"];
         }
 
         return message;
     }
 
+    private static string? NormalizeOptionalDiscordError(string? message) =>
+        string.IsNullOrWhiteSpace(message) ? null : NormalizeDiscordError(message);
+
     private static bool ShouldRetryWithNextClaimProof(string message) =>
         message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("could not be found", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("supporter entitlement", StringComparison.OrdinalIgnoreCase);
+        message.Contains("supporter entitlement", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(message, Loc.Instance["License.DiscordEntitlementNotFound"], StringComparison.Ordinal);
 
     private static string ResolveDataFilePath(string dataPath, string fileName)
     {

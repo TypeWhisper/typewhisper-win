@@ -1,4 +1,5 @@
 using TypeWhisper.Core.Services;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -48,7 +49,7 @@ public static class WatchFolderExportBuilder
         WatchFolderTranscriptionResult result)
     {
         if (result.Segments.Count == 0)
-            throw new InvalidOperationException("Subtitle export requires timestamped transcription segments.");
+            throw new InvalidOperationException(Loc.Instance["FileTranscription.SubtitleUnavailable"]);
 
         var content = extension == "srt"
             ? SubtitleExporter.ToSrt(result.Segments)

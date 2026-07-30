@@ -34,8 +34,8 @@ public partial class ModelManagerViewModel : ObservableObject
     private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _busyMessage;
-    [ObservableProperty] private string _activeProviderDisplayName = "None";
-    [ObservableProperty] private string _activeModelDisplayName = "No model selected";
+    [ObservableProperty] private string _activeProviderDisplayName = Loc.Instance["Models.NoProvider"];
+    [ObservableProperty] private string _activeModelDisplayName = Loc.Instance["Models.NoModelSelected"];
     [ObservableProperty] private string _activeModelStatusText = "";
     private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
@@ -320,14 +320,14 @@ public partial class ModelManagerViewModel : ObservableObject
         bool isDownloaded,
         bool isConfigured,
         bool supportsDownload) => status.Type switch
-    {
-        ModelStatusType.Downloading => $"Download {status.Progress:P0}",
-        ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
-        ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
-        ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
-        _ when !supportsDownload && !isConfigured => Loc.Instance["Models.StatusApiKeyRequired"],
-        _ => isDownloaded ? Loc.Instance["Models.StatusDownloaded"] : ""
-    };
+        {
+            ModelStatusType.Downloading => Loc.Instance.GetString("Models.DownloadProgressFormat", status.Progress),
+            ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
+            ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
+            ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
+            _ when !supportsDownload && !isConfigured => Loc.Instance["Models.StatusApiKeyRequired"],
+            _ => isDownloaded ? Loc.Instance["Models.StatusDownloaded"] : ""
+        };
 
     internal static bool IsBusyStatus(ModelStatus status) =>
         status.Type is ModelStatusType.Downloading or ModelStatusType.Loading;
@@ -409,8 +409,8 @@ public partial class ModelManagerViewModel : ObservableObject
 
         if (activeModel.Model is null)
         {
-            ActiveProviderDisplayName = "None";
-            ActiveModelDisplayName = "No model selected";
+            ActiveProviderDisplayName = Loc.Instance["Models.NoProvider"];
+            ActiveModelDisplayName = Loc.Instance["Models.NoModelSelected"];
             ActiveModelStatusText = "";
             IsActiveModelReady = false;
             IsActiveModelBusy = false;

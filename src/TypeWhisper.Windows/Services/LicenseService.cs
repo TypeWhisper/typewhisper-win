@@ -10,6 +10,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -198,9 +199,9 @@ public sealed partial class LicenseService : ObservableObject
     /// </summary>
     public string? CommercialTierDisplayName => CommercialTier switch
     {
-        CommercialLicenseTier.Individual => "Individual",
-        CommercialLicenseTier.Team => "Team",
-        CommercialLicenseTier.Enterprise => "Enterprise",
+        CommercialLicenseTier.Individual => Loc.Instance["License.TierIndividualName"],
+        CommercialLicenseTier.Team => Loc.Instance["License.TierTeamName"],
+        CommercialLicenseTier.Enterprise => Loc.Instance["License.TierEnterpriseName"],
         _ => null
     };
 
@@ -209,9 +210,9 @@ public sealed partial class LicenseService : ObservableObject
     /// </summary>
     public string? SupporterTierDisplayName => EffectiveSupporterTier switch
     {
-        global::TypeWhisper.Windows.Services.SupporterTier.Bronze => "Bronze",
-        global::TypeWhisper.Windows.Services.SupporterTier.Silver => "Silver",
-        global::TypeWhisper.Windows.Services.SupporterTier.Gold => "Gold",
+        global::TypeWhisper.Windows.Services.SupporterTier.Bronze => Loc.Instance["License.SupporterBronzeName"],
+        global::TypeWhisper.Windows.Services.SupporterTier.Silver => Loc.Instance["License.SupporterSilverName"],
+        global::TypeWhisper.Windows.Services.SupporterTier.Gold => Loc.Instance["License.SupporterGoldName"],
         _ => null
     };
 
@@ -607,13 +608,13 @@ public sealed partial class LicenseService : ObservableObject
     {
         var activation = await ActivateCoreAsync(key, ct);
         var activationId = activation.Id
-            ?? throw new InvalidOperationException("Activation failed: Polar did not return an activation id.");
+            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationMissingId"]);
 
         try
         {
             var validation = await ValidateCoreAsync(key, activationId, ct);
             if (!string.Equals(validation.Status, "granted", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("This entitlement is not active.");
+                throw new InvalidOperationException(Loc.Instance["License.EntitlementInactive"]);
 
             var entitlement = ClassifyGrantedValidation(validation);
             EnsureExpectedEntitlement(entitlement, expectedEntitlement);
@@ -722,7 +723,7 @@ public sealed partial class LicenseService : ObservableObject
         {
             MarkCommercialActivationExpired();
             if (reportErrors)
-                throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
             return;
         }
 
@@ -753,7 +754,7 @@ public sealed partial class LicenseService : ObservableObject
         {
             MarkSupporterActivationExpired();
             if (reportErrors)
-                throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+                throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
             return;
         }
 
@@ -798,7 +799,7 @@ public sealed partial class LicenseService : ObservableObject
 
     private static ActivatedLicenseEntitlement ClassifyGrantedValidation(PolarValidationResponse validation) =>
         TryClassifyGrantedValidation(validation)
-        ?? throw new InvalidOperationException("This key could not be matched to a known TypeWhisper entitlement.");
+        ?? throw new InvalidOperationException(Loc.Instance["License.UnknownEntitlement"]);
 
     private static ActivatedLicenseEntitlement? TryClassifyGrantedValidation(PolarValidationResponse validation)
     {
@@ -821,13 +822,13 @@ public sealed partial class LicenseService : ObservableObject
         if (expectedEntitlement == ExpectedLicenseEntitlementKind.Commercial &&
             entitlement.Kind != ActivatedLicenseEntitlementKind.Commercial)
         {
-            throw new InvalidOperationException("This key belongs to a supporter tier, not a commercial license.");
+            throw new InvalidOperationException(Loc.Instance["License.SupporterKeyForCommercial"]);
         }
 
         if (expectedEntitlement == ExpectedLicenseEntitlementKind.Supporter &&
             entitlement.Kind != ActivatedLicenseEntitlementKind.Supporter)
         {
-            throw new InvalidOperationException("This key belongs to a commercial license, not a supporter tier.");
+            throw new InvalidOperationException(Loc.Instance["License.CommercialKeyForSupporter"]);
         }
     }
 
@@ -867,7 +868,7 @@ public sealed partial class LicenseService : ObservableObject
             throw CreatePolarException(json, $"Activation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
 
         return JsonSerializer.Deserialize<PolarActivationResponse>(json)
-            ?? throw new InvalidOperationException("Activation failed: Polar returned an empty response.");
+            ?? throw new InvalidOperationException(Loc.Instance["License.ActivationEmptyResponse"]);
     }
 
     private async Task<PolarValidationResponse> ValidateCoreAsync(string key, string activationId, CancellationToken ct)
@@ -880,7 +881,7 @@ public sealed partial class LicenseService : ObservableObject
             throw CreatePolarException(json, $"Validation failed (HTTP {(int)response.StatusCode})", (int)response.StatusCode);
 
         return JsonSerializer.Deserialize<PolarValidationResponse>(json)
-            ?? throw new InvalidOperationException("Validation failed: Polar returned an empty response.");
+            ?? throw new InvalidOperationException(Loc.Instance["License.ValidationEmptyResponse"]);
     }
 
     private static string GetAppVersion()

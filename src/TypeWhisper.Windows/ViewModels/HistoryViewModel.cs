@@ -165,7 +165,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         var dlg = new SaveFileDialog
         {
-            Filter = "Text (*.txt)|*.txt|CSV (*.csv)|*.csv|Markdown (*.md)|*.md|JSON (*.json)|*.json",
+            Filter = Loc.Instance["History.ExportFileFilter"],
             DefaultExt = ".txt",
             FileName = Loc.Instance.GetString("History.ExportFilename", DateTime.Now)
         };

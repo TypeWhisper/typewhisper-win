@@ -290,7 +290,7 @@ public sealed class RecorderCaptureService : IStreamingAudioSource, IDisposable
         var fileName = $"recording-{DateTime.Now:yyyy-MM-dd-HHmmssfff}.{extension}";
         var safeFileName = Path.GetFileName(fileName);
         if (string.IsNullOrEmpty(safeFileName))
-            throw new InvalidOperationException("Recorder output file name is invalid.");
+            throw new InvalidOperationException(Loc.Instance["Recorder.InvalidOutputFileName"]);
 
         var path = Path.Join(
             TypeWhisperEnvironment.AudioPath,

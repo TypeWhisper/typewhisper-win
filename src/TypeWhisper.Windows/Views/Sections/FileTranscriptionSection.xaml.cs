@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views.Sections;
@@ -106,7 +107,7 @@ public partial class FileTranscriptionSection : UserControl
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "Select watch folder"
+            Title = Loc.Instance["WatchFolder.SelectWatchFolderTitle"]
         };
 
         var current = _viewModel?.FileTranscription.WatchFolderPath;
@@ -121,7 +122,7 @@ public partial class FileTranscriptionSection : UserControl
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "Select output folder"
+            Title = Loc.Instance["WatchFolder.SelectOutputFolderTitle"]
         };
 
         var current = _viewModel?.FileTranscription.WatchFolderOutputPath
@@ -138,7 +139,7 @@ public partial class FileTranscriptionSection : UserControl
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Multiselect = true,
-            Filter = "Audio/Video|*.wav;*.mp3;*.m4a;*.aac;*.ogg;*.flac;*.wma;*.mp4;*.mkv;*.avi;*.mov;*.webm|All Files|*.*"
+            Filter = Loc.Instance["FileTranscription.FileDialogFilter"]
         };
 
         var owner = Window.GetWindow(this);

@@ -35,27 +35,6 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         License = license;
         Discord = discord;
 
-        MonthlyCommercialOptions =
-        [
-            new LicensePurchaseOption("Individual", "5 EUR/mo", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividual, "settings_individual_monthly")),
-            new LicensePurchaseOption("Team", "19 EUR/mo", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeam, "settings_team_monthly")),
-            new LicensePurchaseOption("Enterprise", "99 EUR/mo", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterprise, "settings_enterprise_monthly")),
-        ];
-
-        LifetimeCommercialOptions =
-        [
-            new LicensePurchaseOption("Individual", "99 EUR", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividualLifetime, "settings_individual_lifetime")),
-            new LicensePurchaseOption("Team", "299 EUR", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeamLifetime, "settings_team_lifetime")),
-            new LicensePurchaseOption("Enterprise", "999 EUR", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterpriseLifetime, "settings_enterprise_lifetime")),
-        ];
-
-        SupporterOptions =
-        [
-            new LicensePurchaseOption("Bronze", "10 EUR", Loc.Instance["License.SupporterBronzeHint"], AttributedCheckoutUrl(CheckoutUrlSupporterBronze, "settings_bronze_one_time")),
-            new LicensePurchaseOption("Silver", "25 EUR", Loc.Instance["License.SupporterSilverHint"], AttributedCheckoutUrl(CheckoutUrlSupporterSilver, "settings_silver_one_time")),
-            new LicensePurchaseOption("Gold", "50 EUR", Loc.Instance["License.SupporterGoldHint"], AttributedCheckoutUrl(CheckoutUrlSupporterGold, "settings_gold_one_time")),
-        ];
-
         SelectPrivateUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.PrivateUser));
         SelectBusinessUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.Business));
         SelectPlanCommand = new RelayCommand<LicensePlanOption>(SelectPlan);
@@ -73,6 +52,7 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
         License.PropertyChanged += OnServicePropertyChanged;
         Discord.PropertyChanged += OnServicePropertyChanged;
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
     }
 
     private static string AttributedCheckoutUrl(string baseUrl, string content) =>
@@ -89,15 +69,30 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     /// <summary>
     /// Gets the monthly commercial options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions =>
+    [
+        new(Loc.Instance["License.TierIndividualName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 5), Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividual, "settings_individual_monthly")),
+        new(Loc.Instance["License.TierTeamName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 19), Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeam, "settings_team_monthly")),
+        new(Loc.Instance["License.TierEnterpriseName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 99), Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterprise, "settings_enterprise_monthly")),
+    ];
     /// <summary>
     /// Gets the lifetime commercial options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions =>
+    [
+        new(Loc.Instance["License.TierIndividualName"], "99 EUR", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividualLifetime, "settings_individual_lifetime")),
+        new(Loc.Instance["License.TierTeamName"], "299 EUR", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeamLifetime, "settings_team_lifetime")),
+        new(Loc.Instance["License.TierEnterpriseName"], "999 EUR", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterpriseLifetime, "settings_enterprise_lifetime")),
+    ];
     /// <summary>
     /// Gets the supporter options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> SupporterOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> SupporterOptions =>
+    [
+        new(Loc.Instance["License.SupporterBronzeName"], "10 EUR", Loc.Instance["License.SupporterBronzeHint"], AttributedCheckoutUrl(CheckoutUrlSupporterBronze, "settings_bronze_one_time")),
+        new(Loc.Instance["License.SupporterSilverName"], "25 EUR", Loc.Instance["License.SupporterSilverHint"], AttributedCheckoutUrl(CheckoutUrlSupporterSilver, "settings_silver_one_time")),
+        new(Loc.Instance["License.SupporterGoldName"], "50 EUR", Loc.Instance["License.SupporterGoldHint"], AttributedCheckoutUrl(CheckoutUrlSupporterGold, "settings_gold_one_time")),
+    ];
     /// <summary>
     /// Gets the plan options.
     /// </summary>
@@ -514,10 +509,25 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         LicenseActivationNotice = null;
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(RefreshComputedProperties);
+            return;
+        }
+
+        RefreshComputedProperties();
+    }
+
     private void RefreshComputedProperties()
     {
         OnPropertyChanged(nameof(IsPrivateUser));
         OnPropertyChanged(nameof(IsBusinessUser));
+        OnPropertyChanged(nameof(MonthlyCommercialOptions));
+        OnPropertyChanged(nameof(LifetimeCommercialOptions));
+        OnPropertyChanged(nameof(SupporterOptions));
         OnPropertyChanged(nameof(PlanOptions));
         OnPropertyChanged(nameof(ShowPlanSelection));
         OnPropertyChanged(nameof(ShowLicenseActivation));

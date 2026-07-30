@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -76,7 +77,7 @@ public sealed class ApiServerController : IDisposable
         if (settings.ApiServerPort is < 1 or > 65535)
         {
             Stop(clearError: false);
-            ErrorMessage = $"Invalid API server port: {settings.ApiServerPort}";
+            ErrorMessage = Loc.Instance.GetString("Advanced.ApiInvalidPortFormat", settings.ApiServerPort);
             NotifyStateChanged();
             return;
         }
@@ -106,7 +107,7 @@ public sealed class ApiServerController : IDisposable
             }
             catch (Exception stopEx) when (IsRecoverable(stopEx))
             {
-                ErrorMessage = $"{ErrorMessage}; cleanup failed: {stopEx.Message}";
+                ErrorMessage = Loc.Instance.GetString("Advanced.ApiCleanupFailedFormat", ErrorMessage ?? "", stopEx.Message);
             }
         }
 

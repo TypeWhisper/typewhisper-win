@@ -438,7 +438,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         {
             FileName = $"typewhisper-diagnostics-{DateTime.Now:yyyy-MM-dd-HHmmss}.json",
             DefaultExt = ".json",
-            Filter = "JSON|*.json"
+            Filter = Loc.Instance["Info.DiagnosticsJsonFilter"]
         };
 
         if (dialog.ShowDialog() == true)

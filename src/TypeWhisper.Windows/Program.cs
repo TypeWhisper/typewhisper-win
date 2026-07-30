@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Core;
 #if TYPEWHISPER_STORE
@@ -100,6 +101,9 @@ public static class Program
 
         try
         {
+            Loc.Instance.Initialize();
+            Loc.Instance.CurrentLanguage = Loc.Instance.DetectSystemLanguage();
+
             try
             {
                 UserDataMigrationService.MigrateLegacyDataIfNeeded();
@@ -107,7 +111,7 @@ public static class Program
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 System.Windows.MessageBox.Show(
-                    $"TypeWhisper could not move its user data outside the application directory. No data was deleted.\n\n{ex.Message}",
+                    Loc.Instance.GetString("App.UserDataMigrationErrorFormat", ex.Message),
                     "TypeWhisper",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Error);

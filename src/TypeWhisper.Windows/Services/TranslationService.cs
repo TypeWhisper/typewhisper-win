@@ -129,7 +129,10 @@ public sealed class TranslationService : ITranslationService, IDisposable
             _loadingModels.Add(key);
 
             var modelInfo = TranslationModelInfo.FindModel(sourceLang, targetLang)
-                ?? throw new NotSupportedException($"No translation model for {sourceLang}->{targetLang}");
+                ?? throw new NotSupportedException(Loc.Instance.GetString(
+                    "Error.TranslationNotAvailableFormat",
+                    sourceLang,
+                    targetLang));
             var modelSubDirectory = SafeRelativeName(modelInfo.SubDirectory, nameof(modelInfo.SubDirectory));
 
             var modelDir = Path.Join(

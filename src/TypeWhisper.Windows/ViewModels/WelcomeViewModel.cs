@@ -457,7 +457,7 @@ public partial class WelcomeViewModel : ObservableObject
         if (status.Type == ModelStatusType.Downloading)
         {
             DownloadProgress = status.Progress;
-            DownloadStatus = $"Download: {status.Progress:P0}";
+            DownloadStatus = Loc.Instance.GetString("Models.DownloadProgressFormat", status.Progress);
         }
         else if (status.Type == ModelStatusType.Loading)
         {
