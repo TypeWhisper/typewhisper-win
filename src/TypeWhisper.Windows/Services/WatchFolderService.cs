@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using TypeWhisper.Core;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -301,8 +302,8 @@ public sealed class WatchFolderService : IDisposable
             if (fingerprint is null || IsKnownFingerprint(fingerprint))
                 return;
 
-            var options = _options ?? throw new InvalidOperationException("Watch folder options are not available.");
-            var transcribeHandler = _transcribeHandler ?? throw new InvalidOperationException("Watch folder transcriber is not available.");
+            var options = _options ?? throw new InvalidOperationException(Loc.Instance["WatchFolder.OptionsUnavailable"]);
+            var transcribeHandler = _transcribeHandler ?? throw new InvalidOperationException(Loc.Instance["WatchFolder.TranscriberUnavailable"]);
             var result = await transcribeHandler(new WatchFolderTranscriptionRequest(filePath), ct);
 
             var outputFolder = string.IsNullOrWhiteSpace(options.OutputPath)
@@ -459,7 +460,7 @@ public sealed class WatchFolderService : IDisposable
             await Task.Delay(250, ct);
         }
 
-        throw new IOException("Watch folder file is still being written.");
+        throw new IOException(Loc.Instance["WatchFolder.FileStillWriting"]);
     }
 
     private static string? CreateFingerprint(string path)

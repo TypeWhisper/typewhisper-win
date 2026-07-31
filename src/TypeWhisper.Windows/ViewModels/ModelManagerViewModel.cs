@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +18,21 @@ namespace TypeWhisper.Windows.ViewModels;
 /// </summary>
 public partial class ModelManagerViewModel : ObservableObject
 {
+    private enum BusyMessageKind
+    {
+        None,
+        LoadingModel,
+        Error,
+    }
+
+    private enum ModelStorageStatusKind
+    {
+        Current,
+        Moving,
+        Moved,
+        Error,
+    }
+
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
     private readonly LocalModelStorageService _modelStorage;
@@ -28,14 +44,17 @@ public partial class ModelManagerViewModel : ObservableObject
     private bool _accelerationRestartNotificationShown;
     private int _accelerationApplyVersion;
     private int _accelerationBusyVersion;
+    private BusyMessageKind _busyMessageKind;
+    private string? _busyErrorDetail;
+    private ModelStorageStatusKind _modelStorageStatusKind = ModelStorageStatusKind.Current;
+    private string? _modelStorageErrorDetail;
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
     private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
     [ObservableProperty] private bool _isBusy;
-    [ObservableProperty] private string? _busyMessage;
-    [ObservableProperty] private string _activeProviderDisplayName = "None";
-    [ObservableProperty] private string _activeModelDisplayName = "No model selected";
+    [ObservableProperty] private string _activeProviderDisplayName = Loc.Instance["Models.NoProvider"];
+    [ObservableProperty] private string _activeModelDisplayName = Loc.Instance["Models.NoModelSelected"];
     [ObservableProperty] private string _activeModelStatusText = "";
     private string _accelerationStatusText = "";
     [ObservableProperty] private bool _isActiveModelReady;
@@ -45,7 +64,6 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private string _accelerationRestartMessage = "";
     [ObservableProperty] private string _modelStoragePath = "";
     [ObservableProperty] private string _resolvedModelStoragePath = "";
-    [ObservableProperty] private string _modelStorageStatusText = "";
     [ObservableProperty] private bool _isModelStorageBusy;
     [ObservableProperty] private bool _hasModelStorageError;
 
@@ -72,6 +90,28 @@ public partial class ModelManagerViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Gets the localized status for the current model operation.
+    /// </summary>
+    public string? BusyMessage => _busyMessageKind switch
+    {
+        BusyMessageKind.LoadingModel => Loc.Instance["Models.LoadingModel"],
+        BusyMessageKind.Error => Loc.Instance.GetString("Status.ErrorFormat", _busyErrorDetail ?? ""),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Gets the localized model storage status.
+    /// </summary>
+    public string ModelStorageStatusText => _modelStorageStatusKind switch
+    {
+        ModelStorageStatusKind.Moving => Loc.Instance["Models.StorageMoving"],
+        ModelStorageStatusKind.Moved => Loc.Instance["Models.StorageMoved"],
+        ModelStorageStatusKind.Error =>
+            Loc.Instance.GetString("Models.StorageErrorFormat", _modelStorageErrorDetail ?? ""),
+        _ => Loc.Instance.GetString("Models.StorageCurrentFormat", ResolvedModelStoragePath),
+    };
+
+    /// <summary>
     /// Gets the providers.
     /// </summary>
     public ObservableCollection<ProviderViewModel> Providers { get; } = [];
@@ -82,14 +122,7 @@ public partial class ModelManagerViewModel : ObservableObject
     /// <summary>
     /// Gets the acceleration options.
     /// </summary>
-    public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } =
-    [
-        new(AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
-        new(AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
-        new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"]),
-        new(AppSettings.LocalModelAccelerationAmdVulkan, Loc.Instance["Models.AccelerationAmdVulkan"]),
-        new(AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"])
-    ];
+    public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } = [];
 
     /// <summary>
     /// Initializes a new instance of the ModelManagerViewModel class.
@@ -110,8 +143,10 @@ public partial class ModelManagerViewModel : ObservableObject
         _selectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
             _settings.Current.LocalModelAcceleration);
 
+        RefreshAccelerationOptions();
         RebuildProviders();
         RefreshModelStorage();
+        PropertyChangedEventManager.AddHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
 
         _modelManager.PropertyChanged += (_, args) =>
         {
@@ -270,7 +305,7 @@ public partial class ModelManagerViewModel : ObservableObject
             if (shouldReloadActiveModel)
             {
                 IsBusy = true;
-                BusyMessage = Loc.Instance["Models.LoadingModel"];
+                SetBusyMessage(BusyMessageKind.LoadingModel);
                 managesBusyState = true;
                 _accelerationBusyVersion = applyVersion;
             }
@@ -290,7 +325,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 managesBusyState = true;
                 _accelerationBusyVersion = applyVersion;
 
-                BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+                SetBusyMessage(BusyMessageKind.Error, ex.Message);
                 await Task.Delay(2000);
             }
         }
@@ -301,7 +336,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 if (managesBusyState || _accelerationBusyVersion != 0)
                 {
                     IsBusy = false;
-                    BusyMessage = null;
+                    SetBusyMessage(BusyMessageKind.None);
                     _accelerationBusyVersion = 0;
                 }
 
@@ -320,14 +355,14 @@ public partial class ModelManagerViewModel : ObservableObject
         bool isDownloaded,
         bool isConfigured,
         bool supportsDownload) => status.Type switch
-    {
-        ModelStatusType.Downloading => $"Download {status.Progress:P0}",
-        ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
-        ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
-        ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
-        _ when !supportsDownload && !isConfigured => Loc.Instance["Models.StatusApiKeyRequired"],
-        _ => isDownloaded ? Loc.Instance["Models.StatusDownloaded"] : ""
-    };
+        {
+            ModelStatusType.Downloading => Loc.Instance.GetString("Models.DownloadProgressFormat", status.Progress),
+            ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
+            ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
+            ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
+            _ when !supportsDownload && !isConfigured => Loc.Instance["Models.StatusApiKeyRequired"],
+            _ => isDownloaded ? Loc.Instance["Models.StatusDownloaded"] : ""
+        };
 
     internal static bool IsBusyStatus(ModelStatus status) =>
         status.Type is ModelStatusType.Downloading or ModelStatusType.Loading;
@@ -336,7 +371,7 @@ public partial class ModelManagerViewModel : ObservableObject
     private async Task ActivateModel(string fullModelId)
     {
         IsBusy = true;
-        BusyMessage = Loc.Instance["Models.LoadingModel"];
+        SetBusyMessage(BusyMessageKind.LoadingModel);
         try
         {
             await _modelManager.DownloadAndLoadModelAsync(fullModelId);
@@ -345,14 +380,21 @@ public partial class ModelManagerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+            SetBusyMessage(BusyMessageKind.Error, ex.Message);
             await Task.Delay(2000);
         }
         finally
         {
             IsBusy = false;
-            BusyMessage = null;
+            SetBusyMessage(BusyMessageKind.None);
         }
+    }
+
+    private void SetBusyMessage(BusyMessageKind kind, string? errorDetail = null)
+    {
+        _busyMessageKind = kind;
+        _busyErrorDetail = errorDetail;
+        OnPropertyChanged(nameof(BusyMessage));
     }
 
     private void SyncSelectedModelOption()
@@ -371,6 +413,39 @@ public partial class ModelManagerViewModel : ObservableObject
         SelectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
             _settings.Current.LocalModelAcceleration);
         _isSyncingAccelerationSelection = false;
+    }
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        InvokeOnUiThread(() =>
+        {
+            RefreshAccelerationOptions();
+            RefreshAllModels();
+            OnPropertyChanged(nameof(BusyMessage));
+            OnPropertyChanged(nameof(ModelStorageStatusText));
+        });
+    }
+
+    private void RefreshAccelerationOptions()
+    {
+        (string Value, string DisplayName)[] localizedOptions =
+        [
+            (AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
+            (AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
+            (AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"]),
+            (AppSettings.LocalModelAccelerationAmdVulkan, Loc.Instance["Models.AccelerationAmdVulkan"]),
+            (AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"]),
+        ];
+
+        foreach (var localizedOption in localizedOptions)
+        {
+            var existing = AccelerationOptions.FirstOrDefault(option =>
+                option.Value == localizedOption.Value);
+            if (existing is null)
+                AccelerationOptions.Add(new(localizedOption.Value, localizedOption.DisplayName));
+            else
+                existing.UpdateDisplayName(localizedOption.DisplayName);
+        }
     }
 
     private static void InvokeOnUiThread(Action action)
@@ -409,8 +484,8 @@ public partial class ModelManagerViewModel : ObservableObject
 
         if (activeModel.Model is null)
         {
-            ActiveProviderDisplayName = "None";
-            ActiveModelDisplayName = "No model selected";
+            ActiveProviderDisplayName = Loc.Instance["Models.NoProvider"];
+            ActiveModelDisplayName = Loc.Instance["Models.NoModelSelected"];
             ActiveModelStatusText = "";
             IsActiveModelReady = false;
             IsActiveModelBusy = false;
@@ -525,20 +600,18 @@ public partial class ModelManagerViewModel : ObservableObject
     private async Task MoveModelStorage()
     {
         IsModelStorageBusy = true;
-        HasModelStorageError = false;
-        ModelStorageStatusText = Loc.Instance["Models.StorageMoving"];
+        SetModelStorageStatus(ModelStorageStatusKind.Moving);
 
         try
         {
             await _modelStorage.MoveDownloadsAndUsePathAsync(ModelStoragePath);
             RefreshModelStorage();
             RefreshAllModels();
-            ModelStorageStatusText = Loc.Instance["Models.StorageMoved"];
+            SetModelStorageStatus(ModelStorageStatusKind.Moved);
         }
         catch (Exception ex)
         {
-            HasModelStorageError = true;
-            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageErrorFormat", ex.Message);
+            SetModelStorageStatus(ModelStorageStatusKind.Error, ex.Message);
         }
         finally
         {
@@ -552,7 +625,7 @@ public partial class ModelManagerViewModel : ObservableObject
         if (IsModelStorageBusy)
             return;
 
-        HasModelStorageError = false;
+        SetModelStorageStatus(ModelStorageStatusKind.Current);
         _modelStorage.ResetToDefault();
         RefreshModelStorage();
         RefreshAllModels();
@@ -563,7 +636,15 @@ public partial class ModelManagerViewModel : ObservableObject
         ResolvedModelStoragePath = _modelStorage.ResolvedModelStoragePath;
         ModelStoragePath = ResolvedModelStoragePath;
         if (!IsModelStorageBusy && !HasModelStorageError)
-            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageCurrentFormat", ResolvedModelStoragePath);
+            SetModelStorageStatus(ModelStorageStatusKind.Current);
+    }
+
+    private void SetModelStorageStatus(ModelStorageStatusKind kind, string? errorDetail = null)
+    {
+        _modelStorageStatusKind = kind;
+        _modelStorageErrorDetail = errorDetail;
+        HasModelStorageError = kind == ModelStorageStatusKind.Error;
+        OnPropertyChanged(nameof(ModelStorageStatusText));
     }
 }
 
@@ -710,8 +791,10 @@ public sealed class ModelOptionViewModel
 /// <summary>
 /// Provides acceleration option view model behavior.
 /// </summary>
-public sealed class AccelerationOptionViewModel
+public sealed class AccelerationOptionViewModel : ObservableObject
 {
+    private string _displayName;
+
     /// <summary>
     /// Gets the value.
     /// </summary>
@@ -719,7 +802,11 @@ public sealed class AccelerationOptionViewModel
     /// <summary>
     /// Gets the display name shown in the UI.
     /// </summary>
-    public string DisplayName { get; }
+    public string DisplayName
+    {
+        get => _displayName;
+        private set => SetProperty(ref _displayName, value);
+    }
 
     /// <summary>
     /// Initializes a new instance of the AccelerationOptionViewModel class.
@@ -727,6 +814,8 @@ public sealed class AccelerationOptionViewModel
     public AccelerationOptionViewModel(string value, string displayName)
     {
         Value = value;
-        DisplayName = displayName;
+        _displayName = displayName;
     }
+
+    internal void UpdateDisplayName(string displayName) => DisplayName = displayName;
 }

@@ -193,7 +193,7 @@ public sealed class WorkflowPaletteService
                         CancellationToken.None);
 
                     FeedbackRequested?.Invoke(
-                        actionResult.Message ?? (actionResult.Success ? Loc.Instance["Status.Done"] : "Failed"),
+                        actionResult.Message ?? (actionResult.Success ? Loc.Instance["Status.Done"] : Loc.Instance["Status.Failed"]),
                         !actionResult.Success);
                     return;
                 }

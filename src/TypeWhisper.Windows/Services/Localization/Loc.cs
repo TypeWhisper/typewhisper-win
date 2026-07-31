@@ -34,7 +34,8 @@ public sealed class Loc : INotifyPropertyChanged
     /// </summary>
     public static Loc Instance { get; } = new();
 
-    private readonly Dictionary<string, Dictionary<string, string>> _strings = [];
+    private readonly Dictionary<string, Dictionary<string, string>> _strings =
+        new(StringComparer.OrdinalIgnoreCase);
     private string _currentLanguage = FallbackLanguage;
     private string? _localizationDir;
 
@@ -47,7 +48,7 @@ public sealed class Loc : INotifyPropertyChanged
     /// </summary>
     public event EventHandler? LanguageChanged;
 
-    private Loc() { }
+    private Loc() => Initialize();
 
     /// <summary>
     /// Indexer used by StrExtension bindings: Loc.Instance["Key"]
@@ -62,9 +63,12 @@ public sealed class Loc : INotifyPropertyChanged
         get => _currentLanguage;
         set
         {
-            if (_currentLanguage == value) return;
-            _currentLanguage = value;
+            var resolved = ResolveLanguage(value, AvailableLanguages);
+            if (string.Equals(_currentLanguage, resolved, StringComparison.OrdinalIgnoreCase)) return;
+            _currentLanguage = resolved;
+            AvailableUiLanguages = BuildUiLanguageOptions(AvailableLanguages);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentLanguage)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AvailableUiLanguages)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
             LanguageChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -87,6 +91,7 @@ public sealed class Loc : INotifyPropertyChanged
     {
         var baseDir = AppContext.BaseDirectory;
         _localizationDir = Path.Combine(baseDir, "Resources", "Localization");
+        _strings.Clear();
 
         var available = new List<string>();
 
@@ -114,26 +119,32 @@ public sealed class Loc : INotifyPropertyChanged
             }
         }
 
-        AvailableLanguages = available;
-        AvailableUiLanguages = BuildUiLanguageOptions(available);
+        AvailableLanguages = available
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _currentLanguage = ResolveLanguage(_currentLanguage, AvailableLanguages);
+        AvailableUiLanguages = BuildUiLanguageOptions(AvailableLanguages);
     }
 
-    private static IReadOnlyList<UiLanguageOption> BuildUiLanguageOptions(List<string> codes)
+    private IReadOnlyList<UiLanguageOption> BuildUiLanguageOptions(IReadOnlyList<string> codes)
     {
-        var displayNames = new Dictionary<string, string>
+        var displayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["en"] = "English",
             ["de"] = "Deutsch",
             ["ja"] = "日本語",
             ["ru"] = "Русский",
+            ["zh-Hans"] = "简体中文",
+            ["zh-Hant"] = "繁體中文",
         };
 
         var options = new List<UiLanguageOption>
         {
-            new(null, "Auto (System)")
+            new(null, GetString("General.LanguageAuto"))
         };
 
-        foreach (var code in codes.OrderBy(c => c))
+        foreach (var code in codes)
         {
             var display = displayNames.TryGetValue(code, out var name) ? name : code.ToUpperInvariant();
             options.Add(new(code, display));
@@ -160,18 +171,93 @@ public sealed class Loc : INotifyPropertyChanged
         {
             var langId = NativeMethods.GetUserDefaultUILanguage();
             var culture = CultureInfo.GetCultureInfo(langId);
-            code = culture.TwoLetterISOLanguageName;
+            code = culture.Name;
             Debug.WriteLine($"[Loc] GetUserDefaultUILanguage() LANGID=0x{langId:X4} -> \"{culture.Name}\" -> \"{code}\"");
         }
         catch (Exception ex)
         {
-            code = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            code = CultureInfo.CurrentUICulture.Name;
             Debug.WriteLine($"[Loc] GetUserDefaultUILanguage() failed ({ex.Message}), fallback CurrentUICulture=\"{code}\"");
         }
 
-        var result = HasLanguage(code) ? code : FallbackLanguage;
+        var result = ResolveLanguage(code, AvailableLanguages);
         Debug.WriteLine($"[Loc] DetectSystemLanguage() -> \"{result}\"");
         return result;
+    }
+
+    /// <summary>
+    /// Resolves a culture name to an available localization resource.
+    /// Chinese regions are mapped to their standard script tags so adding a
+    /// zh-Hant resource automatically enables Traditional Chinese regions.
+    /// </summary>
+    internal static string ResolveLanguage(string? cultureName, IEnumerable<string> availableLanguages)
+    {
+        var available = availableLanguages
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var candidate in LanguageCandidates(cultureName))
+        {
+            var match = available.FirstOrDefault(code =>
+                string.Equals(code, candidate, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match;
+        }
+
+        return available.FirstOrDefault(code =>
+            string.Equals(code, FallbackLanguage, StringComparison.OrdinalIgnoreCase))
+            ?? FallbackLanguage;
+    }
+
+    private static IEnumerable<string> LanguageCandidates(string? cultureName)
+    {
+        if (string.IsNullOrWhiteSpace(cultureName))
+            yield break;
+
+        var normalized = cultureName.Trim().Replace('_', '-');
+        yield return normalized;
+
+        var parts = normalized.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+            yield break;
+
+        var primary = parts[0];
+        if (!string.Equals(primary, "zh", StringComparison.OrdinalIgnoreCase))
+        {
+            if (parts.Length > 1)
+                yield return primary;
+            yield break;
+        }
+
+        var script = parts.FirstOrDefault(part =>
+            part.Equals("Hans", StringComparison.OrdinalIgnoreCase)
+            || part.Equals("Hant", StringComparison.OrdinalIgnoreCase));
+        if (script is null)
+        {
+            if (parts.Any(part => part.Equals("TW", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("HK", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("MO", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("CHT", StringComparison.OrdinalIgnoreCase)))
+            {
+                script = "Hant";
+            }
+            else if (parts.Length == 1 || parts.Any(part =>
+                part.Equals("CN", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("SG", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("MY", StringComparison.OrdinalIgnoreCase)
+                || part.Equals("CHS", StringComparison.OrdinalIgnoreCase)))
+            {
+                script = "Hans";
+            }
+        }
+
+        if (script is not null)
+            yield return $"zh-{script}";
+
+        if (parts.Length > 1
+            && !string.Equals(script, "Hant", StringComparison.OrdinalIgnoreCase))
+            yield return primary;
     }
 
     /// <summary>

@@ -503,7 +503,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         CancellationToken cancellationToken = default)
     {
         var plugin = ActiveTranscriptionPlugin
-            ?? throw new InvalidOperationException("No active transcription engine");
+            ?? throw new InvalidOperationException(Loc.Instance["Error.NoActiveTranscriptionEngine"]);
 
         var modelId = ActiveModelId is { } activeModelId && IsPluginModel(activeModelId)
             ? ParsePluginModelId(activeModelId).ModelId

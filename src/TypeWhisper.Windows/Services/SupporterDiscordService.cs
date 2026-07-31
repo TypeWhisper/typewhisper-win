@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -8,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using TypeWhisper.Core;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -39,6 +41,33 @@ public enum SupporterDiscordClaimState
 }
 
 /// <summary>
+/// Lists stable Discord error values used for persistence and retry decisions.
+/// </summary>
+internal enum SupporterDiscordErrorKind
+{
+    None,
+    EntitlementRequired,
+    EntitlementNotFound,
+    ClaimStartFailed,
+    ClaimEmptyResponse,
+    ClaimNoUrl,
+    StatusRefreshFailed,
+    StatusEmptyResponse,
+    HelperUnavailable,
+    OperationFailed,
+    Raw,
+}
+
+/// <summary>
+/// Represents a stable Discord error and its non-localized detail.
+/// </summary>
+/// <param name="Kind">Stable error kind.</param>
+/// <param name="Detail">Optional non-localized error detail.</param>
+internal readonly record struct SupporterDiscordError(
+    SupporterDiscordErrorKind Kind,
+    string? Detail = null);
+
+/// <summary>
 /// Lightweight Windows port of the supporter Discord claim flow.
 /// Uses the same local claim service endpoints as macOS, but relies on manual refresh instead of callback handling.
 /// </summary>
@@ -51,6 +80,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
 
     private readonly HttpClient _http;
     private readonly string _statusPath;
+    private SupporterDiscordError _error;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLinkedRoles))]
@@ -64,9 +94,6 @@ public sealed partial class SupporterDiscordService : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasLinkedRoles))]
     [NotifyPropertyChangedFor(nameof(LinkedRolesText))]
     private string[] _linkedRoles = Array.Empty<string>();
-
-    [ObservableProperty]
-    private string? _errorMessage;
 
     [ObservableProperty]
     private string? _sessionId;
@@ -110,6 +137,10 @@ public sealed partial class SupporterDiscordService : ObservableObject
     /// </summary>
     public string LinkedRolesText => string.Join(", ", LinkedRoles);
     /// <summary>
+    /// Gets the localized Discord error message.
+    /// </summary>
+    public string? ErrorMessage => FormatDiscordError(_error);
+    /// <summary>
     /// Gets the git hub sponsors url.
     /// </summary>
     public string GitHubSponsorsUrl => $"{BaseUrl}/claims/github";
@@ -147,7 +178,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
     public async Task<Uri?> CreateClaimSessionAsync(LicenseService license, CancellationToken ct = default)
     {
         IsWorking = true;
-        ErrorMessage = null;
+        SetError(default);
 
         try
         {
@@ -156,12 +187,12 @@ public sealed partial class SupporterDiscordService : ObservableObject
             {
                 HandleSupporterEntitlementRemoved();
                 ClaimState = SupporterDiscordClaimState.Failed;
-                ErrorMessage = "An active supporter or commercial license is required before you can claim Discord status.";
+                SetError(new(SupporterDiscordErrorKind.EntitlementRequired));
                 PersistStatus();
                 return null;
             }
 
-            string? lastRecoverableMessage = null;
+            SupporterDiscordError? lastRecoverableError = null;
             foreach (var proof in candidates)
             {
                 using var response = await _http.PostAsJsonAsync(
@@ -176,18 +207,29 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 var json = await response.Content.ReadAsStringAsync(ct);
                 if (!response.IsSuccessStatusCode)
                 {
-                    var message = ParseDiscordError(json, $"Discord claim start failed (HTTP {(int)response.StatusCode})");
-                    if (ShouldRetryWithNextClaimProof(message))
+                    var error = ParseDiscordError(
+                        json,
+                        new(
+                            SupporterDiscordErrorKind.ClaimStartFailed,
+                            ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)));
+                    if (ShouldRetryWithNextClaimProof(error))
                     {
-                        lastRecoverableMessage = message;
+                        lastRecoverableError = error;
                         continue;
                     }
 
-                    throw new InvalidOperationException(message);
+                    ApplyServiceFailure(error);
+                    PersistStatus();
+                    return null;
                 }
 
-                var payload = JsonSerializer.Deserialize<SupporterDiscordStartResponse>(json)
-                    ?? throw new InvalidOperationException("Discord claim start failed: empty response.");
+                var payload = JsonSerializer.Deserialize<SupporterDiscordStartResponse>(json);
+                if (payload is null)
+                {
+                    ApplyServiceFailure(new(SupporterDiscordErrorKind.ClaimEmptyResponse));
+                    PersistStatus();
+                    return null;
+                }
 
                 SessionId = payload.SessionId;
                 ClaimActivationId = proof.ActivationId;
@@ -195,21 +237,20 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 IsHelperUnavailable = false;
                 DiscordUsername = null;
                 LinkedRoles = Array.Empty<string>();
-                ErrorMessage = null;
+                SetError(default);
                 PersistStatus();
                 if (Uri.TryCreate(payload.ClaimUrl, UriKind.Absolute, out var claimUrl))
                     return claimUrl;
 
                 ClaimState = SupporterDiscordClaimState.Failed;
-                ErrorMessage = "Discord claim start failed: no claim URL was returned.";
+                SetError(new(SupporterDiscordErrorKind.ClaimNoUrl));
                 PersistStatus();
                 return null;
             }
 
-            if (!string.IsNullOrWhiteSpace(lastRecoverableMessage))
+            if (lastRecoverableError is { } recoverableError)
             {
-                ClaimState = SupporterDiscordClaimState.Failed;
-                ErrorMessage = lastRecoverableMessage;
+                ApplyServiceFailure(recoverableError);
                 PersistStatus();
             }
 
@@ -235,7 +276,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
         ClaimState = SupporterDiscordClaimState.Unlinked;
         DiscordUsername = null;
         LinkedRoles = Array.Empty<string>();
-        ErrorMessage = null;
+        SetError(default);
         SessionId = null;
         ClaimActivationId = null;
         PersistStatus();
@@ -290,10 +331,23 @@ public sealed partial class SupporterDiscordService : ObservableObject
             using var response = await _http.GetAsync(url, ct);
             var json = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException(ParseDiscordError(json, $"Discord status refresh failed (HTTP {(int)response.StatusCode})"));
+            {
+                ApplyServiceFailure(ParseDiscordError(
+                    json,
+                    new(
+                        SupporterDiscordErrorKind.StatusRefreshFailed,
+                        ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture))));
+                PersistStatus();
+                return;
+            }
 
-            var payload = JsonSerializer.Deserialize<SupporterDiscordStatusResponse>(json)
-                ?? throw new InvalidOperationException("Discord status refresh failed: empty response.");
+            var payload = JsonSerializer.Deserialize<SupporterDiscordStatusResponse>(json);
+            if (payload is null)
+            {
+                ApplyServiceFailure(new(SupporterDiscordErrorKind.StatusEmptyResponse));
+                PersistStatus();
+                return;
+            }
 
             IsHelperUnavailable = false;
             ClaimState = payload.Status switch
@@ -306,7 +360,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
             };
             DiscordUsername = payload.DiscordUsername;
             LinkedRoles = payload.LinkedRoles ?? Array.Empty<string>();
-            ErrorMessage = payload.ErrorMessage;
+            SetError(NormalizeOptionalDiscordError(payload.ErrorMessage) ?? default);
             SessionId = string.IsNullOrWhiteSpace(payload.SessionId) ? SessionId : payload.SessionId;
             PersistStatus();
         }
@@ -331,7 +385,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
         IsHelperUnavailable = false;
         DiscordUsername = null;
         LinkedRoles = Array.Empty<string>();
-        ErrorMessage = null;
+        SetError(default);
         SessionId = null;
         ClaimActivationId = null;
         PersistStatus();
@@ -371,7 +425,7 @@ public sealed partial class SupporterDiscordService : ObservableObject
             SessionId = payload.SessionId;
 
         IsHelperUnavailable = false;
-        ErrorMessage = payload.ErrorMessage;
+        SetError(NormalizeOptionalDiscordError(payload.ErrorMessage) ?? default);
         ClaimState = payload.Status?.ToLowerInvariant() switch
         {
             "linked" or "pending" => SupporterDiscordClaimState.Pending,
@@ -394,7 +448,10 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 ClaimState = ClaimState.ToString(),
                 DiscordUsername = DiscordUsername,
                 LinkedRoles = LinkedRoles,
-                ErrorMessage = ErrorMessage,
+                ErrorKind = _error.Kind == SupporterDiscordErrorKind.None
+                    ? null
+                    : _error.Kind.ToString(),
+                ErrorDetail = _error.Detail,
                 SessionId = SessionId,
                 ClaimActivationId = ClaimActivationId,
                 IsHelperUnavailable = IsHelperUnavailable,
@@ -425,7 +482,18 @@ public sealed partial class SupporterDiscordService : ObservableObject
                 : SupporterDiscordClaimState.Unavailable;
             DiscordUsername = payload.DiscordUsername;
             LinkedRoles = payload.LinkedRoles ?? Array.Empty<string>();
-            ErrorMessage = payload.ErrorMessage;
+            if (Enum.TryParse<SupporterDiscordErrorKind>(payload.ErrorKind, ignoreCase: true, out var errorKind))
+            {
+                SetError(new(errorKind, payload.ErrorDetail));
+            }
+            else if (payload.IsHelperUnavailable)
+            {
+                SetError(new(SupporterDiscordErrorKind.HelperUnavailable));
+            }
+            else
+            {
+                SetError(default);
+            }
             SessionId = payload.SessionId;
             ClaimActivationId = payload.ClaimActivationId;
             IsHelperUnavailable = payload.IsHelperUnavailable;
@@ -442,20 +510,15 @@ public sealed partial class SupporterDiscordService : ObservableObject
         {
             ClaimState = SupporterDiscordClaimState.Unavailable;
             IsHelperUnavailable = true;
-            ErrorMessage = "Local helper unavailable";
+            SetError(new(SupporterDiscordErrorKind.HelperUnavailable));
             return;
         }
 
         IsHelperUnavailable = false;
-        if (ClaimState == SupporterDiscordClaimState.Linked)
-        {
-            ErrorMessage = ex.Message;
-        }
-        else
-        {
+        if (ClaimState != SupporterDiscordClaimState.Linked)
             ClaimState = SupporterDiscordClaimState.Failed;
-            ErrorMessage = ex.Message;
-        }
+
+        SetError(new(SupporterDiscordErrorKind.OperationFailed, ex.Message));
     }
 
     private static bool IsHelperUnavailableError(Exception ex)
@@ -478,7 +541,9 @@ public sealed partial class SupporterDiscordService : ObservableObject
             ?? "0.0.0";
     }
 
-    private static string ParseDiscordError(string? json, string fallback)
+    private static SupporterDiscordError ParseDiscordError(
+        string? json,
+        SupporterDiscordError fallback)
     {
         if (string.IsNullOrWhiteSpace(json))
             return fallback;
@@ -497,20 +562,61 @@ public sealed partial class SupporterDiscordService : ObservableObject
         return fallback;
     }
 
-    private static string NormalizeDiscordError(string message)
+    internal static SupporterDiscordError NormalizeDiscordError(string message)
     {
-        if (string.Equals(message.Trim(), "Not found", StringComparison.OrdinalIgnoreCase))
+        var normalized = message.Trim();
+        if (normalized.Contains("not found", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("could not be found", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("supporter entitlement", StringComparison.OrdinalIgnoreCase))
         {
-            return "The supporter entitlement could not be found. Try refreshing the supporter license and reconnecting Discord.";
+            return new(SupporterDiscordErrorKind.EntitlementNotFound);
         }
 
-        return message;
+        return new(SupporterDiscordErrorKind.Raw, message);
     }
 
-    private static bool ShouldRetryWithNextClaimProof(string message) =>
-        message.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("could not be found", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("supporter entitlement", StringComparison.OrdinalIgnoreCase);
+    private static SupporterDiscordError? NormalizeOptionalDiscordError(string? message) =>
+        string.IsNullOrWhiteSpace(message) ? null : NormalizeDiscordError(message);
+
+    internal static bool ShouldRetryWithNextClaimProof(SupporterDiscordError error) =>
+        error.Kind == SupporterDiscordErrorKind.EntitlementNotFound;
+
+    private void ApplyServiceFailure(SupporterDiscordError error)
+    {
+        IsHelperUnavailable = false;
+        if (ClaimState != SupporterDiscordClaimState.Linked)
+            ClaimState = SupporterDiscordClaimState.Failed;
+
+        SetError(error);
+    }
+
+    private void SetError(SupporterDiscordError error)
+    {
+        if (_error == error)
+            return;
+
+        _error = error;
+        OnPropertyChanged(nameof(ErrorMessage));
+    }
+
+    private static string? FormatDiscordError(SupporterDiscordError error) => error.Kind switch
+    {
+        SupporterDiscordErrorKind.None => null,
+        SupporterDiscordErrorKind.EntitlementRequired => Loc.Instance["License.DiscordEntitlementRequired"],
+        SupporterDiscordErrorKind.EntitlementNotFound => Loc.Instance["License.DiscordEntitlementNotFound"],
+        SupporterDiscordErrorKind.ClaimStartFailed =>
+            Loc.Instance.GetString("License.DiscordClaimStartFailedFormat", error.Detail ?? string.Empty),
+        SupporterDiscordErrorKind.ClaimEmptyResponse => Loc.Instance["License.DiscordClaimEmptyResponse"],
+        SupporterDiscordErrorKind.ClaimNoUrl => Loc.Instance["License.DiscordClaimNoUrl"],
+        SupporterDiscordErrorKind.StatusRefreshFailed =>
+            Loc.Instance.GetString("License.DiscordStatusRefreshFailedFormat", error.Detail ?? string.Empty),
+        SupporterDiscordErrorKind.StatusEmptyResponse => Loc.Instance["License.DiscordStatusEmptyResponse"],
+        SupporterDiscordErrorKind.HelperUnavailable => Loc.Instance["License.DiscordHelperUnavailable"],
+        SupporterDiscordErrorKind.OperationFailed =>
+            Loc.Instance.GetString("License.DiscordOperationFailedFormat", error.Detail ?? string.Empty),
+        SupporterDiscordErrorKind.Raw => error.Detail,
+        _ => error.Detail,
+    };
 
     private static string ResolveDataFilePath(string dataPath, string fileName)
     {
@@ -562,7 +668,11 @@ public sealed partial class SupporterDiscordService : ObservableObject
         [JsonPropertyName("claimState")] public string? ClaimState { get; init; }
         [JsonPropertyName("discordUsername")] public string? DiscordUsername { get; init; }
         [JsonPropertyName("linkedRoles")] public string[]? LinkedRoles { get; init; }
-        [JsonPropertyName("errorMessage")] public string? ErrorMessage { get; init; }
+        [JsonPropertyName("errorKind")] public string? ErrorKind { get; init; }
+        [JsonPropertyName("errorDetail")] public string? ErrorDetail { get; init; }
+        [JsonPropertyName("errorMessage")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? LegacyErrorMessage { get; init; }
         [JsonPropertyName("sessionId")] public string? SessionId { get; init; }
         [JsonPropertyName("claimActivationId")] public string? ClaimActivationId { get; init; }
         [JsonPropertyName("isHelperUnavailable")] public bool IsHelperUnavailable { get; init; }

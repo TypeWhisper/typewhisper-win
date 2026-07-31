@@ -29,6 +29,7 @@ public class AppLocalizationResourcesTests
                 string.IsNullOrWhiteSpace(localized[key]),
                 $"{language} value for {key} must not be empty.");
             Assert.Equal(FormatPlaceholders(english[key]), FormatPlaceholders(localized[key]));
+            Assert.Equal(english[key].Count(c => c == '|'), localized[key].Count(c => c == '|'));
         }
     }
 
@@ -40,6 +41,67 @@ public class AppLocalizationResourcesTests
         Assert.Contains("ru", Loc.Instance.AvailableLanguages);
         Assert.Contains(Loc.Instance.AvailableUiLanguages,
             option => option.Code == "ru" && option.DisplayName == "Русский");
+    }
+
+    [Fact]
+    public void Loc_ListsSimplifiedChineseUiLanguage()
+    {
+        Loc.Instance.Initialize();
+
+        Assert.Contains("zh-Hans", Loc.Instance.AvailableLanguages);
+        Assert.Contains(Loc.Instance.AvailableUiLanguages,
+            option => option.Code == "zh-Hans" && option.DisplayName == "简体中文");
+    }
+
+    [Theory]
+    [InlineData("zh", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh-CN", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh-SG", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh-MY", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh-CHS", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh-Hans-CN", "en,zh-Hans", "zh-Hans")]
+    [InlineData("zh_TW", "en,zh-Hant", "zh-Hant")]
+    [InlineData("zh-HK", "en,zh-Hant", "zh-Hant")]
+    [InlineData("zh-MO", "en,zh-Hant", "zh-Hant")]
+    [InlineData("zh-CHT", "en,zh-Hant", "zh-Hant")]
+    [InlineData("zh-TW", "en,zh-Hans", "en")]
+    [InlineData("zh-TW", "en,zh", "en")]
+    [InlineData("zh-HK", "en,zh", "en")]
+    [InlineData("en-US", "en,zh-Hans", "en")]
+    [InlineData("de-DE", "de,en,zh-Hans", "de")]
+    public void ResolveLanguage_MapsCulturesToAvailableResources(
+        string cultureName,
+        string availableLanguages,
+        string expected)
+    {
+        var available = availableLanguages.Split(',');
+
+        Assert.Equal(expected, Loc.ResolveLanguage(cultureName, available));
+    }
+
+    [Fact]
+    public void SimplifiedChinese_PreservesWhitespaceAndTechnicalTerms()
+    {
+        var localizationDir = Path.Join(AppContext.BaseDirectory, "Resources", "Localization");
+        var english = LoadLocalization(localizationDir, "en");
+        var simplifiedChinese = LoadLocalization(localizationDir, "zh-Hans");
+
+        foreach (var key in english.Keys)
+        {
+            Assert.Equal(LeadingWhitespace(english[key]), LeadingWhitespace(simplifiedChinese[key]));
+            Assert.Equal(TrailingWhitespace(english[key]), TrailingWhitespace(simplifiedChinese[key]));
+        }
+
+        Assert.Contains("TypeWhisper", simplifiedChinese["Settings.Title"]);
+        Assert.Contains("Ctrl+V", simplifiedChinese["General.AutoPaste"]);
+        Assert.Contains("REST API", simplifiedChinese["General.RestApiEnable"]);
+        Assert.Contains("NVIDIA CUDA", simplifiedChinese["Models.AccelerationNvidiaCuda"]);
+        Assert.Contains("AMD ROCm", simplifiedChinese["Models.AccelerationAmdRocm"]);
+        Assert.Contains("Discord", simplifiedChinese["License.ConnectDiscord"]);
+        Assert.Contains("Polar", simplifiedChinese["License.CustomerPortalHint"]);
+        Assert.Contains("Esc", simplifiedChinese["Status.CancelRecordingConfirm"]);
+        Assert.Contains("Enter", simplifiedChinese["Profiles.ProcessNameHint"]);
+        Assert.Contains("Windows", simplifiedChinese["Recorder.M4AEncoderUnavailable"]);
     }
 
     [Theory]
@@ -102,8 +164,14 @@ public class AppLocalizationResourcesTests
     }
 
     private static string[] FormatPlaceholders(string value) =>
-        Regex.Matches(value, @"\{\d+(?::[^}]*)?\}")
+        Regex.Matches(value, @"\{[^{}\r\n]+\}")
             .Select(match => match.Value)
             .OrderBy(placeholder => placeholder)
             .ToArray();
+
+    private static string LeadingWhitespace(string value) =>
+        new(value.TakeWhile(char.IsWhiteSpace).ToArray());
+
+    private static string TrailingWhitespace(string value) =>
+        new(value.Reverse().TakeWhile(char.IsWhiteSpace).Reverse().ToArray());
 }

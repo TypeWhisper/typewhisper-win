@@ -9,6 +9,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
@@ -249,6 +250,82 @@ public sealed class WelcomeViewModelTests
         });
     }
 
+    [Fact]
+    public void LanguageChange_RefreshesLocalizedWelcomeState()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            RunOnStaThread(() =>
+            {
+                WelcomeViewModel? sut = null;
+                try
+                {
+                    Loc.Instance.CurrentLanguage = "en";
+                    var plugin = new FakeTranscriptionPlugin(
+                        "com.typewhisper.sherpa-onnx",
+                        "Parakeet",
+                        configured: true,
+                        supportsModelDownload: true,
+                        isModelDownloaded: false,
+                        isRecommended: true);
+                    sut = CreateViewModel(
+                        plugin,
+                        out _,
+                        out _,
+                        AppSettings.Default with
+                        {
+                            MainDictationHotkeys = [],
+                            PushToTalkHotkey = "",
+                            ToggleHotkey = ""
+                        });
+                    sut.UpdateDownloadStatus(ModelStatus.DownloadingModel(42));
+                    var englishStatus = sut.DownloadStatus;
+                    var englishPrimaryAction = sut.PrimaryActionLabel;
+                    var englishHotkeyDisplay = sut.MainDictationHotkeyDisplay;
+                    var englishModelDisplay = Assert.Single(sut.AvailableModels).DisplayName;
+                    var englishMicrophoneDisplay = Assert.Single(sut.Microphones).Name;
+                    var changedProperties = new HashSet<string>();
+                    sut.PropertyChanged += (_, args) =>
+                    {
+                        if (args.PropertyName is not null)
+                            changedProperties.Add(args.PropertyName);
+                    };
+
+                    Loc.Instance.CurrentLanguage = "zh-Hans";
+
+                    Assert.Equal(
+                        Loc.Instance.GetString("Models.DownloadProgressFormat", 42d),
+                        sut.DownloadStatus);
+                    Assert.NotEqual(englishStatus, sut.DownloadStatus);
+                    Assert.Equal(Loc.Instance["Welcome.Next"], sut.PrimaryActionLabel);
+                    Assert.NotEqual(englishPrimaryAction, sut.PrimaryActionLabel);
+                    Assert.Equal(Loc.Instance["Hotkey.ClickToAssign"], sut.MainDictationHotkeyDisplay);
+                    Assert.NotEqual(englishHotkeyDisplay, sut.MainDictationHotkeyDisplay);
+                    Assert.EndsWith(
+                        $" — {Loc.Instance["Welcome.Recommended"]}",
+                        Assert.Single(sut.AvailableModels).DisplayName);
+                    Assert.NotEqual(englishModelDisplay, Assert.Single(sut.AvailableModels).DisplayName);
+                    Assert.Equal(Loc.Instance["Microphone.Default"], Assert.Single(sut.Microphones).Name);
+                    Assert.NotEqual(englishMicrophoneDisplay, Assert.Single(sut.Microphones).Name);
+                    Assert.Contains(nameof(WelcomeViewModel.DownloadStatus), changedProperties);
+                    Assert.Contains(nameof(WelcomeViewModel.PrimaryActionLabel), changedProperties);
+                    Assert.Contains(nameof(WelcomeViewModel.MainDictationHotkeyDisplay), changedProperties);
+                }
+                finally
+                {
+                    sut?.Cleanup();
+                }
+            });
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
     private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin) =>
         CreateViewModel(plugin, out _);
 
@@ -363,13 +440,21 @@ public sealed class WelcomeViewModelTests
             string providerDisplayName,
             bool configured,
             bool supportsModelDownload,
-            bool isModelDownloaded = true)
+            bool isModelDownloaded = true,
+            bool isRecommended = false)
         {
             PluginId = pluginId;
             ProviderDisplayName = providerDisplayName;
             IsConfigured = configured;
             SupportsModelDownload = supportsModelDownload;
             ModelDownloaded = isModelDownloaded;
+            TranscriptionModels =
+            [
+                new PluginModelInfo("whisper-large-v3-turbo", "Whisper Large V3 Turbo")
+                {
+                    IsRecommended = isRecommended
+                }
+            ];
         }
 
         public string PluginId { get; }
@@ -380,10 +465,7 @@ public sealed class WelcomeViewModelTests
         public bool IsConfigured { get; set; }
         public bool SupportsModelDownload { get; }
         public bool ModelDownloaded { get; }
-        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
-        [
-            new("whisper-large-v3-turbo", "Whisper Large V3 Turbo")
-        ];
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public int CreateSettingsViewCallCount { get; private set; }

@@ -101,6 +101,140 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public void LanguageChange_RefreshesLocalizedModelManagerText()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var settings = new FakeSettingsService(new AppSettings());
+            var pluginManager = CreatePluginManager(settings);
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            var sut = new ModelManagerViewModel(modelManager, settings);
+            var englishNoProvider = sut.ActiveProviderDisplayName;
+            var englishNoModel = sut.ActiveModelDisplayName;
+            var englishAccelerationAuto = sut.AccelerationOptions.Single(option =>
+                option.Value == AppSettings.LocalModelAccelerationAuto).DisplayName;
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Equal(Loc.Instance["Models.NoProvider"], sut.ActiveProviderDisplayName);
+            Assert.Equal(Loc.Instance["Models.NoModelSelected"], sut.ActiveModelDisplayName);
+            Assert.Equal(
+                Loc.Instance["Models.AccelerationAuto"],
+                sut.AccelerationOptions.Single(option =>
+                    option.Value == AppSettings.LocalModelAccelerationAuto).DisplayName);
+            Assert.Equal(
+                Loc.Instance.GetString("Models.StorageCurrentFormat", sut.ResolvedModelStoragePath),
+                sut.ModelStorageStatusText);
+            Assert.NotEqual(englishNoProvider, sut.ActiveProviderDisplayName);
+            Assert.NotEqual(englishNoModel, sut.ActiveModelDisplayName);
+            Assert.NotEqual(
+                englishAccelerationAuto,
+                sut.AccelerationOptions.Single(option =>
+                    option.Value == AppSettings.LocalModelAccelerationAuto).DisplayName);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
+    public void LanguageChange_RefreshesLocalizedModelStatus()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            const string pluginId = "com.typewhisper.groq";
+            const string modelId = "whisper-large-v3";
+            var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+            var settings = new FakeSettingsService(new AppSettings
+            {
+                SelectedModelId = fullModelId
+            });
+            var pluginManager = CreatePluginManager(settings,
+                new FakeTranscriptionPlugin(
+                    pluginId,
+                    "Groq",
+                    modelId,
+                    "Whisper Large V3",
+                    configured: false));
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            var sut = new ModelManagerViewModel(modelManager, settings);
+            var englishStatus = sut.ActiveModelStatusText;
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Equal(Loc.Instance["Models.StatusApiKeyRequired"], sut.ActiveModelStatusText);
+            Assert.Equal(
+                Loc.Instance["Models.StatusApiKeyRequired"],
+                Assert.Single(Assert.Single(sut.Providers).Models).StatusText);
+            Assert.NotEqual(englishStatus, sut.ActiveModelStatusText);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
+    public async Task LanguageChange_PreservesLocalizedModelLoadErrorWhileBusy()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            const string pluginId = "com.typewhisper.sherpa-onnx";
+            const string modelId = "parakeet";
+            const string errorDetail = "Model load failed";
+            var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+            var settings = new FakeSettingsService(new AppSettings
+            {
+                SelectedModelId = fullModelId
+            });
+            var plugin = new FakeTranscriptionPlugin(
+                pluginId,
+                "Parakeet",
+                modelId,
+                "Parakeet TDT",
+                configured: true,
+                supportsModelDownload: true)
+            {
+                LoadException = new InvalidOperationException(errorDetail)
+            };
+            var pluginManager = CreatePluginManager(settings, plugin);
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            var sut = new ModelManagerViewModel(modelManager, settings);
+
+            var activation = sut.ActivateModelCommand.ExecuteAsync(fullModelId);
+
+            Assert.True(await WaitForConditionAsync(
+                () => sut.BusyMessage == Loc.Instance.GetString("Status.ErrorFormat", errorDetail),
+                TimeSpan.FromSeconds(1)));
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.True(sut.IsBusy);
+            Assert.Equal(Loc.Instance.GetString("Status.ErrorFormat", errorDetail), sut.BusyMessage);
+            Assert.NotEqual(Loc.Instance["Models.LoadingModel"], sut.BusyMessage);
+
+            await activation;
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
     public void SelectedAccelerationOptionValue_StoresNormalizedSetting()
     {
         var settings = new FakeSettingsService(new AppSettings
@@ -803,6 +937,46 @@ public class ModelManagerViewModelTests
         finally
         {
             try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task LanguageChange_ReformatsModelStorageErrorAndPreservesDetail()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var settings = new FakeSettingsService(new AppSettings());
+            var pluginManager = CreatePluginManager(settings);
+            var modelManager = new ModelManagerService(pluginManager, settings);
+            var sut = new ModelManagerViewModel(modelManager, settings)
+            {
+                ModelStoragePath = ""
+            };
+            var errorDetail = new ArgumentException(
+                Loc.Instance["Models.StoragePathRequired"],
+                "targetPath").Message;
+
+            await sut.MoveModelStorageCommand.ExecuteAsync(null);
+
+            Assert.True(sut.HasModelStorageError);
+            Assert.Equal(
+                Loc.Instance.GetString("Models.StorageErrorFormat", errorDetail),
+                sut.ModelStorageStatusText);
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.True(sut.HasModelStorageError);
+            Assert.Equal(
+                Loc.Instance.GetString("Models.StorageErrorFormat", errorDetail),
+                sut.ModelStorageStatusText);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
         }
     }
 

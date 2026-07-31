@@ -8,6 +8,7 @@ using System.Text.Json;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Services.Plugins;
 
@@ -408,19 +409,19 @@ public sealed class PluginRegistryService
             return;
 
         if (string.IsNullOrWhiteSpace(registryPlugin.Sha256))
-            throw new InvalidOperationException("Store plugin packages must include a SHA-256 hash.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashMissing"]);
 
         var expectedHash = NormalizeSha256(registryPlugin.Sha256);
         var actualHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)));
         if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Store plugin package SHA-256 hash does not match the registry entry.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashMismatch"]);
     }
 
     private static string NormalizeSha256(string sha256)
     {
         var normalized = sha256.Trim().Replace("-", "", StringComparison.Ordinal).ToUpperInvariant();
         if (normalized.Length != 64 || normalized.Any(c => !Uri.IsHexDigit(c)))
-            throw new InvalidOperationException("Store plugin package SHA-256 hash is invalid.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashInvalid"]);
 
         return normalized;
     }
@@ -442,13 +443,13 @@ public sealed class PluginRegistryService
     private static void ValidateStagedPlugin(RegistryPlugin registryPlugin, string stagingDir)
     {
         var manifest = ReadManifest(stagingDir)
-            ?? throw new InvalidOperationException("The downloaded plugin package does not contain a valid manifest.json.");
+            ?? throw new InvalidOperationException(Loc.Instance["Plugins.PackageManifestInvalid"]);
 
         if (!string.Equals(manifest.Id, registryPlugin.Id, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The downloaded plugin package id does not match the registry entry.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageIdMismatch"]);
 
         if (!string.Equals(manifest.Version, registryPlugin.Version, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The downloaded plugin package version does not match the registry entry.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageVersionMismatch"]);
     }
 
     private async Task QueuePendingUpdateAsync(string pluginId, string stagingDir, CancellationToken ct)
@@ -494,7 +495,7 @@ public sealed class PluginRegistryService
 
         await _deleteActiveDirectoryAsync(pendingDir, ct);
         if (Directory.Exists(pendingDir))
-            throw new IOException($"Failed to clear pending uninstall marker for {pluginId}.");
+            throw new IOException(Loc.Instance.GetString("Plugins.PendingUninstallCleanupFailedFormat", pluginId));
     }
 
     private static Task DeleteActiveDirectoryAsync(string targetDirectory, CancellationToken ct)
@@ -626,14 +627,14 @@ public sealed class PluginRegistryService
             childName.Contains(Path.AltDirectorySeparatorChar) ||
             childName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
         {
-            throw new InvalidOperationException($"Invalid {description} name.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.InvalidPath"]);
         }
 
         var fullRoot = Path.GetFullPath(rootDirectory);
         var fullRootWithSeparator = EnsureTrailingSeparator(fullRoot);
         var fullPath = Path.GetFullPath(Path.Combine(fullRoot, childName));
         if (!fullPath.StartsWith(fullRootWithSeparator, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"The {description} resolves outside the expected root.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.PathOutsideRoot"]);
 
         return fullPath;
     }
@@ -641,7 +642,7 @@ public sealed class PluginRegistryService
     private static void ValidatePluginId(string pluginId)
     {
         if (!IsValidPluginId(pluginId))
-            throw new InvalidOperationException("Invalid plugin id.");
+            throw new InvalidOperationException(Loc.Instance["Plugins.InvalidId"]);
     }
 
     private static bool IsValidPluginId(string? pluginId) =>

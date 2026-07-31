@@ -19,7 +19,8 @@ public sealed class PluginLocalization : IPluginLocalization
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly Dictionary<string, Dictionary<string, string>> _strings = [];
+    private readonly Dictionary<string, Dictionary<string, string>> _strings =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly string _localizationDir;
 
     /// <summary>
@@ -37,7 +38,7 @@ public sealed class PluginLocalization : IPluginLocalization
     public PluginLocalization(string pluginDirectory, string? languageOverride = null)
     {
         _localizationDir = Path.Combine(pluginDirectory, LocalizationFolder);
-        CurrentLanguage = languageOverride
+        var preferredLanguage = languageOverride
             ?? Loc.Instance.CurrentLanguage;
 
         var available = new List<string>();
@@ -67,7 +68,13 @@ public sealed class PluginLocalization : IPluginLocalization
             }
         }
 
-        AvailableLanguages = available;
+        AvailableLanguages = available
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        CurrentLanguage = AvailableLanguages.Count == 0
+            ? preferredLanguage
+            : Loc.ResolveLanguage(preferredLanguage, AvailableLanguages);
     }
 
     /// <summary>

@@ -11,7 +11,7 @@ namespace TypeWhisper.Windows.ViewModels;
 /// <summary>
 /// Provides license section view model behavior.
 /// </summary>
-public sealed partial class LicenseSectionViewModel : ObservableObject
+public sealed partial class LicenseSectionViewModel : ObservableObject, IDisposable
 {
     private const string CustomerPortalUrl = "https://polar.sh/typewhisper/portal";
     private const string CheckoutUrlIndividual = "https://buy.polar.sh/polar_cl_Yfw7BSIXSNFESlrNPL0fNG8GHPqX9qhmxGce32wZfYJ";
@@ -26,6 +26,8 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
     private CommercialLicenseTier _selectedCommercialPlanTier = CommercialLicenseTier.Individual;
     private ActivatedLicenseEntitlementKind? _activationNoticeKind;
+    private bool _isAttached;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the LicenseSectionViewModel class.
@@ -34,27 +36,6 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     {
         License = license;
         Discord = discord;
-
-        MonthlyCommercialOptions =
-        [
-            new LicensePurchaseOption("Individual", "5 EUR/mo", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividual, "settings_individual_monthly")),
-            new LicensePurchaseOption("Team", "19 EUR/mo", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeam, "settings_team_monthly")),
-            new LicensePurchaseOption("Enterprise", "99 EUR/mo", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterprise, "settings_enterprise_monthly")),
-        ];
-
-        LifetimeCommercialOptions =
-        [
-            new LicensePurchaseOption("Individual", "99 EUR", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividualLifetime, "settings_individual_lifetime")),
-            new LicensePurchaseOption("Team", "299 EUR", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeamLifetime, "settings_team_lifetime")),
-            new LicensePurchaseOption("Enterprise", "999 EUR", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterpriseLifetime, "settings_enterprise_lifetime")),
-        ];
-
-        SupporterOptions =
-        [
-            new LicensePurchaseOption("Bronze", "10 EUR", Loc.Instance["License.SupporterBronzeHint"], AttributedCheckoutUrl(CheckoutUrlSupporterBronze, "settings_bronze_one_time")),
-            new LicensePurchaseOption("Silver", "25 EUR", Loc.Instance["License.SupporterSilverHint"], AttributedCheckoutUrl(CheckoutUrlSupporterSilver, "settings_silver_one_time")),
-            new LicensePurchaseOption("Gold", "50 EUR", Loc.Instance["License.SupporterGoldHint"], AttributedCheckoutUrl(CheckoutUrlSupporterGold, "settings_gold_one_time")),
-        ];
 
         SelectPrivateUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.PrivateUser));
         SelectBusinessUserCommand = new RelayCommand(() => License.SetUserType(LicenseUserType.Business));
@@ -70,9 +51,46 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         ReconnectDiscordCommand = new AsyncRelayCommand(ReconnectDiscordAsync, CanReconnectDiscord);
         RefreshDiscordStatusCommand = new AsyncRelayCommand(RefreshDiscordStatusAsync, CanRefreshDiscord);
         OpenGitHubSponsorsClaimCommand = new RelayCommand(() => OpenUrl(Discord.GitHubSponsorsUrl));
+    }
+
+    /// <summary>
+    /// Attaches service and localization event handlers while the owning view is active.
+    /// </summary>
+    internal void Attach()
+    {
+        if (_disposed || _isAttached)
+            return;
 
         License.PropertyChanged += OnServicePropertyChanged;
         Discord.PropertyChanged += OnServicePropertyChanged;
+        Loc.Instance.LanguageChanged += OnLanguageChanged;
+        _isAttached = true;
+    }
+
+    /// <summary>
+    /// Detaches service and localization event handlers when the owning view is unloaded.
+    /// </summary>
+    internal void Detach()
+    {
+        if (!_isAttached)
+            return;
+
+        License.PropertyChanged -= OnServicePropertyChanged;
+        Discord.PropertyChanged -= OnServicePropertyChanged;
+        Loc.Instance.LanguageChanged -= OnLanguageChanged;
+        _isAttached = false;
+    }
+
+    /// <summary>
+    /// Releases event subscriptions owned by this view model.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        Detach();
+        _disposed = true;
     }
 
     private static string AttributedCheckoutUrl(string baseUrl, string content) =>
@@ -89,15 +107,30 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
     /// <summary>
     /// Gets the monthly commercial options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> MonthlyCommercialOptions =>
+    [
+        new(Loc.Instance["License.TierIndividualName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 5), Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividual, "settings_individual_monthly")),
+        new(Loc.Instance["License.TierTeamName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 19), Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeam, "settings_team_monthly")),
+        new(Loc.Instance["License.TierEnterpriseName"], Loc.Instance.GetString("License.MonthlyPriceFormat", 99), Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterprise, "settings_enterprise_monthly")),
+    ];
     /// <summary>
     /// Gets the lifetime commercial options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> LifetimeCommercialOptions =>
+    [
+        new(Loc.Instance["License.TierIndividualName"], "99 EUR", Loc.Instance["License.TierIndividualHint"], AttributedCheckoutUrl(CheckoutUrlIndividualLifetime, "settings_individual_lifetime")),
+        new(Loc.Instance["License.TierTeamName"], "299 EUR", Loc.Instance["License.TierTeamHint"], AttributedCheckoutUrl(CheckoutUrlTeamLifetime, "settings_team_lifetime")),
+        new(Loc.Instance["License.TierEnterpriseName"], "999 EUR", Loc.Instance["License.TierEnterpriseHint"], AttributedCheckoutUrl(CheckoutUrlEnterpriseLifetime, "settings_enterprise_lifetime")),
+    ];
     /// <summary>
     /// Gets the supporter options.
     /// </summary>
-    public IReadOnlyList<LicensePurchaseOption> SupporterOptions { get; }
+    public IReadOnlyList<LicensePurchaseOption> SupporterOptions =>
+    [
+        new(Loc.Instance["License.SupporterBronzeName"], "10 EUR", Loc.Instance["License.SupporterBronzeHint"], AttributedCheckoutUrl(CheckoutUrlSupporterBronze, "settings_bronze_one_time")),
+        new(Loc.Instance["License.SupporterSilverName"], "25 EUR", Loc.Instance["License.SupporterSilverHint"], AttributedCheckoutUrl(CheckoutUrlSupporterSilver, "settings_silver_one_time")),
+        new(Loc.Instance["License.SupporterGoldName"], "50 EUR", Loc.Instance["License.SupporterGoldHint"], AttributedCheckoutUrl(CheckoutUrlSupporterGold, "settings_gold_one_time")),
+    ];
     /// <summary>
     /// Gets the plan options.
     /// </summary>
@@ -483,6 +516,13 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
     private void OnServicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (ReferenceEquals(sender, License)
+            && e.PropertyName is nameof(LicenseService.CommercialTierDisplayName)
+                or nameof(LicenseService.SupporterTierDisplayName))
+        {
+            return;
+        }
+
         ActivateLicenseCommand.NotifyCanExecuteChanged();
         RefreshCommercialLicenseCommand.NotifyCanExecuteChanged();
         RefreshSupporterLicenseCommand.NotifyCanExecuteChanged();
@@ -514,10 +554,25 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         LicenseActivationNotice = null;
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(RefreshComputedProperties);
+            return;
+        }
+
+        RefreshComputedProperties();
+    }
+
     private void RefreshComputedProperties()
     {
         OnPropertyChanged(nameof(IsPrivateUser));
         OnPropertyChanged(nameof(IsBusinessUser));
+        OnPropertyChanged(nameof(MonthlyCommercialOptions));
+        OnPropertyChanged(nameof(LifetimeCommercialOptions));
+        OnPropertyChanged(nameof(SupporterOptions));
         OnPropertyChanged(nameof(PlanOptions));
         OnPropertyChanged(nameof(ShowPlanSelection));
         OnPropertyChanged(nameof(ShowLicenseActivation));

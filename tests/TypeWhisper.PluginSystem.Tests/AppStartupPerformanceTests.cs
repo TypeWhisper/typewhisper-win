@@ -16,6 +16,22 @@ public sealed class AppStartupPerformanceTests
     }
 
     [Fact]
+    public void Startup_DoesNotReloadLocalizationResourcesAfterSingletonInitialization()
+    {
+        var programSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Program.cs");
+        var appSource = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+
+        Assert.DoesNotContain("Loc.Instance.Initialize();", programSource);
+        Assert.DoesNotContain("Loc.Instance.Initialize();", appSource);
+    }
+
+    [Fact]
     public void OnStartup_SkipsAutomaticUpdateCheckWhenPolicyDisallowsIt()
     {
         var source = TestFile.ReadProjectFile(

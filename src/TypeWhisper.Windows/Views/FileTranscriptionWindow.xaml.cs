@@ -1,4 +1,5 @@
 using System.Windows;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.Windows.Views;
@@ -42,7 +43,7 @@ public partial class FileTranscriptionWindow : Window
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Multiselect = true,
-            Filter = "Audio/Video|*.wav;*.mp3;*.m4a;*.aac;*.ogg;*.flac;*.wma;*.mp4;*.mkv;*.avi;*.mov;*.webm|All Files|*.*"
+            Filter = Loc.Instance["FileTranscription.FileDialogFilter"]
         };
 
         if (dialog.ShowDialog() == true)

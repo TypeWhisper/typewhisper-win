@@ -62,6 +62,47 @@ public class PluginLocalizationTests : IDisposable
         Assert.Equal("English only", loc.GetString("only_en"));
     }
 
+    [Theory]
+    [InlineData("zh-CN")]
+    [InlineData("zh-SG")]
+    public void CurrentLanguage_MapsSimplifiedChineseRegions(string language)
+    {
+        WriteLocale("en", new() { ["greeting"] = "Hello" });
+        WriteLocale("zh-Hans", new() { ["greeting"] = "你好" });
+
+        var loc = new PluginLocalization(_pluginDir, language);
+
+        Assert.Equal("zh-Hans", loc.CurrentLanguage);
+        Assert.Equal("你好", loc.GetString("greeting"));
+    }
+
+    [Fact]
+    public void CurrentLanguage_MapsTraditionalChineseWhenResourceExists()
+    {
+        WriteLocale("en", new() { ["greeting"] = "Hello" });
+        WriteLocale("zh-Hant", new() { ["greeting"] = "你好" });
+
+        var loc = new PluginLocalization(_pluginDir, "zh-TW");
+
+        Assert.Equal("zh-Hant", loc.CurrentLanguage);
+        Assert.Equal("你好", loc.GetString("greeting"));
+    }
+
+    [Theory]
+    [InlineData("zh-TW")]
+    [InlineData("zh-HK")]
+    public void CurrentLanguage_FallsBackToEnglishInsteadOfGenericChineseForTraditionalCultures(
+        string language)
+    {
+        WriteLocale("en", new() { ["greeting"] = "Hello" });
+        WriteLocale("zh", new() { ["greeting"] = "你好" });
+
+        var loc = new PluginLocalization(_pluginDir, language);
+
+        Assert.Equal("en", loc.CurrentLanguage);
+        Assert.Equal("Hello", loc.GetString("greeting"));
+    }
+
     [Fact]
     public void GetString_ReturnsKeyWhenNotInAnyLanguage()
     {

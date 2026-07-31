@@ -1647,7 +1647,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        FeedbackText = actionResult.Message ?? (actionResult.Success ? "Done" : "Failed");
+                        FeedbackText = actionResult.Message ?? (actionResult.Success
+                            ? Loc.Instance["Status.Done"]
+                            : Loc.Instance["Status.Failed"]);
                         FeedbackIsError = !actionResult.Success;
                         ShowFeedback = true;
                     });

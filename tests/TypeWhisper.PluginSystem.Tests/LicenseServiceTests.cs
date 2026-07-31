@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -356,6 +357,133 @@ public sealed class LicenseServiceTests : IDisposable
     }
 
     [Fact]
+    public void LicenseService_LanguageChangeRefreshesTierDisplayNamesAndActiveDetails()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+            service.CommercialStatus = LicenseStatus.Active;
+            service.CommercialTier = CommercialLicenseTier.Team;
+            service.SupporterStatus = LicenseStatus.Active;
+            service.SupporterTier = SupporterTier.Gold;
+            using var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
+            viewModel.Attach();
+            var serviceChanges = new List<string?>();
+            var viewModelChanges = new List<string?>();
+            service.PropertyChanged += (_, args) => serviceChanges.Add(args.PropertyName);
+            viewModel.PropertyChanged += (_, args) => viewModelChanges.Add(args.PropertyName);
+            var englishCommercialDetail = viewModel.CommercialStatusDetail;
+            var englishSupporterDetail = viewModel.SupporterStatusDetail;
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Contains(nameof(LicenseService.CommercialTierDisplayName), serviceChanges);
+            Assert.Contains(nameof(LicenseService.SupporterTierDisplayName), serviceChanges);
+            Assert.Contains(nameof(LicenseSectionViewModel.CommercialStatusDetail), viewModelChanges);
+            Assert.Contains(nameof(LicenseSectionViewModel.SupporterStatusDetail), viewModelChanges);
+            Assert.Equal(Loc.Instance["License.TierTeamName"], service.CommercialTierDisplayName);
+            Assert.Equal(Loc.Instance["License.SupporterGoldName"], service.SupporterTierDisplayName);
+            Assert.NotEqual(englishCommercialDetail, viewModel.CommercialStatusDetail);
+            Assert.NotEqual(englishSupporterDetail, viewModel.SupporterStatusDetail);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
+    public async Task SupporterDiscordService_PersistsStableErrorAndRelocalizesAfterRestart()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var dataPath = CreateTempDir();
+            var license = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+            var discord = CreateDiscordService(dataPath);
+
+            await discord.CreateClaimSessionAsync(license);
+
+            var englishMessage = discord.ErrorMessage;
+            using (var document = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(dataPath, "supporter-discord.json"))))
+            {
+                var root = document.RootElement;
+                Assert.Equal("EntitlementRequired", root.GetProperty("errorKind").GetString());
+                Assert.False(root.TryGetProperty("errorMessage", out _));
+            }
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+            var reloaded = CreateDiscordService(dataPath);
+
+            Assert.Equal(Loc.Instance["License.DiscordEntitlementRequired"], discord.ErrorMessage);
+            Assert.Equal(Loc.Instance["License.DiscordEntitlementRequired"], reloaded.ErrorMessage);
+            Assert.NotEqual(englishMessage, reloaded.ErrorMessage);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
+    public void SupporterDiscordService_RetryDecisionUsesStableErrorKind()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var error = SupporterDiscordService.NormalizeDiscordError("Not found");
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Equal(SupporterDiscordErrorKind.EntitlementNotFound, error.Kind);
+            Assert.True(SupporterDiscordService.ShouldRetryWithNextClaimProof(error));
+            Assert.False(SupporterDiscordService.ShouldRetryWithNextClaimProof(
+                SupporterDiscordService.NormalizeDiscordError("Request rejected")));
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
+    }
+
+    [Fact]
+    public async Task SupporterDiscordService_RetriesNextClaimProofAfterEntitlementNotFound()
+    {
+        var calls = 0;
+        var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+        SetPrivateField(service, "_supporterLicenseKey", "TYPEWHISPER-SUP-999");
+        SetPrivateField(service, "_supporterActivationId", "activation-supporter");
+        SetPrivateField(service, "_commercialLicenseKey", "TYPEWHISPER-COM-123");
+        SetPrivateField(service, "_commercialActivationId", "activation-commercial");
+        service.SupporterStatus = LicenseStatus.Active;
+        service.SupporterTier = SupporterTier.Gold;
+        service.CommercialStatus = LicenseStatus.Active;
+        service.CommercialTier = CommercialLicenseTier.Team;
+        var discord = CreateDiscordService((_, _) => ++calls == 1
+            ? Json(HttpStatusCode.NotFound, """{"error":"Not found"}""")
+            : Json(HttpStatusCode.OK, """{"session_id":"session-123","claim_url":"https://example.com/claim"}"""));
+
+        var claimUrl = await discord.CreateClaimSessionAsync(service);
+
+        Assert.Equal(2, calls);
+        Assert.Equal("https://example.com/claim", claimUrl?.ToString());
+        Assert.Equal("activation-commercial", discord.ClaimActivationId);
+        Assert.Equal(SupporterDiscordClaimState.Pending, discord.ClaimState);
+        Assert.Null(discord.ErrorMessage);
+    }
+
+    [Fact]
     public async Task LicenseSectionViewModel_ActivateLicenseCommandClearsSharedInputOnSuccess()
     {
         var service = CreateService((request, _) => request.RequestUri?.AbsolutePath switch
@@ -387,6 +515,41 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.False(viewModel.ShowSupporterManage);
         Assert.True(viewModel.ShowCustomerPortalShortcut);
         Assert.True(viewModel.OpenCustomerPortalCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void LicenseSectionViewModel_DisposeStopsLanguageChangeNotifications()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+            using var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
+            var planOptionsChangeCount = 0;
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(LicenseSectionViewModel.PlanOptions))
+                    planOptionsChangeCount++;
+            };
+            viewModel.Attach();
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Equal(1, planOptionsChangeCount);
+
+            viewModel.Dispose();
+            planOptionsChangeCount = 0;
+            Loc.Instance.CurrentLanguage = "en";
+
+            Assert.Equal(0, planOptionsChangeCount);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
     }
 
     [Fact]
@@ -534,12 +697,19 @@ public sealed class LicenseServiceTests : IDisposable
     private SupporterDiscordService CreateDiscordService(Func<HttpRequestMessage, string, HttpResponseMessage>? responder = null)
     {
         var tempDir = CreateTempDir();
+        return CreateDiscordService(tempDir, responder);
+    }
+
+    private static SupporterDiscordService CreateDiscordService(
+        string dataPath,
+        Func<HttpRequestMessage, string, HttpResponseMessage>? responder = null)
+    {
         return new SupporterDiscordService(
             new HttpClient(new CapturingHandler(responder ?? ((_, _) => Json(HttpStatusCode.OK, "{}"))))
             {
                 Timeout = TimeSpan.FromSeconds(5)
             },
-            tempDir);
+            dataPath);
     }
 
     private string CreateTempDir()
