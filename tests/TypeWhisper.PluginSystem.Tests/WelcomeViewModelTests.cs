@@ -260,57 +260,64 @@ public sealed class WelcomeViewModelTests
         {
             RunOnStaThread(() =>
             {
-                Loc.Instance.CurrentLanguage = "en";
-                var plugin = new FakeTranscriptionPlugin(
-                    "com.typewhisper.sherpa-onnx",
-                    "Parakeet",
-                    configured: true,
-                    supportsModelDownload: true,
-                    isModelDownloaded: false,
-                    isRecommended: true);
-                var sut = CreateViewModel(
-                    plugin,
-                    out _,
-                    out _,
-                    AppSettings.Default with
-                    {
-                        MainDictationHotkeys = [],
-                        PushToTalkHotkey = "",
-                        ToggleHotkey = ""
-                    });
-                sut.UpdateDownloadStatus(ModelStatus.DownloadingModel(42));
-                var englishStatus = sut.DownloadStatus;
-                var englishPrimaryAction = sut.PrimaryActionLabel;
-                var englishHotkeyDisplay = sut.MainDictationHotkeyDisplay;
-                var englishModelDisplay = Assert.Single(sut.AvailableModels).DisplayName;
-                var englishMicrophoneDisplay = Assert.Single(sut.Microphones).Name;
-                var changedProperties = new HashSet<string>();
-                sut.PropertyChanged += (_, args) =>
+                WelcomeViewModel? sut = null;
+                try
                 {
-                    if (args.PropertyName is not null)
-                        changedProperties.Add(args.PropertyName);
-                };
+                    Loc.Instance.CurrentLanguage = "en";
+                    var plugin = new FakeTranscriptionPlugin(
+                        "com.typewhisper.sherpa-onnx",
+                        "Parakeet",
+                        configured: true,
+                        supportsModelDownload: true,
+                        isModelDownloaded: false,
+                        isRecommended: true);
+                    sut = CreateViewModel(
+                        plugin,
+                        out _,
+                        out _,
+                        AppSettings.Default with
+                        {
+                            MainDictationHotkeys = [],
+                            PushToTalkHotkey = "",
+                            ToggleHotkey = ""
+                        });
+                    sut.UpdateDownloadStatus(ModelStatus.DownloadingModel(42));
+                    var englishStatus = sut.DownloadStatus;
+                    var englishPrimaryAction = sut.PrimaryActionLabel;
+                    var englishHotkeyDisplay = sut.MainDictationHotkeyDisplay;
+                    var englishModelDisplay = Assert.Single(sut.AvailableModels).DisplayName;
+                    var englishMicrophoneDisplay = Assert.Single(sut.Microphones).Name;
+                    var changedProperties = new HashSet<string>();
+                    sut.PropertyChanged += (_, args) =>
+                    {
+                        if (args.PropertyName is not null)
+                            changedProperties.Add(args.PropertyName);
+                    };
 
-                Loc.Instance.CurrentLanguage = "zh-Hans";
+                    Loc.Instance.CurrentLanguage = "zh-Hans";
 
-                Assert.Equal(
-                    Loc.Instance.GetString("Models.DownloadProgressFormat", 42d),
-                    sut.DownloadStatus);
-                Assert.NotEqual(englishStatus, sut.DownloadStatus);
-                Assert.Equal(Loc.Instance["Welcome.Next"], sut.PrimaryActionLabel);
-                Assert.NotEqual(englishPrimaryAction, sut.PrimaryActionLabel);
-                Assert.Equal(Loc.Instance["Hotkey.ClickToAssign"], sut.MainDictationHotkeyDisplay);
-                Assert.NotEqual(englishHotkeyDisplay, sut.MainDictationHotkeyDisplay);
-                Assert.EndsWith(
-                    $" — {Loc.Instance["Welcome.Recommended"]}",
-                    Assert.Single(sut.AvailableModels).DisplayName);
-                Assert.NotEqual(englishModelDisplay, Assert.Single(sut.AvailableModels).DisplayName);
-                Assert.Equal(Loc.Instance["Microphone.Default"], Assert.Single(sut.Microphones).Name);
-                Assert.NotEqual(englishMicrophoneDisplay, Assert.Single(sut.Microphones).Name);
-                Assert.Contains(nameof(WelcomeViewModel.DownloadStatus), changedProperties);
-                Assert.Contains(nameof(WelcomeViewModel.PrimaryActionLabel), changedProperties);
-                Assert.Contains(nameof(WelcomeViewModel.MainDictationHotkeyDisplay), changedProperties);
-                sut.Cleanup();
+                    Assert.Equal(
+                        Loc.Instance.GetString("Models.DownloadProgressFormat", 42d),
+                        sut.DownloadStatus);
+                    Assert.NotEqual(englishStatus, sut.DownloadStatus);
+                    Assert.Equal(Loc.Instance["Welcome.Next"], sut.PrimaryActionLabel);
+                    Assert.NotEqual(englishPrimaryAction, sut.PrimaryActionLabel);
+                    Assert.Equal(Loc.Instance["Hotkey.ClickToAssign"], sut.MainDictationHotkeyDisplay);
+                    Assert.NotEqual(englishHotkeyDisplay, sut.MainDictationHotkeyDisplay);
+                    Assert.EndsWith(
+                        $" — {Loc.Instance["Welcome.Recommended"]}",
+                        Assert.Single(sut.AvailableModels).DisplayName);
+                    Assert.NotEqual(englishModelDisplay, Assert.Single(sut.AvailableModels).DisplayName);
+                    Assert.Equal(Loc.Instance["Microphone.Default"], Assert.Single(sut.Microphones).Name);
+                    Assert.NotEqual(englishMicrophoneDisplay, Assert.Single(sut.Microphones).Name);
+                    Assert.Contains(nameof(WelcomeViewModel.DownloadStatus), changedProperties);
+                    Assert.Contains(nameof(WelcomeViewModel.PrimaryActionLabel), changedProperties);
+                    Assert.Contains(nameof(WelcomeViewModel.MainDictationHotkeyDisplay), changedProperties);
+                }
+                finally
+                {
+                    sut?.Cleanup();
+                }
             });
         }
         finally
