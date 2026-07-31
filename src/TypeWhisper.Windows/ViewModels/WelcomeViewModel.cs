@@ -504,7 +504,14 @@ public partial class WelcomeViewModel : ObservableObject
     }
 
     private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e) =>
-        DispatchToUi(() => OnPropertyChanged(nameof(DownloadStatus)));
+        DispatchToUi(() =>
+        {
+            RefreshModels();
+            RefreshMicrophones();
+            OnPropertyChanged(nameof(DownloadStatus));
+            OnPropertyChanged(nameof(PrimaryActionLabel));
+            OnPropertyChanged(nameof(MainDictationHotkeyDisplay));
+        });
 
     [RelayCommand]
     private void SelectRecommendedLocal()
