@@ -42,6 +42,16 @@ public sealed record WelcomeCompletionRequest(SettingsRoute? SettingsRoute, stri
 /// </summary>
 public partial class WelcomeViewModel : ObservableObject
 {
+    private enum DownloadStatusKind
+    {
+        None,
+        Starting,
+        Downloading,
+        Loading,
+        Done,
+        Error,
+    }
+
     private const string LocalPluginId = "com.typewhisper.sherpa-onnx";
     private const string GroqPluginId = "com.typewhisper.groq";
     private const string ParakeetModelId = "plugin:com.typewhisper.sherpa-onnx:parakeet-tdt-0.6b";
@@ -58,11 +68,12 @@ public partial class WelcomeViewModel : ObservableObject
     private bool _isInitializing;
     private bool _isMicTestRunning;
     private DictationState _lastObservedDictationState;
+    private DownloadStatusKind _downloadStatusKind;
+    private string? _downloadErrorDetail;
 
     [ObservableProperty] private int _currentStep; // 0=Extensions+Model, 1=Mic, 2=Hotkey, 3=Try it out
     [ObservableProperty] private bool _isDownloading;
     [ObservableProperty] private double _downloadProgress;
-    [ObservableProperty] private string _downloadStatus = "";
     [ObservableProperty] private string? _selectedModelId;
     [ObservableProperty] private float _micLevel;
     [ObservableProperty] private bool _micWorking;
@@ -140,6 +151,7 @@ public partial class WelcomeViewModel : ObservableObject
         _modelManager.PluginManager.PluginStateChanged += _pluginStateChangedHandler;
         _modelManager.PropertyChanged += OnModelManagerChanged;
         _dictation.PropertyChanged += OnDictationPropertyChanged;
+        PropertyChangedEventManager.AddHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
 
         RefreshMicrophones();
         _ = LoadPluginsAsync();
@@ -153,6 +165,20 @@ public partial class WelcomeViewModel : ObservableObject
     /// Gets whether is final step.
     /// </summary>
     public bool IsFinalStep => CurrentStep == 3;
+    /// <summary>
+    /// Gets the localized model download status.
+    /// </summary>
+    public string DownloadStatus => _downloadStatusKind switch
+    {
+        DownloadStatusKind.Starting => Loc.Instance["Welcome.DownloadProgress"],
+        DownloadStatusKind.Downloading =>
+            Loc.Instance.GetString("Models.DownloadProgressFormat", DownloadProgress),
+        DownloadStatusKind.Loading => Loc.Instance["Welcome.LoadingModel"],
+        DownloadStatusKind.Done => Loc.Instance["Welcome.Done"],
+        DownloadStatusKind.Error =>
+            Loc.Instance.GetString("Status.ErrorFormat", _downloadErrorDetail ?? string.Empty),
+        _ => string.Empty,
+    };
     /// <summary>
     /// Gets the primary action label.
     /// </summary>
@@ -426,19 +452,19 @@ public partial class WelcomeViewModel : ObservableObject
         if (string.IsNullOrEmpty(SelectedModelId)) return;
 
         IsDownloading = true;
-        DownloadStatus = Loc.Instance["Welcome.DownloadProgress"];
+        SetDownloadStatus(DownloadStatusKind.Starting);
 
         _modelManager.PropertyChanged += OnModelManagerPropertyChanged;
 
         try
         {
             await _modelManager.DownloadAndLoadModelAsync(SelectedModelId);
-            DownloadStatus = Loc.Instance["Welcome.Done"];
+            SetDownloadStatus(DownloadStatusKind.Done);
             _settings.Save(_settings.Current with { SelectedModelId = SelectedModelId });
         }
         catch (Exception ex)
         {
-            DownloadStatus = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+            SetDownloadStatus(DownloadStatusKind.Error, ex.Message);
             return;
         }
         finally
@@ -454,16 +480,31 @@ public partial class WelcomeViewModel : ObservableObject
             return;
 
         var status = _modelManager.GetStatus(SelectedModelId);
+        UpdateDownloadStatus(status);
+    }
+
+    internal void UpdateDownloadStatus(ModelStatus status)
+    {
         if (status.Type == ModelStatusType.Downloading)
         {
             DownloadProgress = status.Progress;
-            DownloadStatus = Loc.Instance.GetString("Models.DownloadProgressFormat", status.Progress);
+            SetDownloadStatus(DownloadStatusKind.Downloading);
         }
         else if (status.Type == ModelStatusType.Loading)
         {
-            DownloadStatus = Loc.Instance["Welcome.LoadingModel"];
+            SetDownloadStatus(DownloadStatusKind.Loading);
         }
     }
+
+    private void SetDownloadStatus(DownloadStatusKind kind, string? errorDetail = null)
+    {
+        _downloadStatusKind = kind;
+        _downloadErrorDetail = errorDetail;
+        OnPropertyChanged(nameof(DownloadStatus));
+    }
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e) =>
+        DispatchToUi(() => OnPropertyChanged(nameof(DownloadStatus)));
 
     [RelayCommand]
     private void SelectRecommendedLocal()
@@ -722,6 +763,7 @@ public partial class WelcomeViewModel : ObservableObject
         _modelManager.PluginManager.PluginStateChanged -= _pluginStateChangedHandler;
         _modelManager.PropertyChanged -= OnModelManagerChanged;
         _dictation.PropertyChanged -= OnDictationPropertyChanged;
+        PropertyChangedEventManager.RemoveHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
     }
 
     private static IReadOnlyList<string> ResolveMainDictationHotkeys(AppSettings settings) =>

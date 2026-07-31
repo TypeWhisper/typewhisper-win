@@ -9,6 +9,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
@@ -247,6 +248,49 @@ public sealed class WelcomeViewModelTests
             sut.NextStepCommand.Execute(null);
             Assert.False(audio.IsRecording);
         });
+    }
+
+    [Fact]
+    public void LanguageChange_RefreshesActiveDownloadStatus()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            RunOnStaThread(() =>
+            {
+                Loc.Instance.CurrentLanguage = "en";
+                var plugin = new FakeTranscriptionPlugin(
+                    "com.typewhisper.sherpa-onnx",
+                    "Parakeet",
+                    configured: true,
+                    supportsModelDownload: true,
+                    isModelDownloaded: false);
+                var sut = CreateViewModel(plugin);
+                sut.UpdateDownloadStatus(ModelStatus.DownloadingModel(42));
+                var englishStatus = sut.DownloadStatus;
+                var downloadStatusChanges = 0;
+                sut.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(WelcomeViewModel.DownloadStatus))
+                        downloadStatusChanges++;
+                };
+
+                Loc.Instance.CurrentLanguage = "zh-Hans";
+
+                Assert.Equal(
+                    Loc.Instance.GetString("Models.DownloadProgressFormat", 42d),
+                    sut.DownloadStatus);
+                Assert.NotEqual(englishStatus, sut.DownloadStatus);
+                Assert.Equal(1, downloadStatusChanges);
+                sut.Cleanup();
+            });
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
     }
 
     private static WelcomeViewModel CreateViewModel(FakeTranscriptionPlugin plugin) =>

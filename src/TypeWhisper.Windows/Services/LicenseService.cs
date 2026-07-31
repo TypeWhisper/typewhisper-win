@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -155,6 +156,7 @@ public sealed partial class LicenseService : ObservableObject
         _distributionKind = distributionKind ?? AppDistribution.Current;
         _appVersion = appVersion ?? GetAppVersion();
         LoadStore();
+        PropertyChangedEventManager.AddHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
     }
 
     /// <summary>
@@ -215,6 +217,12 @@ public sealed partial class LicenseService : ObservableObject
         global::TypeWhisper.Windows.Services.SupporterTier.Gold => Loc.Instance["License.SupporterGoldName"],
         _ => null
     };
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(CommercialTierDisplayName));
+        OnPropertyChanged(nameof(SupporterTierDisplayName));
+    }
 
     /// <summary>
     /// Gets the supporter claim proof.

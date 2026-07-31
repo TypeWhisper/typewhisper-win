@@ -516,6 +516,13 @@ public sealed partial class LicenseSectionViewModel : ObservableObject, IDisposa
 
     private void OnServicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (ReferenceEquals(sender, License)
+            && e.PropertyName is nameof(LicenseService.CommercialTierDisplayName)
+                or nameof(LicenseService.SupporterTierDisplayName))
+        {
+            return;
+        }
+
         ActivateLicenseCommand.NotifyCanExecuteChanged();
         RefreshCommercialLicenseCommand.NotifyCanExecuteChanged();
         RefreshSupporterLicenseCommand.NotifyCanExecuteChanged();
