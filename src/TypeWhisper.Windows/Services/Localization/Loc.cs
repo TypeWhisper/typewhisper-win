@@ -255,7 +255,8 @@ public sealed class Loc : INotifyPropertyChanged
         if (script is not null)
             yield return $"zh-{script}";
 
-        if (parts.Length > 1)
+        if (parts.Length > 1
+            && !string.Equals(script, "Hant", StringComparison.OrdinalIgnoreCase))
             yield return primary;
     }
 

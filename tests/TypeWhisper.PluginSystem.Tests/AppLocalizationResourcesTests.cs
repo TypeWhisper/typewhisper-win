@@ -65,6 +65,8 @@ public class AppLocalizationResourcesTests
     [InlineData("zh-MO", "en,zh-Hant", "zh-Hant")]
     [InlineData("zh-CHT", "en,zh-Hant", "zh-Hant")]
     [InlineData("zh-TW", "en,zh-Hans", "en")]
+    [InlineData("zh-TW", "en,zh", "en")]
+    [InlineData("zh-HK", "en,zh", "en")]
     [InlineData("en-US", "en,zh-Hans", "en")]
     [InlineData("de-DE", "de,en,zh-Hans", "de")]
     public void ResolveLanguage_MapsCulturesToAvailableResources(

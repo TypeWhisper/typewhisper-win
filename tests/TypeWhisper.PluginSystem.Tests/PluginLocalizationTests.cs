@@ -88,13 +88,16 @@ public class PluginLocalizationTests : IDisposable
         Assert.Equal("你好", loc.GetString("greeting"));
     }
 
-    [Fact]
-    public void CurrentLanguage_FallsBackToEnglishWhenTraditionalChineseIsUnavailable()
+    [Theory]
+    [InlineData("zh-TW")]
+    [InlineData("zh-HK")]
+    public void CurrentLanguage_FallsBackToEnglishInsteadOfGenericChineseForTraditionalCultures(
+        string language)
     {
         WriteLocale("en", new() { ["greeting"] = "Hello" });
-        WriteLocale("zh-Hans", new() { ["greeting"] = "你好" });
+        WriteLocale("zh", new() { ["greeting"] = "你好" });
 
-        var loc = new PluginLocalization(_pluginDir, "zh-HK");
+        var loc = new PluginLocalization(_pluginDir, language);
 
         Assert.Equal("en", loc.CurrentLanguage);
         Assert.Equal("Hello", loc.GetString("greeting"));

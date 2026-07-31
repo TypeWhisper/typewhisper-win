@@ -18,6 +18,21 @@ namespace TypeWhisper.Windows.ViewModels;
 /// </summary>
 public partial class ModelManagerViewModel : ObservableObject
 {
+    private enum BusyMessageKind
+    {
+        None,
+        LoadingModel,
+        Error,
+    }
+
+    private enum ModelStorageStatusKind
+    {
+        Current,
+        Moving,
+        Moved,
+        Error,
+    }
+
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
     private readonly LocalModelStorageService _modelStorage;
@@ -29,12 +44,15 @@ public partial class ModelManagerViewModel : ObservableObject
     private bool _accelerationRestartNotificationShown;
     private int _accelerationApplyVersion;
     private int _accelerationBusyVersion;
+    private BusyMessageKind _busyMessageKind;
+    private string? _busyErrorDetail;
+    private ModelStorageStatusKind _modelStorageStatusKind = ModelStorageStatusKind.Current;
+    private string? _modelStorageErrorDetail;
 
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
     private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
     [ObservableProperty] private bool _isBusy;
-    [ObservableProperty] private string? _busyMessage;
     [ObservableProperty] private string _activeProviderDisplayName = Loc.Instance["Models.NoProvider"];
     [ObservableProperty] private string _activeModelDisplayName = Loc.Instance["Models.NoModelSelected"];
     [ObservableProperty] private string _activeModelStatusText = "";
@@ -46,7 +64,6 @@ public partial class ModelManagerViewModel : ObservableObject
     [ObservableProperty] private string _accelerationRestartMessage = "";
     [ObservableProperty] private string _modelStoragePath = "";
     [ObservableProperty] private string _resolvedModelStoragePath = "";
-    [ObservableProperty] private string _modelStorageStatusText = "";
     [ObservableProperty] private bool _isModelStorageBusy;
     [ObservableProperty] private bool _hasModelStorageError;
 
@@ -71,6 +88,28 @@ public partial class ModelManagerViewModel : ObservableObject
         get => _accelerationStatusText;
         set => SetProperty(ref _accelerationStatusText, value);
     }
+
+    /// <summary>
+    /// Gets the localized status for the current model operation.
+    /// </summary>
+    public string? BusyMessage => _busyMessageKind switch
+    {
+        BusyMessageKind.LoadingModel => Loc.Instance["Models.LoadingModel"],
+        BusyMessageKind.Error => Loc.Instance.GetString("Status.ErrorFormat", _busyErrorDetail ?? ""),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Gets the localized model storage status.
+    /// </summary>
+    public string ModelStorageStatusText => _modelStorageStatusKind switch
+    {
+        ModelStorageStatusKind.Moving => Loc.Instance["Models.StorageMoving"],
+        ModelStorageStatusKind.Moved => Loc.Instance["Models.StorageMoved"],
+        ModelStorageStatusKind.Error =>
+            Loc.Instance.GetString("Models.StorageErrorFormat", _modelStorageErrorDetail ?? ""),
+        _ => Loc.Instance.GetString("Models.StorageCurrentFormat", ResolvedModelStoragePath),
+    };
 
     /// <summary>
     /// Gets the providers.
@@ -266,7 +305,7 @@ public partial class ModelManagerViewModel : ObservableObject
             if (shouldReloadActiveModel)
             {
                 IsBusy = true;
-                BusyMessage = Loc.Instance["Models.LoadingModel"];
+                SetBusyMessage(BusyMessageKind.LoadingModel);
                 managesBusyState = true;
                 _accelerationBusyVersion = applyVersion;
             }
@@ -286,7 +325,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 managesBusyState = true;
                 _accelerationBusyVersion = applyVersion;
 
-                BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+                SetBusyMessage(BusyMessageKind.Error, ex.Message);
                 await Task.Delay(2000);
             }
         }
@@ -297,7 +336,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 if (managesBusyState || _accelerationBusyVersion != 0)
                 {
                     IsBusy = false;
-                    BusyMessage = null;
+                    SetBusyMessage(BusyMessageKind.None);
                     _accelerationBusyVersion = 0;
                 }
 
@@ -332,7 +371,7 @@ public partial class ModelManagerViewModel : ObservableObject
     private async Task ActivateModel(string fullModelId)
     {
         IsBusy = true;
-        BusyMessage = Loc.Instance["Models.LoadingModel"];
+        SetBusyMessage(BusyMessageKind.LoadingModel);
         try
         {
             await _modelManager.DownloadAndLoadModelAsync(fullModelId);
@@ -341,14 +380,21 @@ public partial class ModelManagerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            BusyMessage = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+            SetBusyMessage(BusyMessageKind.Error, ex.Message);
             await Task.Delay(2000);
         }
         finally
         {
             IsBusy = false;
-            BusyMessage = null;
+            SetBusyMessage(BusyMessageKind.None);
         }
+    }
+
+    private void SetBusyMessage(BusyMessageKind kind, string? errorDetail = null)
+    {
+        _busyMessageKind = kind;
+        _busyErrorDetail = errorDetail;
+        OnPropertyChanged(nameof(BusyMessage));
     }
 
     private void SyncSelectedModelOption()
@@ -375,16 +421,8 @@ public partial class ModelManagerViewModel : ObservableObject
         {
             RefreshAccelerationOptions();
             RefreshAllModels();
-
-            if (IsBusy)
-                BusyMessage = Loc.Instance["Models.LoadingModel"];
-
-            if (IsModelStorageBusy)
-                ModelStorageStatusText = Loc.Instance["Models.StorageMoving"];
-            else if (!HasModelStorageError)
-                ModelStorageStatusText = Loc.Instance.GetString(
-                    "Models.StorageCurrentFormat",
-                    ResolvedModelStoragePath);
+            OnPropertyChanged(nameof(BusyMessage));
+            OnPropertyChanged(nameof(ModelStorageStatusText));
         });
     }
 
@@ -562,20 +600,18 @@ public partial class ModelManagerViewModel : ObservableObject
     private async Task MoveModelStorage()
     {
         IsModelStorageBusy = true;
-        HasModelStorageError = false;
-        ModelStorageStatusText = Loc.Instance["Models.StorageMoving"];
+        SetModelStorageStatus(ModelStorageStatusKind.Moving);
 
         try
         {
             await _modelStorage.MoveDownloadsAndUsePathAsync(ModelStoragePath);
             RefreshModelStorage();
             RefreshAllModels();
-            ModelStorageStatusText = Loc.Instance["Models.StorageMoved"];
+            SetModelStorageStatus(ModelStorageStatusKind.Moved);
         }
         catch (Exception ex)
         {
-            HasModelStorageError = true;
-            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageErrorFormat", ex.Message);
+            SetModelStorageStatus(ModelStorageStatusKind.Error, ex.Message);
         }
         finally
         {
@@ -589,7 +625,7 @@ public partial class ModelManagerViewModel : ObservableObject
         if (IsModelStorageBusy)
             return;
 
-        HasModelStorageError = false;
+        SetModelStorageStatus(ModelStorageStatusKind.Current);
         _modelStorage.ResetToDefault();
         RefreshModelStorage();
         RefreshAllModels();
@@ -600,7 +636,15 @@ public partial class ModelManagerViewModel : ObservableObject
         ResolvedModelStoragePath = _modelStorage.ResolvedModelStoragePath;
         ModelStoragePath = ResolvedModelStoragePath;
         if (!IsModelStorageBusy && !HasModelStorageError)
-            ModelStorageStatusText = Loc.Instance.GetString("Models.StorageCurrentFormat", ResolvedModelStoragePath);
+            SetModelStorageStatus(ModelStorageStatusKind.Current);
+    }
+
+    private void SetModelStorageStatus(ModelStorageStatusKind kind, string? errorDetail = null)
+    {
+        _modelStorageStatusKind = kind;
+        _modelStorageErrorDetail = errorDetail;
+        HasModelStorageError = kind == ModelStorageStatusKind.Error;
+        OnPropertyChanged(nameof(ModelStorageStatusText));
     }
 }
 
