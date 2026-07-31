@@ -100,7 +100,6 @@ public partial class App : Application
         _ = RestoreRemoteTermPacksAsync(termPackRegistry, dictionary, settings, licenseService);
 
         // Initialize localization
-        Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
             ?? Loc.Instance.DetectSystemLanguage();
 

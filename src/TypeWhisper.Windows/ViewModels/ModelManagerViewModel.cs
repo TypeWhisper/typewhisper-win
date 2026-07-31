@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -82,14 +83,7 @@ public partial class ModelManagerViewModel : ObservableObject
     /// <summary>
     /// Gets the acceleration options.
     /// </summary>
-    public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } =
-    [
-        new(AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
-        new(AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
-        new(AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"]),
-        new(AppSettings.LocalModelAccelerationAmdVulkan, Loc.Instance["Models.AccelerationAmdVulkan"]),
-        new(AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"])
-    ];
+    public ObservableCollection<AccelerationOptionViewModel> AccelerationOptions { get; } = [];
 
     /// <summary>
     /// Initializes a new instance of the ModelManagerViewModel class.
@@ -110,8 +104,10 @@ public partial class ModelManagerViewModel : ObservableObject
         _selectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
             _settings.Current.LocalModelAcceleration);
 
+        RefreshAccelerationOptions();
         RebuildProviders();
         RefreshModelStorage();
+        PropertyChangedEventManager.AddHandler(Loc.Instance, OnLocalizationChanged, "Item[]");
 
         _modelManager.PropertyChanged += (_, args) =>
         {
@@ -371,6 +367,47 @@ public partial class ModelManagerViewModel : ObservableObject
         SelectedAccelerationOptionValue = AppSettings.NormalizeLocalModelAcceleration(
             _settings.Current.LocalModelAcceleration);
         _isSyncingAccelerationSelection = false;
+    }
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        InvokeOnUiThread(() =>
+        {
+            RefreshAccelerationOptions();
+            RefreshAllModels();
+
+            if (IsBusy)
+                BusyMessage = Loc.Instance["Models.LoadingModel"];
+
+            if (IsModelStorageBusy)
+                ModelStorageStatusText = Loc.Instance["Models.StorageMoving"];
+            else if (!HasModelStorageError)
+                ModelStorageStatusText = Loc.Instance.GetString(
+                    "Models.StorageCurrentFormat",
+                    ResolvedModelStoragePath);
+        });
+    }
+
+    private void RefreshAccelerationOptions()
+    {
+        (string Value, string DisplayName)[] localizedOptions =
+        [
+            (AppSettings.LocalModelAccelerationAuto, Loc.Instance["Models.AccelerationAuto"]),
+            (AppSettings.LocalModelAccelerationCpu, Loc.Instance["Models.AccelerationCpu"]),
+            (AppSettings.LocalModelAccelerationNvidiaCuda, Loc.Instance["Models.AccelerationNvidiaCuda"]),
+            (AppSettings.LocalModelAccelerationAmdVulkan, Loc.Instance["Models.AccelerationAmdVulkan"]),
+            (AppSettings.LocalModelAccelerationAmdRocm, Loc.Instance["Models.AccelerationAmdRocm"]),
+        ];
+
+        foreach (var localizedOption in localizedOptions)
+        {
+            var existing = AccelerationOptions.FirstOrDefault(option =>
+                option.Value == localizedOption.Value);
+            if (existing is null)
+                AccelerationOptions.Add(new(localizedOption.Value, localizedOption.DisplayName));
+            else
+                existing.UpdateDisplayName(localizedOption.DisplayName);
+        }
     }
 
     private static void InvokeOnUiThread(Action action)
@@ -710,8 +747,10 @@ public sealed class ModelOptionViewModel
 /// <summary>
 /// Provides acceleration option view model behavior.
 /// </summary>
-public sealed class AccelerationOptionViewModel
+public sealed class AccelerationOptionViewModel : ObservableObject
 {
+    private string _displayName;
+
     /// <summary>
     /// Gets the value.
     /// </summary>
@@ -719,7 +758,11 @@ public sealed class AccelerationOptionViewModel
     /// <summary>
     /// Gets the display name shown in the UI.
     /// </summary>
-    public string DisplayName { get; }
+    public string DisplayName
+    {
+        get => _displayName;
+        private set => SetProperty(ref _displayName, value);
+    }
 
     /// <summary>
     /// Initializes a new instance of the AccelerationOptionViewModel class.
@@ -727,6 +770,8 @@ public sealed class AccelerationOptionViewModel
     public AccelerationOptionViewModel(string value, string displayName)
     {
         Value = value;
-        DisplayName = displayName;
+        _displayName = displayName;
     }
+
+    internal void UpdateDisplayName(string displayName) => DisplayName = displayName;
 }

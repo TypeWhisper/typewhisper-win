@@ -66,6 +66,7 @@ public partial class LicenseSection : UserControl
         if (_isViewModelAttached)
             return;
 
+        _viewModel.Attach();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _isViewModelAttached = true;
     }
@@ -76,6 +77,7 @@ public partial class LicenseSection : UserControl
             return;
 
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.Detach();
         _isViewModelAttached = false;
     }
 

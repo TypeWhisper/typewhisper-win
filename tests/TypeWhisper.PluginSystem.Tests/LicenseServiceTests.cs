@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -387,6 +388,41 @@ public sealed class LicenseServiceTests : IDisposable
         Assert.False(viewModel.ShowSupporterManage);
         Assert.True(viewModel.ShowCustomerPortalShortcut);
         Assert.True(viewModel.OpenCustomerPortalCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void LicenseSectionViewModel_DisposeStopsLanguageChangeNotifications()
+    {
+        Loc.Instance.Initialize();
+        var previousLanguage = Loc.Instance.CurrentLanguage;
+
+        try
+        {
+            Loc.Instance.CurrentLanguage = "en";
+            var service = CreateService((_, _) => Json(HttpStatusCode.OK, "{}"));
+            using var viewModel = new LicenseSectionViewModel(service, CreateDiscordService());
+            var planOptionsChangeCount = 0;
+            viewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(LicenseSectionViewModel.PlanOptions))
+                    planOptionsChangeCount++;
+            };
+            viewModel.Attach();
+
+            Loc.Instance.CurrentLanguage = "zh-Hans";
+
+            Assert.Equal(1, planOptionsChangeCount);
+
+            viewModel.Dispose();
+            planOptionsChangeCount = 0;
+            Loc.Instance.CurrentLanguage = "en";
+
+            Assert.Equal(0, planOptionsChangeCount);
+        }
+        finally
+        {
+            Loc.Instance.CurrentLanguage = previousLanguage;
+        }
     }
 
     [Fact]

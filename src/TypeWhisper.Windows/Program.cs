@@ -101,7 +101,6 @@ public static class Program
 
         try
         {
-            Loc.Instance.Initialize();
             Loc.Instance.CurrentLanguage = Loc.Instance.DetectSystemLanguage();
 
             try

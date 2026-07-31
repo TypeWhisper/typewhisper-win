@@ -11,7 +11,7 @@ namespace TypeWhisper.Windows.ViewModels;
 /// <summary>
 /// Provides license section view model behavior.
 /// </summary>
-public sealed partial class LicenseSectionViewModel : ObservableObject
+public sealed partial class LicenseSectionViewModel : ObservableObject, IDisposable
 {
     private const string CustomerPortalUrl = "https://polar.sh/typewhisper/portal";
     private const string CheckoutUrlIndividual = "https://buy.polar.sh/polar_cl_Yfw7BSIXSNFESlrNPL0fNG8GHPqX9qhmxGce32wZfYJ";
@@ -26,6 +26,8 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
 
     private CommercialLicenseTier _selectedCommercialPlanTier = CommercialLicenseTier.Individual;
     private ActivatedLicenseEntitlementKind? _activationNoticeKind;
+    private bool _isAttached;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the LicenseSectionViewModel class.
@@ -49,10 +51,46 @@ public sealed partial class LicenseSectionViewModel : ObservableObject
         ReconnectDiscordCommand = new AsyncRelayCommand(ReconnectDiscordAsync, CanReconnectDiscord);
         RefreshDiscordStatusCommand = new AsyncRelayCommand(RefreshDiscordStatusAsync, CanRefreshDiscord);
         OpenGitHubSponsorsClaimCommand = new RelayCommand(() => OpenUrl(Discord.GitHubSponsorsUrl));
+    }
+
+    /// <summary>
+    /// Attaches service and localization event handlers while the owning view is active.
+    /// </summary>
+    internal void Attach()
+    {
+        if (_disposed || _isAttached)
+            return;
 
         License.PropertyChanged += OnServicePropertyChanged;
         Discord.PropertyChanged += OnServicePropertyChanged;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
+        _isAttached = true;
+    }
+
+    /// <summary>
+    /// Detaches service and localization event handlers when the owning view is unloaded.
+    /// </summary>
+    internal void Detach()
+    {
+        if (!_isAttached)
+            return;
+
+        License.PropertyChanged -= OnServicePropertyChanged;
+        Discord.PropertyChanged -= OnServicePropertyChanged;
+        Loc.Instance.LanguageChanged -= OnLanguageChanged;
+        _isAttached = false;
+    }
+
+    /// <summary>
+    /// Releases event subscriptions owned by this view model.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        Detach();
+        _disposed = true;
     }
 
     private static string AttributedCheckoutUrl(string baseUrl, string content) =>
