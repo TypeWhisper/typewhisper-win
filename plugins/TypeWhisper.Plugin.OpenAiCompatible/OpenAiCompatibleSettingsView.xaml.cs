@@ -37,6 +37,7 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         SaveTranscriptionButton.Content = L("Settings.Save");
         LlmModelLabel2.Text = L("Settings.LlmModel");
         SaveLlmButton.Content = L("Settings.Save");
+        ThinkingModeCheckBox.Content = L("Settings.ThinkingMode");
 
         Loaded += OnLoaded;
     }
@@ -83,6 +84,7 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             ApiKeyBox.Password = _plugin.GetApiKey(profile.Id) ?? "";
             ManualTranscriptionBox.Text = profile.SelectedModelId ?? "";
             ManualLlmBox.Text = profile.SelectedLlmModelId ?? "";
+            ThinkingModeCheckBox.IsChecked = profile.ThinkingEnabled;
             DeleteProfileButton.IsEnabled = profile.Id != OpenAiCompatiblePlugin.DefaultProfileId;
 
             ConnectionStatusPanel.Visibility = Visibility.Collapsed;
@@ -244,14 +246,22 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             PickerSection.Visibility = Visibility.Visible;
             ManualSection.Visibility = Visibility.Collapsed;
 
-            TranscriptionModelPicker.ItemsSource = models;
-            LlmModelPicker.ItemsSource = models;
+            var options = new List<ModelPickerOption>
+            {
+                new("", L("Settings.None"))
+            };
+            options.AddRange(models.Select(model => new ModelPickerOption(model.Id, model.Id)));
 
-            var selectedTranscription = models.FirstOrDefault(m => m.Id == profile.SelectedModelId);
-            TranscriptionModelPicker.SelectedItem = selectedTranscription ?? models.FirstOrDefault();
+            TranscriptionModelPicker.ItemsSource = options;
+            LlmModelPicker.ItemsSource = options;
 
-            var selectedLlm = models.FirstOrDefault(m => m.Id == profile.SelectedLlmModelId);
-            LlmModelPicker.SelectedItem = selectedLlm ?? models.FirstOrDefault();
+            var selectedTranscription = options.FirstOrDefault(option =>
+                string.Equals(option.Id, profile.SelectedModelId ?? "", StringComparison.OrdinalIgnoreCase));
+            TranscriptionModelPicker.SelectedItem = selectedTranscription ?? options[0];
+
+            var selectedLlm = options.FirstOrDefault(option =>
+                string.Equals(option.Id, profile.SelectedLlmModelId ?? "", StringComparison.OrdinalIgnoreCase));
+            LlmModelPicker.SelectedItem = selectedLlm ?? options[0];
         }
         else
         {
@@ -266,8 +276,8 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         if (_isLoadingProfile)
             return;
 
-        if (SelectedProfile() is { } profile && TranscriptionModelPicker.SelectedItem is FetchedModel model)
-            _plugin.SelectModelForProfile(profile.Id, model.Id);
+        if (SelectedProfile() is { } profile && TranscriptionModelPicker.SelectedItem is ModelPickerOption option)
+            _plugin.SelectModelForProfile(profile.Id, option.Id);
     }
 
     private void OnLlmModelChanged(object sender, SelectionChangedEventArgs e)
@@ -276,8 +286,22 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         if (_isLoadingProfile)
             return;
 
-        if (SelectedProfile() is { } profile && LlmModelPicker.SelectedItem is FetchedModel model)
-            _plugin.SelectLlmModelForProfile(profile.Id, model.Id);
+        if (SelectedProfile() is { } profile && LlmModelPicker.SelectedItem is ModelPickerOption option)
+            _plugin.SelectLlmModelForProfile(profile.Id, option.Id);
+    }
+
+    private void OnThinkingModeChanged(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (_isLoadingProfile)
+            return;
+
+        if (SelectedProfile() is { } profile)
+        {
+            _plugin.SetThinkingEnabledForProfile(
+                profile.Id,
+                ThinkingModeCheckBox.IsChecked == true);
+        }
     }
 
     private void OnSaveManualTranscription(object sender, RoutedEventArgs e)
@@ -348,4 +372,6 @@ public partial class OpenAiCompatibleSettingsView : UserControl
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
     private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;
+
+    private sealed record ModelPickerOption(string Id, string DisplayName);
 }

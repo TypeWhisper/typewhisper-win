@@ -12,18 +12,19 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class OpenAiCompatiblePluginTests
 {
     [Fact]
+    public void PluginVersion_MatchesManifestVersion()
+    {
+        var manifest = LoadManifest();
+        var sut = new OpenAiCompatiblePlugin();
+
+        Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
+    [Fact]
     public void Manifest_AdvertisesTranscriptionAndLlmCategories()
     {
-        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
-        var relativeManifestPath = Path.Join(
-            "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.OpenAiCompatible", "manifest.json");
-        var manifestPath = Path.GetFullPath(relativeManifestPath, basePath);
-        var manifest = JsonSerializer.Deserialize<PluginManifest>(
-            File.ReadAllText(manifestPath),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var manifest = LoadManifest();
 
-        Assert.NotNull(manifest);
         Assert.Equal("transcription", manifest.Category);
         Assert.Equal(["transcription", "llm"], manifest.Categories);
     }
@@ -51,6 +52,7 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("https://legacy.example", profile.BaseUrl);
         Assert.Equal("whisper-legacy", profile.SelectedModelId);
         Assert.Equal("gpt-legacy", profile.SelectedLlmModelId);
+        Assert.False(profile.ThinkingEnabled);
         Assert.Equal(["gpt-legacy", "whisper-legacy"], profile.FetchedModels.Select(model => model.Id).Order().ToArray());
         Assert.Equal("legacy-token", sut.GetApiKey());
 
@@ -60,6 +62,32 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("https://legacy.example", host.GetSetting<string>("baseUrl"));
         Assert.Equal("whisper-legacy", host.GetSetting<string>("selectedModel"));
         Assert.Equal("gpt-legacy", host.GetSetting<string>("selectedLlmModel"));
+    }
+
+    [Fact]
+    public async Task ActivateAsync_LoadsSavedProfilesWithoutThinkingModeAsDisabled()
+    {
+        var host = new TestPluginHostServices();
+        host.SetSetting("profiles", new[]
+        {
+            new
+            {
+                id = OpenAiCompatiblePlugin.DefaultProfileId,
+                name = "OpenAI Compatible",
+                baseUrl = "https://saved.example",
+                selectedModelId = "whisper-saved",
+                selectedLlmModelId = "chat-saved",
+                fetchedModels = Array.Empty<object>()
+            }
+        });
+
+        var sut = new OpenAiCompatiblePlugin();
+        await sut.ActivateAsync(host);
+
+        var profile = Assert.Single(sut.Profiles);
+        Assert.False(profile.ThinkingEnabled);
+        using var persisted = JsonDocument.Parse(host.GetRawSettingJson("profiles"));
+        Assert.False(persisted.RootElement[0].GetProperty("ThinkingEnabled").GetBoolean());
     }
 
     [Fact]
@@ -73,6 +101,7 @@ public class OpenAiCompatiblePluginTests
         sut.SetBaseUrl("https://local.example/v1", profile.Id);
         sut.SelectModelForProfile(profile.Id, "whisper-local");
         sut.SelectLlmModelForProfile(profile.Id, "gpt-local");
+        sut.SetThinkingEnabledForProfile(profile.Id, true);
         await sut.SetApiKeyAsync("local-token", profile.Id);
 
         var transcriptionRole = Assert.Single(((IAdditionalTranscriptionEnginesProvider)sut).AdditionalTranscriptionEngines);
@@ -87,6 +116,8 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("Local Gateway", llmRole.ProviderName);
         Assert.Equal("whisper-local", transcriptionRole.SelectedModelId);
         Assert.Equal("gpt-local", llmRole.SupportedModels.Single().Id);
+        Assert.False(sut.Profiles.Single(item => item.Id == OpenAiCompatiblePlugin.DefaultProfileId).ThinkingEnabled);
+        Assert.True(profile.ThinkingEnabled);
         Assert.Equal("local-token", host.Secrets[$"api-key.{profile.Id}"]);
         Assert.DoesNotContain("local-token", host.GetRawSettingJson("profiles"));
 
@@ -123,7 +154,8 @@ public class OpenAiCompatiblePluginTests
                   "choices": [
                     {
                       "message": {
-                        "content": "processed"
+                        "content": "  processed  ",
+                        "reasoning_content": "internal reasoning that must not be returned"
                       }
                     }
                   ]
@@ -145,6 +177,7 @@ public class OpenAiCompatiblePluginTests
         sut.SetBaseUrl("https://profile.example/v1", profile.Id);
         sut.SelectModelForProfile(profile.Id, "whisper-profile");
         sut.SelectLlmModelForProfile(profile.Id, "gpt-profile");
+        sut.SetThinkingEnabledForProfile(profile.Id, true);
         await sut.SetApiKeyAsync("profile-token", profile.Id);
 
         var profileTranscription = ((IAdditionalTranscriptionEnginesProvider)sut).AdditionalTranscriptionEngines.Single();
@@ -152,8 +185,11 @@ public class OpenAiCompatiblePluginTests
 
         await sut.TranscribeAsync([1, 2, 3], "en", translate: false, prompt: null, CancellationToken.None);
         await profileTranscription.TranscribeAsync([4, 5, 6], "de", translate: false, prompt: "terms", CancellationToken.None);
-        await sut.ProcessAsync("system", "user", "", CancellationToken.None);
-        await profileLlm.ProcessAsync("system", "user", "", CancellationToken.None);
+        var defaultResult = await sut.ProcessAsync("system", "user", "", CancellationToken.None);
+        var profileResult = await profileLlm.ProcessAsync("system", "user", "", CancellationToken.None);
+
+        Assert.Equal("processed", defaultResult);
+        Assert.Equal("processed", profileResult);
 
         Assert.Contains(requests, request =>
             request.Url == "https://default.example/v1/audio/transcriptions"
@@ -171,6 +207,99 @@ public class OpenAiCompatiblePluginTests
             request.Url == "https://profile.example/v1/chat/completions"
             && request.Authorization == "Bearer profile-token"
             && request.Body?.Contains("\"model\":\"gpt-profile\"", StringComparison.Ordinal) == true);
+
+        var defaultChat = requests.Single(request =>
+            request.Url == "https://default.example/v1/chat/completions");
+        using (var defaultBody = JsonDocument.Parse(defaultChat.Body!))
+        {
+            Assert.Equal(
+                "disabled",
+                defaultBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+            Assert.Equal(2048, defaultBody.RootElement.GetProperty("max_tokens").GetInt32());
+            Assert.Equal(0.1, defaultBody.RootElement.GetProperty("temperature").GetDouble());
+        }
+
+        var profileChat = requests.Single(request =>
+            request.Url == "https://profile.example/v1/chat/completions");
+        using var profileBody = JsonDocument.Parse(profileChat.Body!);
+        Assert.Equal(
+            "enabled",
+            profileBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task ClearedDefaultsKeepConfiguredProfileAvailableForWorkflowModelOverrides()
+    {
+        string? chatBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            chatBody = body;
+            return JsonResponse("""
+                {
+                  "choices": [
+                    {
+                      "message": {
+                        "content": "workflow result",
+                        "reasoning_content": "ignored"
+                      }
+                    }
+                  ]
+                }
+                """);
+        });
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        sut.SetBaseUrl("https://workflow.example/v1");
+        sut.SetFetchedModels([
+            new FetchedModel("whisper-workflow", "provider"),
+            new FetchedModel("chat-workflow", "provider")
+        ]);
+        sut.SelectModel("whisper-workflow");
+        sut.SelectLlmModel("chat-workflow");
+
+        sut.SelectModel("");
+        sut.SelectLlmModel("");
+
+        Assert.Null(sut.SelectedModelId);
+        Assert.Null(Assert.Single(sut.Profiles).SelectedLlmModelId);
+        Assert.True(sut.IsAvailable);
+        Assert.Equal(
+            ["chat-workflow", "whisper-workflow"],
+            sut.SupportedModels.Select(model => model.Id).ToArray());
+
+        var result = await sut.ProcessAsync(
+            "system",
+            "user",
+            "chat-workflow",
+            CancellationToken.None);
+
+        Assert.Equal("workflow result", result);
+        using var body = JsonDocument.Parse(chatBody!);
+        Assert.Equal("chat-workflow", body.RootElement.GetProperty("model").GetString());
+        Assert.Equal(
+            "disabled",
+            body.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ProcessAsync("system", "user", "", CancellationToken.None));
+        Assert.Equal("Kein LLM-Modell ausgewählt", error.Message);
+    }
+
+    private static PluginManifest LoadManifest()
+    {
+        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
+        var relativeManifestPath = Path.Join(
+            "..", "..", "..", "..", "..",
+            "plugins", "TypeWhisper.Plugin.OpenAiCompatible", "manifest.json");
+        var manifestPath = Path.GetFullPath(relativeManifestPath, basePath);
+        return JsonSerializer.Deserialize<PluginManifest>(
+                   File.ReadAllText(manifestPath),
+                   new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+               ?? throw new InvalidOperationException("OpenAI Compatible manifest could not be parsed.");
     }
 
     private static HttpResponseMessage JsonResponse(string json) =>

@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
@@ -59,7 +60,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -286,6 +287,17 @@ public sealed class OpenAiCompatiblePlugin :
         PersistProfiles();
     }
 
+    /// <summary>Enables or disables thinking mode for the default profile.</summary>
+    public void SetThinkingEnabled(bool enabled) =>
+        SetThinkingEnabledForProfile(DefaultProfileId, enabled);
+
+    /// <summary>Enables or disables thinking mode for a profile.</summary>
+    public void SetThinkingEnabledForProfile(string profileId, bool enabled)
+    {
+        RequireProfile(profileId).ThinkingEnabled = enabled;
+        PersistProfiles();
+    }
+
     /// <summary>Stores fetched models for the default profile.</summary>
     public void SetFetchedModels(List<FetchedModel> models) =>
         SetFetchedModelsForProfile(DefaultProfileId, models);
@@ -386,8 +398,7 @@ public sealed class OpenAiCompatiblePlugin :
         !string.IsNullOrWhiteSpace(FindProfile(profileId)?.BaseUrl);
 
     internal bool IsProfileLlmAvailable(string profileId) =>
-        IsProfileConfigured(profileId)
-        && !string.IsNullOrWhiteSpace(FindProfile(profileId)?.SelectedLlmModelId);
+        IsProfileConfigured(profileId);
 
     internal IReadOnlyList<PluginModelInfo> GetTranscriptionModels(string profileId)
     {
@@ -457,14 +468,72 @@ public sealed class OpenAiCompatiblePlugin :
         if (string.IsNullOrEmpty(modelId))
             throw new InvalidOperationException("Kein LLM-Modell ausgewählt");
 
-        return await OpenAiChatHelper.SendChatCompletionAsync(
-            _httpClient,
-            profile.BaseUrl,
-            GetApiKey(profile.Id) ?? "",
+        return await SendChatCompletionAsync(
+            profile,
             modelId,
             systemPrompt,
             userText,
             ct);
+    }
+
+    private async Task<string> SendChatCompletionAsync(
+        OpenAiCompatibleProfile profile,
+        string modelId,
+        string systemPrompt,
+        string userText,
+        CancellationToken ct)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = modelId,
+            ["messages"] = new object[]
+            {
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = userText }
+            },
+            ["temperature"] = 0.1,
+            ["max_tokens"] = 2048,
+            ["thinking"] = new
+            {
+                type = profile.ThinkingEnabled ? "enabled" : "disabled"
+            }
+        };
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{profile.BaseUrl}/v1/chat/completions");
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            GetApiKey(profile.Id) ?? "");
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(body),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(
+            _httpClient,
+            request,
+            ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        return ParseChatCompletionResponse(json);
+    }
+
+    private static string ParseChatCompletionResponse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("choices", out var choices)
+            && choices.ValueKind == JsonValueKind.Array
+            && choices.GetArrayLength() > 0
+            && choices[0].TryGetProperty("message", out var message)
+            && message.TryGetProperty("content", out var content)
+            && content.ValueKind == JsonValueKind.String)
+        {
+            return content.GetString()?.Trim() ?? "";
+        }
+
+        return "";
     }
 
     private static string SecretKey(string profileId) =>
@@ -679,6 +748,8 @@ public sealed class OpenAiCompatibleProfile
     public string? SelectedModelId { get; set; }
     /// <summary>Selected LLM model ID.</summary>
     public string? SelectedLlmModelId { get; set; }
+    /// <summary>Whether compatible chat requests should enable model thinking mode.</summary>
+    public bool ThinkingEnabled { get; set; }
     /// <summary>Models fetched from the provider. API keys are never stored here.</summary>
     public List<FetchedModel> FetchedModels { get; set; } = [];
     /// <summary>Display name with a fallback for unnamed profiles.</summary>
