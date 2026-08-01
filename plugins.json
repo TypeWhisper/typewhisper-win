@@ -81,23 +81,21 @@
   {
     "id": "com.typewhisper.openai-compatible",
     "name": "OpenAI Compatible",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minHostVersion": null,
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
     "category": "transcription",
-    "size": 17928,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-compatible-1.0.1.zip",
+    "size": 27294,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-compatible-1.0.2.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
-    "descriptions": {
-      "de": "Verbindung zu jedem OpenAI-kompatiblen Server (Ollama, LM Studio, vLLM, etc.)"
-    },
+    "descriptions": null,
     "categories": [
       "transcription",
       "llm"
     ],
-    "sha256": "caea04431a901f12defb01bf2e6bb27c089bcb39704d78e12642bd5aa043764a"
+    "sha256": "2f65a82228e7323074b834acf555a571a544054a64d600e91a7ddafcbadf28ca"
   },
   {
     "id": "com.typewhisper.gemini",
