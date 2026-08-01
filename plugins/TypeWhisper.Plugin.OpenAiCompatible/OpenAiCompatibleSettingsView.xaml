@@ -93,13 +93,13 @@
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <ComboBox x:Name="TranscriptionModelPicker"
                           SelectionChanged="OnTranscriptionModelChanged"
-                          DisplayMemberPath="Id" Margin="0,0,0,12"/>
+                          DisplayMemberPath="DisplayName" Margin="0,0,0,12"/>
 
                 <TextBlock x:Name="LlmModelLabel1" FontSize="12"
                            Foreground="{StaticResource PluginHintBrush}" Margin="0,0,0,4"/>
                 <ComboBox x:Name="LlmModelPicker"
                           SelectionChanged="OnLlmModelChanged"
-                          DisplayMemberPath="Id"/>
+                          DisplayMemberPath="DisplayName"/>
             </StackPanel>
 
             <!-- Manual entry fallback -->
@@ -133,6 +133,11 @@
                             Click="OnSaveManualLlm"/>
                 </Grid>
             </StackPanel>
+
+            <Separator Margin="0,16,0,12"/>
+            <CheckBox x:Name="ThinkingModeCheckBox"
+                      Checked="OnThinkingModeChanged"
+                      Unchecked="OnThinkingModeChanged"/>
         </StackPanel>
     </StackPanel>
 </UserControl>

@@ -13,6 +13,8 @@
   "Settings.Refresh": "\uD83D\uDD04 Aktualisieren",
   "Settings.TranscriptionModel": "Transkriptions-Modell",
   "Settings.LlmModel": "LLM-Modell",
+  "Settings.None": "Keine",
+  "Settings.ThinkingMode": "Denkmodus",
   "Settings.NoModelsFound": "\u26A0 Keine Modelle über die API gefunden. Du kannst die Modellnamen manuell eingeben.",
   "Settings.Connecting": "Verbinde...",
   "Settings.TryingConnection": "Versuche Verbindung zu {0}...",

@@ -13,6 +13,8 @@
   "Settings.Refresh": "\uD83D\uDD04 Refresh",
   "Settings.TranscriptionModel": "Transcription Model",
   "Settings.LlmModel": "LLM Model",
+  "Settings.None": "None",
+  "Settings.ThinkingMode": "Thinking Mode",
   "Settings.NoModelsFound": "\u26A0 No models found via the API. You can enter model names manually.",
   "Settings.Connecting": "Connecting...",
   "Settings.TryingConnection": "Trying to connect to {0}...",
