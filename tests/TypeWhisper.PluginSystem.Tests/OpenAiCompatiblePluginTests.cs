@@ -289,6 +289,37 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("Kein LLM-Modell ausgewählt", error.Message);
     }
 
+    [Fact]
+    public async Task ProcessAsync_ThrowsWhenResponseContainsOnlyReasoningContent()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse("""
+            {
+              "choices": [
+                {
+                  "message": {
+                    "reasoning_content": "internal reasoning"
+                  }
+                }
+              ]
+            }
+            """));
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://reasoning-only.example/v1");
+        sut.SelectLlmModel("chat-model");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ProcessAsync("system", "user", "", CancellationToken.None));
+
+        Assert.Equal(
+            "OpenAI-compatible chat completion response did not contain a string "
+            + "choices[0].message.content value.",
+            error.Message);
+    }
+
     private static PluginManifest LoadManifest()
     {
         var basePath = Path.GetFullPath(AppContext.BaseDirectory);

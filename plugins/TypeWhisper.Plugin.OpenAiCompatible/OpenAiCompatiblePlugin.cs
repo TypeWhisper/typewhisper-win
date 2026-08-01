@@ -533,7 +533,9 @@ public sealed class OpenAiCompatiblePlugin :
             return content.GetString()?.Trim() ?? "";
         }
 
-        return "";
+        throw new InvalidOperationException(
+            "OpenAI-compatible chat completion response did not contain a string "
+            + "choices[0].message.content value.");
     }
 
     private static string SecretKey(string profileId) =>
