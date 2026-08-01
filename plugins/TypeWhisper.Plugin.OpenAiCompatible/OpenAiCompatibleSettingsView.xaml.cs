@@ -300,7 +300,7 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         {
             _plugin.SetThinkingEnabledForProfile(
                 profile.Id,
-                ThinkingModeCheckBox.IsChecked == true);
+                ThinkingModeCheckBox.IsChecked.GetValueOrDefault());
         }
     }
 
