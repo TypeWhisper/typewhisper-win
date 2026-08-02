@@ -1,7 +1,9 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
@@ -26,6 +28,10 @@ public sealed class OpenAiCompatiblePlugin :
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
+    };
+    private static readonly JsonSerializerOptions RequestJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
     };
 
     private readonly HttpClient _httpClient;
@@ -60,7 +66,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.4";
+    public string PluginVersion => "1.0.5";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -503,7 +509,7 @@ public sealed class OpenAiCompatiblePlugin :
             "Bearer",
             GetApiKey(profile.Id) ?? "");
         request.Content = new StringContent(
-            JsonSerializer.Serialize(body),
+            JsonSerializer.Serialize(body, RequestJsonOptions),
             Encoding.UTF8,
             "application/json");
 
