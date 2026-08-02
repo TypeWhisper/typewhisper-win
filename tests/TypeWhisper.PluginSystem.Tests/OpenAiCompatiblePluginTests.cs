@@ -17,6 +17,7 @@ public class OpenAiCompatiblePluginTests
         var manifest = LoadManifest();
         var sut = new OpenAiCompatiblePlugin();
 
+        Assert.Equal("1.0.4", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -216,6 +217,7 @@ public class OpenAiCompatiblePluginTests
                 "disabled",
                 defaultBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
             Assert.False(defaultBody.RootElement.TryGetProperty("reasoning", out _));
+            Assert.False(defaultBody.RootElement.TryGetProperty("reasoning_effort", out _));
             Assert.Equal(2048, defaultBody.RootElement.GetProperty("max_tokens").GetInt32());
             Assert.Equal(0.1, defaultBody.RootElement.GetProperty("temperature").GetDouble());
         }
@@ -227,10 +229,11 @@ public class OpenAiCompatiblePluginTests
             "enabled",
             profileBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
         Assert.False(profileBody.RootElement.TryGetProperty("reasoning", out _));
+        Assert.False(profileBody.RootElement.TryGetProperty("reasoning_effort", out _));
     }
 
     [Fact]
-    public async Task DeepInfraRequestsUseReasoningControlWithoutGenericThinking()
+    public async Task DeepInfraRequestsUseReasoningEffortWithoutOtherThinkingControls()
     {
         var requestBodies = new List<string>();
         var handler = new CapturingHandler((_, body) =>
@@ -278,7 +281,8 @@ public class OpenAiCompatiblePluginTests
         {
             var root = disabledBody.RootElement;
             Assert.Equal("google/gemma-4-E4B-it", root.GetProperty("model").GetString());
-            Assert.False(root.GetProperty("reasoning").GetProperty("enabled").GetBoolean());
+            Assert.Equal("none", root.GetProperty("reasoning_effort").GetString());
+            Assert.False(root.TryGetProperty("reasoning", out _));
             Assert.False(root.TryGetProperty("thinking", out _));
             Assert.Equal(2048, root.GetProperty("max_tokens").GetInt32());
             Assert.Equal(0.1, root.GetProperty("temperature").GetDouble());
@@ -291,7 +295,8 @@ public class OpenAiCompatiblePluginTests
         }
 
         using var enabledBody = JsonDocument.Parse(requestBodies[1]);
-        Assert.True(enabledBody.RootElement.GetProperty("reasoning").GetProperty("enabled").GetBoolean());
+        Assert.Equal("high", enabledBody.RootElement.GetProperty("reasoning_effort").GetString());
+        Assert.False(enabledBody.RootElement.TryGetProperty("reasoning", out _));
         Assert.False(enabledBody.RootElement.TryGetProperty("thinking", out _));
     }
 
@@ -319,6 +324,7 @@ public class OpenAiCompatiblePluginTests
             "disabled",
             body.RootElement.GetProperty("thinking").GetProperty("type").GetString());
         Assert.False(body.RootElement.TryGetProperty("reasoning", out _));
+        Assert.False(body.RootElement.TryGetProperty("reasoning_effort", out _));
     }
 
     [Fact]

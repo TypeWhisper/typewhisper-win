@@ -60,7 +60,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.3";
+    public string PluginVersion => "1.0.4";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -542,7 +542,7 @@ public sealed class OpenAiCompatiblePlugin :
     {
         if (IsDeepInfraEndpoint(baseUrl))
         {
-            body["reasoning"] = new { enabled = thinkingEnabled };
+            body["reasoning_effort"] = thinkingEnabled ? "high" : "none";
             return;
         }
 
