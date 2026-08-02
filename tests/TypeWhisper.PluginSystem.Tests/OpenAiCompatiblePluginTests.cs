@@ -17,7 +17,7 @@ public class OpenAiCompatiblePluginTests
         var manifest = LoadManifest();
         var sut = new OpenAiCompatiblePlugin();
 
-        Assert.Equal("1.0.4", manifest.Version);
+        Assert.Equal("1.0.5", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -298,6 +298,41 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("high", enabledBody.RootElement.GetProperty("reasoning_effort").GetString());
         Assert.False(enabledBody.RootElement.TryGetProperty("reasoning", out _));
         Assert.False(enabledBody.RootElement.TryGetProperty("thinking", out _));
+    }
+
+    [Theory]
+    [InlineData("https://api.deepinfra.com")]
+    [InlineData("http://localhost:1234")]
+    [InlineData("https://api.deepinfra.com.example.org")]
+    public async Task ChatRequestsWriteNonAsciiMessageContentAsUtf8(string baseUrl)
+    {
+        string? requestBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            requestBody = body;
+            return JsonResponse("""{ "choices": [ { "message": { "content": "processed" } } ] }""");
+        });
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl(baseUrl);
+        sut.SelectLlmModel("chat-model");
+
+        await sut.ProcessAsync(
+            "Output original input message.",
+            "今天天气很好,我们去蹓狗吧!",
+            "",
+            CancellationToken.None);
+
+        Assert.Contains("今天天气很好,我们去蹓狗吧!", requestBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u4ECA", requestBody, StringComparison.OrdinalIgnoreCase);
+
+        using var body = JsonDocument.Parse(requestBody!);
+        Assert.Equal(
+            "今天天气很好,我们去蹓狗吧!",
+            body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString());
     }
 
     [Fact]
