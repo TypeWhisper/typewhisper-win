@@ -215,6 +215,7 @@ public class OpenAiCompatiblePluginTests
             Assert.Equal(
                 "disabled",
                 defaultBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+            Assert.False(defaultBody.RootElement.TryGetProperty("reasoning", out _));
             Assert.Equal(2048, defaultBody.RootElement.GetProperty("max_tokens").GetInt32());
             Assert.Equal(0.1, defaultBody.RootElement.GetProperty("temperature").GetDouble());
         }
@@ -225,6 +226,99 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal(
             "enabled",
             profileBody.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.False(profileBody.RootElement.TryGetProperty("reasoning", out _));
+    }
+
+    [Fact]
+    public async Task DeepInfraRequestsUseReasoningControlWithoutGenericThinking()
+    {
+        var requestBodies = new List<string>();
+        var handler = new CapturingHandler((_, body) =>
+        {
+            requestBodies.Add(body!);
+            return JsonResponse("""
+                {
+                  "choices": [
+                    {
+                      "message": {
+                        "content": "  processed  ",
+                        "reasoning_content": "internal reasoning that must not be returned"
+                      }
+                    }
+                  ]
+                }
+                """);
+        });
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://API.DEEPINFRA.COM/custom-path");
+        sut.SelectLlmModel("google/gemma-4-E4B-it");
+
+        var disabledResult = await sut.ProcessAsync(
+            "Return only the final text.",
+            "input",
+            "",
+            CancellationToken.None);
+
+        sut.SetThinkingEnabled(true);
+        var enabledResult = await sut.ProcessAsync(
+            "Return only the final text.",
+            "input",
+            "",
+            CancellationToken.None);
+
+        Assert.Equal("processed", disabledResult);
+        Assert.Equal("processed", enabledResult);
+        Assert.Equal(2, requestBodies.Count);
+
+        using (var disabledBody = JsonDocument.Parse(requestBodies[0]))
+        {
+            var root = disabledBody.RootElement;
+            Assert.Equal("google/gemma-4-E4B-it", root.GetProperty("model").GetString());
+            Assert.False(root.GetProperty("reasoning").GetProperty("enabled").GetBoolean());
+            Assert.False(root.TryGetProperty("thinking", out _));
+            Assert.Equal(2048, root.GetProperty("max_tokens").GetInt32());
+            Assert.Equal(0.1, root.GetProperty("temperature").GetDouble());
+
+            var messages = root.GetProperty("messages");
+            Assert.Equal("system", messages[0].GetProperty("role").GetString());
+            Assert.Equal("Return only the final text.", messages[0].GetProperty("content").GetString());
+            Assert.Equal("user", messages[1].GetProperty("role").GetString());
+            Assert.Equal("input", messages[1].GetProperty("content").GetString());
+        }
+
+        using var enabledBody = JsonDocument.Parse(requestBodies[1]);
+        Assert.True(enabledBody.RootElement.GetProperty("reasoning").GetProperty("enabled").GetBoolean());
+        Assert.False(enabledBody.RootElement.TryGetProperty("thinking", out _));
+    }
+
+    [Fact]
+    public async Task DeepInfraLookalikeHostUsesGenericThinkingControl()
+    {
+        string? requestBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            requestBody = body;
+            return JsonResponse("""{ "choices": [ { "message": { "content": "processed" } } ] }""");
+        });
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://api.deepinfra.com.example.org");
+        sut.SelectLlmModel("chat-model");
+
+        await sut.ProcessAsync("system", "user", "", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(requestBody!);
+        Assert.Equal(
+            "disabled",
+            body.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.False(body.RootElement.TryGetProperty("reasoning", out _));
     }
 
     [Fact]

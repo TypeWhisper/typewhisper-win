@@ -60,7 +60,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.2";
+    public string PluginVersion => "1.0.3";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -492,12 +492,9 @@ public sealed class OpenAiCompatiblePlugin :
                 new { role = "user", content = userText }
             },
             ["temperature"] = 0.1,
-            ["max_tokens"] = 2048,
-            ["thinking"] = new
-            {
-                type = profile.ThinkingEnabled ? "enabled" : "disabled"
-            }
+            ["max_tokens"] = 2048
         };
+        AddThinkingConfiguration(body, profile.BaseUrl, profile.ThinkingEnabled);
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -537,6 +534,27 @@ public sealed class OpenAiCompatiblePlugin :
             "OpenAI-compatible chat completion response did not contain a string "
             + "choices[0].message.content value.");
     }
+
+    private static void AddThinkingConfiguration(
+        Dictionary<string, object?> body,
+        string baseUrl,
+        bool thinkingEnabled)
+    {
+        if (IsDeepInfraEndpoint(baseUrl))
+        {
+            body["reasoning"] = new { enabled = thinkingEnabled };
+            return;
+        }
+
+        body["thinking"] = new
+        {
+            type = thinkingEnabled ? "enabled" : "disabled"
+        };
+    }
+
+    private static bool IsDeepInfraEndpoint(string baseUrl) =>
+        Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+        && string.Equals(uri.Host, "api.deepinfra.com", StringComparison.OrdinalIgnoreCase);
 
     private static string SecretKey(string profileId) =>
         IsDefaultProfile(profileId) ? "api-key" : $"api-key.{profileId}";
