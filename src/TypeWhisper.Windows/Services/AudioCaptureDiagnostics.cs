@@ -70,7 +70,16 @@ internal static class AudioCaptureDiagnostics
             return;
 
         foreach (var observer in observers.GetInvocationList().Cast<Action<string>>())
-            observer(message);
+        {
+            try
+            {
+                observer(message);
+            }
+            catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+            {
+                Debug.WriteLine($"Audio capture diagnostics observer failed: {ex.Message}");
+            }
+        }
     }
 
     public static void Reset()

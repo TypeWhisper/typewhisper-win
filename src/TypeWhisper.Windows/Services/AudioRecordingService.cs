@@ -11,6 +11,13 @@ namespace TypeWhisper.Windows.Services;
 /// </summary>
 public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 {
+    private enum CaptureDisposalClassification
+    {
+        Routine,
+        Failure,
+        FallbackRecreated
+    }
+
     private const int SampleRate = 16000;
     private const int BitsPerSample = 16;
     private const int Channels = 1;
@@ -257,7 +264,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             {
                 AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
-                DisposeWaveIn(stopRecording: false, reason: "prepare failure");
+                DisposeWaveIn(
+                    stopRecording: false,
+                    reason: "prepare failure",
+                    classification: CaptureDisposalClassification.Failure);
             }
 
             StartDevicePolling();
@@ -355,7 +365,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
                 ClearRecordingState();
-                DisposeWaveIn(reason: "start failure");
+                DisposeWaveIn(
+                    reason: "start failure",
+                    classification: CaptureDisposalClassification.Failure);
             }
         }
     }
@@ -400,7 +412,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (_waveIn.CanRestartAfterStop)
                 StopAndRetainWaveIn(_waveIn);
             else
-                DisposeWaveIn(resetWarmUp: false, reason: "fallback recreated");
+                DisposeWaveIn(
+                    resetWarmUp: false,
+                    reason: "fallback recreated",
+                    classification: CaptureDisposalClassification.FallbackRecreated);
 
             if (samples is null || samples.Length == 0)
             {
@@ -554,7 +569,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 : "Audio input capture stopped unexpectedly without an exception.");
 
             ClearRecordingState();
-            DisposeWaveIn(stopRecording: false, reason: "unexpected stop");
+            DisposeWaveIn(
+                stopRecording: false,
+                reason: "unexpected stop",
+                classification: CaptureDisposalClassification.Failure);
             StartDevicePolling();
 
             if (captureFailed && !activeDeviceAvailable)
@@ -1034,7 +1052,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         lock (_captureLifecycleLock)
         {
             ClearRecordingState();
-            DisposeWaveIn(reason: "device loss");
+            DisposeWaveIn(
+                reason: "device loss",
+                classification: CaptureDisposalClassification.Failure);
             RaiseDeviceLost();
         }
     }
@@ -1296,13 +1316,15 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             _activeDeviceNumber = -1;
             _activeDeviceId = null;
             _activeDeviceName = null;
+            StartDevicePolling();
         }
     }
 
     private void DisposeWaveIn(
         bool stopRecording = true,
         bool resetWarmUp = true,
-        string reason = "cleanup")
+        string reason = "cleanup",
+        CaptureDisposalClassification classification = CaptureDisposalClassification.Routine)
     {
         lock (_captureLifecycleLock)
         {
@@ -1319,14 +1341,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     StopRecordingForCleanup(waveIn);
                 }
                 waveIn.Dispose();
-                if (reason.Contains("failure", StringComparison.Ordinal)
-                    || reason.Contains("loss", StringComparison.Ordinal)
-                    || reason.Contains("unexpected", StringComparison.Ordinal))
+                if (classification == CaptureDisposalClassification.Failure)
                 {
                     AudioCaptureDiagnostics.Log(
                         $"Capture disposed after failure captureGeneration={_activeCaptureGeneration} reason={reason}");
                 }
-                else if (reason == "fallback recreated")
+                else if (classification == CaptureDisposalClassification.FallbackRecreated)
                 {
                     AudioCaptureDiagnostics.Log(
                         $"WaveIn fallback released; fallback recreated on next recording captureGeneration={_activeCaptureGeneration}");

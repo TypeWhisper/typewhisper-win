@@ -610,6 +610,30 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public void DiagnosticsObserverFailure_DoesNotInterruptRemainingObservers()
+    {
+        var notifications = 0;
+        Action<string> throwingObserver = _ => throw new InvalidOperationException("Observer failed.");
+        Action<string> succeedingObserver = _ => notifications++;
+        AudioCaptureDiagnostics.MessageLogged += throwingObserver;
+        AudioCaptureDiagnostics.MessageLogged += succeedingObserver;
+
+        Exception? exception;
+        try
+        {
+            exception = Record.Exception(() => AudioCaptureDiagnostics.Log("observer isolation"));
+        }
+        finally
+        {
+            AudioCaptureDiagnostics.MessageLogged -= throwingObserver;
+            AudioCaptureDiagnostics.MessageLogged -= succeedingObserver;
+        }
+
+        Assert.Null(exception);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
     public void RecordingStopped_WithoutException_DoesNotRaiseDeviceLost_WhenCaptureStopsCleanly()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
@@ -1514,7 +1538,9 @@ public sealed class RecorderAudioPipelineTests
         Assert.Contains("Path.GetFileName(segment)", method);
         Assert.Contains("string.IsNullOrEmpty(fileName) ? string.Empty : fileName", method);
         Assert.DoesNotContain("?? segment", method);
-        Assert.DoesNotContain("catch (Exception ex)", source);
+        Assert.DoesNotMatch(
+            @"catch\s*\(\s*Exception\s+\w+\s*\)(?!\s+when\b)",
+            source);
         Assert.Contains("catch (IOException ex)", source);
         Assert.Contains("catch (UnauthorizedAccessException ex)", source);
     }
@@ -1782,10 +1808,9 @@ internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFor
 
     public void StartRecording()
     {
+        StartCount++;
         if (StartException is not null)
             throw StartException;
-
-        StartCount++;
     }
 
     public void StopRecording()

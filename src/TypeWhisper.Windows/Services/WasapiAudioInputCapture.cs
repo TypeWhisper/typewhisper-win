@@ -268,7 +268,6 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         if (captureThread is not null && stopTimedOut)
         {
             AudioCaptureDiagnostics.Log("WasapiCapture discarding client after stop timeout");
-            DisposePreparedResources();
             return;
         }
 
@@ -278,7 +277,6 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                 $"WasapiCapture dispose continuing after stop timeoutMs={StopTimeout.TotalMilliseconds:F0}");
             lock (_lifecycleLock)
                 _disposeAfterCaptureThread = true;
-            DisposePreparedResources();
             return;
         }
 
@@ -306,7 +304,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
                 ReadNextPacket(captureClient, recordBuffer, bytesPerFrame);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             captureException = ex;
         }
@@ -415,7 +413,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         {
             audioClient.Stop();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             failure = ex;
         }
@@ -424,7 +422,7 @@ internal sealed class WasapiAudioInputCapture : IAudioInputCapture
         {
             audioClient.Reset();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             failure ??= ex;
         }
