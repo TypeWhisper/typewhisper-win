@@ -33,6 +33,28 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public void PreparedWasapiCapture_SeparatesInitializeStartAndSynchronousReset()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "WasapiAudioInputCapture.cs");
+        var prepare = TestFile.ExtractBlock(source, "public void Prepare()", 2600);
+        var start = TestFile.ExtractBlock(source, "public void StartRecording()", 2600);
+        var stop = TestFile.ExtractBlock(source, "public void StopRecording()", 1900);
+        var reset = TestFile.ExtractBlock(source, "private static Exception? StopAndResetClient", 1200);
+
+        Assert.Contains("audioClient.Initialize(", prepare);
+        Assert.DoesNotContain("audioClient.Start()", prepare);
+        Assert.Contains("audioClient.Start()", start);
+        Assert.Contains("_captureStopped.Wait(StopTimeout)", stop);
+        Assert.Contains("audioClient.Stop()", reset);
+        Assert.Contains("audioClient.Reset()", reset);
+        Assert.Contains("public bool CanRestartAfterStop => true;", source);
+    }
+
+    [Fact]
     public void FallbackCapture_UsesWaveInWhenWasapiStartFails()
     {
         var wasapi = new FakeAudioInputCaptureFactory
@@ -50,6 +72,28 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
         Assert.True(Assert.Single(wasapi.Created).Disposed);
         Assert.True(Assert.Single(waveIn.Created).Started);
+    }
+
+    [Fact]
+    public void FallbackCapture_UsesWaveInWhenWasapiPrepareFails()
+    {
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            PrepareException = new InvalidOperationException("WASAPI initialization failed.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory();
+        var factory = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        using var capture = factory.Create(
+            deviceNumber: 0,
+            new WaveFormat(16000, 16, 1),
+            bufferMilliseconds: 30);
+
+        capture.Prepare();
+
+        Assert.True(Assert.Single(wasapi.Created).Disposed);
+        Assert.True(Assert.Single(waveIn.Created).Prepared);
+        Assert.False(capture.CanRestartAfterStop);
     }
 
     [Fact]
@@ -280,23 +324,31 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
-    public void WarmUp_DoesNotStartMicrophoneCapture()
+    public void WarmUp_PreparesMicrophoneCaptureWithoutStartingIt()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
-        var captures = new FakeAudioInputCaptureFactory();
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
         using var sut = CreateService(devices, captures);
 
         Assert.True(sut.WarmUp());
 
         var capture = Assert.Single(captures.Created);
+        Assert.True(capture.Prepared);
+        Assert.Equal(1, capture.PrepareCount);
         Assert.False(capture.Started);
     }
 
     [Fact]
-    public void StopRecording_StopsAndDisposesMicrophoneCapture_WhenNoAudioWasReceived()
+    public void StopRecording_StopsAndRetainsRestartableCapture_WhenNoAudioWasReceived()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
-        var captures = new FakeAudioInputCaptureFactory();
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
         using var sut = CreateService(devices, captures);
         Assert.True(sut.WarmUp());
         sut.StartRecording();
@@ -306,14 +358,17 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
         Assert.Null(samples);
         Assert.True(capture.Stopped);
-        Assert.True(capture.Disposed);
+        Assert.False(capture.Disposed);
     }
 
     [Fact]
-    public async Task StopRecordingAsync_ReleasesMicrophoneCapture_WhenCancellationIsRequested()
+    public async Task StopRecordingAsync_StopsAndRetainsRestartableCapture_WhenCancellationIsRequested()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
-        var captures = new FakeAudioInputCaptureFactory();
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
         using var sut = CreateService(devices, captures);
         sut.StartRecording();
         var capture = Assert.Single(captures.Created);
@@ -324,34 +379,234 @@ public sealed class AudioRecordingServiceDeviceChangeTests
 
         Assert.Null(samples);
         Assert.True(capture.Stopped);
+        Assert.False(capture.Disposed);
+    }
+
+    [Fact]
+    public void ConsecutiveRecordings_ReusePreparedCaptureWithoutLeakingSamples()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
+        using var sut = CreateService(devices, captures);
+        sut.NormalizationEnabled = false;
+        var firstBytes = new byte[sizeof(short) * 2];
+        Buffer.BlockCopy(new short[] { 1000, 2000 }, 0, firstBytes, 0, firstBytes.Length);
+        var secondBytes = new byte[sizeof(short) * 2];
+        Buffer.BlockCopy(new short[] { 3000, 4000 }, 0, secondBytes, 0, secondBytes.Length);
+
+        sut.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData(firstBytes, firstBytes.Length);
+        var firstSamples = sut.StopRecording();
+
+        sut.StartRecording();
+        Assert.Same(capture, Assert.Single(captures.Created));
+        capture.RaiseData(secondBytes, secondBytes.Length);
+        var secondSamples = sut.StopRecording();
+
+        Assert.Equal(2, capture.StartCount);
+        Assert.Equal(2, capture.StopCount);
+        Assert.False(capture.Disposed);
+        Assert.NotNull(firstSamples);
+        Assert.NotNull(secondSamples);
+        Assert.Equal([1000 / 32768f, 2000 / 32768f], firstSamples);
+        Assert.Equal([3000 / 32768f, 4000 / 32768f], secondSamples);
+    }
+
+    [Fact]
+    public void WaveInFallback_RecreatesFreshCaptureForEachRecording()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            PrepareException = new InvalidOperationException("WASAPI initialization failed.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory();
+        var captures = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        using var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan);
+
+        sut.StartRecording();
+        sut.StopRecording();
+        sut.StartRecording();
+        sut.StopRecording();
+
+        Assert.Equal(2, waveIn.Created.Count);
+        Assert.All(waveIn.Created, capture => Assert.True(capture.Disposed));
+        Assert.Equal(2, wasapi.Created.Count);
+        Assert.All(wasapi.Created, capture => Assert.True(capture.Disposed));
+    }
+
+    [Fact]
+    public void WarmUp_DisposesCaptureAfterPrepareFailureAndRecovers()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            PrepareException = new InvalidOperationException("WASAPI initialization failed.")
+        };
+        using var sut = CreateService(devices, captures);
+
+        Assert.False(sut.WarmUp());
+        Assert.True(Assert.Single(captures.Created).Disposed);
+
+        captures.PrepareException = null;
+
+        Assert.True(sut.WarmUp());
+        Assert.Equal(2, captures.Created.Count);
+        Assert.True(captures.Created.Last().Prepared);
+    }
+
+    [Fact]
+    public void StartRecording_DisposesRestartableCaptureAfterStartFailureAndRecovers()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            StartException = new InvalidOperationException("WASAPI start failed.")
+        };
+        using var sut = CreateService(devices, captures);
+
+        sut.StartRecording();
+        var failedCapture = Assert.Single(captures.Created);
+
+        Assert.False(sut.IsRecording);
+        Assert.True(failedCapture.Disposed);
+
+        captures.StartException = null;
+        sut.StartRecording();
+
+        Assert.True(sut.IsRecording);
+        Assert.Equal(2, captures.Created.Count);
+    }
+
+    [Fact]
+    public void StopRecording_DisposesRestartableCaptureAfterStopFailureAndRecovers()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            StopException = new InvalidOperationException("Capture stop failed.")
+        };
+        using var sut = CreateService(devices, captures);
+
+        sut.StartRecording();
+        var failedCapture = Assert.Single(captures.Created);
+        var exception = Record.Exception(() => sut.StopRecording());
+
+        Assert.Null(exception);
+        Assert.True(failedCapture.Disposed);
+
+        captures.StopException = null;
+        sut.StartRecording();
+
+        Assert.Equal(2, captures.Created.Count);
+        Assert.NotSame(failedCapture, captures.Created.Last());
+    }
+
+    [Fact]
+    public void StopRecording_DisposesRestartableCaptureAfterStopTimeoutAndRecovers()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true,
+            StopException = new TimeoutException("Capture stop timed out.")
+        };
+        using var sut = CreateService(devices, captures);
+
+        sut.StartRecording();
+        var failedCapture = Assert.Single(captures.Created);
+        sut.StopRecording();
+
+        Assert.True(failedCapture.Disposed);
+
+        captures.StopException = null;
+        sut.StartRecording();
+
+        Assert.Equal(2, captures.Created.Count);
+    }
+
+    [Fact]
+    public void RecordingStopped_UnexpectedlyDisposesRestartableCapture()
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
+        using var sut = CreateService(devices, captures);
+        sut.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseStopped(new InvalidOperationException("Device removed."));
+
+        Assert.False(sut.IsRecording);
         Assert.True(capture.Disposed);
     }
 
     [Fact]
-    public void ConsecutiveRecordings_UseFreshMicrophoneCaptures()
+    public void DeviceChange_DisposesPreparedRestartableCaptureAndCreatesNewGeneration()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            "Microphone Array",
+            "USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
+        using var sut = CreateService(devices, captures);
+        Assert.True(sut.WarmUp());
+        var firstCapture = Assert.Single(captures.Created);
+
+        sut.SetMicrophoneDevice(1);
+
+        Assert.True(firstCapture.Disposed);
+        Assert.Equal(2, captures.Created.Count);
+        Assert.True(captures.Created.Last().Prepared);
+        Assert.Equal(1, captures.Created.Last().DeviceNumber);
+    }
+
+    [Fact]
+    public void FirstDataAvailable_LogsStartLatencyOncePerRecording()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");
-        var captures = new FakeAudioInputCaptureFactory();
+        var captures = new FakeAudioInputCaptureFactory
+        {
+            CanRestartAfterStop = true
+        };
         using var sut = CreateService(devices, captures);
-        var bytes = new byte[sizeof(short) * 2];
+        var messages = new List<string>();
+        void Observe(string message) => messages.Add(message);
+        AudioCaptureDiagnostics.MessageLogged += Observe;
 
-        sut.StartRecording();
-        var firstCapture = Assert.Single(captures.Created);
-        Assert.True(firstCapture.Started);
-        firstCapture.RaiseData(bytes, bytes.Length);
-        Assert.NotNull(sut.StopRecording());
+        try
+        {
+            sut.StartRecording();
+            var capture = Assert.Single(captures.Created);
+            var bytes = new byte[sizeof(short) * 2];
+            capture.RaiseData(bytes, bytes.Length);
+            capture.RaiseData(bytes, bytes.Length);
+        }
+        finally
+        {
+            AudioCaptureDiagnostics.MessageLogged -= Observe;
+        }
 
-        sut.StartRecording();
-        var secondCapture = Assert.Single(captures.Created.Skip(1));
-        Assert.NotSame(firstCapture, secondCapture);
-        Assert.True(secondCapture.Started);
-        secondCapture.RaiseData(bytes, bytes.Length);
-        Assert.NotNull(sut.StopRecording());
-
-        Assert.True(firstCapture.Stopped);
-        Assert.True(firstCapture.Disposed);
-        Assert.True(secondCapture.Stopped);
-        Assert.True(secondCapture.Disposed);
+        var latencyMessage = Assert.Single(messages, message =>
+            message.StartsWith("FirstDataAvailable", StringComparison.Ordinal));
+        Assert.Contains("sequence=1", latencyMessage);
+        Assert.Contains("captureGeneration=1", latencyMessage);
+        Assert.Matches("startLatencyMs=[0-9]+\\.[0-9]", latencyMessage);
     }
 
     [Fact]
@@ -1477,7 +1732,10 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
     public List<FakeAudioInputCapture> Created { get; } = [];
     public WaveFormat? ActualWaveFormat { get; set; }
     public Exception? CreateException { get; set; }
+    public Exception? PrepareException { get; set; }
     public Exception? StartException { get; set; }
+    public Exception? StopException { get; set; }
+    public bool CanRestartAfterStop { get; set; }
 
     public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
     {
@@ -1486,7 +1744,10 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
 
         var capture = new FakeAudioInputCapture(deviceNumber, ActualWaveFormat ?? waveFormat)
         {
-            StartException = StartException
+            CanRestartAfterStop = CanRestartAfterStop,
+            PrepareException = PrepareException,
+            StartException = StartException,
+            StopException = StopException
         };
         Created.Add(capture);
         return capture;
@@ -1497,23 +1758,42 @@ internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFor
 {
     public int DeviceNumber { get; } = deviceNumber;
     public WaveFormat WaveFormat { get; } = waveFormat;
-    public bool Started { get; private set; }
-    public bool Stopped { get; private set; }
+    public bool CanRestartAfterStop { get; init; }
+    public bool Prepared => PrepareCount > 0;
+    public bool Started => StartCount > 0;
+    public bool Stopped => StopCount > 0;
     public bool Disposed { get; private set; }
+    public int PrepareCount { get; private set; }
+    public int StartCount { get; private set; }
+    public int StopCount { get; private set; }
+    public Exception? PrepareException { get; init; }
     public Exception? StartException { get; init; }
+    public Exception? StopException { get; init; }
 
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
+
+    public void Prepare()
+    {
+        PrepareCount++;
+        if (PrepareException is not null)
+            throw PrepareException;
+    }
 
     public void StartRecording()
     {
         if (StartException is not null)
             throw StartException;
 
-        Started = true;
+        StartCount++;
     }
 
-    public void StopRecording() => Stopped = true;
+    public void StopRecording()
+    {
+        StopCount++;
+        if (StopException is not null)
+            throw StopException;
+    }
 
     public void RaiseStopped(Exception? exception = null) =>
         RecordingStopped?.Invoke(this, new AudioInputRecordingStoppedEventArgs(exception));

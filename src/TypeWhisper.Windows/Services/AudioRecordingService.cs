@@ -34,6 +34,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private readonly TimeSpan _devicePollInterval;
     private readonly object _deviceInfoCacheLock = new();
     private readonly object _deviceChangeCheckLock = new();
+    private readonly object _captureLifecycleLock = new();
     private IAudioInputCapture? _waveIn;
     private IAudioInputCapture? _previewWaveIn;
     private List<float>? _sampleBuffer;
@@ -66,6 +67,11 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private readonly Queue<AudioChunkTelemetry> _recentChunks = new();
     private DateTime? _lastSamplesAvailableUtc;
     private int _diagnosticDataAvailableCount;
+    private long _recordingStartTimestamp;
+    private long _recordingSequence;
+    private long _activeRecordingSequence;
+    private long _captureGeneration;
+    private long _activeCaptureGeneration;
 
     /// <summary>
     /// Initializes a new instance of the AudioRecordingService class.
@@ -206,53 +212,57 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public bool WarmUp()
     {
-        AudioCaptureDiagnostics.Log(
-            $"WarmUp enter warmed={_isWarmedUp} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
-        if (_disposed) return false;
-        if (_isWarmedUp && _waveIn is not null) return true;
-
-        if (_deviceProvider.DeviceCount == 0)
-        {
-            AudioCaptureDiagnostics.Log("WarmUp no devices");
-            System.Diagnostics.Debug.WriteLine("WarmUp: No audio input devices available.");
-            StartDevicePolling();
-            return false;
-        }
-
-        _activeDeviceNumber = ResolvePreferredDeviceNumber(allowFallback: true);
-        if (_activeDeviceNumber < 0)
-        {
-            AudioCaptureDiagnostics.Log("WarmUp no active device after resolve");
-            StartDevicePolling();
-            return false;
-        }
-
-        try
+        lock (_captureLifecycleLock)
         {
             AudioCaptureDiagnostics.Log(
-                $"WarmUp creating capture active={_activeDeviceNumber}:{TryGetDeviceName(_activeDeviceNumber) ?? "<unknown>"}");
-            _waveIn = _captureFactory.Create(
-                _activeDeviceNumber,
-                new WaveFormat(SampleRate, BitsPerSample, Channels),
-                bufferMilliseconds: 30);
+                $"WarmUp enter warmed={_isWarmedUp} disposed={_disposed} deviceCount={SafeDeviceCount()} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
+            if (_disposed) return false;
+            if (_isWarmedUp && _waveIn is not null) return true;
 
-            _waveIn.DataAvailable += OnDataAvailable;
-            _waveIn.RecordingStopped += OnRecordingStopped;
+            if (_deviceProvider.DeviceCount == 0)
+            {
+                AudioCaptureDiagnostics.Log("WarmUp no devices");
+                System.Diagnostics.Debug.WriteLine("WarmUp: No audio input devices available.");
+                StartDevicePolling();
+                return false;
+            }
 
-            SetActiveDeviceIdentity(_activeDeviceNumber);
-            _isWarmedUp = true;
-            AudioCaptureDiagnostics.Log(
-                $"WarmUp prepared active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+            _activeDeviceNumber = ResolvePreferredDeviceNumber(allowFallback: true);
+            if (_activeDeviceNumber < 0)
+            {
+                AudioCaptureDiagnostics.Log("WarmUp no active device after resolve");
+                StartDevicePolling();
+                return false;
+            }
+
+            try
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"WarmUp creating capture active={_activeDeviceNumber}:{TryGetDeviceName(_activeDeviceNumber) ?? "<unknown>"}");
+                _waveIn = _captureFactory.Create(
+                    _activeDeviceNumber,
+                    new WaveFormat(SampleRate, BitsPerSample, Channels),
+                    bufferMilliseconds: 30);
+                _waveIn.Prepare();
+                _waveIn.DataAvailable += OnDataAvailable;
+                _waveIn.RecordingStopped += OnRecordingStopped;
+
+                SetActiveDeviceIdentity(_activeDeviceNumber);
+                _isWarmedUp = true;
+                _activeCaptureGeneration = ++_captureGeneration;
+                AudioCaptureDiagnostics.Log(
+                    $"WarmUp prepared captureGeneration={_activeCaptureGeneration} reusable={_waveIn.CanRestartAfterStop} active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
+                DisposeWaveIn(stopRecording: false, reason: "prepare failure");
+            }
+
+            StartDevicePolling();
+            return _isWarmedUp;
         }
-        catch (Exception ex) when (IsNonFatalAudioException(ex))
-        {
-            AudioCaptureDiagnostics.Log($"WarmUp failed {ex.GetType().Name}: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"WarmUp failed: {ex.Message}");
-            DisposeWaveIn(stopRecording: false);
-        }
-
-        StartDevicePolling();
-        return _isWarmedUp;
     }
 
     /// <summary>
@@ -293,53 +303,60 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StartRecording()
     {
-        AudioCaptureDiagnostics.Log(
-            $"StartRecording enter serviceRecording={_isRecording} warmed={_isWarmedUp} previewing={_isPreviewing} waveIn={_waveIn is not null}");
-        if (_isRecording) return;
-
-        // The settings microphone preview uses its own WaveIn instance and can
-        // block real capture while the settings window stays open on Dictation.
-        // Always stop preview before entering recording mode.
-        if (_isPreviewing)
-            StopPreview();
-
-        if ((!_isWarmedUp || _waveIn is null) && !WarmUp())
+        var startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        lock (_captureLifecycleLock)
         {
-            AudioCaptureDiagnostics.Log("StartRecording warmup failed");
-            return;
-        }
-
-        if (_waveIn is null)
-        {
-            AudioCaptureDiagnostics.Log("StartRecording no capture");
-            return;
-        }
-
-        _sampleBuffer = new List<float>(SampleRate * 60); // Pre-alloc ~1 min
-        _peakRmsLevel = 0;
-        _preGainPeakRms = 0;
-        _currentRmsLevel = 0;
-        lock (_bufferLock)
-        {
-            _recentChunks.Clear();
-            _lastSamplesAvailableUtc = null;
-        }
-        _recordingStartTime = DateTime.UtcNow;
-        _isRecording = true;
-        _diagnosticDataAvailableCount = 0;
-
-        try
-        {
-            _waveIn.StartRecording();
             AudioCaptureDiagnostics.Log(
-                $"StartRecording active isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
-        }
-        catch (Exception ex) when (IsNonFatalAudioException(ex))
-        {
-            AudioCaptureDiagnostics.Log($"StartRecording failed {ex.GetType().Name}: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
-            ClearRecordingState();
-            DisposeWaveIn();
+                $"StartRecording enter serviceRecording={_isRecording} warmed={_isWarmedUp} previewing={_isPreviewing} waveIn={_waveIn is not null}");
+            if (_isRecording) return;
+
+            // The settings microphone preview uses its own WaveIn instance and can
+            // block real capture while the settings window stays open on Dictation.
+            // Always stop preview before entering recording mode.
+            if (_isPreviewing)
+                StopPreview();
+
+            if ((!_isWarmedUp || _waveIn is null) && !WarmUp())
+            {
+                AudioCaptureDiagnostics.Log("StartRecording warmup failed");
+                return;
+            }
+
+            if (_waveIn is null)
+            {
+                AudioCaptureDiagnostics.Log("StartRecording no capture");
+                return;
+            }
+
+            _sampleBuffer = new List<float>(SampleRate * 60); // Pre-alloc ~1 min
+            _peakRmsLevel = 0;
+            _preGainPeakRms = 0;
+            _currentRmsLevel = 0;
+            lock (_bufferLock)
+            {
+                _recentChunks.Clear();
+                _lastSamplesAvailableUtc = null;
+            }
+            _recordingStartTime = DateTime.UtcNow;
+            _recordingStartTimestamp = startTimestamp;
+            _activeRecordingSequence = ++_recordingSequence;
+            _isRecording = true;
+            Interlocked.Exchange(ref _diagnosticDataAvailableCount, 0);
+
+            try
+            {
+                _waveIn.StartRecording();
+                AudioCaptureDiagnostics.Log(
+                    $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
+                ClearRecordingState();
+                DisposeWaveIn(reason: "start failure");
+            }
         }
     }
 
@@ -357,41 +374,48 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public float[]? StopRecording()
     {
-        AudioCaptureDiagnostics.Log(
-            $"StopRecording enter serviceRecording={_isRecording} waveIn={_waveIn is not null} bufferCount={_sampleBuffer?.Count ?? -1} peak={_peakRmsLevel:F6} preGain={_preGainPeakRms:F6}");
-        if (!_isRecording)
-            return null;
-
-        if (_waveIn is null)
+        lock (_captureLifecycleLock)
         {
-            AudioCaptureDiagnostics.Log("StopRecording no capture");
-            ClearRecordingState();
-            return null;
+            AudioCaptureDiagnostics.Log(
+                $"StopRecording enter sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} serviceRecording={_isRecording} waveIn={_waveIn is not null} bufferCount={_sampleBuffer?.Count ?? -1} peak={_peakRmsLevel:F6} preGain={_preGainPeakRms:F6}");
+            if (!_isRecording)
+                return null;
+
+            if (_waveIn is null)
+            {
+                AudioCaptureDiagnostics.Log("StopRecording no capture");
+                ClearRecordingState();
+                return null;
+            }
+
+            _isRecording = false;
+
+            float[]? samples;
+            lock (_bufferLock)
+            {
+                samples = _sampleBuffer?.ToArray();
+                _sampleBuffer = null;
+            }
+
+            if (_waveIn.CanRestartAfterStop)
+                StopAndRetainWaveIn(_waveIn);
+            else
+                DisposeWaveIn(resetWarmUp: false, reason: "fallback recreated");
+
+            if (samples is null || samples.Length == 0)
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"StopRecording returning empty sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration}");
+                return null;
+            }
+
+            if (NormalizationEnabled)
+                NormalizeAudio(samples);
+
+            AudioCaptureDiagnostics.Log(
+                $"StopRecording returning sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} samples={samples.Length} duration={samples.Length / 16000.0:F3}");
+            return samples;
         }
-
-        _isRecording = false;
-
-        float[]? samples;
-        lock (_bufferLock)
-        {
-            samples = _sampleBuffer?.ToArray();
-            _sampleBuffer = null;
-        }
-
-        DisposeWaveIn(resetWarmUp: false);
-
-        if (samples is null || samples.Length == 0)
-        {
-            AudioCaptureDiagnostics.Log("StopRecording returning empty");
-            return null;
-        }
-
-        if (NormalizationEnabled)
-            NormalizeAudio(samples);
-
-        AudioCaptureDiagnostics.Log(
-            $"StopRecording returning samples={samples.Length} duration={samples.Length / 16000.0:F3}");
-        return samples;
     }
 
     /// <summary>
@@ -435,11 +459,20 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             e.BytesRecorded,
             capture.WaveFormat);
         var sampleCount = decodedSamples.Length;
-        _diagnosticDataAvailableCount++;
-        if (_diagnosticDataAvailableCount <= 5 || _diagnosticDataAvailableCount % 50 == 0)
+        var dataAvailableCount = Interlocked.Increment(ref _diagnosticDataAvailableCount);
+        if (dataAvailableCount == 1)
+        {
+            var startLatency = System.Diagnostics.Stopwatch.GetElapsedTime(_recordingStartTimestamp);
+            var startLatencyMilliseconds = startLatency.TotalMilliseconds.ToString(
+                "F1",
+                System.Globalization.CultureInfo.InvariantCulture);
+            AudioCaptureDiagnostics.Log(
+                $"FirstDataAvailable sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} startLatencyMs={startLatencyMilliseconds} bytes={e.BytesRecorded} decoded={sampleCount}");
+        }
+        if (dataAvailableCount <= 5 || dataAvailableCount % 50 == 0)
         {
             AudioCaptureDiagnostics.Log(
-                $"DataAvailable accepted count={_diagnosticDataAvailableCount} bytes={e.BytesRecorded} decoded={sampleCount} format={DescribeWaveFormat(capture.WaveFormat)} recording={_isRecording}");
+                $"DataAvailable accepted sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} count={dataAvailableCount} bytes={e.BytesRecorded} decoded={sampleCount} format={DescribeWaveFormat(capture.WaveFormat)} recording={_isRecording}");
         }
         if (sampleCount == 0) return;
 
@@ -506,24 +539,27 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void OnRecordingStopped(object? sender, AudioInputRecordingStoppedEventArgs e)
     {
-        if (_waveIn is null || !ReferenceEquals(sender, _waveIn))
-            return;
+        lock (_captureLifecycleLock)
+        {
+            if (_waveIn is null || !ReferenceEquals(sender, _waveIn))
+                return;
 
-        var captureFailed = e.Exception is not null;
-        var activeDeviceAvailable = IsActiveDeviceAvailable(GetDeviceSnapshot(refresh: true));
-        AudioCaptureDiagnostics.Log(
-            $"RecordingStopped captureFailed={captureFailed} activeAvailable={activeDeviceAvailable} exception={e.Exception?.GetType().Name}:{e.Exception?.Message}");
+            var captureFailed = e.Exception is not null;
+            var activeDeviceAvailable = IsActiveDeviceAvailable(GetDeviceSnapshot(refresh: true));
+            AudioCaptureDiagnostics.Log(
+                $"RecordingStopped unexpected sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} captureFailed={captureFailed} activeAvailable={activeDeviceAvailable} exception={e.Exception?.GetType().Name}:{e.Exception?.Message}");
 
-        System.Diagnostics.Debug.WriteLine(captureFailed
-            ? $"Audio input capture stopped unexpectedly: {e.Exception!.Message}"
-            : "Audio input capture stopped.");
+            System.Diagnostics.Debug.WriteLine(captureFailed
+                ? $"Audio input capture stopped unexpectedly: {e.Exception!.Message}"
+                : "Audio input capture stopped unexpectedly without an exception.");
 
-        ClearRecordingState();
-        DisposeWaveIn(stopRecording: false);
-        StartDevicePolling();
+            ClearRecordingState();
+            DisposeWaveIn(stopRecording: false, reason: "unexpected stop");
+            StartDevicePolling();
 
-        if (captureFailed && !activeDeviceAvailable)
-            RaiseDeviceLost();
+            if (captureFailed && !activeDeviceAvailable)
+                RaiseDeviceLost();
+        }
     }
 
     private static void NormalizeAudio(float[] samples)
@@ -607,20 +643,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void ApplyPreferredDeviceChange()
     {
-        if (!_isWarmedUp)
-            return;
+        lock (_captureLifecycleLock)
+        {
+            if (!_isWarmedUp)
+                return;
 
-        var newDevice = ResolvePreferredDeviceNumber(allowFallback: true);
-        if (!ActiveDeviceMatches(newDevice))
-        {
-            DisposeWaveIn();
-            if (newDevice >= 0)
-                WarmUp();
-        }
-        else if (newDevice >= 0)
-        {
-            _activeDeviceNumber = newDevice;
-            SetActiveDeviceIdentity(newDevice);
+            var newDevice = ResolvePreferredDeviceNumber(allowFallback: true);
+            if (!ActiveDeviceMatches(newDevice))
+            {
+                DisposeWaveIn(reason: "device change");
+                if (newDevice >= 0)
+                    WarmUp();
+            }
+            else if (newDevice >= 0)
+            {
+                _activeDeviceNumber = newDevice;
+                SetActiveDeviceIdentity(newDevice);
+            }
         }
     }
 
@@ -918,22 +957,25 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void EnsureActiveDeviceIsPreferred(IReadOnlyList<AudioInputDeviceSnapshot> snapshot)
     {
-        if (!_isWarmedUp)
-            return;
-
-        if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
-            return;
-
-        if (_isRecording)
+        lock (_captureLifecycleLock)
         {
-            // Never tear down an in-flight recording just to migrate to a
-            // preferred device; complete the migration on a later check once
-            // recording has stopped.
-            return;
-        }
+            if (!_isWarmedUp)
+                return;
 
-        DisposeWaveIn();
-        WarmUp();
+            if (!IsPreferredDeviceAvailable(snapshot) || IsActiveDevicePreferred())
+                return;
+
+            if (_isRecording)
+            {
+                // Never tear down an in-flight recording just to migrate to a
+                // preferred device; complete the migration on a later check once
+                // recording has stopped.
+                return;
+            }
+
+            DisposeWaveIn(reason: "device change");
+            WarmUp();
+        }
     }
 
     private void RaiseAudioLevelChanged(float peak, float rms) =>
@@ -989,9 +1031,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
     private void HandleDeviceLost()
     {
-        ClearRecordingState();
-        DisposeWaveIn();
-        RaiseDeviceLost();
+        lock (_captureLifecycleLock)
+        {
+            ClearRecordingState();
+            DisposeWaveIn(reason: "device loss");
+            RaiseDeviceLost();
+        }
     }
 
     private void RaiseDeviceLost()
@@ -1122,33 +1167,34 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StartPreview(int? deviceNumber)
     {
-        if (_isRecording)
-            return;
-
-        StopPreview();
-        if (_disposed || _deviceProvider.DeviceCount == 0) return;
-
-        var deviceIndex = deviceNumber.HasValue
-            ? TryGetDeviceName(deviceNumber.Value) is not null
-                ? deviceNumber.Value
-                : ResolvePreferredDeviceNumber(allowFallback: true)
-            : FindBestMicrophoneDevice();
-        if (deviceIndex < 0) return;
-
-        try
+        lock (_captureLifecycleLock)
         {
-            _previewWaveIn = _captureFactory.Create(
-                deviceIndex,
-                new WaveFormat(SampleRate, BitsPerSample, Channels),
-                bufferMilliseconds: 50);
-            _previewWaveIn.DataAvailable += OnPreviewDataAvailable;
-            _previewWaveIn.StartRecording();
-            _isPreviewing = true;
-        }
-        catch (Exception ex) when (IsNonFatalAudioException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine($"StartPreview failed: {ex.Message}");
             StopPreview();
+            if (_isRecording || _disposed || _deviceProvider.DeviceCount == 0) return;
+
+            var deviceIndex = deviceNumber.HasValue
+                ? TryGetDeviceName(deviceNumber.Value) is not null
+                    ? deviceNumber.Value
+                    : ResolvePreferredDeviceNumber(allowFallback: true)
+                : FindBestMicrophoneDevice();
+            if (deviceIndex < 0) return;
+
+            try
+            {
+                _previewWaveIn = _captureFactory.Create(
+                    deviceIndex,
+                    new WaveFormat(SampleRate, BitsPerSample, Channels),
+                    bufferMilliseconds: 50);
+                _previewWaveIn.DataAvailable += OnPreviewDataAvailable;
+                _previewWaveIn.Prepare();
+                _previewWaveIn.StartRecording();
+                _isPreviewing = true;
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                System.Diagnostics.Debug.WriteLine($"StartPreview failed: {ex.Message}");
+                StopPreview();
+            }
         }
     }
 
@@ -1157,14 +1203,17 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StopPreview()
     {
-        if (_previewWaveIn is not null)
+        lock (_captureLifecycleLock)
         {
-            _previewWaveIn.DataAvailable -= OnPreviewDataAvailable;
-            StopRecordingForCleanup(_previewWaveIn);
-            _previewWaveIn.Dispose();
-            _previewWaveIn = null;
+            if (_previewWaveIn is not null)
+            {
+                _previewWaveIn.DataAvailable -= OnPreviewDataAvailable;
+                StopRecordingForCleanup(_previewWaveIn);
+                _previewWaveIn.Dispose();
+                _previewWaveIn = null;
+            }
+            _isPreviewing = false;
         }
-        _isPreviewing = false;
     }
 
     private static void StopRecordingForCleanup(IAudioInputCapture waveIn)
@@ -1173,7 +1222,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         {
             waveIn.StopRecording();
         }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or MmException)
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
         {
             System.Diagnostics.Debug.WriteLine($"StopRecording during audio cleanup failed: {ex.Message}");
         }
@@ -1211,30 +1260,87 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         RaisePreviewLevelChanged(peak, rms);
     }
 
-    private void DisposeWaveIn(bool stopRecording = true, bool resetWarmUp = true)
+    private void StopAndRetainWaveIn(IAudioInputCapture waveIn)
     {
-        if (_waveIn is not null)
+        waveIn.DataAvailable -= OnDataAvailable;
+        waveIn.RecordingStopped -= OnRecordingStopped;
+
+        try
         {
-            var waveIn = _waveIn;
-            _waveIn = null;
+            waveIn.StopRecording();
+            waveIn.DataAvailable += OnDataAvailable;
+            waveIn.RecordingStopped += OnRecordingStopped;
             AudioCaptureDiagnostics.Log(
-                $"DisposeWaveIn release stopRecording={stopRecording} resetWarmUp={resetWarmUp}");
-            waveIn.DataAvailable -= OnDataAvailable;
-            waveIn.RecordingStopped -= OnRecordingStopped;
-            if (stopRecording)
-            {
-                StopRecordingForCleanup(waveIn);
-            }
-            waveIn.Dispose();
+                $"Capture stopped and retained sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration}");
+            AudioCaptureDiagnostics.Log(
+                $"DisposeWaveIn release stopRecording=True resetWarmUp=False retained=True sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration}");
         }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Capture disposed after failure sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} reason=stop failure exception={ex.GetType().Name}:{ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Reusable audio capture stop failed: {ex.Message}");
+            if (ReferenceEquals(_waveIn, waveIn))
+                _waveIn = null;
+            try
+            {
+                waveIn.Dispose();
+            }
+            catch (Exception disposeException) when (IsNonFatalAudioException(disposeException))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Reusable audio capture cleanup failed: {disposeException.Message}");
+            }
 
-        if (!resetWarmUp)
-            return;
+            _isWarmedUp = false;
+            _activeDeviceNumber = -1;
+            _activeDeviceId = null;
+            _activeDeviceName = null;
+        }
+    }
 
-        _isWarmedUp = false;
-        _activeDeviceNumber = -1;
-        _activeDeviceId = null;
-        _activeDeviceName = null;
+    private void DisposeWaveIn(
+        bool stopRecording = true,
+        bool resetWarmUp = true,
+        string reason = "cleanup")
+    {
+        lock (_captureLifecycleLock)
+        {
+            if (_waveIn is not null)
+            {
+                var waveIn = _waveIn;
+                _waveIn = null;
+                AudioCaptureDiagnostics.Log(
+                    $"DisposeWaveIn release stopRecording={stopRecording} resetWarmUp={resetWarmUp} reason={reason} captureGeneration={_activeCaptureGeneration}");
+                waveIn.DataAvailable -= OnDataAvailable;
+                waveIn.RecordingStopped -= OnRecordingStopped;
+                if (stopRecording)
+                {
+                    StopRecordingForCleanup(waveIn);
+                }
+                waveIn.Dispose();
+                if (reason.Contains("failure", StringComparison.Ordinal)
+                    || reason.Contains("loss", StringComparison.Ordinal)
+                    || reason.Contains("unexpected", StringComparison.Ordinal))
+                {
+                    AudioCaptureDiagnostics.Log(
+                        $"Capture disposed after failure captureGeneration={_activeCaptureGeneration} reason={reason}");
+                }
+                else if (reason == "fallback recreated")
+                {
+                    AudioCaptureDiagnostics.Log(
+                        $"WaveIn fallback released; fallback recreated on next recording captureGeneration={_activeCaptureGeneration}");
+                }
+            }
+
+            if (!resetWarmUp)
+                return;
+
+            _isWarmedUp = false;
+            _activeDeviceNumber = -1;
+            _activeDeviceId = null;
+            _activeDeviceName = null;
+        }
     }
 
     /// <summary>
@@ -1242,20 +1348,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
+        lock (_captureLifecycleLock)
         {
-            _disposed = true;
-            _devicePollTimer?.Dispose();
-            _devicePollTimer = null;
-            if (_deviceChangeNotifier is not null)
+            if (!_disposed)
             {
-                if (_deviceNotificationsStarted)
-                    _deviceChangeNotifier.DevicesChanged -= OnDeviceChangeNotification;
-                _deviceChangeNotifier.Dispose();
+                _disposed = true;
+                _devicePollTimer?.Dispose();
+                _devicePollTimer = null;
+                if (_deviceChangeNotifier is not null)
+                {
+                    if (_deviceNotificationsStarted)
+                        _deviceChangeNotifier.DevicesChanged -= OnDeviceChangeNotification;
+                    _deviceChangeNotifier.Dispose();
+                }
+                _isRecording = false;
+                StopPreview();
+                DisposeWaveIn();
             }
-            _isRecording = false;
-            StopPreview();
-            DisposeWaveIn();
         }
     }
 
@@ -1381,7 +1490,9 @@ internal interface IAudioInputCapture : IDisposable
 {
     event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
     event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
+    bool CanRestartAfterStop { get; }
     WaveFormat WaveFormat { get; }
+    void Prepare();
     void StartRecording();
     void StopRecording();
 }
@@ -1709,7 +1820,13 @@ internal sealed class WaveInAudioInputCapture : IAudioInputCapture
     /// </summary>
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
+    public bool CanRestartAfterStop => false;
+
     public WaveFormat WaveFormat => _waveIn.WaveFormat;
+
+    public void Prepare()
+    {
+    }
 
     /// <summary>
     /// Starts recording.
@@ -1878,8 +1995,27 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
     public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
     public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
 
+    public bool CanRestartAfterStop => _capture?.CanRestartAfterStop ?? false;
+
     public WaveFormat WaveFormat =>
         _capture?.WaveFormat ?? throw new ObjectDisposedException(nameof(FallbackAudioInputCapture));
+
+    public void Prepare()
+    {
+        ThrowIfDisposed();
+
+        try
+        {
+            _capture!.Prepare();
+        }
+        catch (Exception ex) when (!_usingFallback && NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Primary microphone capture prepare failed; using fallback {ex.GetType().Name}: {ex.Message}");
+            SwitchToFallback();
+            _capture!.Prepare();
+        }
+    }
 
     public void StartRecording()
     {
@@ -1942,6 +2078,8 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
                 _requestedWaveFormat,
                 _bufferMilliseconds);
             AttachCapture();
+            AudioCaptureDiagnostics.Log(
+                $"WaveIn fallback recreated deviceNumber={_deviceNumber} bufferMs={_bufferMilliseconds}");
         }
         catch
         {
@@ -2092,53 +2230,4 @@ internal static class WasapiAudioInputDeviceOrdering
         return wasapiDeviceName.StartsWith(trimmedWaveInName, StringComparison.OrdinalIgnoreCase)
             || trimmedWaveInName.StartsWith(wasapiDeviceName, StringComparison.OrdinalIgnoreCase);
     }
-}
-
-internal sealed class WasapiAudioInputCapture : IAudioInputCapture
-{
-    private readonly MMDevice _device;
-    private readonly WasapiCapture _capture;
-
-    public WasapiAudioInputCapture(MMDevice device, int bufferMilliseconds)
-    {
-        _device = device;
-        AudioCaptureDiagnostics.Log(
-            $"WasapiCapture ctor device={device.FriendlyName} bufferMs={bufferMilliseconds} sync={SynchronizationContext.Current?.GetType().FullName ?? "<null>"}");
-        _capture = new WasapiCapture(device, useEventSync: true, bufferMilliseconds);
-        _capture.DataAvailable += OnDataAvailable;
-        _capture.RecordingStopped += OnRecordingStopped;
-        AudioCaptureDiagnostics.Log($"WasapiCapture ctor format={AudioRecordingService.DescribeWaveFormat(_capture.WaveFormat)}");
-    }
-
-    public event EventHandler<AudioInputDataAvailableEventArgs>? DataAvailable;
-    public event EventHandler<AudioInputRecordingStoppedEventArgs>? RecordingStopped;
-
-    public WaveFormat WaveFormat => _capture.WaveFormat;
-
-    public void StartRecording()
-    {
-        AudioCaptureDiagnostics.Log($"WasapiCapture StartRecording state={_capture.CaptureState}");
-        _capture.StartRecording();
-        AudioCaptureDiagnostics.Log($"WasapiCapture StartRecording returned state={_capture.CaptureState}");
-    }
-
-    public void StopRecording()
-    {
-        AudioCaptureDiagnostics.Log($"WasapiCapture StopRecording state={_capture.CaptureState}");
-        _capture.StopRecording();
-    }
-
-    public void Dispose()
-    {
-        _capture.DataAvailable -= OnDataAvailable;
-        _capture.RecordingStopped -= OnRecordingStopped;
-        _capture.Dispose();
-        _device.Dispose();
-    }
-
-    private void OnDataAvailable(object? sender, WaveInEventArgs e) =>
-        DataAvailable?.Invoke(this, new AudioInputDataAvailableEventArgs(e.Buffer, e.BytesRecorded));
-
-    private void OnRecordingStopped(object? sender, StoppedEventArgs e) =>
-        RecordingStopped?.Invoke(this, new AudioInputRecordingStoppedEventArgs(e.Exception));
 }
