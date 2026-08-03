@@ -19,8 +19,11 @@ internal static class AudioCaptureDiagnostics
         SafePathSegment("Logs"),
         SafePathSegment("audio-capture-diagnostics.log"));
 
+    internal static event Action<string>? MessageLogged;
+
     public static void Log(string message)
     {
+        NotifyObservers(message);
         if (!Enabled)
             return;
 
@@ -57,6 +60,25 @@ internal static class AudioCaptureDiagnostics
         catch (ArgumentException ex)
         {
             Debug.WriteLine($"Audio capture diagnostics logging failed: {ex.Message}");
+        }
+    }
+
+    private static void NotifyObservers(string message)
+    {
+        var observers = MessageLogged;
+        if (observers is null)
+            return;
+
+        foreach (var observer in observers.GetInvocationList().Cast<Action<string>>())
+        {
+            try
+            {
+                observer(message);
+            }
+            catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+            {
+                Debug.WriteLine($"Audio capture diagnostics observer failed: {ex.Message}");
+            }
         }
     }
 
