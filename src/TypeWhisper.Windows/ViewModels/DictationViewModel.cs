@@ -575,7 +575,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         if (!_isRecording
             && GetApiDictationSession(sessionId)?.Status == ApiDictationSessionStatus.Recording)
-            FailApiDictationSession(sessionId, StatusText);
+        {
+            var startupError = string.IsNullOrWhiteSpace(FeedbackText)
+                ? StatusText
+                : FeedbackText;
+            FailApiDictationSession(sessionId, startupError);
+        }
 
         return sessionId;
     }
@@ -1381,6 +1386,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         session.StopRequested = true;
         _isStoppingRecording = true;
+        CancellationTokenSource? jobCancellation = null;
 
         try
         {
@@ -1487,6 +1493,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             var activeModelIdAtCapture = preparationOutcome.ActiveModelId
                 ?? session.Context.DesiredModelId;
             var transcriptionIdentity = _modelManager.ResolveTranscriptionIdentity(activeModelIdAtCapture);
+            jobCancellation = session.CreateJobCancellation();
             var job = new TranscriptionJob(
                 transcriptionSamples,
                 originalSamples,
@@ -1527,11 +1534,21 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     null,
                     null,
                     null),
+                session,
+                jobCancellation,
                 session.Context.RecordingId);
+
+            try
+            {
+                await _jobChannel.Writer.WriteAsync(job, jobCancellation.Token);
+            }
+            catch (OperationCanceledException) when (jobCancellation.IsCancellationRequested)
+            {
+                return;
+            }
 
             session.JobEnqueued = true;
             Interlocked.Increment(ref _pendingJobCount);
-            await _jobChannel.Writer.WriteAsync(job);
             UpdateVisualState();
         }
         finally
@@ -1542,6 +1559,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 _activeRecordingSession = null;
             if (!session.JobEnqueued && _currentRecordingId == session.Context.RecordingId)
                 _currentRecordingId = null;
+            if (!session.JobEnqueued && jobCancellation is not null)
+                session.ReleaseJobCancellation(jobCancellation);
             session.DisposePreparationResources();
             _hotkey.ForceStop();
         }
@@ -1639,10 +1658,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             await DispatchToUiAsync(UpdateVisualState);
             try
             {
-                await ProcessSingleJobAsync(job, ct);
+                using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(
+                    ct,
+                    job.SessionCancellationSource.Token);
+                await ProcessSingleJobAsync(job, jobCts.Token);
             }
             finally
             {
+                job.Session.ReleaseJobCancellation(job.SessionCancellationSource);
                 DecrementPendingJobCount();
                 await DispatchToUiAsync(UpdateVisualState);
             }
@@ -1653,11 +1676,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             await DispatchToUiAsync(() =>
             {
                 State = DictationState.Processing;
                 StatusText = Loc.Instance["Status.Processing"];
             });
+            ct.ThrowIfCancellationRequested();
 
             string rawText = "";
             string? detectedLanguage = null;
@@ -1712,6 +1737,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             {
                 fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
             }
+            ct.ThrowIfCancellationRequested();
 
             if (result is not null && isParakeetJob)
             {
@@ -1915,6 +1941,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             };
 
             var pipelineResult = await _pipeline.ProcessAsync(rawText, pipelineOptions, ct);
+            ct.ThrowIfCancellationRequested();
             var finalText = pipelineResult.Text;
 
             var timestamp = DateTime.UtcNow;
@@ -2101,6 +2128,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
         catch (OperationCanceledException)
         {
+            if (job.SessionCancellationSource.IsCancellationRequested)
+                return;
+
             FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.Cancelled"]);
             PublishCancelledFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -2761,6 +2791,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 pendingJob.ActiveModelIdAtCapture,
                 pendingJob.CapturedWindowTitle,
                 pendingJob.RecordingId);
+            pendingJob.Session.ReleaseJobCancellation(pendingJob.SessionCancellationSource);
             DecrementPendingJobCount();
         }
 
@@ -2825,6 +2856,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             CancelTargetAppCorrectionLearning();
             _consumerCts.Cancel();
             try { _consumerTask?.Wait(TimeSpan.FromSeconds(3)); } catch { /* shutting down */ }
+            while (_jobChannel.Reader.TryRead(out var pendingJob))
+            {
+                pendingJob.Session.ReleaseJobCancellation(pendingJob.SessionCancellationSource);
+                DecrementPendingJobCount();
+            }
             _consumerCts.Dispose();
             _durationTimer?.Dispose();
             _feedbackTimer?.Dispose();
@@ -2900,12 +2936,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Task<ModelPreparationOutcome> modelPreparation)
     {
         private int _preparationResourcesDisposed;
+        private int _isInvalidated;
+        private readonly object _jobCancellationGate = new();
+        private CancellationTokenSource? _jobCancellation;
 
         public RecordingContext Context { get; } = context;
         public TaskCompletionSource<bool> CaptureStarted { get; } = captureStarted;
         public CancellationTokenSource PreparationCts { get; } = preparationCts;
         public Task<ModelPreparationOutcome> ModelPreparation { get; } = modelPreparation;
-        public bool IsInvalidated { get; private set; }
+        public bool IsInvalidated => Volatile.Read(ref _isInvalidated) != 0;
         public bool AudioStopped { get; set; }
         public bool RecordingStartedPublished { get; set; }
         public bool RecordingStoppedPublished { get; set; }
@@ -2917,13 +2956,40 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         public void Invalidate()
         {
-            if (IsInvalidated)
+            if (Interlocked.Exchange(ref _isInvalidated, 1) != 0)
                 return;
 
-            IsInvalidated = true;
             CaptureStarted.TrySetResult(false);
             PreparationCts.Cancel();
+            lock (_jobCancellationGate)
+                _jobCancellation?.Cancel();
             DisposePreparationResources();
+        }
+
+        public CancellationTokenSource CreateJobCancellation()
+        {
+            lock (_jobCancellationGate)
+            {
+                if (_jobCancellation is not null)
+                    throw new InvalidOperationException("A recording session can enqueue only one transcription job.");
+
+                _jobCancellation = new CancellationTokenSource();
+                if (IsInvalidated)
+                    _jobCancellation.Cancel();
+                return _jobCancellation;
+            }
+        }
+
+        public void ReleaseJobCancellation(CancellationTokenSource cancellation)
+        {
+            lock (_jobCancellationGate)
+            {
+                if (!ReferenceEquals(_jobCancellation, cancellation))
+                    return;
+
+                _jobCancellation = null;
+                cancellation.Dispose();
+            }
         }
 
         public void DisposePreparationResources()
@@ -2964,6 +3030,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Guid? ApiSessionId,
         bool TranscribeShortQuietClipsAggressively,
         RecordingTailDiagnosticSnapshot Diagnostic,
+        RecordingSession Session,
+        CancellationTokenSource SessionCancellationSource,
         Guid? RecordingId);
 
     internal static Func<string, string>? CreateSpokenFormatter(
