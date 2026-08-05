@@ -972,7 +972,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 IsCancelled: true,
                 Error: null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             return new ModelPreparationOutcome(
                 recordingId,
@@ -1264,7 +1264,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         var preparationOutcome = await modelPreparation;
         if (!ReferenceEquals(_activeRecordingSession, session)
             || session.IsInvalidated
-            || _isStoppingRecording
+            || session.StopRequested
             || !_isRecording)
         {
             return;
@@ -1293,6 +1293,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             return;
         }
 
+        session.StopRequested = true;
         _isStoppingRecording = true;
 
         try
@@ -2825,6 +2826,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         public bool PreparationFailureHandled { get; set; }
         public bool CancelledByUser { get; set; }
         public bool JobEnqueued { get; set; }
+        public bool StopRequested { get; set; }
 
         public void Invalidate()
         {

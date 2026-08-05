@@ -227,7 +227,7 @@ public sealed class StreamingHandler : IDisposable
         {
             StopPreviewBuffering(sessionVersion);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             Debug.WriteLine($"Delayed streaming startup error: {ex.Message}");
             StopPreviewBuffering(sessionVersion);
