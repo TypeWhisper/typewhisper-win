@@ -7,6 +7,13 @@ using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Windows.Services;
 
+internal sealed record StreamingModelPreparation(
+    string RequestedModelId,
+    string? ActiveModelId,
+    ITranscriptionEngine? Engine,
+    ITranscriptionEnginePlugin? Plugin,
+    bool IsReady);
+
 /// <summary>
 /// Provides live transcription during recording. Uses real-time WebSocket streaming
 /// when the plugin supports it, otherwise falls back to polling-based transcription.
@@ -99,11 +106,11 @@ public sealed class StreamingHandler : IDisposable
     /// Starts buffering live-preview audio immediately and opens the provider path
     /// after the requested model is ready.
     /// </summary>
-    public void StartWhenReadyWithLanguageHints(
+    internal void StartWhenReadyWithLanguageHints(
         IReadOnlyList<string> languageHints,
         TranscriptionTask task,
         Func<bool> isStillRecording,
-        Task<bool> modelReady,
+        Task<StreamingModelPreparation> modelPreparation,
         bool allowOnlineBatchPolling)
     {
         Stop();
@@ -120,7 +127,7 @@ public sealed class StreamingHandler : IDisposable
             languageHints,
             task,
             isStillRecording,
-            modelReady,
+            modelPreparation,
             allowOnlineBatchPolling,
             sessionVersion,
             ct);
@@ -183,14 +190,15 @@ public sealed class StreamingHandler : IDisposable
         IReadOnlyList<string> languageHints,
         TranscriptionTask task,
         Func<bool> isStillRecording,
-        Task<bool> modelReady,
+        Task<StreamingModelPreparation> modelPreparation,
         bool allowOnlineBatchPolling,
         int sessionVersion,
         CancellationToken ct)
     {
         try
         {
-            if (!await modelReady.WaitAsync(ct)
+            var preparation = await modelPreparation.WaitAsync(ct);
+            if (!IsCurrentPreparation(preparation)
                 || !_transcriptState.IsCurrentSession(sessionVersion)
                 || ct.IsCancellationRequested)
             {
@@ -198,7 +206,7 @@ public sealed class StreamingHandler : IDisposable
                 return;
             }
 
-            var plugin = _modelManager.ActiveTranscriptionPlugin;
+            var plugin = preparation.Plugin!;
             var prompt = plugin?.SupportsDictionaryTerms == true
                 ? _dictionary.GetTermsForPrompt()
                 : null;
@@ -220,7 +228,8 @@ public sealed class StreamingHandler : IDisposable
                     task,
                     isStillRecording,
                     sessionVersion,
-                    ct);
+                    ct,
+                    preparation.Engine);
             }
         }
         catch (OperationCanceledException)
@@ -233,6 +242,20 @@ public sealed class StreamingHandler : IDisposable
             StopPreviewBuffering(sessionVersion);
         }
     }
+
+    private bool IsCurrentPreparation(StreamingModelPreparation preparation) =>
+        preparation.IsReady
+        && preparation.Engine?.IsModelLoaded == true
+        && preparation.Plugin is not null
+        && string.Equals(
+            preparation.RequestedModelId,
+            preparation.ActiveModelId,
+            StringComparison.Ordinal)
+        && string.Equals(
+            _modelManager.ActiveModelId,
+            preparation.ActiveModelId,
+            StringComparison.Ordinal)
+        && ReferenceEquals(_modelManager.ActiveTranscriptionPlugin, preparation.Plugin);
 
     private void StopPreviewBuffering(int sessionVersion)
     {
@@ -457,9 +480,10 @@ public sealed class StreamingHandler : IDisposable
 
     private async Task RunPollingFallbackAsync(
         IReadOnlyList<string> languageHints, TranscriptionTask task,
-        Func<bool> isStillRecording, int sessionVersion, CancellationToken ct)
+        Func<bool> isStillRecording, int sessionVersion, CancellationToken ct,
+        ITranscriptionEngine? preparedEngine = null)
     {
-        var engine = _modelManager.Engine;
+        var engine = preparedEngine ?? _modelManager.Engine;
         var pollInterval = TimeSpan.FromSeconds(3.0);
 
         try

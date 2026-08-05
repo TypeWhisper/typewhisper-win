@@ -88,6 +88,7 @@ internal sealed record ModelPreparationOutcome(
     string RequestedModelId,
     string? ActiveModelId,
     ITranscriptionEngine? Engine,
+    ITranscriptionEnginePlugin? Plugin,
     bool IsReady,
     bool IsCancelled,
     Exception? Error);
@@ -196,6 +197,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
     private readonly SemaphoreSlim _modelPreparationLock = new(1, 1);
+    private readonly object _modelPreparationLifetimeGate = new();
+    private int _activeModelPreparationOperations;
+    private bool _modelPreparationLockDisposeRequested;
+    private bool _modelPreparationLockDisposed;
     private bool _disposed;
     private int _lastVadFlushedSegmentCount;
     private int _lastVadDiscardedShortSegmentCount;
@@ -928,6 +933,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Task<bool> captureStarted,
         CancellationToken cancellationToken)
     {
+        if (!TryBeginModelPreparationOperation())
+        {
+            return new ModelPreparationOutcome(
+                recordingId,
+                desiredModelId,
+                null,
+                null,
+                null,
+                IsReady: false,
+                IsCancelled: true,
+                Error: null);
+        }
+
         var lockAcquired = false;
         try
         {
@@ -936,6 +954,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 return new ModelPreparationOutcome(
                     recordingId,
                     desiredModelId,
+                    null,
                     null,
                     null,
                     IsReady: false,
@@ -952,12 +971,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             cancellationToken.ThrowIfCancellationRequested();
             var activeModelId = _modelManager.ActiveModelId;
             var engine = _modelManager.Engine;
+            var plugin = _modelManager.ActiveTranscriptionPlugin;
+            var requestedModelIsActive = string.Equals(
+                desiredModelId,
+                activeModelId,
+                StringComparison.Ordinal);
             return new ModelPreparationOutcome(
                 recordingId,
                 desiredModelId,
                 activeModelId,
                 engine,
-                IsReady: loaded && engine.IsModelLoaded,
+                plugin,
+                IsReady: loaded && requestedModelIsActive && engine.IsModelLoaded,
                 IsCancelled: false,
                 Error: null);
         }
@@ -966,6 +991,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             return new ModelPreparationOutcome(
                 recordingId,
                 desiredModelId,
+                null,
                 null,
                 null,
                 IsReady: false,
@@ -979,6 +1005,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 desiredModelId,
                 null,
                 null,
+                null,
                 IsReady: false,
                 IsCancelled: false,
                 Error: ex);
@@ -987,7 +1014,49 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             if (lockAcquired)
                 _modelPreparationLock.Release();
+            CompleteModelPreparationOperation();
         }
+    }
+
+    private void CompleteModelPreparationOperation()
+    {
+        lock (_modelPreparationLifetimeGate)
+        {
+            _activeModelPreparationOperations--;
+            if (_activeModelPreparationOperations == 0 && _modelPreparationLockDisposeRequested)
+                DisposeModelPreparationLockOnce();
+        }
+    }
+
+    private bool TryBeginModelPreparationOperation()
+    {
+        lock (_modelPreparationLifetimeGate)
+        {
+            if (_modelPreparationLockDisposeRequested)
+                return false;
+
+            _activeModelPreparationOperations++;
+            return true;
+        }
+    }
+
+    private void RequestModelPreparationLockDisposal()
+    {
+        lock (_modelPreparationLifetimeGate)
+        {
+            _modelPreparationLockDisposeRequested = true;
+            if (_activeModelPreparationOperations == 0)
+                DisposeModelPreparationLockOnce();
+        }
+    }
+
+    private void DisposeModelPreparationLockOnce()
+    {
+        if (_modelPreparationLockDisposed)
+            return;
+
+        _modelPreparationLockDisposed = true;
+        _modelPreparationLock.Dispose();
     }
 
     private static async Task YieldForRecordingPresentationAsync()
@@ -1002,8 +1071,17 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         await dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Background);
     }
 
-    private static async Task<bool> AwaitModelReadyAsync(Task<ModelPreparationOutcome> preparation) =>
-        (await preparation).IsReady;
+    private static async Task<StreamingModelPreparation> AwaitStreamingModelPreparationAsync(
+        Task<ModelPreparationOutcome> preparation)
+    {
+        var outcome = await preparation;
+        return new StreamingModelPreparation(
+            outcome.RequestedModelId,
+            outcome.ActiveModelId,
+            outcome.Engine,
+            outcome.Plugin,
+            outcome.IsReady);
+    }
 
     private void PublishRecordingStartedOnce(RecordingSession session)
     {
@@ -1112,7 +1190,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
     private async Task StartRecording()
     {
-        if (_isRecording)
+        if (_disposed || _isRecording)
             return;
 
         if (_isStoppingRecording)
@@ -1206,17 +1284,25 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         PartialText = "";
         _vad?.Dispose();
         _vad = null;
+        _audio.SamplesAvailable -= OnSamplesAvailable;
         _streamingHandler.Stop();
 
-        if (settingsSnapshot.LiveTranscriptionEnabled
-            && ModelManagerService.IsPluginModel(desiredModelId))
+        if (settingsSnapshot.LiveTranscriptionEnabled)
         {
-            _streamingHandler.StartWhenReadyWithLanguageHints(
-                languageHints,
-                effectiveTask,
-                () => ReferenceEquals(_activeRecordingSession, session) && _isRecording,
-                AwaitModelReadyAsync(modelPreparation),
-                settingsSnapshot.OnlineAsrBatchLiveTranscriptionEnabled);
+            if (ModelManagerService.IsPluginModel(desiredModelId))
+            {
+                _streamingHandler.StartWhenReadyWithLanguageHints(
+                    languageHints,
+                    effectiveTask,
+                    () => ReferenceEquals(_activeRecordingSession, session) && _isRecording,
+                    AwaitStreamingModelPreparationAsync(modelPreparation),
+                    settingsSnapshot.OnlineAsrBatchLiveTranscriptionEnabled);
+            }
+            else
+            {
+                _vad = CreateVoiceActivityDetector();
+                _audio.SamplesAvailable += OnSamplesAvailable;
+            }
         }
 
         _audio.StartRecording();
@@ -2726,6 +2812,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (!_disposed)
         {
+            _disposed = true;
             var recordingSession = _activeRecordingSession;
             recordingSession?.Invalidate();
             if (_isRecording && recordingSession is not null)
@@ -2744,9 +2831,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _streamingHandler.Dispose();
             _vad?.Dispose();
             _vadLock.Dispose();
+            RequestModelPreparationLockDisposal();
             _audio.AudioLevelChanged -= OnAudioLevelChanged;
             _audio.SamplesAvailable -= OnSamplesAvailable;
-            _disposed = true;
         }
     }
 
@@ -2836,6 +2923,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             IsInvalidated = true;
             CaptureStarted.TrySetResult(false);
             PreparationCts.Cancel();
+            DisposePreparationResources();
         }
 
         public void DisposePreparationResources()

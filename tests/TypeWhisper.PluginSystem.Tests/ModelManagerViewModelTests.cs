@@ -852,6 +852,11 @@ public class ModelManagerViewModelTests
         var startTask = fixture.ViewModel.StartRecordingAsync();
         Assert.True(await plugin.WaitForLoadCountAsync(1, TimeSpan.FromSeconds(2)));
         Assert.True(fixture.Audio.IsRecording);
+        var recordingSession = GetPrivateField(fixture.ViewModel, "_activeRecordingSession");
+        var preparationCts = Assert.IsType<CancellationTokenSource>(
+            recordingSession.GetType()
+                .GetProperty("PreparationCts")
+                ?.GetValue(recordingSession));
 
         await fixture.ViewModel.HandleCancelRequested();
         await fixture.ViewModel.HandleCancelRequested();
@@ -867,12 +872,45 @@ public class ModelManagerViewModelTests
         Assert.False(fixture.Audio.IsRecording);
         Assert.Equal(DictationState.Idle, fixture.ViewModel.State);
         Assert.Equal(0, plugin.TranscribeCallCount);
+        Assert.Throws<ObjectDisposedException>(() => preparationCts.Cancel());
         lock (startedEvents)
             Assert.Single(startedEvents);
         lock (stoppedEvents)
             Assert.Single(stoppedEvents);
         lock (failedEvents)
             Assert.Single(failedEvents);
+    }
+
+    [Fact]
+    public async Task Dispose_DefersModelPreparationLockDisposalUntilBlockedLoadReturns()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+        plugin.BlockNextLoadIgnoringCancellation();
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with { SelectedModelId = fullModelId },
+            plugin);
+
+        var startTask = fixture.ViewModel.StartRecordingAsync();
+        Assert.True(await plugin.WaitForLoadCountAsync(1, TimeSpan.FromSeconds(2)));
+        var preparationLock = Assert.IsType<SemaphoreSlim>(
+            GetPrivateField(fixture.ViewModel, "_modelPreparationLock"));
+
+        fixture.ViewModel.Dispose();
+
+        Assert.False(preparationLock.Wait(0));
+        plugin.ReleaseBlockedLoad();
+        await startTask;
+
+        Assert.Throws<ObjectDisposedException>(() => preparationLock.Wait(0));
     }
 
     [Fact]

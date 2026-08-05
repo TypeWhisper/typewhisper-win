@@ -93,4 +93,35 @@ public class DictationOverlayPresentationTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LegacyLivePreview_PreparesVadBeforeAudioCaptureStarts()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 8500);
+
+        var pluginBranchIndex = startRecording.IndexOf(
+            "if (ModelManagerService.IsPluginModel(desiredModelId))",
+            StringComparison.Ordinal);
+        var vadIndex = startRecording.IndexOf(
+            "_vad = CreateVoiceActivityDetector();",
+            StringComparison.Ordinal);
+        var samplesSubscriptionIndex = startRecording.IndexOf(
+            "_audio.SamplesAvailable += OnSamplesAvailable;",
+            StringComparison.Ordinal);
+        var captureStartIndex = startRecording.IndexOf("_audio.StartRecording();", StringComparison.Ordinal);
+
+        Assert.True(pluginBranchIndex >= 0, "Expected separate plugin and legacy preview paths.");
+        Assert.True(vadIndex > pluginBranchIndex, "Expected the legacy preview path to create its VAD.");
+        Assert.True(
+            samplesSubscriptionIndex > vadIndex,
+            "Expected legacy audio samples to feed the VAD.");
+        Assert.True(
+            captureStartIndex > samplesSubscriptionIndex,
+            "Expected live preview subscriptions before audio capture starts.");
+    }
+
 }
