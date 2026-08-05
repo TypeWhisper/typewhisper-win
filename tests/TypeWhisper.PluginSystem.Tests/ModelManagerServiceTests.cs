@@ -95,6 +95,28 @@ public class ModelManagerServiceTests
     }
 
     [Fact]
+    public void ResolveTranscriptionIdentity_UsesProviderIdAndRawModelId()
+    {
+        const string providerId = "com.typewhisper.openai-compatible";
+        const string selectionId = "openai-compatible-profile-a";
+        const string modelId = "whisper-profile";
+        var plugin = new FakeTranscriptionPlugin(
+            providerId,
+            configured: true,
+            selectedModelId: modelId,
+            selectionId: selectionId,
+            modelIds: [modelId]);
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        var identity = sut.ResolveTranscriptionIdentity(
+            ModelManagerService.GetPluginModelId(selectionId, modelId));
+
+        Assert.NotNull(identity);
+        Assert.Equal(providerId, identity.EngineId);
+        Assert.Equal(modelId, identity.ModelId);
+    }
+
+    [Fact]
     public async Task EnsureModelLoadedAsync_ReloadsActiveModel_WhenAccelerationPreferenceChanges()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";

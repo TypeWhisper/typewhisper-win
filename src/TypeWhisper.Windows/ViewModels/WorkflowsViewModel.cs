@@ -164,6 +164,14 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// </summary>
     public bool HasWorkflows => Workflows.Count > 0;
     /// <summary>
+    /// Gets whether an AI provider is currently available for workflow processing.
+    /// </summary>
+    public bool HasAvailableLlmProvider => _pluginManager.LlmProviders.Any(provider => provider.IsAvailable);
+    /// <summary>
+    /// Gets whether workflow AI processing currently has no available provider.
+    /// </summary>
+    public bool HasNoAvailableLlmProvider => !HasAvailableLlmProvider;
+    /// <summary>
     /// Gets whether has filtered workflows.
     /// </summary>
     public bool HasFilteredWorkflows => FilteredWorkflows.Count > 0;
@@ -343,13 +351,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             NotifyEditorStateChanged();
         };
         _history.RecordsChanged += RefreshDomainSuggestions;
-        _pluginManager.PluginStateChanged += (_, _) => Application.Current?.Dispatcher.Invoke(() =>
+        _pluginManager.PluginStateChanged += (_, _) => RunOnUiThread(() =>
         {
             RebuildProviderOptions();
             RebuildModelOptions();
             RebuildActionPluginOptions();
         });
-        _settings.SettingsChanged += _ => Application.Current?.Dispatcher.Invoke(() =>
+        _settings.SettingsChanged += _ => RunOnUiThread(() =>
         {
             RebuildProviderOptions();
             OnPropertyChanged(nameof(DefaultLlmProvider));
@@ -1069,6 +1077,17 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             EditProviderOverride = null;
         OnPropertyChanged(nameof(SelectedDefaultProvider));
         OnPropertyChanged(nameof(SelectedEditProvider));
+        OnPropertyChanged(nameof(HasAvailableLlmProvider));
+        OnPropertyChanged(nameof(HasNoAvailableLlmProvider));
+    }
+
+    private static void RunOnUiThread(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+            dispatcher.Invoke(action);
+        else
+            action();
     }
 
     private static bool IsStaleProviderSelection(string? value, IEnumerable<ProviderOption> options) =>

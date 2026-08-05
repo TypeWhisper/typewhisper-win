@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using TypeWhisper.Windows.ViewModels;
+using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
@@ -18,6 +19,18 @@ public partial class AudioSection : UserControl
     /// Initializes a new instance of the AudioSection class.
     /// </summary>
     public AudioSection() => InitializeComponent();
+
+    private void OnTestSpokenFormattingClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not SettingsWindowViewModel { SpokenFormatting.HasSelectedModel: true } viewModel)
+            return;
+
+        var dialog = new SpokenFormattingVerificationWindow(viewModel.SpokenFormatting)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        dialog.ShowDialog();
+    }
 
     private void Model_Click(object sender, MouseButtonEventArgs e)
     {

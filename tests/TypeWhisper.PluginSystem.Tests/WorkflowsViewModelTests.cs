@@ -100,6 +100,66 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void NewDraft_IsNamedSmartFormattingButKeepsCleanedTextTemplate()
+    {
+        var sut = CreateViewModel();
+
+        Assert.Equal("Smart Formatting", sut.EditName);
+        Assert.Equal(WorkflowTemplate.CleanedText, sut.EditTemplate);
+        Assert.Contains("AI", sut.SelectedTemplateDescription, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExistingCleanedTextWorkflowName_IsNotMigrated()
+    {
+        var workflow = NewWorkflow("My existing cleaned text", WorkflowTrigger.Global());
+        var sut = CreateViewModel(new TestWorkflowService([workflow]));
+
+        sut.StartEditCommand.Execute(workflow);
+
+        Assert.Equal("My existing cleaned text", sut.EditName);
+        Assert.Equal(WorkflowTemplate.CleanedText, sut.EditTemplate);
+    }
+
+    [Fact]
+    public void ProviderWarning_TracksAvailableProviderState()
+    {
+        var sut = CreateViewModel();
+
+        Assert.False(sut.HasAvailableLlmProvider);
+        Assert.True(sut.HasNoAvailableLlmProvider);
+
+        AddLlmProvider(new FakeLlmProvider(
+            "com.test.openai",
+            "OpenAI",
+            [new PluginModelInfo("gpt-5.5", "GPT-5.5")]));
+        InvokeRebuildProviderOptions(sut);
+
+        Assert.True(sut.HasAvailableLlmProvider);
+        Assert.False(sut.HasNoAvailableLlmProvider);
+    }
+
+    [Fact]
+    public void ProviderWarning_ReactsToPluginStateChanges()
+    {
+        var provider = new FakeLlmProvider(
+            "com.test.openai",
+            "OpenAI",
+            [new PluginModelInfo("gpt-5.5", "GPT-5.5")]);
+        AddLlmProvider(provider);
+        var sut = CreateViewModel();
+        var changedProperties = new List<string?>();
+        sut.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        provider.IsAvailable = false;
+        RaisePluginStateChanged();
+
+        Assert.True(sut.HasNoAvailableLlmProvider);
+        Assert.Contains(nameof(WorkflowsViewModel.HasAvailableLlmProvider), changedProperties);
+        Assert.Contains(nameof(WorkflowsViewModel.HasNoAvailableLlmProvider), changedProperties);
+    }
+
+    [Fact]
     public void SelectedEditProvider_IgnoresSelectionChangesDuringProviderRefresh()
     {
         var sut = CreateViewModel();
@@ -427,6 +487,14 @@ public sealed class WorkflowsViewModelTests : IDisposable
         typeof(WorkflowsViewModel)
             .GetMethod("RebuildProviderOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
             .Invoke(viewModel, null);
+
+    private void RaisePluginStateChanged()
+    {
+        var handler = (EventHandler?)typeof(PluginManager)
+            .GetField("PluginStateChanged", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(_pluginManager);
+        handler?.Invoke(_pluginManager, EventArgs.Empty);
+    }
 
     private sealed class FakeLlmProvider : ILlmProviderPlugin, ILlmProviderSelectionIdentity
     {

@@ -296,6 +296,22 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void SmartFormattingTemplate_UsesAiDescriptionAndPreservationPrompt()
+    {
+        var definition = WorkflowTemplateCatalog.DefinitionFor(WorkflowTemplate.CleanedText);
+        var workflow = NewWorkflow("Smart Formatting", WorkflowTrigger.Global());
+
+        var prompt = workflow.SystemPrompt(configuredLanguage: "de");
+
+        Assert.Equal("Smart Formatting", definition.Name);
+        Assert.Contains("AI", definition.Description, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(prompt);
+        Assert.Contains("paragraph", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tone", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("source language", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void SystemPrompt_UsesWorkflowBehaviorAndOutput()
     {
         var workflow = NewWorkflow("Translate", WorkflowTrigger.App("slack")) with

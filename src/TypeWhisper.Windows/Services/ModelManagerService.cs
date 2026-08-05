@@ -34,6 +34,8 @@ internal sealed record ActiveModelTranscriptionResult(
     string? EngineId,
     string? ModelId);
 
+internal sealed record TranscriptionEngineIdentity(string EngineId, string ModelId);
+
 /// <summary>
 /// Provides model manager service behavior.
 /// </summary>
@@ -124,6 +126,25 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
                 return null;
             var (pluginId, _) = ParsePluginModelId(_activeModelId);
             return FindTranscriptionEngine(pluginId);
+        }
+    }
+
+    internal TranscriptionEngineIdentity? ResolveTranscriptionIdentity(string? fullModelId)
+    {
+        if (string.IsNullOrWhiteSpace(fullModelId) || !IsPluginModel(fullModelId))
+            return null;
+
+        try
+        {
+            var (selectionId, modelId) = ParsePluginModelId(fullModelId);
+            var plugin = FindTranscriptionEngine(selectionId);
+            return plugin is null
+                ? null
+                : new TranscriptionEngineIdentity(plugin.ProviderId, modelId);
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 

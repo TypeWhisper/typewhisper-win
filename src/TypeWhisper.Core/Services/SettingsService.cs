@@ -191,7 +191,9 @@ public sealed class SettingsService : ISettingsService
             LocalModelAcceleration = AppSettings.NormalizeLocalModelAcceleration(
                 settings.LocalModelAcceleration),
             LocalModelStoragePath = AppSettings.NormalizeLocalModelStoragePath(
-                settings.LocalModelStoragePath)
+                settings.LocalModelStoragePath),
+            SpokenFormattingProfiles = SpokenFormatting.SpokenFormattingProfileStore.NormalizeProfiles(
+                settings.SpokenFormattingProfiles)
         };
 
         return settings

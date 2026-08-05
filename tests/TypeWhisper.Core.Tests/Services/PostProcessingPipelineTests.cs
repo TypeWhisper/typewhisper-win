@@ -232,6 +232,11 @@ public class PostProcessingPipelineTests
                 executionOrder.Add($"Formatting:{text}");
                 return text + "+FMT";
             },
+            SpokenFormatter = text =>
+            {
+                executionOrder.Add($"SpokenFormatting:{text}");
+                return text + "+SPK";
+            },
             LlmHandler = (text, _) =>
             {
                 executionOrder.Add($"LLM:{text}");
@@ -262,17 +267,32 @@ public class PostProcessingPipelineTests
 
         var result = await _sut.ProcessAsync("twenty three", options);
 
-        Assert.Equal("23+FMT+LLM+SNP+BOOST+DICT+TR", result.Text);
+        Assert.Equal("23+FMT+SPK+LLM+SNP+BOOST+DICT+TR", result.Text);
         Assert.Equal(
             [
                 "Formatting:23",
-                "LLM:23+FMT",
-                "Snippets:23+FMT+LLM",
-                "Boosting:23+FMT+LLM+SNP",
-                "Dictionary:23+FMT+LLM+SNP+BOOST",
-                "Translation:23+FMT+LLM+SNP+BOOST+DICT"
+                "SpokenFormatting:23+FMT",
+                "LLM:23+FMT+SPK",
+                "Snippets:23+FMT+SPK+LLM",
+                "Boosting:23+FMT+SPK+LLM+SNP",
+                "Dictionary:23+FMT+SPK+LLM+SNP+BOOST",
+                "Translation:23+FMT+SPK+LLM+SNP+BOOST+DICT"
             ],
             executionOrder);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SpokenFormattingFailure_KeepsCurrentText()
+    {
+        var options = new PipelineOptions
+        {
+            SpokenFormatter = _ => throw new InvalidOperationException("Formatting failed"),
+            DictionaryCorrector = text => text + "+DICT"
+        };
+
+        var result = await _sut.ProcessAsync("hello", options);
+
+        Assert.Equal("hello+DICT", result.Text);
     }
 
     [Fact]

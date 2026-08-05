@@ -33,6 +33,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// </summary>
     public SettingsViewModel Settings { get; }
     /// <summary>
+    /// Gets the spoken formatting profile editor.
+    /// </summary>
+    public SpokenFormattingViewModel SpokenFormatting { get; }
+    /// <summary>
     /// Gets the model manager.
     /// </summary>
     public ModelManagerViewModel ModelManager { get; }
@@ -273,6 +277,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// </summary>
     public SettingsWindowViewModel(
         SettingsViewModel settings,
+        SpokenFormattingViewModel spokenFormatting,
         ModelManagerViewModel modelManager,
         HistoryViewModel history,
         DictionaryViewModel dictionary,
@@ -291,6 +296,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         TargetAppCorrectionLearningService targetAppCorrectionLearning)
     {
         Settings = settings;
+        SpokenFormatting = spokenFormatting;
         ModelManager = modelManager;
         History = history;
         Dictionary = dictionary;
