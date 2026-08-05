@@ -110,7 +110,11 @@ public static class WorkflowTemplateCatalog
     /// </summary>
     public static IReadOnlyList<WorkflowTemplateDefinition> All { get; } =
     [
-        new(WorkflowTemplate.CleanedText, "Cleaned Text", "Clean up dictated text for readability and punctuation.", "Text"),
+        new(
+            WorkflowTemplate.CleanedText,
+            "Smart Formatting",
+            "Use AI to improve punctuation, paragraphs, grammar, and structure while preserving the original message.",
+            "Text"),
         new(WorkflowTemplate.Translation, "Translation", "Translate dictated text into the target language.", "Globe"),
         new(WorkflowTemplate.EmailReply, "Email Reply", "Turn dictated notes into a reply email.", "Mail"),
         new(WorkflowTemplate.MeetingNotes, "Meeting Notes", "Structure dictated notes into a meeting summary.", "Notes"),
@@ -486,7 +490,7 @@ public sealed record Workflow
         return Template switch
         {
             WorkflowTemplate.CleanedText =>
-                "Clean up the dictated text for readability. Fix punctuation, grammar, and formatting while preserving the original meaning and language. Return only the cleaned text."
+                "Use AI to apply smart formatting to the dictated text. Correct punctuation, capitalization, grammar, paragraph structure, and formatting. Preserve the original wording, meaning, tone, and source language. Return only the formatted text."
                 + languageHint + settingsInstruction + fineTuningInstruction + outputInstruction,
             WorkflowTemplate.Translation =>
                 $"Translate the dictated text into {ResolveTranslationTarget(fallbackTranslationTarget)}. Preserve meaning, names, and domain-specific terminology unless instructed otherwise. Return only the translated text."

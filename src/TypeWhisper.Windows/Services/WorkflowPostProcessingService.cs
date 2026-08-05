@@ -2,6 +2,7 @@ using System.Windows;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.SpokenFormatting;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -17,6 +18,8 @@ public sealed record WorkflowPostProcessingRequest(
     string? ConfiguredLanguage,
     IReadOnlyList<string> ConfiguredLanguageCandidates,
     TranscriptionTask TranscriptionTask,
+    string? TranscriptionEngineId,
+    string? TranscriptionModelId,
     string? AppName,
     string? AppProcessName,
     double AudioDurationSeconds);
@@ -53,6 +56,8 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
     private readonly ITranslationService _translation;
     private readonly IWorkflowTextProcessor _workflowTextProcessor;
     private readonly IPostProcessingPipeline _pipeline;
+    private readonly SpokenFormattingService _spokenFormatting;
+    private readonly SpokenFormattingStrategyResolver _spokenFormattingStrategyResolver;
 
     /// <summary>
     /// Creates a shared workflow post-processing service.
@@ -65,7 +70,9 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         ISnippetService snippets,
         ITranslationService translation,
         IWorkflowTextProcessor workflowTextProcessor,
-        IPostProcessingPipeline pipeline)
+        IPostProcessingPipeline pipeline,
+        SpokenFormattingService? spokenFormatting = null,
+        SpokenFormattingStrategyResolver? spokenFormattingStrategyResolver = null)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -75,6 +82,12 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         _translation = translation;
         _workflowTextProcessor = workflowTextProcessor;
         _pipeline = pipeline;
+        var spokenFormattingRules = new SpokenFormattingRulesLoader();
+        _spokenFormatting = spokenFormatting ?? new SpokenFormattingService(spokenFormattingRules);
+        _spokenFormattingStrategyResolver = spokenFormattingStrategyResolver
+            ?? new SpokenFormattingStrategyResolver(
+                new SpokenFormattingProfileStore(settings),
+                spokenFormattingRules);
     }
 
     /// <summary>
@@ -131,6 +144,11 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         var translationTarget = request.Workflow is null
             ? _settings.Current.TranslationTargetLanguage
             : null;
+        var spokenFormattingContext = _spokenFormattingStrategyResolver.Resolve(
+            request.TranscriptionEngineId,
+            request.TranscriptionModelId,
+            request.ConfiguredLanguageCandidates,
+            request.DetectedLanguage);
         var options = new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
@@ -140,6 +158,7 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
             ConfiguredLanguage = request.ConfiguredLanguage == "auto" ? null : request.ConfiguredLanguage,
             ConfiguredLanguageCandidates = request.ConfiguredLanguageCandidates,
             AppFormatter = AppFormatterService.Format,
+            SpokenFormatter = CreateSpokenFormatter(_spokenFormatting, spokenFormattingContext),
             TargetProcessName = request.AppProcessName,
             VocabularyBooster = _settings.Current.VocabularyBoostingEnabled
                 ? _vocabularyBoosting.Apply
@@ -161,6 +180,21 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         var result = await _pipeline.ProcessAsync(request.RawText, options, cancellationToken).ConfigureAwait(false);
         return new WorkflowPostProcessingResult(result.Text, workflowRequiresLlm);
     }
+
+    internal static Func<string, string>? CreateSpokenFormatter(
+        SpokenFormattingService service,
+        ResolvedSpokenFormattingStrategy? context) => context?.Strategy switch
+        {
+            SpokenFormattingStrategy.Automatic => text => service.Normalize(
+                text,
+                context.LanguageCode,
+                SpokenFormattingApplicationMode.SelectiveFallback),
+            SpokenFormattingStrategy.FallbackOnly => text => service.Normalize(
+                text,
+                context.LanguageCode,
+                SpokenFormattingApplicationMode.FullFallback),
+            _ => null
+        };
 
     private static string ReadClipboardText()
     {

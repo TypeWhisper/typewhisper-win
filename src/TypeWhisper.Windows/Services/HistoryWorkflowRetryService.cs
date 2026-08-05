@@ -111,6 +111,8 @@ public sealed class HistoryWorkflowRetryService
                     languageHints.FirstOrDefault(),
                     languageHints,
                     task,
+                    record.EngineUsed,
+                    record.ModelUsed,
                     record.AppName,
                     record.AppProcessName,
                     record.DurationSeconds),

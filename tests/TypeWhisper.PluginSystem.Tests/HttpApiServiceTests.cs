@@ -534,6 +534,27 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DictionaryCorrectionEndpoint_RoundTripsVisibleReplacementEscapes()
+    {
+        var service = CreateService();
+
+        var put = JsonObject(await service.HandleRequestAsync(JsonRequest(
+            "PUT",
+            "/v1/dictionary/corrections",
+            """{"original":"neuer Absatz","replacement":"\\n\\n","caseSensitive":false}"""), CancellationToken.None));
+        var get = JsonObject(await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/dictionary/corrections",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None));
+
+        Assert.Equal(@"\n\n", Assert.Single(put["corrections"].EnumerateArray()).GetProperty("replacement").GetString());
+        Assert.Equal(@"\n\n", Assert.Single(get["corrections"].EnumerateArray()).GetProperty("replacement").GetString());
+        Assert.Equal("Before \n\n after", new DictionaryService(_dictionaryPath).ApplyCorrections("Before neuer Absatz after"));
+    }
+
+    [Fact]
     public async Task TranscribeRejectsLanguageAndLanguageHintsTogether()
     {
         var service = CreateService();

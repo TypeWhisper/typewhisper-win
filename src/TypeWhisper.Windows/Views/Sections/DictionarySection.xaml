@@ -417,6 +417,11 @@
                         </StackPanel>
                     </ui:Button>
                 </Grid>
+                <TextBlock Text="{loc:Str Dictionary.ReplacementEscapesHint}"
+                           AutomationProperties.AutomationId="DictionaryNewReplacementEscapesHint"
+                           Style="{StaticResource HintStyle}"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
 
@@ -1032,7 +1037,12 @@
                         <TextBox Text="{Binding Dictionary.EditReplacement, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.AutomationId="DictionaryEditReplacement"
                                  AutomationProperties.Name="{loc:Str Dictionary.Replacement}"
-                                 Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,12"/>
+                                 Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,6"/>
+                        <TextBlock Text="{loc:Str Dictionary.ReplacementEscapesHint}"
+                                   AutomationProperties.AutomationId="DictionaryEditReplacementEscapesHint"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,0,12"
+                                   TextWrapping="Wrap"/>
 
                         <CheckBox Content="{loc:Str Dictionary.CaseSensitive}"
                                   AutomationProperties.AutomationId="DictionaryEditCaseSensitive"

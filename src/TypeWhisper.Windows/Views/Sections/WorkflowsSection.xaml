@@ -323,6 +323,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -393,6 +394,25 @@
                                FontSize="11"
                                Margin="0,5,0,0"
                                TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="2"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="3"
+                            Margin="0,16,0,0"
+                            Visibility="{Binding Workflows.HasNoAvailableLlmProvider, Converter={StaticResource BoolToVis}}">
+                    <ui:InfoBar Title="{loc:Str Workflows.ProviderWarningTitle}"
+                                Message="{loc:Str Workflows.ProviderWarningMessage}"
+                                Severity="Warning"
+                                IsOpen="True"
+                                IsClosable="False"
+                                AutomationProperties.AutomationId="WorkflowsProviderWarningSummary"/>
+                    <Button Content="{loc:Str Workflows.OpenIntegrations}"
+                            AutomationProperties.AutomationId="WorkflowsOpenIntegrationsSummary"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding OpenIntegrationsCommand}"
+                            HorizontalAlignment="Left"
+                            Margin="0,8,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -664,6 +684,22 @@
                               HorizontalScrollBarVisibility="Disabled"
                               CanContentScroll="False">
                     <StackPanel Margin="24,0,40,24">
+
+                                    <StackPanel Margin="0,0,0,14"
+                                                Visibility="{Binding Workflows.HasNoAvailableLlmProvider, Converter={StaticResource BoolToVis}}">
+                                        <ui:InfoBar Title="{loc:Str Workflows.ProviderWarningTitle}"
+                                                    Message="{loc:Str Workflows.ProviderWarningMessage}"
+                                                    Severity="Warning"
+                                                    IsOpen="True"
+                                                    IsClosable="False"
+                                                    AutomationProperties.AutomationId="WorkflowsProviderWarning"/>
+                                        <Button Content="{loc:Str Workflows.OpenIntegrations}"
+                                                AutomationProperties.AutomationId="WorkflowsOpenIntegrations"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding OpenIntegrationsCommand}"
+                                                HorizontalAlignment="Left"
+                                                Margin="0,8,0,0"/>
+                                    </StackPanel>
 
                                     <TextBlock Text="{loc:Str Workflows.Name}" Style="{StaticResource WorkflowFieldLabelStyle}"/>
                                     <TextBox Text="{Binding Workflows.EditName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource WorkflowInputTextBoxStyle}" Margin="0,0,0,14"

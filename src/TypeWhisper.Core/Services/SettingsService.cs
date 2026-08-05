@@ -206,7 +206,9 @@ public sealed class SettingsService : ISettingsService
             DictationRecoveryTask = string.Equals(
                 settings.DictationRecoveryTask, "translate", StringComparison.OrdinalIgnoreCase)
                     ? "translate"
-                    : "transcribe"
+                    : "transcribe",
+            SpokenFormattingProfiles = SpokenFormatting.SpokenFormattingProfileStore.NormalizeProfiles(
+                settings.SpokenFormattingProfiles)
         };
 
         return settings

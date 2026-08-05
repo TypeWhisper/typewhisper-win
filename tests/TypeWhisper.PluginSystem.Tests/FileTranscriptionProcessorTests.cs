@@ -30,6 +30,7 @@ public sealed class FileTranscriptionProcessorTests
 
         Assert.Equal("23 TYPEWHISPER", result.ProcessedText);
         Assert.Equal(["vocabulary:23 type whisper", "dictionary:23 TypeWhisper"], harness.PostProcessingCalls);
+        Assert.Null(harness.Pipeline.LastOptions?.SpokenFormatter);
         Assert.Equal("en", result.RawResult.DetectedLanguage);
         Assert.Equal(4.2, result.RawResult.Duration);
         var segment = Assert.Single(result.RawResult.Segments);
@@ -179,7 +180,7 @@ public sealed class FileTranscriptionProcessorTests
         public Mock<IVocabularyBoostingService> Vocabulary { get; } = new();
         public List<string> PostProcessingCalls { get; } = [];
         public AudioFileService AudioFile { get; } = new();
-        public PostProcessingPipeline Pipeline { get; } = new();
+        public CapturingPipeline Pipeline { get; } = new();
         public ModelManagerService ModelManager { get; }
         public FileTranscriptionProcessor Processor { get; }
 
@@ -206,6 +207,22 @@ public sealed class FileTranscriptionProcessorTests
             {
                 // Best-effort cleanup for temporary test files.
             }
+        }
+    }
+
+    private sealed class CapturingPipeline : IPostProcessingPipeline
+    {
+        private readonly PostProcessingPipeline _inner = new();
+
+        public PipelineOptions? LastOptions { get; private set; }
+
+        public Task<PostProcessingResult> ProcessAsync(
+            string rawText,
+            PipelineOptions options,
+            CancellationToken ct = default)
+        {
+            LastOptions = options;
+            return _inner.ProcessAsync(rawText, options, ct);
         }
     }
 }

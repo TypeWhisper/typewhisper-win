@@ -97,13 +97,14 @@ public sealed class AudioRecorderViewModelTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync("hallo da");
 
+        var pipeline = new CapturingPipeline();
         var sut = new AudioRecorderViewModel(
             audio,
             modelManager,
             settings,
             new AudioFileService(),
             new FakeErrorLogService(),
-            new PostProcessingPipeline(),
+            pipeline,
             translation.Object);
 
         sut.ToggleRecordingCommand.Execute(null);
@@ -117,10 +118,27 @@ public sealed class AudioRecorderViewModelTests
 
             Assert.Equal("hallo da", transcript);
             Assert.Contains(sut.Recordings, item => item.Transcript == "hallo da");
+            Assert.Null(pipeline.LastOptions?.SpokenFormatter);
         }
         finally
         {
             TryDeleteRecordingFiles(transcriptPath);
+        }
+    }
+
+    private sealed class CapturingPipeline : IPostProcessingPipeline
+    {
+        private readonly PostProcessingPipeline _inner = new();
+
+        public PipelineOptions? LastOptions { get; private set; }
+
+        public Task<PostProcessingResult> ProcessAsync(
+            string rawText,
+            PipelineOptions options,
+            CancellationToken ct = default)
+        {
+            LastOptions = options;
+            return _inner.ProcessAsync(rawText, options, ct);
         }
     }
 

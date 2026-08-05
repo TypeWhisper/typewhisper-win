@@ -1,0 +1,26 @@
+{
+  "language": "en",
+  "rules": [
+    { "phrase": "new paragraph", "replacement": "\n\n", "category": "Structural" },
+    { "phrase": "new line", "replacement": "\n", "category": "Structural" },
+    { "phrase": "tab", "replacement": "\t", "category": "Structural" },
+    { "phrase": "question mark", "replacement": "?", "category": "Punctuation" },
+    { "phrase": "exclamation mark", "replacement": "!", "category": "Punctuation" },
+    { "phrase": "colon", "replacement": ":", "category": "Punctuation" },
+    { "phrase": "semicolon", "replacement": ";", "category": "Punctuation" },
+    { "phrase": "open parenthesis", "replacement": "(", "category": "Brackets" },
+    { "phrase": "close parenthesis", "replacement": ")", "category": "Brackets" },
+    { "phrase": "open bracket", "replacement": "(", "category": "Brackets" },
+    { "phrase": "close bracket", "replacement": ")", "category": "Brackets" },
+    { "phrase": "comma", "replacement": ",", "category": "Punctuation" },
+    { "phrase": "period", "replacement": ".", "category": "Punctuation" },
+    { "phrase": "full stop", "replacement": ".", "category": "Punctuation" }
+  ],
+  "verificationScenarios": [
+    { "spoken": "hello comma world", "expected": "hello, world" },
+    { "spoken": "how are you question mark", "expected": "how are you?" },
+    { "spoken": "hello new line world", "expected": "hello\nworld" },
+    { "spoken": "first paragraph new paragraph second paragraph", "expected": "first paragraph\n\nsecond paragraph" },
+    { "spoken": "name tab value", "expected": "name\tvalue" }
+  ]
+}

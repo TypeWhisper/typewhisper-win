@@ -296,6 +296,11 @@ public record AppSettings
     /// </summary>
     public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
+    /// <summary>
+    /// Gets persisted spoken formatting overrides by engine, model, and language.
+    /// </summary>
+    public IReadOnlyList<DictationSpokenFormattingProfile> SpokenFormattingProfiles { get; init; } = [];
+
     // Live transcription (streaming preview while recording)
     /// <summary>
     /// Gets or sets the live transcription enabled value.
