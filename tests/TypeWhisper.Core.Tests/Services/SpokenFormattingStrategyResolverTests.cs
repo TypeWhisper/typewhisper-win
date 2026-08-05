@@ -111,7 +111,7 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
             ]
         });
 
-        var profile = Assert.Single(new SettingsService(Path.Combine(_tempDirectory, "settings.json"))
+        var profile = Assert.Single(new SettingsService(Path.Join(_tempDirectory, "settings.json"))
             .Current.SpokenFormattingProfiles);
 
         Assert.Equal("futureStrategy", profile.StrategyOverrideRaw);
