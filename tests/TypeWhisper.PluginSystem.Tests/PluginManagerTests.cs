@@ -181,6 +181,52 @@ public class PluginManagerTests : IDisposable
     }
 
     [Fact]
+    public void PreferLaterSearchDirectoryPlugins_NewerBundledPluginOverridesOlderLocalPlugin()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.script", "1.1.0", @"C:\App\Plugins\com.typewhisper.script");
+        var local = CreateLoadedPlugin("com.typewhisper.script", "1.0.0", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.script");
+
+        var result = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+
+        var plugin = Assert.Single(result);
+        Assert.Same(bundled, plugin);
+    }
+
+    [Fact]
+    public void PreferLaterSearchDirectoryPlugins_ValidVersionOverridesInvalidVersion()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.script", "1.1.0", @"C:\App\Plugins\com.typewhisper.script");
+        var local = CreateLoadedPlugin("com.typewhisper.script", "development", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.script");
+
+        var result = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+
+        var plugin = Assert.Single(result);
+        Assert.Same(bundled, plugin);
+    }
+
+    [Fact]
+    public void PreferLaterSearchDirectoryPlugins_EqualVersionKeepsLocalOverride()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.script", "1.1.0", @"C:\App\Plugins\com.typewhisper.script");
+        var local = CreateLoadedPlugin("com.typewhisper.script", "1.1.0", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.script");
+
+        var result = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+
+        Assert.Same(local, Assert.Single(result));
+    }
+
+    [Fact]
+    public void PreferLaterSearchDirectoryPlugins_InvalidVersionsKeepLocalOverride()
+    {
+        var bundled = CreateLoadedPlugin("com.typewhisper.script", "bundled", @"C:\App\Plugins\com.typewhisper.script");
+        var local = CreateLoadedPlugin("com.typewhisper.script", "development", @"C:\Users\me\AppData\Local\TypeWhisper\Plugins\com.typewhisper.script");
+
+        var result = PluginManager.PreferLaterSearchDirectoryPlugins([bundled, local]);
+
+        Assert.Same(local, Assert.Single(result));
+    }
+
+    [Fact]
     public void UnloadDiscardedSearchDirectoryPlugins_DisposesPluginDroppedByOverride()
     {
         var bundled = CreateLoadedPlugin("com.typewhisper.groq", "1.0.2", @"C:\App\Plugins\com.typewhisper.groq");
