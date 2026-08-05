@@ -25,6 +25,7 @@ public class SpokenFormattingLayoutTests
         Assert.Contains("SpokenFormattingKeepAutomatic", dialog);
         Assert.Contains("SpokenFormattingUseFallback", dialog);
         Assert.Contains("SpokenFormattingNativeWorks", dialog);
+        Assert.Contains("SelectedLanguageDisplayName, Mode=OneWay", dialog);
     }
 
     [Fact]

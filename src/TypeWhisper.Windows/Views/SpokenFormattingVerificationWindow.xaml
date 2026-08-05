@@ -36,7 +36,7 @@
                     <Run Text=" / "/>
                     <Run Text="{Binding CurrentModelDisplayName}"/>
                     <Run Text=" / "/>
-                    <Run Text="{Binding SelectedLanguageDisplayName}"/>
+                    <Run Text="{Binding SelectedLanguageDisplayName, Mode=OneWay}"/>
                 </TextBlock>
             </StackPanel>
 
