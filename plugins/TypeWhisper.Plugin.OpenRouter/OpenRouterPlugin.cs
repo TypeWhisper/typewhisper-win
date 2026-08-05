@@ -12,7 +12,7 @@ namespace TypeWhisper.Plugin.OpenRouter;
 /// <summary>
 /// Provides open router plugin behavior.
 /// </summary>
-public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
+public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
     private const string BaseUrl = "https://openrouter.ai/api";
     private const string ApiKeySecretName = "api-key";
@@ -29,6 +29,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
     private const string DefaultLlmModelName = "OpenRouter: Free Models Router (free)";
     private const string LegacyFallbackDefaultLlmModelId = "openai/gpt-4o";
     internal const string DefaultTranscriptionModelId = "openai/whisper-large-v3-turbo";
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -219,7 +222,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         var modelId = string.IsNullOrWhiteSpace(model)
             ? _selectedLlmModelId ?? SupportedModels.First().Id
@@ -511,7 +516,7 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseChatCompletionResponse(json);
     }
@@ -539,13 +544,20 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseTranscriptionResponse(json);
     }
 
     private static string ParseChatCompletionResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "The OpenRouter response did not contain text.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -558,7 +570,9 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
             return content.GetString()?.Trim() ?? "";
         }
 
-        return "";
+        throw new PluginRequestException(
+            "The OpenRouter response did not contain text.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 
     private static PluginTranscriptionResult ParseTranscriptionResponse(string json)

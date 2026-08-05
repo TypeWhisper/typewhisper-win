@@ -159,9 +159,9 @@ public partial class DashboardViewModel : ObservableObject
         RecentTranscriptions.Clear();
         foreach (var r in _history.Records.Take(3))
         {
-            var preview = r.FinalText.Length > 80
-                ? string.Concat(r.FinalText.AsSpan(0, 80), "...")
-                : r.FinalText;
+            var preview = r.DisplayText.Length > 80
+                ? string.Concat(r.DisplayText.AsSpan(0, 80), "...")
+                : r.DisplayText;
             RecentTranscriptions.Add(new RecentTranscription(preview, FormatTimeAgo(r.Timestamp), r.AppProcessName));
         }
         HasRecentTranscriptions = RecentTranscriptions.Count > 0;

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Claude;
@@ -11,7 +12,7 @@ namespace TypeWhisper.Plugin.Claude;
 /// <summary>
 /// Provides claude plugin behavior.
 /// </summary>
-public sealed class ClaudePlugin : ILlmProviderPlugin
+public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
     private const string BaseUrl = "https://api.anthropic.com";
     private const string AnthropicVersion = "2023-06-01";
@@ -19,6 +20,9 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(60) };
     private IPluginHostServices? _host;
     private string? _apiKey;
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     // ITypeWhisperPlugin
 
@@ -101,7 +105,9 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         var requestBody = new
         {
@@ -124,23 +130,26 @@ public sealed class ClaudePlugin : ILlmProviderPlugin
         request.Headers.Add("x-api-key", _apiKey);
         request.Headers.Add("anthropic-version", AnthropicVersion);
 
-        var response = await _httpClient.SendAsync(request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var responseBody = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
+        if (string.IsNullOrWhiteSpace(responseBody))
         {
-            _host?.Log(PluginLogLevel.Error, $"Anthropic API error {response.StatusCode}: {responseBody}");
-            throw new HttpRequestException(
-                $"Anthropic API returned {(int)response.StatusCode}: {responseBody}");
+            throw new PluginRequestException(
+                "Anthropic API returned empty content",
+                PluginRequestFailureKind.EmptyResponse);
         }
 
         using var doc = JsonDocument.Parse(responseBody);
         var content = doc.RootElement.GetProperty("content");
         if (content.GetArrayLength() == 0)
-            throw new InvalidOperationException("Anthropic API returned empty content array");
+            throw new PluginRequestException(
+                "Anthropic API returned empty content",
+                PluginRequestFailureKind.EmptyResponse);
 
         return content[0].GetProperty("text").GetString()
-            ?? throw new InvalidOperationException("Anthropic API returned null text");
+            ?? throw new PluginRequestException(
+                "Anthropic API returned empty content",
+                PluginRequestFailureKind.EmptyResponse);
     }
 
     // Internal helpers for settings view

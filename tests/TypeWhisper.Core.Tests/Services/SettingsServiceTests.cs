@@ -75,7 +75,14 @@ public class SettingsServiceTests : IDisposable
                 },
                 AppliedOperationIds = ["op-1"],
                 LastSyncAt = new DateTime(2026, 6, 3, 8, 30, 0, DateTimeKind.Utc)
-            }
+            },
+            DictationRecoveryRetentionDays = 90,
+            DictationRecoveryEngineId = "groq",
+            DictationRecoveryModelId = "whisper-large-v3",
+            DictationRecoveryLanguage = "ja",
+            DictationRecoveryTask = "translate",
+            DictationRecoveryAutomaticFallbackEnabled = true,
+            WorkflowRequestRecoveryEnabled = false
         };
 
         sut.Save(settings);
@@ -115,6 +122,13 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("2026-06-03T08:00:00.000Z", sut2.Current.CloudFolderSyncState.ExportedItemVersions["dictionary:term:dHlwZXdoaXNwZXI"]);
         Assert.Contains("op-1", sut2.Current.CloudFolderSyncState.AppliedOperationIds);
         Assert.Equal(new DateTime(2026, 6, 3, 8, 30, 0, DateTimeKind.Utc), sut2.Current.CloudFolderSyncState.LastSyncAt);
+        Assert.Equal(90, sut2.Current.DictationRecoveryRetentionDays);
+        Assert.Equal("groq", sut2.Current.DictationRecoveryEngineId);
+        Assert.Equal("whisper-large-v3", sut2.Current.DictationRecoveryModelId);
+        Assert.Equal("ja", sut2.Current.DictationRecoveryLanguage);
+        Assert.Equal("translate", sut2.Current.DictationRecoveryTask);
+        Assert.True(sut2.Current.DictationRecoveryAutomaticFallbackEnabled);
+        Assert.False(sut2.Current.WorkflowRequestRecoveryEnabled);
     }
 
     [Fact]

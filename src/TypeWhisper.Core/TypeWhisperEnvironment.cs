@@ -63,6 +63,10 @@ public static class TypeWhisperEnvironment
     /// </summary>
     public static string AudioPath => Path.Join(_basePath, "Audio");
     /// <summary>
+    /// Gets the dictation recovery audio path.
+    /// </summary>
+    public static string DictationRecoveryPath => Path.Join(_basePath, "DictationRecovery");
+    /// <summary>
     /// Gets the previous audio path inside the Velopack install root.
     /// </summary>
     public static string LegacyAudioPath => Path.Join(_legacyBasePath, "Audio");

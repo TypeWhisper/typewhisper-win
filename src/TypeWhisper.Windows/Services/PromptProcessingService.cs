@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Text.Json;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
@@ -33,16 +34,45 @@ public interface IWorkflowTextProcessor
 /// </summary>
 public sealed class PromptProcessingService : IWorkflowTextProcessor
 {
+    internal static readonly TimeSpan DefaultHedgeDelay = TimeSpan.FromSeconds(5);
+    internal static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromMilliseconds(250);
+    internal static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromSeconds(15);
+
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
+    private readonly TimeSpan _hedgeDelay;
+    private readonly TimeSpan _retryDelay;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly Action<string> _diagnostic;
 
     /// <summary>
     /// Initializes a new instance of the PromptProcessingService class.
     /// </summary>
     public PromptProcessingService(PluginManager pluginManager, ISettingsService settings)
+        : this(
+            pluginManager,
+            settings,
+            DefaultHedgeDelay,
+            DefaultRetryDelay,
+            static (delay, ct) => Task.Delay(delay, ct),
+            static message => Debug.WriteLine(message))
+    {
+    }
+
+    internal PromptProcessingService(
+        PluginManager pluginManager,
+        ISettingsService settings,
+        TimeSpan hedgeDelay,
+        TimeSpan retryDelay,
+        Func<TimeSpan, CancellationToken, Task> delay,
+        Action<string> diagnostic)
     {
         _pluginManager = pluginManager;
         _settings = settings;
+        _hedgeDelay = hedgeDelay;
+        _retryDelay = retryDelay;
+        _delay = delay;
+        _diagnostic = diagnostic;
     }
 
     /// <summary>
@@ -65,14 +95,342 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
         if (provider is null)
             throw new InvalidOperationException(Loc.Instance["Error.NoLlmProvider"]);
 
-        Debug.WriteLine($"[PromptProcessing] Using provider '{provider.ProviderName}' model '{modelId}' for workflow prompt");
+        var providerSelectionId = provider.GetLlmSelectionId();
+        var framedInput = WorkflowPromptInputFramer.Frame(inputText);
+        Log(providerSelectionId, modelId, 0, "selected", "resolved");
 
-        return await provider.ProcessAsync(
-            systemPrompt,
-            WorkflowPromptInputFramer.Frame(inputText),
+        if (!_settings.Current.WorkflowRequestRecoveryEnabled)
+        {
+            var single = await RunAttemptAsync(
+                provider,
+                providerSelectionId,
+                modelId,
+                systemPrompt,
+                framedInput,
+                attempt: 1,
+                reason: "single-request",
+                ct,
+                ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (single.Text is not null)
+                return single.Text;
+            throw single.Failure ?? CreateCancellationFailure();
+        }
+
+        return await ProcessWithRecoveryAsync(
+            provider,
+            providerSelectionId,
             modelId,
-            ct);
+            systemPrompt,
+            framedInput,
+            ct).ConfigureAwait(false);
     }
+
+    private async Task<string> ProcessWithRecoveryAsync(
+        ILlmProviderPlugin provider,
+        string providerSelectionId,
+        string modelId,
+        string systemPrompt,
+        string framedInput,
+        CancellationToken ct)
+    {
+        using var primaryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var hedgeTimerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        CancellationTokenSource? secondaryCts = null;
+        Task<AttemptOutcome>? secondaryTask = null;
+        var primaryTask = RunAttemptAsync(
+            provider,
+            providerSelectionId,
+            modelId,
+            systemPrompt,
+            framedInput,
+            attempt: 1,
+            reason: "primary",
+            primaryCts.Token,
+            ct);
+
+        try
+        {
+            var supportsHedging = provider is ILlmRequestHedgingSupport { SupportsRequestHedging: true };
+            if (!supportsHedging)
+            {
+                var primary = await primaryTask.ConfigureAwait(false);
+                return await CompleteSequentiallyAsync(primary).ConfigureAwait(false);
+            }
+
+            var hedgeTimer = _delay(_hedgeDelay, hedgeTimerCts.Token);
+            var firstCompleted = await Task.WhenAny(primaryTask, hedgeTimer).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            if (firstCompleted == primaryTask)
+            {
+                hedgeTimerCts.Cancel();
+                await ObserveDelayAsync(hedgeTimer).ConfigureAwait(false);
+                var primary = await primaryTask.ConfigureAwait(false);
+                return await CompleteSequentiallyAsync(primary).ConfigureAwait(false);
+            }
+
+            await hedgeTimer.ConfigureAwait(false);
+            Log(providerSelectionId, modelId, 2, "start", "hedge-after-timeout");
+            secondaryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            secondaryTask = RunAttemptAsync(
+                provider,
+                providerSelectionId,
+                modelId,
+                systemPrompt,
+                framedInput,
+                attempt: 2,
+                reason: "hedge",
+                secondaryCts.Token,
+                ct);
+
+            return await CompleteHedgedAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            primaryCts.Cancel();
+            secondaryCts?.Cancel();
+            await ObserveAttemptAsync(primaryTask).ConfigureAwait(false);
+            if (secondaryTask is not null)
+                await ObserveAttemptAsync(secondaryTask).ConfigureAwait(false);
+            Log(providerSelectionId, modelId, 0, "cancelled", "user");
+            throw;
+        }
+        finally
+        {
+            secondaryCts?.Dispose();
+        }
+
+        async Task<string> CompleteSequentiallyAsync(AttemptOutcome primary)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (primary.Text is not null)
+            {
+                Log(providerSelectionId, modelId, 1, "winner", "primary");
+                return primary.Text;
+            }
+
+            var primaryFailure = primary.Failure ?? CreateCancellationFailure();
+            if (!primaryFailure.IsTransient)
+                throw primaryFailure;
+
+            var retryDelay = ResolveRetryDelay(primaryFailure);
+            Log(
+                providerSelectionId,
+                modelId,
+                2,
+                "scheduled",
+                $"retry-after-{retryDelay.TotalMilliseconds:0}-ms");
+            await _delay(retryDelay, ct).ConfigureAwait(false);
+
+            secondaryCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            secondaryTask = RunAttemptAsync(
+                provider,
+                providerSelectionId,
+                modelId,
+                systemPrompt,
+                framedInput,
+                attempt: 2,
+                reason: "transient-retry",
+                secondaryCts.Token,
+                ct);
+            var secondary = await secondaryTask.ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (secondary.Text is not null)
+            {
+                Log(providerSelectionId, modelId, 2, "winner", "sequential-retry");
+                return secondary.Text;
+            }
+
+            throw CreateCombinedFailure(primaryFailure, secondary.Failure ?? CreateCancellationFailure());
+        }
+
+        async Task<string> CompleteHedgedAsync()
+        {
+            var firstTask = await Task.WhenAny(primaryTask, secondaryTask!).ConfigureAwait(false);
+            var first = await firstTask.ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            if (first.Text is not null)
+            {
+                var primaryWon = firstTask == primaryTask;
+                if (primaryWon)
+                    secondaryCts!.Cancel();
+                else
+                    primaryCts.Cancel();
+
+                await ObserveAttemptAsync(primaryWon ? secondaryTask! : primaryTask).ConfigureAwait(false);
+                Log(
+                    providerSelectionId,
+                    modelId,
+                    primaryWon ? 1 : 2,
+                    "winner",
+                    primaryWon ? "primary" : "hedge");
+                return first.Text;
+            }
+
+            var remainingTask = firstTask == primaryTask ? secondaryTask! : primaryTask;
+            var remaining = await remainingTask.ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (remaining.Text is not null)
+            {
+                Log(
+                    providerSelectionId,
+                    modelId,
+                    remainingTask == primaryTask ? 1 : 2,
+                    "winner",
+                    remainingTask == primaryTask ? "primary-after-hedge-failure" : "hedge-after-primary-failure");
+                return remaining.Text;
+            }
+
+            var primary = firstTask == primaryTask ? first : remaining;
+            var secondary = firstTask == primaryTask ? remaining : first;
+            throw CreateCombinedFailure(
+                primary.Failure ?? CreateCancellationFailure(),
+                secondary.Failure ?? CreateCancellationFailure());
+        }
+    }
+
+    private async Task<AttemptOutcome> RunAttemptAsync(
+        ILlmProviderPlugin provider,
+        string providerSelectionId,
+        string modelId,
+        string systemPrompt,
+        string framedInput,
+        int attempt,
+        string reason,
+        CancellationToken attemptToken,
+        CancellationToken userToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        Log(providerSelectionId, modelId, attempt, "start", reason);
+        try
+        {
+            var text = await provider.ProcessAsync(
+                systemPrompt,
+                framedInput,
+                modelId,
+                attemptToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new PluginRequestException(
+                    "The provider returned an empty response.",
+                    PluginRequestFailureKind.EmptyResponse);
+            }
+
+            Log(providerSelectionId, modelId, attempt, "success", $"elapsed-ms-{stopwatch.ElapsedMilliseconds}");
+            return new AttemptOutcome(text, null);
+        }
+        catch (OperationCanceledException) when (userToken.IsCancellationRequested || attemptToken.IsCancellationRequested)
+        {
+            Log(providerSelectionId, modelId, attempt, "cancelled", $"elapsed-ms-{stopwatch.ElapsedMilliseconds}");
+            return new AttemptOutcome(null, CreateCancellationFailure());
+        }
+        catch (Exception ex)
+        {
+            var failure = ClassifyFailure(ex);
+            Log(
+                providerSelectionId,
+                modelId,
+                attempt,
+                "failure",
+                $"{failure.FailureKind}-elapsed-ms-{stopwatch.ElapsedMilliseconds}");
+            return new AttemptOutcome(null, failure);
+        }
+    }
+
+    private TimeSpan ResolveRetryDelay(PluginRequestException failure)
+    {
+        if (failure.RetryAfter is not { } retryAfter)
+            return _retryDelay;
+        if (retryAfter < TimeSpan.Zero)
+            return TimeSpan.Zero;
+        return retryAfter > MaximumRetryAfter ? MaximumRetryAfter : retryAfter;
+    }
+
+    private static PluginRequestException ClassifyFailure(Exception exception) => exception switch
+    {
+        PluginRequestException requestException => requestException,
+        HttpRequestException httpException => new PluginRequestException(
+            "The provider could not be reached.",
+            PluginRequestFailureKind.Network,
+            innerException: httpException),
+        TimeoutException timeoutException => new PluginRequestException(
+            "The provider request timed out.",
+            PluginRequestFailureKind.Timeout,
+            innerException: timeoutException),
+        OperationCanceledException cancelledException => new PluginRequestException(
+            "The provider request timed out.",
+            PluginRequestFailureKind.Timeout,
+            innerException: cancelledException),
+        _ => new PluginRequestException(
+            "The provider request failed.",
+            PluginRequestFailureKind.Unknown,
+            isTransient: false,
+            innerException: exception)
+    };
+
+    private static PluginRequestException CreateCancellationFailure() => new(
+        "The provider request was cancelled.",
+        PluginRequestFailureKind.Cancellation,
+        isTransient: false);
+
+    private static PluginRequestException CreateCombinedFailure(
+        PluginRequestException primary,
+        PluginRequestException secondary)
+    {
+        var message = $"Both workflow requests failed. Primary: {DescribeFailure(primary)}. Second: {DescribeFailure(secondary)}.";
+        return new PluginRequestException(
+            message,
+            secondary.FailureKind,
+            secondary.HttpStatusCode,
+            secondary.RetryAfter,
+            isTransient: false,
+            innerException: new AggregateException(primary, secondary));
+    }
+
+    private static string DescribeFailure(PluginRequestException failure)
+    {
+        var description = failure.FailureKind switch
+        {
+            PluginRequestFailureKind.Network => "network error",
+            PluginRequestFailureKind.Timeout => "timeout",
+            PluginRequestFailureKind.RateLimit => "rate limit",
+            PluginRequestFailureKind.ServerError => "provider server error",
+            PluginRequestFailureKind.EmptyResponse => "empty response",
+            PluginRequestFailureKind.Authentication => "authentication error",
+            PluginRequestFailureKind.Permission => "permission error",
+            PluginRequestFailureKind.Configuration => "configuration error",
+            PluginRequestFailureKind.RequestTooLarge => "request too large",
+            PluginRequestFailureKind.InvalidRequest => "invalid request",
+            PluginRequestFailureKind.Cancellation => "cancellation",
+            _ => "unknown provider error"
+        };
+        return failure.HttpStatusCode is { } statusCode
+            ? $"{description} (HTTP {statusCode})"
+            : description;
+    }
+
+    private void Log(
+        string providerSelectionId,
+        string modelId,
+        int attempt,
+        string eventName,
+        string reason) =>
+        _diagnostic(
+            $"[PromptProcessing] provider={providerSelectionId} model={modelId} attempt={attempt} event={eventName} reason={reason}");
+
+    private static async Task ObserveAttemptAsync(Task<AttemptOutcome> task)
+    {
+        try { _ = await task.ConfigureAwait(false); } catch { }
+    }
+
+    private static async Task ObserveDelayAsync(Task task)
+    {
+        try { await task.ConfigureAwait(false); } catch (OperationCanceledException) { }
+    }
+
+    private sealed record AttemptOutcome(string? Text, PluginRequestException? Failure);
 
     private (ILlmProviderPlugin? Provider, string ModelId) ResolveProvider(string? providerOverride, string? modelOverride)
     {

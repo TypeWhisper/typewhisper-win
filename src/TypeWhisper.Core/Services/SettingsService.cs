@@ -191,13 +191,31 @@ public sealed class SettingsService : ISettingsService
             LocalModelAcceleration = AppSettings.NormalizeLocalModelAcceleration(
                 settings.LocalModelAcceleration),
             LocalModelStoragePath = AppSettings.NormalizeLocalModelStoragePath(
-                settings.LocalModelStoragePath)
+                settings.LocalModelStoragePath),
+            DictationRecoveryRetentionDays = NormalizeDictationRecoveryRetention(
+                settings.DictationRecoveryRetentionDays),
+            DictationRecoveryEngineId = string.IsNullOrWhiteSpace(settings.DictationRecoveryEngineId)
+                ? null
+                : settings.DictationRecoveryEngineId.Trim(),
+            DictationRecoveryModelId = string.IsNullOrWhiteSpace(settings.DictationRecoveryModelId)
+                ? null
+                : settings.DictationRecoveryModelId.Trim(),
+            DictationRecoveryLanguage = string.IsNullOrWhiteSpace(settings.DictationRecoveryLanguage)
+                ? "auto"
+                : settings.DictationRecoveryLanguage.Trim(),
+            DictationRecoveryTask = string.Equals(
+                settings.DictationRecoveryTask, "translate", StringComparison.OrdinalIgnoreCase)
+                    ? "translate"
+                    : "transcribe"
         };
 
         return settings
             .NormalizeHotkeyLists()
             .NormalizeMicrophonePriorityList();
     }
+
+    private static int NormalizeDictationRecoveryRetention(int days) =>
+        days is -1 or 0 or 1 or 7 or 30 or 60 or 90 or 180 ? days : 30;
 
     private static void LogWarning(string message)
     {

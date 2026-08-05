@@ -122,15 +122,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly SoundService _sound;
     private readonly IHistoryService _history;
     private readonly IDictionaryService _dictionary;
-    private readonly IVocabularyBoostingService _vocabularyBoosting;
-    private readonly ISnippetService _snippets;
     private readonly IWorkflowService _workflows;
-    private readonly ITranslationService _translation;
     private readonly IAudioDuckingService _audioDucking;
     private readonly IMediaPauseService _mediaPause;
     private readonly PluginEventBus _eventBus;
-    private readonly IWorkflowTextProcessor _workflowTextProcessor;
-    private readonly IPostProcessingPipeline _pipeline;
     private readonly IErrorLogService _errorLog;
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly RecentTranscriptionsService _recentTranscriptions;
@@ -138,6 +133,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly LicenseService? _licenseService;
     private readonly ITargetAppTextObserver? _targetAppTextObserver;
     private readonly TargetAppCorrectionLearningService? _targetAppCorrectionLearning;
+    private readonly AutomaticTranscriptionFallbackService? _transcriptionFallback;
+    private readonly WorkflowPostProcessingService _workflowPostProcessing;
     private readonly object _targetAppCorrectionLearningSync = new();
 
     private CancellationTokenSource _consumerCts = new();
@@ -245,7 +242,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         WorkflowPaletteService workflowPalette,
         LicenseService? licenseService = null,
         ITargetAppTextObserver? targetAppTextObserver = null,
-        TargetAppCorrectionLearningService? targetAppCorrectionLearning = null)
+        TargetAppCorrectionLearningService? targetAppCorrectionLearning = null,
+        AutomaticTranscriptionFallbackService? transcriptionFallback = null,
+        WorkflowPostProcessingService? workflowPostProcessing = null)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -256,15 +255,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _sound = sound;
         _history = history;
         _dictionary = dictionary;
-        _vocabularyBoosting = vocabularyBoosting;
-        _snippets = snippets;
         _workflows = workflows;
-        _translation = translation;
         _audioDucking = audioDucking;
         _mediaPause = mediaPause;
         _eventBus = modelManager.PluginManager.EventBus;
-        _workflowTextProcessor = workflowTextProcessor;
-        _pipeline = pipeline;
         _errorLog = errorLog;
         _speechFeedback = speechFeedback;
         _recentTranscriptions = recentTranscriptions;
@@ -272,6 +266,19 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _licenseService = licenseService;
         _targetAppTextObserver = targetAppTextObserver;
         _targetAppCorrectionLearning = targetAppCorrectionLearning;
+        _transcriptionFallback = transcriptionFallback
+            ?? (licenseService is null
+                ? null
+                : new AutomaticTranscriptionFallbackService(modelManager, settings, licenseService, dictionary));
+        _workflowPostProcessing = workflowPostProcessing ?? new WorkflowPostProcessingService(
+            settings,
+            modelManager,
+            dictionary,
+            vocabularyBoosting,
+            snippets,
+            translation,
+            workflowTextProcessor,
+            pipeline);
         FeedbackActionCommand = new RelayCommand(UndoLearnedCorrections, () => _pendingLearnedCorrections.Count > 0);
 
         _streamingHandler = new StreamingHandler(modelManager, audio, dictionary);
@@ -572,11 +579,20 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         if (record is null)
             return null;
 
+        if (record.Status == TranscriptionRecordStatus.WorkflowPostProcessingFailed)
+        {
+            return new ApiDictationSessionSnapshot(
+                id,
+                ApiDictationSessionStatus.Failed,
+                null,
+                record.WorkflowFailureMessage ?? "Workflow post-processing failed.");
+        }
+
         return new ApiDictationSessionSnapshot(
             id,
             ApiDictationSessionStatus.Completed,
             new ApiDictationTranscription(
-                record.FinalText,
+                record.DisplayText,
                 record.RawText,
                 record.Timestamp,
                 record.AppName,
@@ -1006,7 +1022,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _audio.SamplesAvailable += OnSamplesAvailable;
         }
 
-        _audio.StartRecording();
+        _audio.StartRecording(enableRecovery: true);
         if (!_audio.IsRecording)
         {
             _isRecording = false;
@@ -1054,6 +1070,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (!_isRecording || _isStoppingRecording) return;
         _isStoppingRecording = true;
+        RecoveryRecordingLease? stoppedRecoveryLease = null;
+        var recoveryLeaseTransferred = false;
 
         try
         {
@@ -1061,7 +1079,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             var streamingText = _streamingHandler.Stop();
             _audio.SamplesAvailable -= OnSamplesAvailable;
 
-            var samples = await _audio.StopRecordingAsync();
+            var recordingResult = await _audio.StopRecordingWithRecoveryAsync();
+            var samples = recordingResult.Samples;
+            stoppedRecoveryLease = recordingResult.RecoveryLease;
             _isRecording = false;
             var audioTailSnapshot = _audio.CaptureTailSnapshot();
             var originalSamples = samples ?? [];
@@ -1115,6 +1135,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
             {
+                if (stoppedRecoveryLease is not null)
+                {
+                    await stoppedRecoveryLease.DiscardAsync();
+                    stoppedRecoveryLease = null;
+                }
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
                 _eventBus.Publish(new TranscriptionFailedEvent
                 {
@@ -1129,6 +1154,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
             {
+                if (stoppedRecoveryLease is not null)
+                {
+                    await stoppedRecoveryLease.DiscardAsync();
+                    stoppedRecoveryLease = null;
+                }
                 FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
                 PublishNoSpeechFailure(_modelManager.ActiveModelId, _capturedWindowTitle, _currentRecordingId);
                 ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
@@ -1181,14 +1211,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     null,
                     null,
                     null),
+                stoppedRecoveryLease,
                 _currentRecordingId);
 
             Interlocked.Increment(ref _pendingJobCount);
             await _jobChannel.Writer.WriteAsync(job);
+            recoveryLeaseTransferred = true;
             UpdateVisualState();
         }
         finally
         {
+            if (!recoveryLeaseTransferred && stoppedRecoveryLease is not null)
+                _ = await stoppedRecoveryLease.PreserveAsync();
             _isRecording = false;
             _isStoppingRecording = false;
             _hotkey.ForceStop();
@@ -1290,6 +1324,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
     private async Task ProcessSingleJobAsync(TranscriptionJob job, CancellationToken ct)
     {
+        var rawText = string.Empty;
+        string? detectedLanguage = null;
+        var audioDuration = job.OriginalSamples.Length / 16000.0;
+        var stage = DictationProcessingStage.Transcription;
+        var recoveryDecided = false;
+        var preserveAfterSuccessfulPreviewFallback = false;
+        var usedTranscriptionFallback = false;
+        var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
+        var modelUsed = ResolveModelUsed(job.ActiveModelIdAtCapture);
+        var transcriptionTaskUsed = job.EffectiveTask;
+        TranscriptionRecord? persistedHistoryRecord = null;
+
         try
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1298,9 +1344,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 StatusText = Loc.Instance["Status.Processing"];
             });
 
-            string rawText = "";
-            string? detectedLanguage = null;
-            double audioDuration = job.OriginalSamples.Length / 16000.0;
             var diagnosticsEnabled = _settings.Current.InternalParakeetTailDiagnosticsEnabled;
             var tailHardeningEnabled = _settings.Current.InternalParakeetTailHardeningEnabled;
             var isParakeetJob = ParakeetTailHelper.IsParakeetModel(job.ActiveModelIdAtCapture);
@@ -1324,35 +1367,60 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 fullDecodeText = result.Text ?? "";
                 fullDecodeDetectedLanguage = result.DetectedLanguage;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
             }
-            catch (Exception ex) when (!string.IsNullOrWhiteSpace(previewText))
+            catch (Exception ex)
             {
-                rawText = DictationFinalTextPolicy.SelectRawText(null, previewText);
-                detectedLanguage = language;
-                _errorLog.AddEntry(
-                    $"Final transcription failed; using live preview fallback: {ex.Message}",
-                    ErrorCategory.Transcription);
-                job = job with
+                var fallback = _transcriptionFallback is null
+                    ? null
+                    : await _transcriptionFallback.TryTranscribeAsync(
+                        job.OriginalSamples,
+                        engineUsed,
+                        ex,
+                        ct);
+                if (fallback is not null)
                 {
-                    Diagnostic = job.Diagnostic with
+                    result = fallback.Result;
+                    fullDecodeText = result.Text ?? string.Empty;
+                    fullDecodeDetectedLanguage = result.DetectedLanguage;
+                    engineUsed = fallback.EngineId;
+                    modelUsed = fallback.ModelId;
+                    transcriptionTaskUsed = fallback.Task;
+                    usedTranscriptionFallback = true;
+                }
+                else if (!string.IsNullOrWhiteSpace(previewText))
+                {
+                    preserveAfterSuccessfulPreviewFallback = true;
+                    rawText = DictationFinalTextPolicy.SelectRawText(null, previewText);
+                    detectedLanguage = language;
+                    _errorLog.AddEntry(
+                        $"Final transcription failed; using live preview fallback: {ex.GetType().Name}",
+                        ErrorCategory.Transcription);
+                    job = job with
                     {
-                        TailGuardApplied = tailGuardApplied,
-                        TailSamplesAdded = tailSamplesAdded,
-                        FinalTextSource = "live_preview_fallback",
-                        FullDecodeTextLength = 0,
-                        PartialTextLength = previewText.Length
-                    }
-                };
+                        Diagnostic = job.Diagnostic with
+                        {
+                            TailGuardApplied = tailGuardApplied,
+                            TailSamplesAdded = tailSamplesAdded,
+                            FinalTextSource = "live_preview_fallback",
+                            FullDecodeTextLength = 0,
+                            PartialTextLength = previewText.Length
+                        }
+                    };
+                }
+                else
+                {
+                    throw;
+                }
             }
             finally
             {
                 fullDecodeDurationMs = (long)(DateTime.UtcNow - decodeStartedAt).TotalMilliseconds;
             }
 
-            if (result is not null && isParakeetJob)
+            if (result is not null && isParakeetJob && !usedTranscriptionFallback)
             {
                 var selection = ParakeetTailHelper.SelectResult(
                     job.ActiveModelIdAtCapture,
@@ -1384,6 +1452,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         hasPreviewText: !string.IsNullOrWhiteSpace(previewText),
                         job.TranscribeShortQuietClipsAggressively))
                 {
+                    if (job.RecoveryLease is not null)
+                    {
+                        await job.RecoveryLease.DiscardAsync();
+                        recoveryDecided = true;
+                    }
                     FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
                     PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
                     await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1412,6 +1485,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             if (string.IsNullOrWhiteSpace(rawText))
             {
+                if (job.RecoveryLease is not null)
+                {
+                    await job.RecoveryLease.DiscardAsync();
+                    recoveryDecided = true;
+                }
                 FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
                 PublishNoSpeechFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
                 LogParakeetTailDiagnostics(job.Diagnostic);
@@ -1420,7 +1498,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 return;
             }
 
-            if (diagnosticsEnabled && isParakeetJob)
+            if (diagnosticsEnabled && isParakeetJob && !usedTranscriptionFallback)
             {
                 if (!tailHardeningEnabled)
                 {
@@ -1449,107 +1527,43 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 Text = rawText,
                 DetectedLanguage = detectedLanguage,
                 DurationSeconds = audioDuration,
-                ModelId = job.ActiveModelIdAtCapture,
+                ModelId = modelUsed,
                 ProfileName = job.ActiveWorkflow?.Name,
                 AppName = job.CapturedWindowTitle,
                 AppProcessName = job.CapturedProcessName,
                 RecordingId = job.RecordingId
             });
 
-            // Build pipeline options
-            var pipelineContext = new PostProcessingContext
-            {
-                SourceLanguage = detectedLanguage ?? job.EffectiveLanguage,
-                ActiveAppName = job.CapturedWindowTitle,
-                ActiveAppProcessName = job.CapturedProcessName,
-                ProfileName = job.ActiveWorkflow?.Name,
-                AudioDurationSeconds = audioDuration
-            };
-
-            // Build LLM handler if the active workflow has prompt behavior.
-            Func<string, CancellationToken, Task<string>>? llmHandler = null;
-            var workflowRequiresLlm = false;
-            if (job.ActiveWorkflow?.SystemPrompt(
-                    fallbackTranslationTarget: job.ActiveWorkflow.Behavior.TranslationTarget,
-                    detectedLanguage: detectedLanguage,
-                    configuredLanguage: job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage) is { } systemPrompt)
-            {
-                workflowRequiresLlm = true;
-                if (_workflowTextProcessor.IsAnyProviderAvailable)
+            var hasWorkflowPrompt = WorkflowPostProcessingService.HasWorkflowPrompt(
+                job.ActiveWorkflow,
+                detectedLanguage,
+                job.EffectiveLanguage);
+            stage = hasWorkflowPrompt
+                ? DictationProcessingStage.WorkflowPostProcessing
+                : DictationProcessingStage.OtherPostProcessing;
+            var pipelineResult = await _workflowPostProcessing.ProcessAsync(
+                new WorkflowPostProcessingRequest(
+                    rawText,
+                    job.ActiveWorkflow,
+                    detectedLanguage,
+                    job.EffectiveLanguage,
+                    job.EffectiveLanguageHints,
+                    transcriptionTaskUsed,
+                    job.CapturedWindowTitle,
+                    job.CapturedProcessName,
+                    audioDuration),
+                async status =>
                 {
-                    var behavior = job.ActiveWorkflow.Behavior;
-                    llmHandler = (text, token) => _workflowTextProcessor.ProcessAsync(
-                        systemPrompt,
-                        text,
-                        behavior.ProviderOverride,
-                        behavior.ModelOverride,
-                        token);
-                }
-                else
-                {
-                    var errorMessage = Loc.Instance["Error.NoLlmProvider"];
-                    llmHandler = (_, _) => throw new InvalidOperationException(errorMessage);
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        FeedbackText = errorMessage;
-                        FeedbackIsError = true;
-                        ShowFeedback = true;
-                    });
-                }
-            }
-
-            // Build plugin post-processors (capture context in closure)
-            var postProcessors = _modelManager.PluginManager.PostProcessors;
-            var pluginProcessors = postProcessors.Select(p =>
-                new PluginPostProcessor(p.Priority,
-                    (text, token) => p.ProcessAsync(text, pipelineContext, token))).ToList();
-
-            var translationTarget = job.ActiveWorkflow is null
-                ? _settings.Current.TranslationTargetLanguage
-                : null;
-
-            var pipelineOptions = new PipelineOptions
-            {
-                TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
-                NormalizeNumbersOverride = job.ActiveWorkflow?.Output.NumberNormalizationMode.OverrideValue(),
-                TranscriptionTask = job.EffectiveTask,
-                DetectedLanguage = detectedLanguage,
-                ConfiguredLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
-                ConfiguredLanguageCandidates = job.EffectiveLanguageHints,
-                AppFormatter = AppFormatterService.Format,
-                TargetProcessName = job.CapturedProcessName,
-                VocabularyBooster = GetVocabularyBooster(),
-                DictionaryCorrector = _dictionary.ApplyCorrections,
-                SnippetExpander = text => _snippets.ApplySnippets(text, () =>
-                {
-                    var t = "";
-                    Application.Current.Dispatcher.Invoke(() =>
-                        t = System.Windows.Clipboard.GetText());
-                    return t;
-                }),
-                LlmHandler = llmHandler,
-                RequireLlmSuccess = workflowRequiresLlm,
-                TranslationHandler = !string.IsNullOrEmpty(translationTarget)
-                    ? (text, src, tgt, token) => _translation.TranslateAsync(text, src, tgt, token)
-                    : null,
-                TranslationTarget = translationTarget,
-                RequireTranslationSuccess = !string.IsNullOrEmpty(translationTarget),
-                EffectiveSourceLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
-                PluginPostProcessors = pluginProcessors,
-                StatusCallback = async status =>
-                {
-                    var msg = status == "AI"
+                    var message = status == "AI"
                         ? Loc.Instance["Status.AiPrompt"]
                         : Loc.Instance["Status.Translating"];
-                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = msg);
-                }
-            };
-
-            var pipelineResult = await _pipeline.ProcessAsync(rawText, pipelineOptions, ct);
+                    await Application.Current.Dispatcher.InvokeAsync(() => StatusText = message);
+                },
+                ct);
             var finalText = pipelineResult.Text;
+            stage = DictationProcessingStage.HistoryPersistence;
 
             var timestamp = DateTime.UtcNow;
-            var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
             var wordsCount = CountWords(finalText);
             var recordId = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString();
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1573,34 +1587,14 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 audioDuration,
                 detectedLanguage,
                 engineUsed,
-                job.ActiveModelIdAtCapture,
+                modelUsed,
                 wordsCount));
 
             // Save to history before output delivery so paste/action failures do not lose text.
             if (_settings.Current.SaveToHistoryEnabled)
             {
-                string? audioFileName = null;
-                try
-                {
-                    audioFileName = $"{Guid.NewGuid():N}.wav";
-                    var safeAudioFileName = Path.GetFileName(audioFileName);
-                    if (string.IsNullOrEmpty(safeAudioFileName) || Path.IsPathRooted(safeAudioFileName))
-                        safeAudioFileName = $"{Guid.NewGuid():N}.wav";
-                    audioFileName = safeAudioFileName;
-                    var audioPath = Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName);
-                    var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(job.OriginalSamples);
-                    await File.WriteAllBytesAsync(audioPath, wav, ct);
-                }
-                catch (IOException)
-                {
-                    audioFileName = null;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    audioFileName = null;
-                }
-
-                _history.AddRecord(new TranscriptionRecord
+                var audioFileName = await WriteHistoryAudioAsync(job.OriginalSamples, ct);
+                var historyRecord = new TranscriptionRecord
                 {
                     Id = recordId,
                     Timestamp = timestamp,
@@ -1612,13 +1606,24 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     DurationSeconds = audioDuration,
                     Language = detectedLanguage,
                     ProfileName = job.ActiveWorkflow?.Name,
+                    WorkflowId = job.ActiveWorkflow?.Id,
                     EngineUsed = engineUsed,
-                    ModelUsed = job.ActiveModelIdAtCapture,
-                    AudioFileName = audioFileName
-                });
+                    ModelUsed = modelUsed,
+                    AudioFileName = audioFileName,
+                    TranscriptionTaskUsed = transcriptionTaskUsed.ToString(),
+                    UsedTranscriptionFallback = usedTranscriptionFallback
+                };
+                if (!_history.TryAddRecord(historyRecord))
+                {
+                    DeleteHistoryAudio(audioFileName);
+                    throw new IOException("The transcription history could not be saved.");
+                }
+
+                persistedHistoryRecord = historyRecord;
             }
 
             // Route to action plugin if configured
+            stage = DictationProcessingStage.Output;
             var targetActionPluginId = job.ActiveWorkflow?.Output.TargetActionPluginId;
 
             InsertionResult insertResult;
@@ -1653,6 +1658,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         FeedbackIsError = !actionResult.Success;
                         ShowFeedback = true;
                     });
+
+                    if (!actionResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            actionResult.Message ?? Loc.Instance["Status.Failed"]);
+                    }
 
                     insertResult = InsertionResult.ActionHandled;
                 }
@@ -1721,6 +1732,30 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 };
             });
 
+            if (job.RecoveryLease is not null)
+            {
+                if (preserveAfterSuccessfulPreviewFallback)
+                {
+                    var descriptor = await job.RecoveryLease.PreserveAsync();
+                    if (descriptor is not null && persistedHistoryRecord is not null)
+                    {
+                        var linkedRecord = persistedHistoryRecord with
+                        {
+                            RecoveryAudioFileName = descriptor.FileName
+                        };
+                        if (_history.TryReplaceRecord(linkedRecord))
+                            persistedHistoryRecord = linkedRecord;
+                    }
+                }
+                else
+                {
+                    await job.RecoveryLease.DiscardAsync();
+                }
+
+                recoveryDecided = true;
+            }
+            stage = DictationProcessingStage.Completed;
+
             // Delay only for the last job when not recording
             if (_pendingJobCount <= 1 && !_isRecording)
             {
@@ -1730,8 +1765,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     await Task.Delay(autoHideMilliseconds, ct);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            if (!recoveryDecided && job.RecoveryLease is not null)
+            {
+                await job.RecoveryLease.DiscardAsync();
+                recoveryDecided = true;
+            }
             FailApiDictationSession(job.ApiSessionId, Loc.Instance["Status.Cancelled"]);
             PublishCancelledFailure(job.ActiveModelIdAtCapture, job.CapturedWindowTitle, job.RecordingId);
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -1739,16 +1779,60 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         }
         catch (Exception ex)
         {
+            var failureMessage = SanitizeFailureMessage(ex, rawText);
+            RecoveryRecordingDescriptor? recoveryDescriptor = null;
+            if (!recoveryDecided && job.RecoveryLease is not null)
+            {
+                recoveryDescriptor = await job.RecoveryLease.PreserveAsync();
+                recoveryDecided = true;
+            }
+
+            if (stage == DictationProcessingStage.WorkflowPostProcessing
+                && !string.IsNullOrWhiteSpace(rawText)
+                && _settings.Current.SaveToHistoryEnabled)
+            {
+                try
+                {
+                    persistedHistoryRecord = await SaveFailedWorkflowHistoryAsync(
+                        job,
+                        rawText,
+                        detectedLanguage,
+                        audioDuration,
+                        engineUsed,
+                        modelUsed,
+                        transcriptionTaskUsed,
+                        usedTranscriptionFallback,
+                        failureMessage,
+                        recoveryDescriptor?.FileName,
+                        CancellationToken.None);
+                }
+                catch (Exception historyFailure) when (historyFailure is IOException or UnauthorizedAccessException)
+                {
+                    _errorLog.AddEntry(
+                        $"Failed workflow history persistence: {historyFailure.GetType().Name}",
+                        ErrorCategory.Transcription);
+                }
+            }
+            else if (recoveryDescriptor is not null && persistedHistoryRecord is not null)
+            {
+                var linkedRecord = persistedHistoryRecord with
+                {
+                    RecoveryAudioFileName = recoveryDescriptor.FileName
+                };
+                if (_history.TryReplaceRecord(linkedRecord))
+                    persistedHistoryRecord = linkedRecord;
+            }
+
             var apiSessionAlreadyCompleted = job.ApiSessionId is Guid completedApiSessionId
                 && GetApiDictationSession(completedApiSessionId)?.Status == ApiDictationSessionStatus.Completed;
             if (!apiSessionAlreadyCompleted)
-                FailApiDictationSession(job.ApiSessionId, ex.Message);
+                FailApiDictationSession(job.ApiSessionId, failureMessage);
 
-            _errorLog.AddEntry(ex.Message, ErrorCategory.Transcription);
+            _errorLog.AddEntry(failureMessage, ErrorCategory.Transcription);
             _eventBus.Publish(new TranscriptionFailedEvent
             {
-                ErrorMessage = ex.Message,
-                ModelId = job.ActiveModelIdAtCapture,
+                ErrorMessage = failureMessage,
+                ModelId = modelUsed,
                 AppName = job.CapturedWindowTitle,
                 RecordingId = job.RecordingId
             });
@@ -1756,7 +1840,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 State = DictationState.Error;
-                StatusText = Loc.Instance.GetString("Status.ErrorFormat", ex.Message);
+                StatusText = Loc.Instance.GetString("Status.ErrorFormat", failureMessage);
                 FeedbackText = StatusText;
                 FeedbackIsError = true;
                 ShowFeedback = true;
@@ -2373,6 +2457,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         while (_jobChannel.Reader.TryRead(out var pendingJob))
         {
+            if (pendingJob.RecoveryLease is not null)
+                _ = pendingJob.RecoveryLease.DiscardAsync();
             FailApiDictationSession(pendingJob.ApiSessionId, Loc.Instance["Status.Cancelled"]);
             PublishCancelledFailure(
                 pendingJob.ActiveModelIdAtCapture,
@@ -2400,8 +2486,133 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         AudioLevel = e.RmsLevel;
     }
 
-    private Func<string, string>? GetVocabularyBooster() =>
-        _settings.Current.VocabularyBoostingEnabled ? _vocabularyBoosting.Apply : null;
+    private static async Task<string?> WriteHistoryAudioAsync(
+        float[] samples,
+        CancellationToken cancellationToken)
+    {
+        var fileName = $"{Guid.NewGuid():N}.wav";
+        try
+        {
+            Directory.CreateDirectory(TypeWhisperEnvironment.AudioPath);
+            var path = Path.Combine(TypeWhisperEnvironment.AudioPath, fileName);
+            var wav = TypeWhisper.Core.Audio.WavEncoder.Encode(samples);
+            await File.WriteAllBytesAsync(path, wav, cancellationToken);
+            return fileName;
+        }
+        catch (OperationCanceledException)
+        {
+            DeleteHistoryAudio(fileName);
+            throw;
+        }
+        catch (IOException)
+        {
+            DeleteHistoryAudio(fileName);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            DeleteHistoryAudio(fileName);
+            return null;
+        }
+    }
+
+    private async Task<TranscriptionRecord> SaveFailedWorkflowHistoryAsync(
+        TranscriptionJob job,
+        string rawText,
+        string? detectedLanguage,
+        double audioDuration,
+        string engineUsed,
+        string? modelUsed,
+        TranscriptionTask transcriptionTaskUsed,
+        bool usedTranscriptionFallback,
+        string failureMessage,
+        string? recoveryAudioFileName,
+        CancellationToken cancellationToken)
+    {
+        var audioFileName = await WriteHistoryAudioAsync(job.OriginalSamples, cancellationToken);
+        var record = new TranscriptionRecord
+        {
+            Id = job.ApiSessionId?.ToString() ?? Guid.NewGuid().ToString(),
+            Timestamp = DateTime.UtcNow,
+            RawText = rawText,
+            FinalText = string.Empty,
+            AppName = job.CapturedWindowTitle,
+            AppProcessName = job.CapturedProcessName,
+            AppUrl = job.CapturedUrl,
+            DurationSeconds = audioDuration,
+            Language = detectedLanguage,
+            ProfileName = job.ActiveWorkflow?.Name,
+            WorkflowId = job.ActiveWorkflow?.Id,
+            Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+            WorkflowFailureMessage = failureMessage,
+            EngineUsed = engineUsed,
+            ModelUsed = modelUsed,
+            AudioFileName = audioFileName,
+            RecoveryAudioFileName = recoveryAudioFileName,
+            TranscriptionTaskUsed = transcriptionTaskUsed.ToString(),
+            UsedTranscriptionFallback = usedTranscriptionFallback
+        };
+
+        if (_history.TryAddRecord(record))
+            return record;
+
+        DeleteHistoryAudio(audioFileName);
+        throw new IOException("The failed workflow history record could not be saved.");
+    }
+
+    private static void DeleteHistoryAudio(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)
+            || !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal)
+            || Path.IsPathRooted(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            var audioRoot = Path.GetFullPath(TypeWhisperEnvironment.AudioPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var path = Path.GetFullPath(Path.Combine(audioRoot, fileName));
+            var parent = Path.GetDirectoryName(path)?.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            if (!string.Equals(parent, audioRoot, StringComparison.OrdinalIgnoreCase))
+                return;
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private static string SanitizeFailureMessage(Exception exception, string rawText)
+    {
+        var message = exception is PluginRequestException requestFailure
+            ? requestFailure.FailureKind switch
+            {
+                PluginRequestFailureKind.Network => "The workflow provider could not be reached.",
+                PluginRequestFailureKind.Timeout => "The workflow provider request timed out.",
+                PluginRequestFailureKind.RateLimit => "The workflow provider rate limit was reached.",
+                PluginRequestFailureKind.ServerError => "The workflow provider returned a server error.",
+                PluginRequestFailureKind.EmptyResponse => "The workflow provider returned an empty response.",
+                PluginRequestFailureKind.Authentication => "Workflow provider authentication failed.",
+                PluginRequestFailureKind.Permission => "The workflow provider denied this request.",
+                PluginRequestFailureKind.Configuration => "The workflow provider is not configured correctly.",
+                PluginRequestFailureKind.RequestTooLarge => "The workflow request was too large.",
+                PluginRequestFailureKind.InvalidRequest => "The workflow provider rejected the request.",
+                PluginRequestFailureKind.Cancellation => "The workflow request was cancelled.",
+                _ => "The workflow provider request failed."
+            }
+            : exception.Message;
+
+        if (!string.IsNullOrEmpty(rawText))
+            message = message.Replace(rawText, "[dictated text]", StringComparison.Ordinal);
+        message = Regex.Replace(message, @"\s+", " ", RegexOptions.CultureInvariant).Trim();
+        if (string.IsNullOrWhiteSpace(message))
+            return "The operation failed.";
+        return message.Length > 300 ? message[..300] : message;
+    }
 
     private string ResolveEngineUsed(string? activeModelId)
     {
@@ -2413,11 +2624,16 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     plugin.GetTranscriptionSelectionId(),
                     pluginId,
                     StringComparison.OrdinalIgnoreCase))
-                ?.ProviderId ?? activeModelId;
+                ?.GetTranscriptionSelectionId() ?? activeModelId;
         }
 
         return "parakeet";
     }
+
+    private static string? ResolveModelUsed(string? activeModelId) =>
+        activeModelId is not null && ModelManagerService.IsPluginModel(activeModelId)
+            ? ModelManagerService.ParsePluginModelId(activeModelId).ModelId
+            : activeModelId;
 
     private static int CountWords(string text) =>
         text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
@@ -2435,6 +2651,11 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             CancelTargetAppCorrectionLearning();
             _consumerCts.Cancel();
             try { _consumerTask?.Wait(TimeSpan.FromSeconds(3)); } catch { /* shutting down */ }
+            while (_jobChannel.Reader.TryRead(out var pendingJob))
+            {
+                if (pendingJob.RecoveryLease is not null)
+                    _ = pendingJob.RecoveryLease.DiscardAsync();
+            }
             _consumerCts.Dispose();
             _durationTimer?.Dispose();
             _feedbackTimer?.Dispose();
@@ -2504,7 +2725,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         Guid? ApiSessionId,
         bool TranscribeShortQuietClipsAggressively,
         RecordingTailDiagnosticSnapshot Diagnostic,
+        RecoveryRecordingLease? RecoveryLease,
         Guid? RecordingId);
+}
+
+internal enum DictationProcessingStage
+{
+    Transcription,
+    OtherPostProcessing,
+    WorkflowPostProcessing,
+    HistoryPersistence,
+    Output,
+    Completed
 }
 
 internal enum ShortSpeechDecision

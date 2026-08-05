@@ -13,7 +13,7 @@ namespace TypeWhisper.Plugin.OpenAi;
 /// <summary>
 /// Provides open ai plugin behavior.
 /// </summary>
-public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ITtsProviderPlugin
+public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, ITtsProviderPlugin
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
@@ -33,6 +33,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private const string TemperatureModeProviderDefault = "providerDefault";
     private const string TemperatureModeCustom = "custom";
     private const string OAuthAccessTokenSecretName = "oauth-access-token";
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
     private const string OAuthRefreshTokenSecretName = "oauth-refresh-token";
     private const string OAuthIdTokenSecretName = "oauth-id-token";
     private const string OAuthAccountIdSettingName = "oauthAccountID";
@@ -40,6 +43,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private const string OAuthExpiresAtSettingName = "oauthExpiresAt";
 
     private readonly HttpClient _httpClient;
+    private readonly SemaphoreSlim _oauthRefreshLock = new(1, 1);
     private readonly Func<byte[], ITtsPlaybackSession> _ttsPlaybackFactory;
     private IPluginHostServices? _host;
     private string? _apiKey;
@@ -336,7 +340,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         CancellationToken ct)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
         if (SelectedModelEntry is not { Transport: TranscriptionTransport.Realtime } entry)
             throw new NotSupportedException("Select an OpenAI realtime transcription model to use streaming.");
 
@@ -405,7 +411,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
         }
 
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         if (UsesResponsesApi(modelId))
         {
@@ -870,6 +878,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     /// </summary>
     public void Dispose()
     {
+        _oauthRefreshLock.Dispose();
         _httpClient.Dispose();
     }
 
@@ -990,12 +999,29 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             return _oauthAccessToken;
         }
 
-        if (string.IsNullOrWhiteSpace(_oauthRefreshToken))
-            throw new InvalidOperationException("ChatGPT login is not configured.");
+        await _oauthRefreshLock.WaitAsync(ct);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_oauthAccessToken)
+                && _oauthExpiresAt is { } refreshedExpiresAt
+                && refreshedExpiresAt > DateTimeOffset.UtcNow.AddSeconds(60))
+            {
+                return _oauthAccessToken;
+            }
 
-        var refreshed = await OpenAiOAuthClient.RefreshTokenAsync(_httpClient, _oauthRefreshToken, ct);
-        await StoreOAuthTokensAsync(refreshed, _oauthAccountId);
-        return refreshed.AccessToken;
+            if (string.IsNullOrWhiteSpace(_oauthRefreshToken))
+                throw new PluginRequestException(
+                    "ChatGPT login is not configured.",
+                    PluginRequestFailureKind.Configuration);
+
+            var refreshed = await OpenAiOAuthClient.RefreshTokenAsync(_httpClient, _oauthRefreshToken, ct);
+            await StoreOAuthTokensAsync(refreshed, _oauthAccountId);
+            return refreshed.AccessToken;
+        }
+        finally
+        {
+            _oauthRefreshLock.Release();
+        }
     }
 
     private async Task StoreOAuthTokensAsync(OpenAiOAuthTokenResponse tokens, string? preferredAccountId)

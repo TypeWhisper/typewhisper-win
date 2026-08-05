@@ -4,6 +4,7 @@ using System.Windows;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using TypeWhisper.Windows.Services.Localization;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -15,6 +16,17 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
     private TaskbarIcon? _trayIcon;
     private bool _disposed;
     private Action? _pendingBalloonClick;
+    private readonly DictationRecoveryAudioStore _recoveryStore;
+    private System.Windows.Controls.MenuItem? _recoverLastItem;
+
+    /// <summary>
+    /// Creates the tray icon service.
+    /// </summary>
+    public TrayIconService(DictationRecoveryAudioStore recoveryStore)
+    {
+        _recoveryStore = recoveryStore;
+        _recoveryStore.Changed += OnRecoveryStoreChanged;
+    }
 
     /// <summary>
     /// Raised when show settings requested.
@@ -24,6 +36,10 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
     /// Raised when show file transcription requested.
     /// </summary>
     public event EventHandler? ShowFileTranscriptionRequested;
+    /// <summary>
+    /// Raised when the newest failed recording should be recovered.
+    /// </summary>
+    public event EventHandler? RecoverLastRecordingRequested;
     /// <summary>
     /// Raised when show recent transcriptions requested.
     /// </summary>
@@ -102,6 +118,13 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         var fileItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.TranscribeFile"] };
         fileItem.Click += (_, _) => ShowFileTranscriptionRequested?.Invoke(this, EventArgs.Empty);
 
+        _recoverLastItem = new System.Windows.Controls.MenuItem
+        {
+            Header = Loc.Instance["Tray.RecoverLastRecording"],
+            Visibility = _recoveryStore.HasRecordings ? Visibility.Visible : Visibility.Collapsed
+        };
+        _recoverLastItem.Click += (_, _) => RecoverLastRecordingRequested?.Invoke(this, EventArgs.Empty);
+
         var recentItem = new System.Windows.Controls.MenuItem { Header = Loc.Instance["Tray.RecentTranscriptions"] };
         recentItem.Click += (_, _) => ShowRecentTranscriptionsRequested?.Invoke(this, EventArgs.Empty);
 
@@ -124,6 +147,7 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
 
         menu.Items.Add(settingsItem);
         menu.Items.Add(fileItem);
+        menu.Items.Add(_recoverLastItem);
         menu.Items.Add(recentItem);
         menu.Items.Add(copyLastItem);
         menu.Items.Add(readBackItem);
@@ -144,6 +168,20 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
         return CreateFallbackIcon();
     }
 
+    private void OnRecoveryStoreChanged()
+    {
+        void Update()
+        {
+            if (_recoverLastItem is not null)
+                _recoverLastItem.Visibility = _recoveryStore.HasRecordings ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+            dispatcher.InvokeAsync(Update);
+        else
+            Update();
+    }
+
     private static Icon CreateFallbackIcon()
     {
         using var bmp = new Bitmap(16, 16);
@@ -162,6 +200,7 @@ public sealed class TrayIconService : IAppNotificationService, IDisposable
     {
         if (!_disposed)
         {
+            _recoveryStore.Changed -= OnRecoveryStoreChanged;
             _trayIcon?.Dispose();
             _disposed = true;
         }

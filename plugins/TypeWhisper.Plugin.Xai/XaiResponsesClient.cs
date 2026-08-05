@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.Xai;
@@ -47,7 +48,7 @@ internal sealed class XaiResponsesClient
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         request.Content = XaiJson.CreateJsonContent(body);
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseResponse(json);
     }
@@ -57,6 +58,13 @@ internal sealed class XaiResponsesClient
     /// </summary>
     public static string ParseResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "The xAI response did not contain text.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -94,7 +102,9 @@ internal sealed class XaiResponsesClient
                 return nestedText;
         }
 
-        throw new InvalidOperationException("Failed to parse xAI response text.");
+        throw new PluginRequestException(
+            "The xAI response did not contain text.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 
     private static string JoinTextParts(IReadOnlyList<string> parts)

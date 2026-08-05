@@ -10,7 +10,7 @@ namespace TypeWhisper.Plugin.Gemini;
 /// <summary>
 /// Provides gemini plugin behavior.
 /// </summary>
-public sealed class GeminiPlugin : ILlmProviderPlugin
+public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
     private const string DefaultModel = "gemini-2.5-flash";
@@ -18,6 +18,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
     private readonly HttpClient _httpClient = new();
     private IPluginHostServices? _host;
     private string? _apiKey;
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     // ITypeWhisperPlugin
 
@@ -88,7 +91,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         return await OpenAiChatHelper.SendChatCompletionAsync(
             _httpClient, BaseUrl, _apiKey!, model, systemPrompt, userText, ct);

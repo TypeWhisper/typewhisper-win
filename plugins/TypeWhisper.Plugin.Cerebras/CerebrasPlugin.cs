@@ -10,13 +10,16 @@ namespace TypeWhisper.Plugin.Cerebras;
 /// <summary>
 /// Provides cerebras plugin behavior.
 /// </summary>
-public sealed class CerebrasPlugin : ILlmProviderPlugin
+public sealed class CerebrasPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
     private const string BaseUrl = "https://api.cerebras.ai";
 
     private readonly HttpClient _httpClient = new();
     private IPluginHostServices? _host;
     private string? _apiKey;
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     // ITypeWhisperPlugin
 
@@ -82,7 +85,9 @@ public sealed class CerebrasPlugin : ILlmProviderPlugin
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         return await OpenAiChatHelper.SendChatCompletionAsync(
             _httpClient, BaseUrl, _apiKey!, model, systemPrompt, userText, ct);

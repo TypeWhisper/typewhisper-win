@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.OpenAi;
 
@@ -174,15 +176,24 @@ internal static class OpenAiOAuthClient
         HttpRequestMessage request,
         CancellationToken ct)
     {
-        var response = await httpClient.SendAsync(request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"OpenAI token request failed with status {(int)response.StatusCode}: {json}");
-
-        return JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
-            json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? throw new InvalidOperationException("OpenAI token response could not be parsed.");
+        try
+        {
+            return JsonSerializer.Deserialize<OpenAiOAuthTokenResponse>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? throw new PluginRequestException(
+                    "OpenAI token response could not be parsed.",
+                    PluginRequestFailureKind.Authentication);
+        }
+        catch (JsonException ex)
+        {
+            throw new PluginRequestException(
+                "OpenAI token response could not be parsed.",
+                PluginRequestFailureKind.Authentication,
+                innerException: ex);
+        }
     }
 
     private static string RandomOAuthString(int length)

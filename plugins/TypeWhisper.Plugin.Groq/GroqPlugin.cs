@@ -14,7 +14,7 @@ namespace TypeWhisper.Plugin.Groq;
 /// <summary>
 /// Provides groq plugin behavior.
 /// </summary>
-public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
+public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
     private const string BaseUrl = "https://api.groq.com/openai";
     private const int TranscriptionUploadBitRate = 48_000;
@@ -29,6 +29,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     private string? _selectedApiModelName;
     private string? _selectedLlmModelId;
     private List<FetchedLlmModel> _fetchedLlmModels = [];
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     private static readonly IReadOnlyList<TranscriptionModelEntry> TranscriptionModelEntries =
     [
@@ -243,7 +246,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         var modelId = ResolveLlmModelId(string.IsNullOrWhiteSpace(model) ? null : model);
         return await OpenAiChatHelper.SendChatCompletionAsync(

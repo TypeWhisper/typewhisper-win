@@ -513,7 +513,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         {
             id = r.Id,
             timestamp = r.Timestamp,
-            text = r.FinalText,
+            text = r.DisplayText,
             raw_text = r.RawText,
             app = r.AppProcessName,
             app_name = r.AppName ?? r.AppProcessName,

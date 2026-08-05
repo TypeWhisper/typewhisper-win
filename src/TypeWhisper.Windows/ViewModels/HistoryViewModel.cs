@@ -22,6 +22,9 @@ public partial class HistoryViewModel : ObservableObject
     private readonly IHistoryService _history;
     private readonly IDictionaryService _dictionary;
     private readonly SpeechFeedbackService _speechFeedback;
+    private readonly HistoryWorkflowRetryService _workflowRetry;
+    private readonly IWorkflowService _workflows;
+    private readonly DictationRecoveryAudioStore _recoveryStore;
     private bool _suppressRefresh;
     private bool _hasLoaded;
 
@@ -57,11 +60,17 @@ public partial class HistoryViewModel : ObservableObject
     public HistoryViewModel(
         IHistoryService history,
         IDictionaryService dictionary,
-        SpeechFeedbackService speechFeedback)
+        SpeechFeedbackService speechFeedback,
+        HistoryWorkflowRetryService workflowRetry,
+        IWorkflowService workflows,
+        DictationRecoveryAudioStore recoveryStore)
     {
         _history = history;
         _dictionary = dictionary;
         _speechFeedback = speechFeedback;
+        _workflowRetry = workflowRetry;
+        _workflows = workflows;
+        _recoveryStore = recoveryStore;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
 
         GroupedEntries = CollectionViewSource.GetDefaultView(Entries);
@@ -79,6 +88,11 @@ public partial class HistoryViewModel : ObservableObject
                 OnPropertyChanged(nameof(TotalWords));
             });
         };
+        _workflows.WorkflowsChanged += () => Application.Current?.Dispatcher.Invoke(() =>
+        {
+            foreach (var entry in Entries)
+                entry.RefreshWorkflowOptions();
+        });
     }
 
     /// <summary>
@@ -120,7 +134,7 @@ public partial class HistoryViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(SearchQuery)) return true;
 
         var q = SearchQuery;
-        return entry.Record.FinalText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+        return entry.Record.DisplayText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                entry.Record.RawText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                (entry.Record.AppName?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
     }
@@ -210,15 +224,64 @@ public partial class HistoryViewModel : ObservableObject
             }
     }
 
-    internal void DeleteEntry(HistoryEntryViewModel entry) =>
+    internal async Task DeleteEntryAsync(HistoryEntryViewModel entry)
+    {
+        var recoveryFileName = entry.Record.RecoveryAudioFileName;
         _history.DeleteRecord(entry.Record.Id);
+        if (_history.Records.Any(record => string.Equals(
+                record.Id,
+                entry.Record.Id,
+                StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(recoveryFileName))
+            return;
+
+        var recovery = _recoveryStore.Recordings.FirstOrDefault(candidate =>
+            string.Equals(candidate.FileName, recoveryFileName, StringComparison.OrdinalIgnoreCase));
+        if (recovery is not null)
+            await _recoveryStore.DeleteAsync(recovery.Id);
+    }
 
     internal void ReadBackEntry(HistoryEntryViewModel entry) =>
-        _speechFeedback.ReadBack(entry.Record.FinalText, entry.Record.Language);
+        _speechFeedback.ReadBack(entry.Record.DisplayText, entry.Record.Language);
+
+    internal IReadOnlyList<Workflow> GetRetryWorkflows() => _workflowRetry.GetEligibleWorkflows();
+
+    internal Workflow? ResolveInitialWorkflow(TranscriptionRecord record) =>
+        _workflowRetry.ResolveInitialWorkflow(record);
+
+    internal async Task<TranscriptionRecord> RetryWorkflowAsync(
+        HistoryEntryViewModel entry,
+        Workflow workflow,
+        Func<string, Task> statusCallback,
+        CancellationToken cancellationToken)
+    {
+        _suppressRefresh = true;
+        try
+        {
+            return await _workflowRetry.RetryAsync(
+                entry.Record.Id,
+                workflow.Id,
+                statusCallback,
+                cancellationToken);
+        }
+        finally
+        {
+            _suppressRefresh = false;
+            OnPropertyChanged(nameof(TotalRecords));
+            OnPropertyChanged(nameof(TotalWords));
+        }
+    }
+
+    internal TranscriptionRecord? GetCurrentRecord(string id) =>
+        _history.Records.FirstOrDefault(record => string.Equals(record.Id, id, StringComparison.Ordinal));
 
     internal void SaveEdit(HistoryEntryViewModel entry, string newText)
     {
-        var originalText = entry.Record.FinalText;
+        var originalText = entry.Record.DisplayText;
 
         // Suppress refresh so RecordsChanged doesn't rebuild entries and lose suggestions
         _suppressRefresh = true;
@@ -274,11 +337,23 @@ public partial class HistoryEntryViewModel : ObservableObject
     [ObservableProperty] private bool _isEditing;
     [ObservableProperty] private string _editText = "";
     [ObservableProperty] private bool _hasSuggestions;
+    [ObservableProperty] private bool _isRetrying;
+    [ObservableProperty] private string _retryStatusText = "";
+    [ObservableProperty] private string _retryErrorText = "";
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RetryWorkflowCommand))]
+    private Workflow? _selectedWorkflow;
+
+    private CancellationTokenSource? _retryCts;
 
     /// <summary>
     /// Gets the correction suggestions.
     /// </summary>
     public ObservableCollection<CorrectionSuggestion> CorrectionSuggestions { get; } = [];
+    /// <summary>
+    /// Gets workflows that currently have a post-processing prompt.
+    /// </summary>
+    public ObservableCollection<Workflow> RetryWorkflows { get; } = [];
 
     /// <summary>
     /// Performs compute date group.
@@ -292,6 +367,10 @@ public partial class HistoryEntryViewModel : ObservableObject
     /// Gets the duration label.
     /// </summary>
     public string DurationLabel => $"{Record.DurationSeconds:F1}s";
+    /// <summary>
+    /// Gets whether post-processing failed for this entry.
+    /// </summary>
+    public bool IsWorkflowFailed => Record.Status == TranscriptionRecordStatus.WorkflowPostProcessingFailed;
 
     /// <summary>
     /// Initializes a new instance of the HistoryEntryViewModel class.
@@ -300,6 +379,7 @@ public partial class HistoryEntryViewModel : ObservableObject
     {
         Record = record;
         _parent = parent;
+        RefreshWorkflowOptions();
     }
 
     partial void OnIsExpandedChanged(bool value)
@@ -320,7 +400,9 @@ public partial class HistoryEntryViewModel : ObservableObject
     [RelayCommand]
     private void StartEdit()
     {
-        EditText = Record.FinalText;
+        if (IsWorkflowFailed)
+            return;
+        EditText = Record.DisplayText;
         IsEditing = true;
     }
 
@@ -337,13 +419,81 @@ public partial class HistoryEntryViewModel : ObservableObject
     private void CancelEdit() => IsEditing = false;
 
     [RelayCommand]
-    private void Copy() => Clipboard.SetText(Record.FinalText);
+    private void Copy() => Clipboard.SetText(Record.DisplayText);
+
+    [RelayCommand]
+    private void CopyRawText() => Clipboard.SetText(Record.RawText);
 
     [RelayCommand]
     private void ReadBack() => _parent.ReadBackEntry(this);
 
     [RelayCommand]
-    private void Delete() => _parent.DeleteEntry(this);
+    private Task Delete() => _parent.DeleteEntryAsync(this);
+
+    /// <summary>
+    /// Refreshes the eligible workflow list while preserving a still-valid selection.
+    /// </summary>
+    internal void RefreshWorkflowOptions()
+    {
+        if (!IsWorkflowFailed)
+            return;
+
+        var previousId = SelectedWorkflow?.Id;
+        RetryWorkflows.Clear();
+        foreach (var workflow in _parent.GetRetryWorkflows())
+            RetryWorkflows.Add(workflow);
+
+        SelectedWorkflow = RetryWorkflows.FirstOrDefault(workflow => workflow.Id == previousId)
+                           ?? _parent.ResolveInitialWorkflow(Record);
+    }
+
+    private bool CanRetryWorkflow() => IsWorkflowFailed && SelectedWorkflow is not null && !IsRetrying;
+
+    [RelayCommand(CanExecute = nameof(CanRetryWorkflow))]
+    private async Task RetryWorkflow()
+    {
+        if (SelectedWorkflow is null || IsRetrying)
+            return;
+
+        _retryCts?.Dispose();
+        _retryCts = new CancellationTokenSource();
+        IsRetrying = true;
+        RetryErrorText = "";
+        RetryStatusText = Loc.Instance["History.RetryStarting"];
+        RetryWorkflowCommand.NotifyCanExecuteChanged();
+        try
+        {
+            var updated = await _parent.RetryWorkflowAsync(
+                this,
+                SelectedWorkflow,
+                status => Application.Current?.Dispatcher.InvokeAsync(() => RetryStatusText = status).Task
+                          ?? Task.CompletedTask,
+                _retryCts.Token);
+            Record = updated;
+            RetryStatusText = Loc.Instance["History.RetrySucceeded"];
+            OnPropertyChanged(nameof(Record));
+            OnPropertyChanged(nameof(IsWorkflowFailed));
+        }
+        catch (OperationCanceledException)
+        {
+            RetryStatusText = Loc.Instance["Status.Cancelled"];
+        }
+        catch (Exception ex)
+        {
+            Record = _parent.GetCurrentRecord(Record.Id) ?? Record;
+            RetryErrorText = HistoryWorkflowRetryService.SanitizeFailure(ex);
+            RetryStatusText = "";
+            OnPropertyChanged(nameof(Record));
+            OnPropertyChanged(nameof(IsWorkflowFailed));
+        }
+        finally
+        {
+            IsRetrying = false;
+            _retryCts.Dispose();
+            _retryCts = null;
+            RetryWorkflowCommand.NotifyCanExecuteChanged();
+        }
+    }
 
     [RelayCommand]
     private void AcceptSuggestions()

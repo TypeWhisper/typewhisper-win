@@ -11,7 +11,7 @@ namespace TypeWhisper.Plugin.Xai;
 /// <summary>
 /// Provides xai plugin behavior.
 /// </summary>
-public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ITtsProviderPlugin
+public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, ITtsProviderPlugin
 {
     private const string BaseUrl = "https://api.x.ai";
     private const string ApiKeySecretName = "api-key";
@@ -26,6 +26,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
 
     internal const string DefaultLlmModelId = "grok-4.3";
     internal const string DefaultSttModelId = "grok-stt";
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     private static readonly IReadOnlyList<PluginModelInfo> SttModels =
     [
@@ -211,7 +214,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
     public async Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         return await XaiStreamingSession.ConnectAsync(_apiKey!, NormalizeLanguage(language), ct);
     }
@@ -241,7 +246,9 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         var modelId = string.IsNullOrWhiteSpace(model)
             ? _selectedLlmModelId ?? SupportedModels.First().Id

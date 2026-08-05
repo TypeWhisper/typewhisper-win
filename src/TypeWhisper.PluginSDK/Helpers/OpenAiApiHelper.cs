@@ -21,24 +21,58 @@ public static class OpenAiApiHelper
         }
         catch (HttpRequestException ex)
         {
-            throw new InvalidOperationException($"Network error: {ex.Message}", ex);
+            ct.ThrowIfCancellationRequested();
+            throw new PluginRequestException(
+                $"Network error: {ex.Message}",
+                PluginRequestFailureKind.Network,
+                innerException: ex);
         }
-        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            throw new InvalidOperationException("API request timed out.", ex);
+            throw new PluginRequestException(
+                "API request timed out.",
+                PluginRequestFailureKind.Timeout,
+                innerException: ex);
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(ct);
-            var message = (int)response.StatusCode switch
+            var statusCode = (int)response.StatusCode;
+            var retryAfter = response.Headers.RetryAfter?.Delta;
+            if (retryAfter is null && response.Headers.RetryAfter?.Date is { } retryAt)
+                retryAfter = retryAt - DateTimeOffset.UtcNow;
+            string errorBody;
+            try
+            {
+                errorBody = await response.Content.ReadAsStringAsync(ct);
+            }
+            finally
+            {
+                response.Dispose();
+            }
+            var message = statusCode switch
             {
                 401 => "Invalid API key",
                 413 => "Audio too large (max 25 MB)",
                 429 => "Rate limit reached, please wait",
-                _ => $"API error {(int)response.StatusCode}: {ExtractErrorMessage(errorBody)}"
+                _ => $"API error {statusCode}: {ExtractErrorMessage(errorBody)}"
             };
-            throw new InvalidOperationException(message);
+            var failureKind = statusCode switch
+            {
+                401 => PluginRequestFailureKind.Authentication,
+                403 => PluginRequestFailureKind.Permission,
+                408 => PluginRequestFailureKind.Timeout,
+                413 => PluginRequestFailureKind.RequestTooLarge,
+                429 => PluginRequestFailureKind.RateLimit,
+                >= 500 and <= 599 => PluginRequestFailureKind.ServerError,
+                >= 400 and <= 499 => PluginRequestFailureKind.InvalidRequest,
+                _ => PluginRequestFailureKind.Unknown
+            };
+            throw new PluginRequestException(
+                message,
+                failureKind,
+                statusCode,
+                retryAfter);
         }
 
         return response;

@@ -32,7 +32,8 @@ internal sealed class ModelManagerRequestException : Exception
 internal sealed record ActiveModelTranscriptionResult(
     TranscriptionResult Result,
     string? EngineId,
-    string? ModelId);
+    string? ModelId,
+    string? EngineSelectionId);
 
 /// <summary>
 /// Provides model manager service behavior.
@@ -539,7 +540,11 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             Segments = result.Segments.Select(seg => new TranscriptionSegment(seg.Text, seg.Start, seg.End)).ToList()
         };
 
-        return new ActiveModelTranscriptionResult(transcription, plugin.ProviderId, modelId);
+        return new ActiveModelTranscriptionResult(
+            transcription,
+            plugin.ProviderId,
+            modelId,
+            plugin.GetTranscriptionSelectionId());
     }
 
     private RequestModel ResolveRequestModel(string? engineOverride, string? modelOverride, bool awaitDownload)
@@ -547,7 +552,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var engines = _pluginManager.TranscriptionEngines;
         var engine = string.IsNullOrWhiteSpace(engineOverride)
             ? null
-            : engines.FirstOrDefault(e => e.ProviderId.Equals(engineOverride, StringComparison.OrdinalIgnoreCase));
+            : FindTranscriptionEngine(engineOverride)
+              ?? engines.FirstOrDefault(e => e.ProviderId.Equals(engineOverride, StringComparison.OrdinalIgnoreCase));
 
         if (!string.IsNullOrWhiteSpace(engineOverride) && engine is null)
             throw new ModelManagerRequestException(400, $"Unknown engine '{engineOverride}'");

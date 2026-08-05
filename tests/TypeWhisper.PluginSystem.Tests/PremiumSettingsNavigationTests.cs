@@ -2,6 +2,7 @@ using System.Text.Json;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views.Sections;
+using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -59,4 +60,38 @@ public sealed class PremiumSettingsNavigationTests
     public void Diagnostics_RejectNonObjectRoot()
         => Assert.Throws<JsonException>(() =>
             SettingsWindowViewModel.AddTargetAppCorrectionLearningDiagnostics("[]", null));
+
+    [Fact]
+    public void Diagnostics_IncludePrivacySafeRecoveryState()
+    {
+        var settings = AppSettings.Default with
+        {
+            DictationRecoveryRetentionDays = 60,
+            DictationRecoveryAutomaticFallbackEnabled = true,
+            WorkflowRequestRecoveryEnabled = false
+        };
+
+        var json = SettingsWindowViewModel.AddRecoveryDiagnostics("{}", settings, 3);
+        using var document = JsonDocument.Parse(json);
+        var recovery = document.RootElement.GetProperty("dictation_recovery");
+
+        Assert.Equal(60, recovery.GetProperty("retention_days").GetInt32());
+        Assert.Equal(3, recovery.GetProperty("recording_count").GetInt32());
+        Assert.True(recovery.GetProperty("automatic_stt_fallback_enabled").GetBoolean());
+        Assert.False(recovery.GetProperty("workflow_request_recovery_enabled").GetBoolean());
+        Assert.DoesNotContain("path", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("transcript", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("prompt", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RecoveryNavigation_FollowsFileTranscriptionInCaptureGroup()
+    {
+        var routes = SettingsNavigationCatalog.Build(key => key)
+            .Single(group => group.Group == SettingsGroup.Capture)
+            .Items.Select(item => item.Route).ToList();
+
+        Assert.Equal(routes.IndexOf(SettingsRoute.FileTranscription) + 1, routes.IndexOf(SettingsRoute.Recovery));
+        Assert.True(typeof(RecoverySection).IsAssignableTo(typeof(System.Windows.Controls.UserControl)));
+    }
 }

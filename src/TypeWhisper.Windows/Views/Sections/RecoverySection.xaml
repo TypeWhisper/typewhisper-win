@@ -1,0 +1,214 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.RecoverySection"
+             AutomationProperties.AutomationId="SettingsSection.Recovery"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="900" Margin="24">
+            <TextBlock Text="{loc:Str Recovery.Title}" Style="{StaticResource SectionHeaderStyle}"/>
+            <TextBlock Text="{loc:Str Recovery.Description}" Style="{StaticResource HintStyle}"
+                       TextWrapping="Wrap" Margin="0,0,0,22"/>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,18">
+                <StackPanel Margin="18,16">
+                    <TextBlock Text="{loc:Str Recovery.StorageTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                    <TextBlock Text="{Binding Recovery.StoragePath}" Style="{StaticResource HintStyle}"
+                               AutomationProperties.AutomationId="RecoveryStoragePath"
+                               TextTrimming="CharacterEllipsis" Margin="0,0,0,14"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Recovery.Retention}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                            <TextBlock Text="{loc:Str Recovery.RetentionHint}" Style="{StaticResource HintStyle}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding Recovery.RetentionOptions}"
+                                  DisplayMemberPath="DisplayName" SelectedValuePath="Value"
+                                  SelectedValue="{Binding Recovery.RetentionDays}"
+                                  AutomationProperties.AutomationId="RecoveryRetention"
+                                  AutomationProperties.Name="{loc:Str Recovery.Retention}"
+                                  MinWidth="180" VerticalAlignment="Top"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,18">
+                <StackPanel Margin="18,16">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Recovery.RecordingsTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                            <TextBlock Text="{loc:Str Recovery.RecordingsHint}" Style="{StaticResource HintStyle}"/>
+                        </StackPanel>
+                        <ui:Button Grid.Column="1" Content="{loc:Str Recovery.Refresh}"
+                                   Command="{Binding Recovery.RefreshCommand}"
+                                   AutomationProperties.AutomationId="RecoveryRefresh"
+                                   Appearance="Secondary" Padding="11,6" Margin="8,0"/>
+                        <ui:Button Grid.Column="2" Content="{loc:Str Recovery.DeleteAll}"
+                                   Command="{Binding Recovery.DeleteAllCommand}"
+                                   AutomationProperties.AutomationId="RecoveryDeleteAll"
+                                   Appearance="Danger" Padding="11,6"/>
+                    </Grid>
+
+                    <TextBlock Text="{loc:Str Recovery.NoRecordings}"
+                               AutomationProperties.AutomationId="RecoveryNoRecordings"
+                               HorizontalAlignment="Center" Margin="0,20">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource HintStyle}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Recovery.HasRecordings}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <ListBox ItemsSource="{Binding Recovery.Recordings}"
+                             SelectedItem="{Binding Recovery.SelectedRecording}"
+                             AutomationProperties.AutomationId="RecoveryRecordingList"
+                             BorderThickness="1" MaxHeight="260" HorizontalContentAlignment="Stretch">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="8,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:g}'}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding DurationLabel}" Margin="16,0" Foreground="{StaticResource HintBrush}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding SizeLabel}" Foreground="{StaticResource HintBrush}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <ui:Button Content="{loc:Str Recovery.DeleteSelected}"
+                                   Command="{Binding Recovery.DeleteSelectedCommand}"
+                                   AutomationProperties.AutomationId="RecoveryDeleteSelected"
+                                   Appearance="Danger" Padding="11,6"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,18">
+                <StackPanel Margin="18,16">
+                    <TextBlock Text="{loc:Str Recovery.TranscriptionTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                    <TextBlock Text="{loc:Str Recovery.TranscriptionHint}" Style="{StaticResource HintStyle}"
+                               TextWrapping="Wrap" Margin="0,0,0,14"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Margin="0,0,8,10">
+                            <TextBlock Text="{loc:Str Recovery.Engine}" Style="{StaticResource LabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding Recovery.EngineOptions}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="Value" SelectedValue="{Binding Recovery.EngineId}"
+                                      AutomationProperties.AutomationId="RecoveryEngine"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="8,0,0,10">
+                            <TextBlock Text="{loc:Str Recovery.Model}" Style="{StaticResource LabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding Recovery.ModelOptions}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="Value" SelectedValue="{Binding Recovery.ModelId}"
+                                      AutomationProperties.AutomationId="RecoveryModel"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Margin="0,0,8,0">
+                            <TextBlock Text="{loc:Str Recovery.Language}" Style="{StaticResource LabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding Recovery.LanguageOptions}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="Value" SelectedValue="{Binding Recovery.Language}"
+                                      AutomationProperties.AutomationId="RecoveryLanguage"/>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,0">
+                            <TextBlock Text="{loc:Str Recovery.Task}" Style="{StaticResource LabelStyle}"/>
+                            <ComboBox ItemsSource="{Binding Recovery.TaskOptions}" DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="Value" SelectedValue="{Binding Recovery.Task}"
+                                      AutomationProperties.AutomationId="RecoveryTask"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <ui:Button Content="{loc:Str Recovery.TranscribeAndSave}"
+                                   Command="{Binding Recovery.TranscribeSelectedCommand}"
+                                   AutomationProperties.AutomationId="RecoveryTranscribeAndSave"
+                                   Appearance="Primary" Padding="12,7"/>
+                        <ui:Button Content="{loc:Str FileTranscription.Cancel}"
+                                   Command="{Binding Recovery.CancelTranscriptionCommand}"
+                                   AutomationProperties.AutomationId="RecoveryCancelTranscription"
+                                   Appearance="Secondary" Padding="12,7" Margin="8,0,0,0"
+                                   Visibility="{Binding Recovery.IsTranscribing, Converter={StaticResource BoolToVis}}"/>
+                        <ui:ProgressRing IsIndeterminate="True" Width="20" Height="20" Margin="10,0,0,0"
+                                         Visibility="{Binding Recovery.IsTranscribing, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="{Binding Recovery.StatusText}" Foreground="{StaticResource HintBrush}"
+                                   AutomationProperties.AutomationId="RecoveryStatus"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Recovery.ErrorText}" Foreground="{StaticResource DangerBrush}"
+                               AutomationProperties.AutomationId="RecoveryError"
+                               TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,18">
+                <StackPanel Margin="18,16">
+                    <TextBlock Text="{loc:Str Recovery.AutomaticTitle}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                    <Grid Margin="0,4,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,18,0">
+                            <TextBlock Text="{loc:Str Recovery.AutomaticFallback}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                            <TextBlock Text="{loc:Str Recovery.AutomaticFallbackHint}" Style="{StaticResource HintStyle}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Recovery.FallbackLicenseStatus}"
+                                       AutomationProperties.AutomationId="RecoveryFallbackLicenseStatus"
+                                       Style="{StaticResource HintStyle}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Recovery.AutomaticFallbackEnabled}"
+                                         IsEnabled="{Binding Recovery.HasFallbackLicense}"
+                                         AutomationProperties.AutomationId="RecoveryAutomaticFallback"
+                                         OnContent="" OffContent=""/>
+                    </Grid>
+                    <Border Height="1" Background="{StaticResource SurfaceStrokeBrush}" Margin="0,0,0,14"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,18,0">
+                            <TextBlock Text="{loc:Str Recovery.WorkflowRequestRecovery}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                            <TextBlock Text="{loc:Str Recovery.WorkflowRequestRecoveryHint}" Style="{StaticResource HintStyle}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{loc:Str Recovery.WorkflowCostNotice}" Foreground="#D4915B" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Recovery.WorkflowRequestRecoveryEnabled}"
+                                         AutomationProperties.AutomationId="RecoveryWorkflowRequestRecovery"
+                                         OnContent="" OffContent=""/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

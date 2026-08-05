@@ -76,6 +76,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Gets the file transcription.
     /// </summary>
     public FileTranscriptionViewModel FileTranscription { get; }
+    /// <summary>
+    /// Gets dictation recovery settings and recordings.
+    /// </summary>
+    public RecoveryViewModel Recovery { get; }
 
     private readonly UpdateService _updateService;
     private readonly ISettingsService _settingsService;
@@ -284,6 +288,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         LicenseService license,
         AudioRecorderViewModel recorder,
         FileTranscriptionViewModel fileTranscription,
+        RecoveryViewModel recovery,
         UpdateService updateService,
         ISettingsService settingsService,
         IErrorLogService errorLog,
@@ -302,6 +307,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         License = license;
         Recorder = recorder;
         FileTranscription = fileTranscription;
+        Recovery = recovery;
         _updateService = updateService;
         _settingsService = settingsService;
         _errorLog = errorLog;
@@ -443,9 +449,12 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
 
         if (dialog.ShowDialog() == true)
         {
-            var json = AddTargetAppCorrectionLearningDiagnostics(
-                _errorLog.ExportDiagnostics(),
-                _targetAppCorrectionLearning.LastOutcome);
+            var json = AddRecoveryDiagnostics(
+                AddTargetAppCorrectionLearningDiagnostics(
+                    _errorLog.ExportDiagnostics(),
+                    _targetAppCorrectionLearning.LastOutcome),
+                _settingsService.Current,
+                Recovery.Recordings.Count);
             System.IO.File.WriteAllText(dialog.FileName, json);
         }
     }
@@ -461,6 +470,24 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         {
             ["outcome"] = outcome?.Code,
             ["recorded_at_utc"] = outcome?.RecordedAtUtc.ToString("o")
+        };
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    internal static string AddRecoveryDiagnostics(
+        string diagnosticsJson,
+        AppSettings settings,
+        int recoveryRecordingCount)
+    {
+        if (JsonNode.Parse(diagnosticsJson) is not JsonObject root)
+            throw new JsonException("Diagnostics root must be a JSON object.");
+
+        root["dictation_recovery"] = new JsonObject
+        {
+            ["retention_days"] = settings.DictationRecoveryRetentionDays,
+            ["recording_count"] = Math.Max(0, recoveryRecordingCount),
+            ["automatic_stt_fallback_enabled"] = settings.DictationRecoveryAutomaticFallbackEnabled,
+            ["workflow_request_recovery_enabled"] = settings.WorkflowRequestRecoveryEnabled
         };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
@@ -816,6 +843,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.Dictation => Loc.Instance["Nav.Dictation"],
             SettingsRoute.Shortcuts => Loc.Instance["Nav.Shortcuts"],
             SettingsRoute.FileTranscription => Loc.Instance["Nav.FileTranscription"],
+            SettingsRoute.Recovery => Loc.Instance["Nav.Recovery"],
             SettingsRoute.Recorder => Loc.Instance["Nav.Recorder"],
             SettingsRoute.History => Loc.Instance["Nav.History"],
             SettingsRoute.Dictionary => Loc.Instance["Nav.Dictionary"],
@@ -837,6 +865,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.Dictation => Loc.Instance["Page.DictationSubtitle"],
             SettingsRoute.Shortcuts => Loc.Instance["Page.ShortcutsSubtitle"],
             SettingsRoute.FileTranscription => Loc.Instance["Page.FileTranscriptionSubtitle"],
+            SettingsRoute.Recovery => Loc.Instance["Page.RecoverySubtitle"],
             SettingsRoute.Recorder => Loc.Instance["Page.RecorderSubtitle"],
             SettingsRoute.History => Loc.Instance["Page.HistorySubtitle"],
             SettingsRoute.Dictionary => Loc.Instance["Page.DictionarySubtitle"],

@@ -117,7 +117,7 @@ public static class OpenAiChatHelper
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseChatCompletionResponse(json);
     }
@@ -127,6 +127,13 @@ public static class OpenAiChatHelper
     /// </summary>
     internal static string ParseChatCompletionResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "The provider returned an empty response.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -141,6 +148,8 @@ public static class OpenAiChatHelper
             }
         }
 
-        return "";
+        throw new PluginRequestException(
+            "The provider returned an empty response.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 }
