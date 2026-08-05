@@ -67,6 +67,18 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void BuildWorkflowHotkeyBindings_SkipsUnsafeMouseBindings()
+    {
+        var workflow = NewWorkflow(
+            "Mouse",
+            WorkflowTrigger.Hotkey("MouseLeft", "MouseRight", "Ctrl+MouseLeft", "MouseBack"));
+
+        var bindings = HotkeyService.BuildWorkflowHotkeyBindings([workflow]);
+
+        Assert.Equal(["Ctrl+MouseLeft", "MouseBack"], bindings.Select(binding => binding.Hotkey));
+    }
+
+    [Fact]
     public void BuildAppHotkeyBindings_IncludesMultipleHotkeysPerShortcutAction()
     {
         var settings = AppSettings.Default with
@@ -109,6 +121,22 @@ public sealed class HotkeyServiceTests
             .Where(binding => binding.Action == AppHotkeyAction.HoldOnly);
 
         Assert.Equal(["Ctrl+Alt+H"], bindings.Select(binding => binding.Hotkey));
+    }
+
+    [Fact]
+    public void BuildAppHotkeyBindings_SkipsUnsafeMouseBindings()
+    {
+        var settings = AppSettings.Default with
+        {
+            MainDictationHotkeys = ["MouseLeft", "Ctrl+MouseLeft"],
+            ToggleOnlyHotkeys = ["MouseRight", "MouseBack"]
+        };
+
+        var bindings = HotkeyService.BuildAppHotkeyBindings(settings);
+
+        Assert.DoesNotContain(bindings, binding => binding.Hotkey is "MouseLeft" or "MouseRight");
+        Assert.Contains(bindings, binding => binding.Hotkey == "Ctrl+MouseLeft");
+        Assert.Contains(bindings, binding => binding.Hotkey == "MouseBack");
     }
 
     [Fact]

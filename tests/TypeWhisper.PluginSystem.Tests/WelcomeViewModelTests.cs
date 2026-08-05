@@ -211,6 +211,66 @@ public sealed class WelcomeViewModelTests
         });
     }
 
+    [Theory]
+    [InlineData("MouseLeft")]
+    [InlineData("MouseRight")]
+    public void MainDictationHotkeyCommand_RejectsUnsafeMouseBinding(string hotkey)
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(
+                plugin,
+                out _,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = [],
+                    PushToTalkHotkey = "",
+                    ToggleHotkey = ""
+                });
+
+            sut.AddMainDictationHotkeyCommand.Execute(hotkey);
+
+            Assert.Empty(sut.MainDictationHotkeys);
+            Assert.Empty(settings.Current.MainDictationHotkeys);
+            Assert.False(sut.HasConfiguredMainHotkey);
+            Assert.Contains("modifier", sut.HotkeyValidationMessage, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public void ExistingUnsafeMouseBinding_RemainsVisibleButDoesNotEnableTrial()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(
+                plugin,
+                out _,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = ["MouseLeft"],
+                    PushToTalkHotkey = "MouseLeft",
+                    ToggleHotkey = "MouseLeft"
+                });
+
+            Assert.Equal(["MouseLeft"], sut.MainDictationHotkeys);
+            Assert.Equal(["MouseLeft"], settings.Current.MainDictationHotkeys);
+            Assert.False(sut.HasConfiguredMainHotkey);
+            Assert.Contains("modifier", sut.HotkeyValidationMessage, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
     [Fact]
     public void MicTest_RaisesMicLevelOnWizardDispatcher()
     {

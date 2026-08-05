@@ -711,6 +711,13 @@
                                                                 AllowModifierOnly="True"
                                                                 HorizontalAlignment="Left"/>
 
+                                <TextBlock Text="{Binding HotkeyValidationMessage}"
+                                           Foreground="{StaticResource DangerBrush}"
+                                           FontSize="12"
+                                           Margin="0,8,0,0"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding HotkeyValidationMessage, Converter={StaticResource NonEmptyToVis}}"/>
+
                                 <StackPanel Margin="0,12,0,0">
                                     <TextBlock Text="{loc:Str Welcome.MainHotkeyHint}"
                                                Style="{StaticResource PageSubtitleStyle}"

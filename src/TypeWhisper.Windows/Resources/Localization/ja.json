@@ -618,6 +618,7 @@
   "Shortcuts.RemoveHotkey": "ホットキーを削除",
   "Shortcuts.ValidationDuplicateFormat": "{0}は別のショートカットに既に割り当てられています。",
   "Shortcuts.ValidationModifierOnlyHold": "修飾キーのみのショートカットはホールド専用の音声入力には使用できません。",
+  "Hotkey.ValidationUnsafeMouseButton": "マウスの左ボタンと右ボタンには Ctrl、Shift、Alt、または Win が必要です。MouseMiddle、MouseBack、MouseForward は修飾キーなしで使用できます。",
   "Appearance.LayoutSection": "オーバーレイレイアウト",
   "Appearance.Style": "インジケータースタイル",
   "Appearance.StyleStatusIsland": "Status Island",

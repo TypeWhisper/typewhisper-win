@@ -384,6 +384,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _editingCreatedAt = workflow.CreatedAt;
         IsCreatingNew = false;
         PopulateEditor(workflow);
+        EditorError = ValidateUnsafeMouseBindings();
         IsEditorOpen = true;
     }
 
@@ -572,6 +573,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         var hotkey = HotkeyParser.Normalize(value ?? NewHotkey);
         if (string.IsNullOrWhiteSpace(hotkey))
             return;
+
+        if (HotkeyParser.IsUnsafeMouseBinding(hotkey))
+        {
+            EditorError = Loc.Instance["Hotkey.ValidationUnsafeMouseButton"];
+            NewHotkey = "";
+            return;
+        }
 
         if (EditHotkeys.Any(existing => string.Equals(HotkeyParser.Normalize(existing), hotkey, StringComparison.OrdinalIgnoreCase)))
         {
@@ -1143,6 +1151,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     private string? ValidateHotkeys()
     {
         var hotkeys = NormalizeHotkeyList(EditHotkeys);
+        var unsafeMouseValidation = ValidateUnsafeMouseBindings();
+        if (unsafeMouseValidation is not null)
+            return unsafeMouseValidation;
+
         var duplicate = hotkeys
             .GroupBy(static hotkey => hotkey, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(static group => group.Count() > 1)
@@ -1161,6 +1173,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         return null;
     }
+
+    private string? ValidateUnsafeMouseBindings() =>
+        EditHotkeys.Any(HotkeyParser.IsUnsafeMouseBinding)
+            ? Loc.Instance["Hotkey.ValidationUnsafeMouseButton"]
+            : null;
 
     private string? FindAppHotkeyConflict(string hotkey)
     {
