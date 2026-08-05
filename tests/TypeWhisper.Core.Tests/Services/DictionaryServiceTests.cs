@@ -120,6 +120,55 @@ public class DictionaryServiceTests : IDisposable
         Assert.Equal("I deployed to Kubernetes", result);
     }
 
+    [Theory]
+    [InlineData(@"\n", "\n")]
+    [InlineData(@"\n\n", "\n\n")]
+    [InlineData(@"\r\n", "\r\n")]
+    [InlineData(@"\t", "\t")]
+    [InlineData(@"\\", "\\")]
+    [InlineData(@"\x", @"\x")]
+    public void ApplyCorrections_DecodesSupportedReplacementEscapes(string replacement, string expected)
+    {
+        _sut.UpsertCorrection("command", replacement, caseSensitive: false);
+
+        var result = _sut.ApplyCorrections("before command after");
+
+        Assert.Equal($"before {expected} after", result);
+    }
+
+    [Theory]
+    [InlineData("$1")]
+    [InlineData("$&")]
+    public void ApplyCorrections_TreatsRegexReplacementTokensLiterally(string replacement)
+    {
+        _sut.UpsertCorrection("command", replacement, caseSensitive: false);
+
+        var result = _sut.ApplyCorrections("before command after");
+
+        Assert.Equal($"before {replacement} after", result);
+    }
+
+    [Fact]
+    public void ApplyCorrections_DoesNotInterpretOriginalAsRegex()
+    {
+        _sut.UpsertCorrection(@"\sDoppelpunkt", ":", caseSensitive: false);
+
+        var result = _sut.ApplyCorrections("Text Doppelpunkt Beispiel");
+
+        Assert.Equal("Text Doppelpunkt Beispiel", result);
+    }
+
+    [Fact]
+    public void ApplyCorrections_OnlyIncrementsUsageForWholePatternMatch()
+    {
+        _sut.UpsertCorrection("he", "HE", caseSensitive: false);
+
+        var result = _sut.ApplyCorrections("theater");
+
+        Assert.Equal("theater", result);
+        Assert.Equal(0, Assert.Single(_sut.Entries).UsageCount);
+    }
+
     [Fact]
     public void ApplyCorrections_ReplacesChinesePhraseWithoutWhitespace()
     {

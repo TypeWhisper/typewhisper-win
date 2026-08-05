@@ -41,6 +41,9 @@ public sealed record PipelineOptions
     /// <summary>Process name of the target app for formatting.</summary>
     public string? TargetProcessName { get; init; }
 
+    /// <summary>Applies rule-based spoken punctuation and structural formatting.</summary>
+    public Func<string, string>? SpokenFormatter { get; init; }
+
     /// <summary>Applies dictionary corrections to text.</summary>
     public Func<string, string>? DictionaryCorrector { get; init; }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using TypeWhisper.Core.Interfaces;
@@ -119,21 +120,63 @@ public sealed class DictionaryService : IDictionaryService
 
         foreach (var entry in corrections)
         {
-            var comparison = entry.CaseSensitive
-                ? StringComparison.Ordinal
-                : StringComparison.OrdinalIgnoreCase;
+            var pattern = BuildCorrectionPattern(entry.Original);
+            var options = entry.CaseSensitive
+                ? RegexOptions.CultureInvariant
+                : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+            var regex = new Regex(pattern, options);
+            if (!regex.IsMatch(text))
+                continue;
 
-            if (text.Contains(entry.Original, comparison))
-            {
-                var pattern = BuildCorrectionPattern(entry.Original);
-                var options = entry.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                text = Regex.Replace(text, pattern, entry.Replacement!, options);
-
-                IncrementUsageCount(entry.Id);
-            }
+            var replacement = ExpandReplacementEscapes(entry.Replacement!);
+            text = regex.Replace(text, _ => replacement);
+            IncrementUsageCount(entry.Id);
         }
 
         return text;
+    }
+
+    private static string ExpandReplacementEscapes(string replacement)
+    {
+        if (!replacement.Contains('\\', StringComparison.Ordinal))
+            return replacement;
+
+        var builder = new StringBuilder(replacement.Length);
+        for (var index = 0; index < replacement.Length; index++)
+        {
+            var character = replacement[index];
+            if (character != '\\' || index + 1 >= replacement.Length)
+            {
+                builder.Append(character);
+                continue;
+            }
+
+            var escaped = replacement[index + 1];
+            switch (escaped)
+            {
+                case 'n':
+                    builder.Append('\n');
+                    index++;
+                    break;
+                case 'r':
+                    builder.Append('\r');
+                    index++;
+                    break;
+                case 't':
+                    builder.Append('\t');
+                    index++;
+                    break;
+                case '\\':
+                    builder.Append('\\');
+                    index++;
+                    break;
+                default:
+                    builder.Append('\\');
+                    break;
+            }
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>

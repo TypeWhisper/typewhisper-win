@@ -9,6 +9,7 @@ namespace TypeWhisper.Core.Services;
 ///   Number Normalization: 100
 ///   Plugin PostProcessors: their own Priority value
 ///   App Formatting: 150
+///   Spoken Formatting: 200
 ///   LLM Prompt Action: 300
 ///   Snippet Expansion: 500
 ///   Vocabulary Boosting: 550
@@ -19,6 +20,7 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
 {
     private const int NumberNormalizationPriority = 100;
     private const int FormattingPriority = 150;
+    private const int SpokenFormattingPriority = 200;
     private const int LlmPriority = 300;
     private const int SnippetPriority = 500;
     private const int VocabularyBoostingPriority = 550;
@@ -93,6 +95,12 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
             var processName = options.TargetProcessName;
             steps.Add((FormattingPriority, "Formatting",
                 (text, _) => Task.FromResult(options.AppFormatter(text, processName))));
+        }
+
+        if (options.SpokenFormatter is not null)
+        {
+            steps.Add((SpokenFormattingPriority, "SpokenFormatting",
+                (text, _) => Task.FromResult(options.SpokenFormatter(text))));
         }
 
         // Plugin post-processors at their own priority (context captured in closure)

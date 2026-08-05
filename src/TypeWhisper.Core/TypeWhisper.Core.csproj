@@ -9,5 +9,9 @@
     <AssemblyName>TypeWhisper.Core</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\SpokenFormatting\*.json" />
+  </ItemGroup>
+
 
 </Project>

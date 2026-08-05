@@ -1,0 +1,23 @@
+{
+  "language": "de",
+  "rules": [
+    { "phrase": "neuer absatz", "replacement": "\n\n", "category": "Structural" },
+    { "phrase": "neue zeile", "replacement": "\n", "category": "Structural" },
+    { "phrase": "tabulator", "replacement": "\t", "category": "Structural" },
+    { "phrase": "fragezeichen", "replacement": "?", "category": "Punctuation" },
+    { "phrase": "ausrufezeichen", "replacement": "!", "category": "Punctuation" },
+    { "phrase": "doppelpunkt", "replacement": ":", "category": "Punctuation" },
+    { "phrase": "semikolon", "replacement": ";", "category": "Punctuation" },
+    { "phrase": "offene klammer", "replacement": "(", "category": "Brackets" },
+    { "phrase": "geschlossene klammer", "replacement": ")", "category": "Brackets" },
+    { "phrase": "komma", "replacement": ",", "category": "Punctuation" },
+    { "phrase": "punkt", "replacement": ".", "category": "Punctuation" }
+  ],
+  "verificationScenarios": [
+    { "spoken": "hallo komma welt", "expected": "hallo, welt" },
+    { "spoken": "wie geht es dir fragezeichen", "expected": "wie geht es dir?" },
+    { "spoken": "hallo neue zeile welt", "expected": "hallo\nwelt" },
+    { "spoken": "erster absatz neuer absatz zweiter absatz", "expected": "erster absatz\n\nzweiter absatz" },
+    { "spoken": "name tabulator wert", "expected": "name\twert" }
+  ]
+}

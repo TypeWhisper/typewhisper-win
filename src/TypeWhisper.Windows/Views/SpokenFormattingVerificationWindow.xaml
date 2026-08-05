@@ -1,0 +1,111 @@
+<Window x:Class="TypeWhisper.Windows.Views.SpokenFormattingVerificationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
+        Title="{loc:Str SpokenFormatting.DialogTitle}"
+        Width="680"
+        Height="580"
+        MinWidth="600"
+        MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False"
+        Background="{StaticResource BackgroundBrush}"
+        AutomationProperties.AutomationId="SpokenFormattingTestDialog">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WizardShellStyle}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Margin="0,0,0,18">
+                <TextBlock Text="{loc:Str SpokenFormatting.DialogTitle}" Style="{StaticResource SettingsGroupTitleStyle}" FontSize="22" Margin="0,0,0,4"/>
+                <TextBlock Text="{loc:Str SpokenFormatting.DialogSubtitle}" Style="{StaticResource PageSubtitleStyle}" Margin="0" TextWrapping="Wrap"/>
+                <TextBlock Margin="0,12,0,0" Style="{StaticResource HintStyle}" TextWrapping="Wrap">
+                    <Run Text="{Binding CurrentEngineDisplayName}"/>
+                    <Run Text=" / "/>
+                    <Run Text="{Binding CurrentModelDisplayName}"/>
+                    <Run Text=" / "/>
+                    <Run Text="{Binding SelectedLanguageDisplayName, Mode=OneWay}"/>
+                </TextBlock>
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding VerificationScenarios}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource SettingsGroupPanelStyle}" Margin="0,0,0,10" Padding="16,14">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="28"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str SpokenFormatting.SayLabel}" Style="{StaticResource HintStyle}" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding Spoken}" Style="{StaticResource SettingsRowLabelStyle}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="→" FontSize="18" Foreground="{StaticResource HintBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{loc:Str SpokenFormatting.ExpectedLabel}" Style="{StaticResource HintStyle}" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding Expected}" Style="{StaticResource SettingsRowLabelStyle}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2" Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="{loc:Str SpokenFormatting.Cancel}"
+                        AutomationProperties.AutomationId="SpokenFormattingCancel"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        IsCancel="True"
+                        HorizontalAlignment="Left"
+                        Padding="14,8"/>
+                <Button Grid.Column="1"
+                        Content="{loc:Str SpokenFormatting.KeepAutomatic}"
+                        AutomationProperties.AutomationId="SpokenFormattingKeepAutomatic"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding KeepAutomaticCommand}"
+                        Click="Decision_Click"
+                        Padding="14,8"
+                        Margin="0,0,8,0"/>
+                <Button Grid.Column="2"
+                        Content="{loc:Str SpokenFormatting.UseFallback}"
+                        AutomationProperties.AutomationId="SpokenFormattingUseFallback"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding UseFallbackCommand}"
+                        Click="Decision_Click"
+                        Padding="14,8"
+                        Margin="0,0,8,0"/>
+                <Button Grid.Column="3"
+                        Content="{loc:Str SpokenFormatting.NativeWorks}"
+                        AutomationProperties.AutomationId="SpokenFormattingNativeWorks"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Command="{Binding NativeWorksCommand}"
+                        Click="Decision_Click"
+                        IsDefault="True"
+                        Padding="14,8"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

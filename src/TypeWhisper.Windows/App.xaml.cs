@@ -7,6 +7,7 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.SpokenFormatting;
 using TypeWhisper.Core.Services.Sync;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
@@ -500,6 +501,10 @@ public partial class App : Application
 
         // Post-processing pipeline
         services.AddSingleton<IPostProcessingPipeline, PostProcessingPipeline>();
+        services.AddSingleton<SpokenFormattingRulesLoader>();
+        services.AddSingleton<SpokenFormattingService>();
+        services.AddSingleton<SpokenFormattingProfileStore>();
+        services.AddSingleton<SpokenFormattingStrategyResolver>();
 
         // Translation (uses plugin manager for LLM providers)
         services.AddSingleton<ITranslationService>(sp =>
@@ -543,6 +548,7 @@ public partial class App : Application
         services.AddSingleton<IDictationApiController>(sp => sp.GetRequiredService<DictationViewModel>());
         services.AddSingleton<RecordingOverlayViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<SpokenFormattingViewModel>();
         services.AddSingleton<ModelManagerViewModel>();
         services.AddSingleton<HistoryViewModel>();
         services.AddSingleton<DictionaryTrainingViewModel>();

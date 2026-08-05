@@ -34,6 +34,8 @@ internal sealed record ActiveModelTranscriptionResult(
     string? EngineId,
     string? ModelId);
 
+internal sealed record TranscriptionEngineIdentity(string EngineId, string ModelId);
+
 /// <summary>
 /// Provides model manager service behavior.
 /// </summary>
@@ -113,6 +115,28 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     /// <summary>Returns the active <see cref="ITranscriptionEnginePlugin"/> if a plugin model is selected.</summary>
     public ITranscriptionEnginePlugin? ActiveTranscriptionPlugin => _activeTranscriptionPlugin;
+
+    internal TranscriptionEngineIdentity? ResolveTranscriptionIdentity(string? fullModelId)
+    {
+        if (string.IsNullOrWhiteSpace(fullModelId) || !IsPluginModel(fullModelId))
+            return null;
+
+        try
+        {
+            var (selectionId, modelId) = ParsePluginModelId(fullModelId);
+            if (string.IsNullOrWhiteSpace(selectionId) || string.IsNullOrWhiteSpace(modelId))
+                return null;
+
+            var plugin = FindTranscriptionEngine(selectionId);
+            return plugin is null
+                ? null
+                : new TranscriptionEngineIdentity(plugin.ProviderId, modelId);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the ModelManagerService class.

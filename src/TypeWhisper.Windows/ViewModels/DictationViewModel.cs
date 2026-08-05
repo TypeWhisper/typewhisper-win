@@ -10,6 +10,7 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Core.Services.SpokenFormatting;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
@@ -135,6 +136,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly SpeechFeedbackService _speechFeedback;
     private readonly RecentTranscriptionsService _recentTranscriptions;
     private readonly WorkflowPaletteService _workflowPalette;
+    private readonly SpokenFormattingService _spokenFormatting;
+    private readonly SpokenFormattingStrategyResolver _spokenFormattingStrategyResolver;
     private readonly LicenseService? _licenseService;
     private readonly ITargetAppTextObserver? _targetAppTextObserver;
     private readonly TargetAppCorrectionLearningService? _targetAppCorrectionLearning;
@@ -245,7 +248,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         WorkflowPaletteService workflowPalette,
         LicenseService? licenseService = null,
         ITargetAppTextObserver? targetAppTextObserver = null,
-        TargetAppCorrectionLearningService? targetAppCorrectionLearning = null)
+        TargetAppCorrectionLearningService? targetAppCorrectionLearning = null,
+        SpokenFormattingService? spokenFormatting = null,
+        SpokenFormattingStrategyResolver? spokenFormattingStrategyResolver = null)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -269,6 +274,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _speechFeedback = speechFeedback;
         _recentTranscriptions = recentTranscriptions;
         _workflowPalette = workflowPalette;
+        var spokenFormattingRules = new SpokenFormattingRulesLoader();
+        _spokenFormatting = spokenFormatting ?? new SpokenFormattingService(spokenFormattingRules);
+        _spokenFormattingStrategyResolver = spokenFormattingStrategyResolver
+            ?? new SpokenFormattingStrategyResolver(
+                new SpokenFormattingProfileStore(settings),
+                spokenFormattingRules);
         _licenseService = licenseService;
         _targetAppTextObserver = targetAppTextObserver;
         _targetAppCorrectionLearning = targetAppCorrectionLearning;
@@ -1144,6 +1155,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             // Snapshot all context and enqueue — returns immediately
             var transcriptionSamples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(originalSamples, rawDuration);
+            var activeModelIdAtCapture = _modelManager.ActiveModelId;
+            var transcriptionIdentity = _modelManager.ResolveTranscriptionIdentity(activeModelIdAtCapture);
             var job = new TranscriptionJob(
                 transcriptionSamples,
                 originalSamples,
@@ -1156,7 +1169,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 EffectiveLanguage,
                 EffectiveLanguageHints.ToList(),
                 EffectiveTask,
-                _modelManager.ActiveModelId,
+                activeModelIdAtCapture,
+                transcriptionIdentity?.EngineId,
+                transcriptionIdentity?.ModelId,
                 apiSessionId,
                 aggressiveShortQuietHandling,
                 new RecordingTailDiagnosticSnapshot(
@@ -1508,6 +1523,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 ? _settings.Current.TranslationTargetLanguage
                 : null;
 
+            var spokenFormattingContext = _spokenFormattingStrategyResolver.Resolve(
+                job.EngineIdAtCapture,
+                job.TranscriptionModelIdAtCapture,
+                job.EffectiveLanguageHints,
+                detectedLanguage);
+            var spokenFormatter = CreateSpokenFormatter(_spokenFormatting, spokenFormattingContext);
+
             var pipelineOptions = new PipelineOptions
             {
                 TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
@@ -1517,6 +1539,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 ConfiguredLanguage = job.EffectiveLanguage == "auto" ? null : job.EffectiveLanguage,
                 ConfiguredLanguageCandidates = job.EffectiveLanguageHints,
                 AppFormatter = AppFormatterService.Format,
+                SpokenFormatter = spokenFormatter,
                 TargetProcessName = job.CapturedProcessName,
                 VocabularyBooster = GetVocabularyBooster(),
                 DictionaryCorrector = _dictionary.ApplyCorrections,
@@ -2501,10 +2524,27 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         IReadOnlyList<string> EffectiveLanguageHints,
         TranscriptionTask EffectiveTask,
         string? ActiveModelIdAtCapture,
+        string? EngineIdAtCapture,
+        string? TranscriptionModelIdAtCapture,
         Guid? ApiSessionId,
         bool TranscribeShortQuietClipsAggressively,
         RecordingTailDiagnosticSnapshot Diagnostic,
         Guid? RecordingId);
+
+    internal static Func<string, string>? CreateSpokenFormatter(
+        SpokenFormattingService service,
+        ResolvedSpokenFormattingStrategy? context) => context?.Strategy switch
+        {
+            SpokenFormattingStrategy.Automatic => text => service.Normalize(
+                text,
+                context.LanguageCode,
+                SpokenFormattingApplicationMode.SelectiveFallback),
+            SpokenFormattingStrategy.FallbackOnly => text => service.Normalize(
+                text,
+                context.LanguageCode,
+                SpokenFormattingApplicationMode.FullFallback),
+            _ => null
+        };
 }
 
 internal enum ShortSpeechDecision

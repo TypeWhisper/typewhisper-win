@@ -32,6 +32,21 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Load_LegacySettingsWithoutSpokenFormattingProfiles_UsesEmptyProfiles()
+    {
+        File.WriteAllText(_filePath, """
+        {
+          "language": "de",
+          "selectedModelId": "plugin:engine:model"
+        }
+        """);
+
+        var sut = new SettingsService(_filePath);
+
+        Assert.Empty(sut.Current.SpokenFormattingProfiles);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTrips()
     {
         var sut = new SettingsService(_filePath);
