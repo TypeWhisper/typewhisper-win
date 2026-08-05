@@ -1186,7 +1186,7 @@
   "SpokenFormatting.LanguageGerman": "Deutsch",
   "SpokenFormatting.LanguageEnglish": "English",
   "SpokenFormatting.Strategy": "Strategy",
-  "SpokenFormatting.StrategyHint": "Automatic only changes text when a visible spoken command is found. Fallback also normalizes spacing.",
+  "SpokenFormatting.StrategyHint": "Native is the default and keeps engine output unchanged. Automatic processes visible German and English spoken commands. Fallback also normalizes spacing.",
   "SpokenFormatting.StrategyNative": "Native",
   "SpokenFormatting.StrategyAutomatic": "Automatic",
   "SpokenFormatting.StrategyFallback": "Fallback",
@@ -1201,7 +1201,7 @@
   "SpokenFormatting.DialogSubtitle": "Dictate each phrase in a text editor and compare the result. Then choose how this profile should behave.",
   "SpokenFormatting.SayLabel": "Say",
   "SpokenFormatting.ExpectedLabel": "Expected",
-  "SpokenFormatting.KeepAutomatic": "Keep Automatic",
+  "SpokenFormatting.KeepAutomatic": "Use Automatic",
   "SpokenFormatting.UseFallback": "Use Fallback",
   "SpokenFormatting.NativeWorks": "Native Works",
   "SpokenFormatting.Cancel": "Cancel"

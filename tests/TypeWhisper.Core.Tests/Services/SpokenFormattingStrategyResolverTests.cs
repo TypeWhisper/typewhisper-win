@@ -21,13 +21,13 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
     }
 
     [Fact]
-    public void Resolve_MissingProfile_DefaultsToAutomatic()
+    public void Resolve_MissingProfile_DefaultsToNative()
     {
         var result = _sut.Resolve("sherpa-onnx", "parakeet-tdt-0.6b", ["de"], null);
 
         Assert.NotNull(result);
         Assert.Equal("de", result.LanguageCode);
-        Assert.Equal(SpokenFormattingStrategy.Automatic, result.Strategy);
+        Assert.Equal(SpokenFormattingStrategy.NativeOnly, result.Strategy);
         Assert.Equal(SpokenFormattingVerificationState.VendorHint, result.Profile.VerificationState);
     }
 
@@ -118,6 +118,13 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
         Assert.Equal("futureVerification", profile.VerificationStateRaw);
         Assert.Null(profile.StrategyOverride);
         Assert.Equal(SpokenFormattingVerificationState.Unknown, profile.VerificationState);
+
+        var resolver = new SpokenFormattingStrategyResolver(
+            new SpokenFormattingProfileStore(new SettingsService(Path.Join(_tempDirectory, "settings.json"))),
+            new SpokenFormattingRulesLoader());
+        var resolved = resolver.Resolve("engine", "model", ["en"], null);
+
+        Assert.Equal(SpokenFormattingStrategy.NativeOnly, resolved!.Strategy);
     }
 
     public void Dispose()

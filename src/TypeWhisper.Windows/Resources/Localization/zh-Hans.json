@@ -1151,7 +1151,7 @@
   "SpokenFormatting.LanguageGerman": "Deutsch",
   "SpokenFormatting.LanguageEnglish": "English",
   "SpokenFormatting.Strategy": "策略",
-  "SpokenFormatting.StrategyHint": "自动模式仅在发现可见语音命令时更改文本。回退模式还会规范空格。",
+  "SpokenFormatting.StrategyHint": "默认使用原生模式，不更改引擎输出。自动模式处理可见的德语和英语语音命令。回退模式还会规范空格。",
   "SpokenFormatting.StrategyNative": "原生",
   "SpokenFormatting.StrategyAutomatic": "自动",
   "SpokenFormatting.StrategyFallback": "回退",
@@ -1166,7 +1166,7 @@
   "SpokenFormatting.DialogSubtitle": "在文本编辑器中口述每个短语并比较结果，然后选择此配置的行为。",
   "SpokenFormatting.SayLabel": "说出",
   "SpokenFormatting.ExpectedLabel": "预期",
-  "SpokenFormatting.KeepAutomatic": "保持自动",
+  "SpokenFormatting.KeepAutomatic": "使用自动",
   "SpokenFormatting.UseFallback": "使用回退",
   "SpokenFormatting.NativeWorks": "原生可用",
   "SpokenFormatting.Cancel": "取消"

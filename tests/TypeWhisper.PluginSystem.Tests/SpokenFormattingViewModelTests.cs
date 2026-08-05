@@ -58,7 +58,7 @@ public sealed class SpokenFormattingViewModelTests : IDisposable
         Assert.Equal("Sherpa ONNX", sut.CurrentEngineDisplayName);
         Assert.Equal("Parakeet TDT 0.6B", sut.CurrentModelDisplayName);
         Assert.Equal("de", sut.SelectedLanguageCode);
-        Assert.Equal(SpokenFormattingStrategy.Automatic, sut.SelectedStrategy);
+        Assert.Equal(SpokenFormattingStrategy.NativeOnly, sut.SelectedStrategy);
         Assert.Equal(SpokenFormattingVerificationState.VendorHint, sut.VerificationState);
 
         sut.UseFallbackCommand.Execute(null);
@@ -100,10 +100,10 @@ public sealed class SpokenFormattingViewModelTests : IDisposable
         sut.SelectedStrategy = SpokenFormattingStrategy.FallbackOnly;
         sut.SelectedLanguageCode = "en";
 
-        Assert.Equal(SpokenFormattingStrategy.Automatic, sut.SelectedStrategy);
+        Assert.Equal(SpokenFormattingStrategy.NativeOnly, sut.SelectedStrategy);
         Assert.Equal(SpokenFormattingVerificationState.Unknown, sut.VerificationState);
 
-        sut.SelectedStrategy = SpokenFormattingStrategy.NativeOnly;
+        sut.SelectedStrategy = SpokenFormattingStrategy.Automatic;
 
         Assert.Collection(
             _settings.Current.SpokenFormattingProfiles.OrderBy(profile => profile.LanguageCode),
@@ -115,8 +115,17 @@ public sealed class SpokenFormattingViewModelTests : IDisposable
             profile =>
             {
                 Assert.Equal("en", profile.LanguageCode);
-                Assert.Equal(SpokenFormattingVerificationState.UserVerifiedGood, profile.VerificationState);
+                Assert.Equal(SpokenFormattingStrategy.Automatic, profile.StrategyOverride);
+                Assert.Equal(SpokenFormattingVerificationState.Unknown, profile.VerificationState);
             });
+    }
+
+    [Fact]
+    public void AvailableLanguages_ContainOnlySupportedRuleLanguages()
+    {
+        var sut = CreateViewModel();
+
+        Assert.Equal(["de", "en"], sut.AvailableLanguages.Select(language => language.Code));
     }
 
     public void Dispose() => _pluginManager.Dispose();

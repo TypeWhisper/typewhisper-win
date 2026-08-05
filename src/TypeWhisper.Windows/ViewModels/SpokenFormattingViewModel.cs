@@ -22,7 +22,7 @@ public sealed record SpokenFormattingLanguageOption(string Code, string DisplayN
 public sealed record SpokenFormattingStrategyOption(SpokenFormattingStrategy Value, string DisplayName);
 
 /// <summary>
-/// Manages the spoken formatting profile selected in Dictation settings.
+/// Manages the spoken formatting profile selected in Advanced settings.
 /// </summary>
 public sealed partial class SpokenFormattingViewModel : ObservableObject
 {
@@ -37,7 +37,7 @@ public sealed partial class SpokenFormattingViewModel : ObservableObject
     private string? _modelId;
 
     [ObservableProperty] private string _selectedLanguageCode = "en";
-    [ObservableProperty] private SpokenFormattingStrategy _selectedStrategy = SpokenFormattingStrategy.Automatic;
+    [ObservableProperty] private SpokenFormattingStrategy _selectedStrategy = SpokenFormattingStrategy.NativeOnly;
     [ObservableProperty] private SpokenFormattingVerificationState _verificationState;
     [ObservableProperty] private bool _hasSelectedModel;
     [ObservableProperty] private string _currentEngineDisplayName = "";
@@ -226,7 +226,7 @@ public sealed partial class SpokenFormattingViewModel : ObservableObject
             _modelId,
             [SelectedLanguageCode],
             detectedLanguage: null);
-        SelectedStrategy = context?.Strategy ?? SpokenFormattingStrategy.Automatic;
+        SelectedStrategy = context?.Strategy ?? SpokenFormattingStrategy.NativeOnly;
         VerificationState = context?.Profile.VerificationState ?? SpokenFormattingVerificationState.Unknown;
 
         VerificationScenarios.Clear();

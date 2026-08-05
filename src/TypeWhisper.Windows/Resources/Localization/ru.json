@@ -1151,7 +1151,7 @@
   "SpokenFormatting.LanguageGerman": "Deutsch",
   "SpokenFormatting.LanguageEnglish": "English",
   "SpokenFormatting.Strategy": "Стратегия",
-  "SpokenFormatting.StrategyHint": "Автоматический режим меняет текст только при найденной голосовой команде. Резервный режим также нормализует пробелы.",
+  "SpokenFormatting.StrategyHint": "По умолчанию используется встроенный режим без изменения результата движка. Автоматический режим обрабатывает видимые немецкие и английские голосовые команды. Резервный режим также нормализует пробелы.",
   "SpokenFormatting.StrategyNative": "Встроенная",
   "SpokenFormatting.StrategyAutomatic": "Автоматически",
   "SpokenFormatting.StrategyFallback": "Резервная",
@@ -1166,7 +1166,7 @@
   "SpokenFormatting.DialogSubtitle": "Продиктуйте каждую фразу в текстовом редакторе, сравните результат и выберите поведение профиля.",
   "SpokenFormatting.SayLabel": "Скажите",
   "SpokenFormatting.ExpectedLabel": "Ожидается",
-  "SpokenFormatting.KeepAutomatic": "Оставить автоматически",
+  "SpokenFormatting.KeepAutomatic": "Использовать автоматически",
   "SpokenFormatting.UseFallback": "Использовать резервный режим",
   "SpokenFormatting.NativeWorks": "Встроенный режим работает",
   "SpokenFormatting.Cancel": "Отмена"

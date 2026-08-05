@@ -162,7 +162,7 @@ public static class SpokenFormattingStrategyValues
                 strategy = SpokenFormattingStrategy.FallbackOnly;
                 return true;
             default:
-                strategy = SpokenFormattingStrategy.Automatic;
+                strategy = SpokenFormattingStrategy.NativeOnly;
                 return false;
         }
     }

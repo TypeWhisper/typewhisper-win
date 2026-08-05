@@ -1186,7 +1186,7 @@
   "SpokenFormatting.LanguageGerman": "Deutsch",
   "SpokenFormatting.LanguageEnglish": "English",
   "SpokenFormatting.Strategy": "Strategie",
-  "SpokenFormatting.StrategyHint": "Automatisch ändert Text nur bei einem sichtbaren Sprachbefehl. Fallback normalisiert zusätzlich die Abstände.",
+  "SpokenFormatting.StrategyHint": "Nativ ist der Standard und übernimmt die Engine-Ausgabe unverändert. Automatisch verarbeitet sichtbare deutsche und englische Sprachbefehle. Fallback normalisiert zusätzlich die Abstände.",
   "SpokenFormatting.StrategyNative": "Nativ",
   "SpokenFormatting.StrategyAutomatic": "Automatisch",
   "SpokenFormatting.StrategyFallback": "Fallback",
@@ -1201,7 +1201,7 @@
   "SpokenFormatting.DialogSubtitle": "Diktiere jede Phrase in einen Texteditor und vergleiche das Ergebnis. Wähle danach das Verhalten für dieses Profil.",
   "SpokenFormatting.SayLabel": "Sagen",
   "SpokenFormatting.ExpectedLabel": "Erwartet",
-  "SpokenFormatting.KeepAutomatic": "Automatisch beibehalten",
+  "SpokenFormatting.KeepAutomatic": "Automatisch verwenden",
   "SpokenFormatting.UseFallback": "Fallback verwenden",
   "SpokenFormatting.NativeWorks": "Nativ funktioniert",
   "SpokenFormatting.Cancel": "Abbrechen"

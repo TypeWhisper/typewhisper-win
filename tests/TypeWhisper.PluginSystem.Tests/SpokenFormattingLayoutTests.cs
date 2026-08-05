@@ -3,7 +3,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public class SpokenFormattingLayoutTests
 {
     [Fact]
-    public void DictationSettings_ExposeProfileAndGuidedTestAutomationIds()
+    public void AdvancedSettings_ExposeProfileAndGuidedTestAutomationIds()
     {
         var audioSection = TestFile.ReadProjectFile(
             "src",
@@ -11,16 +11,23 @@ public class SpokenFormattingLayoutTests
             "Views",
             "Sections",
             "AudioSection.xaml");
+        var advancedSection = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "AdvancedSection.xaml");
         var dialog = TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "Views",
             "SpokenFormattingVerificationWindow.xaml");
 
-        Assert.Contains("SpokenFormattingLanguage", audioSection);
-        Assert.Contains("SpokenFormattingStrategy", audioSection);
-        Assert.Contains("SpokenFormattingVerificationStatus", audioSection);
-        Assert.Contains("SpokenFormattingTest", audioSection);
+        Assert.DoesNotContain("SpokenFormattingLanguage", audioSection);
+        Assert.Contains("SpokenFormattingLanguage", advancedSection);
+        Assert.Contains("SpokenFormattingStrategy", advancedSection);
+        Assert.Contains("SpokenFormattingVerificationStatus", advancedSection);
+        Assert.Contains("SpokenFormattingTest", advancedSection);
         Assert.Contains("SpokenFormattingTestDialog", dialog);
         Assert.Contains("SpokenFormattingKeepAutomatic", dialog);
         Assert.Contains("SpokenFormattingUseFallback", dialog);

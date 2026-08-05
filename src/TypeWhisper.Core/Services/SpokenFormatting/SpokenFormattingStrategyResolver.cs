@@ -46,7 +46,7 @@ public sealed class SpokenFormattingStrategyResolver
 
         return new ResolvedSpokenFormattingStrategy(
             languageCode,
-            profile.StrategyOverride ?? SpokenFormattingStrategy.Automatic,
+            profile.StrategyOverride ?? SpokenFormattingStrategy.NativeOnly,
             profile);
     }
 

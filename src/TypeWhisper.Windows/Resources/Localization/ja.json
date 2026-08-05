@@ -1151,7 +1151,7 @@
   "SpokenFormatting.LanguageGerman": "Deutsch",
   "SpokenFormatting.LanguageEnglish": "English",
   "SpokenFormatting.Strategy": "方式",
-  "SpokenFormatting.StrategyHint": "自動は音声コマンドが見つかった場合のみ変更します。フォールバックは間隔も正規化します。",
+  "SpokenFormatting.StrategyHint": "ネイティブが既定で、エンジン出力を変更しません。自動はドイツ語と英語の音声コマンドを処理します。フォールバックは間隔も正規化します。",
   "SpokenFormatting.StrategyNative": "ネイティブ",
   "SpokenFormatting.StrategyAutomatic": "自動",
   "SpokenFormatting.StrategyFallback": "フォールバック",
@@ -1166,7 +1166,7 @@
   "SpokenFormatting.DialogSubtitle": "各フレーズをテキストエディターにディクテーションして結果を比較し、このプロファイルの動作を選択します。",
   "SpokenFormatting.SayLabel": "発話",
   "SpokenFormatting.ExpectedLabel": "期待結果",
-  "SpokenFormatting.KeepAutomatic": "自動のまま",
+  "SpokenFormatting.KeepAutomatic": "自動を使用",
   "SpokenFormatting.UseFallback": "フォールバックを使用",
   "SpokenFormatting.NativeWorks": "ネイティブで動作",
   "SpokenFormatting.Cancel": "キャンセル"
