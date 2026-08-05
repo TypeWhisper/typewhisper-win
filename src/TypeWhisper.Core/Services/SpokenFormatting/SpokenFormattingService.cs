@@ -86,10 +86,12 @@ public sealed class SpokenFormattingService
             .Where(static word => word.Length > 0)
             .Select(Regex.Escape);
         var phrasePattern = string.Join(@"\s+", escapedWords);
-        var attachedPunctuation = rule.Category == SpokenFormattingRuleCategory.Structural
-            ? @"[\.,:;?!]?"
-            : "";
-        var pattern = $@"(?<![\p{{L}}\p{{M}}\p{{N}}]){phrasePattern}(?![\p{{L}}\p{{M}}\p{{N}}]){attachedPunctuation}";
+        var boundedPhrase = $@"(?<![\p{{L}}\p{{M}}\p{{N}}]){phrasePattern}(?![\p{{L}}\p{{M}}\p{{N}}])";
+        const string attachedPunctuation = @"[\.,:;?!]";
+        var pairedAsrCommas = $@",[ \f\v]+{boundedPhrase},";
+        var pattern = rule.Category == SpokenFormattingRuleCategory.Structural
+            ? $@"(?:{pairedAsrCommas}|{boundedPhrase}{attachedPunctuation}?)"
+            : boundedPhrase;
         return new Regex(
             pattern,
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,

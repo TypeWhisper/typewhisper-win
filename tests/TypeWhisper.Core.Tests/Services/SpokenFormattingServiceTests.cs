@@ -61,6 +61,39 @@ public class SpokenFormattingServiceTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData("de", "Hallo, neue Zeile, Welt.", "Hallo\nWelt.")]
+    [InlineData("de", "Erster Absatz, neuer Absatz, zweiter Absatz.", "Erster Absatz\n\nzweiter Absatz.")]
+    [InlineData("de", "Name, Tabulator, Wert.", "Name\tWert.")]
+    [InlineData("en", "Hello, new line, world.", "Hello\nworld.")]
+    public void Normalize_StructuralCommand_RemovesPairedAsrSeparatorCommas(
+        string language,
+        string input,
+        string expected)
+    {
+        var result = _sut.Normalize(input, language, SpokenFormattingApplicationMode.SelectiveFallback);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void Normalize_StructuralCommand_PreservesMeaningfulPunctuationBeforeCommand()
+    {
+        Assert.Equal(
+            "Wie geht es dir?\nGut.",
+            _sut.Normalize(
+                "Wie geht es dir? neue Zeile, Gut.",
+                "de",
+                SpokenFormattingApplicationMode.SelectiveFallback));
+
+        Assert.Equal(
+            "Hallo,\nWelt.",
+            _sut.Normalize(
+                "Hallo, neue Zeile. Welt.",
+                "de",
+                SpokenFormattingApplicationMode.SelectiveFallback));
+    }
+
     [Fact]
     public void Normalize_StructuralCommand_PreservesExplicitSpokenPunctuation()
     {
