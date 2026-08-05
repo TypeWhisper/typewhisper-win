@@ -18,6 +18,159 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class WelcomeViewModelTests
 {
     [Fact]
+    public async Task FailedModelActivation_OffersRetryAndOnlySavesAfterSuccess()
+    {
+        await RunOnStaThreadAsync(async () =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.sherpa-onnx",
+                "Parakeet",
+                configured: true,
+                supportsModelDownload: true,
+                isModelDownloaded: true)
+            {
+                LoadException = new InvalidOperationException("Model load failed")
+            };
+            var sut = CreateViewModel(plugin, out _, out var settings);
+            var modelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "whisper-large-v3-turbo");
+            sut.SelectedModelId = modelId;
+
+            await sut.DownloadModelCommand.ExecuteAsync(null);
+
+            Assert.True(sut.CanRetrySelectedModel);
+            Assert.NotEqual(modelId, settings.Current.SelectedModelId);
+            Assert.Contains("Model load failed", sut.DownloadStatus);
+
+            plugin.LoadException = null;
+            await sut.DownloadModelCommand.ExecuteAsync(null);
+
+            Assert.False(sut.CanRetrySelectedModel);
+            Assert.True(sut.HasReadyEngine);
+            Assert.Equal(modelId, settings.Current.SelectedModelId);
+            Assert.Equal(2, plugin.LoadCallCount);
+        });
+    }
+
+    [Fact]
+    public void PendingLocalUpdate_BlocksLocalTrialAndConfirmsBeforeRestart()
+    {
+        RunOnStaThread(() =>
+        {
+            var plugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.sherpa-onnx",
+                "Parakeet",
+                configured: true,
+                supportsModelDownload: true,
+                isModelDownloaded: true);
+            var restart = new FakeAppRestartService();
+            var sut = CreateViewModel(
+                plugin,
+                out var pluginManager,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = ["Ctrl+Alt+D"],
+                    PushToTalkHotkey = "Ctrl+Alt+D",
+                    ToggleHotkey = "Ctrl+Alt+D"
+                },
+                appRestart: restart);
+            var registryService = new PluginRegistryService(
+                pluginManager,
+                new PluginLoader(),
+                settings,
+                CreateRegistryHttpClient());
+            var registryItem = new RegistryPluginItemViewModel(
+                new RegistryPlugin
+                {
+                    Id = plugin.PluginId,
+                    Name = plugin.PluginName,
+                    Version = "1.0.1"
+                },
+                registryService);
+            TestPluginManagerFactory.SetPrivateField(
+                registryItem,
+                "_installState",
+                PluginInstallState.PendingRestart);
+            sut.Plugins.Add(registryItem);
+            sut.SelectedModelId = ModelManagerService.GetPluginModelId(
+                plugin.PluginId,
+                "parakeet-tdt-0.6b");
+
+            Assert.True(sut.IsSelectedModelRestartRequired);
+            Assert.False(sut.CanTryItOut);
+
+            var confirmationCalls = 0;
+            sut.ConfirmModelUpdateRestart = (_, _) =>
+            {
+                confirmationCalls++;
+                return false;
+            };
+            sut.RestartForModelUpdateCommand.Execute(null);
+
+            Assert.Equal(1, confirmationCalls);
+            Assert.Equal(0, restart.RestartCount);
+
+            sut.ConfirmModelUpdateRestart = (_, _) =>
+            {
+                confirmationCalls++;
+                return true;
+            };
+            sut.RestartForModelUpdateCommand.Execute(null);
+
+            Assert.Equal(2, confirmationCalls);
+            Assert.Equal(1, restart.RestartCount);
+        });
+    }
+
+    [Fact]
+    public void PendingLocalUpdate_DoesNotBlockSelectedReadyCloudModel()
+    {
+        RunOnStaThread(() =>
+        {
+            var cloudPlugin = new FakeTranscriptionPlugin(
+                "com.typewhisper.groq",
+                "Groq",
+                configured: true,
+                supportsModelDownload: false);
+            var sut = CreateViewModel(
+                cloudPlugin,
+                out var pluginManager,
+                out var settings,
+                AppSettings.Default with
+                {
+                    MainDictationHotkeys = ["Ctrl+Alt+D"],
+                    PushToTalkHotkey = "Ctrl+Alt+D",
+                    ToggleHotkey = "Ctrl+Alt+D"
+                });
+            var registryService = new PluginRegistryService(
+                pluginManager,
+                new PluginLoader(),
+                settings,
+                CreateRegistryHttpClient());
+            var localRegistryItem = new RegistryPluginItemViewModel(
+                new RegistryPlugin
+                {
+                    Id = "com.typewhisper.sherpa-onnx",
+                    Name = "Parakeet",
+                    Version = "1.0.1"
+                },
+                registryService);
+            TestPluginManagerFactory.SetPrivateField(
+                localRegistryItem,
+                "_installState",
+                PluginInstallState.PendingRestart);
+            sut.Plugins.Add(localRegistryItem);
+            sut.SelectedModelId = ModelManagerService.GetPluginModelId(
+                cloudPlugin.PluginId,
+                "whisper-large-v3-turbo");
+
+            Assert.False(sut.IsSelectedModelRestartRequired);
+            Assert.True(sut.HasReadyEngine);
+            Assert.True(sut.CanTryItOut);
+        });
+    }
+
+    [Fact]
     public void SelectedCloudModelWithoutApiKey_ExposesInlineSettingsAndBlocksActivation()
     {
         RunOnStaThread(() =>
@@ -34,6 +187,7 @@ public sealed class WelcomeViewModelTests
             Assert.True(sut.SelectedModelNeedsConfiguration);
             Assert.NotNull(sut.SelectedModelSettingsView);
             Assert.False(sut.CanApplySelectedModel);
+            Assert.False(sut.CanRetrySelectedModel);
             Assert.Equal("Groq", sut.SelectedModelConfigurationProviderName);
             Assert.Equal(1, plugin.CreateSettingsViewCallCount);
         });
@@ -404,7 +558,8 @@ public sealed class WelcomeViewModelTests
         out PluginManager pluginManager,
         out FakeSettingsService settings,
         AppSettings? initialSettings = null,
-        AudioRecordingService? audio = null)
+        AudioRecordingService? audio = null,
+        IAppRestartService? appRestart = null)
     {
         settings = new FakeSettingsService(initialSettings ?? AppSettings.Default);
         var workflows = new Mock<IWorkflowService>();
@@ -444,7 +599,13 @@ public sealed class WelcomeViewModelTests
             CreateRegistryHttpClient());
         var dictation = (DictationViewModel)RuntimeHelpers.GetUninitializedObject(typeof(DictationViewModel));
 
-        return new WelcomeViewModel(modelManager, settings, audio, registry, dictation);
+        return new WelcomeViewModel(
+            modelManager,
+            settings,
+            audio,
+            registry,
+            dictation,
+            appRestart ?? new FakeAppRestartService());
     }
 
     private static HttpClient CreateRegistryHttpClient()
@@ -472,6 +633,39 @@ public sealed class WelcomeViewModelTests
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
+        thread.Join();
+
+        if (failure is not null)
+            throw failure;
+    }
+
+    private static async Task RunOnStaThreadAsync(Func<Task> action)
+    {
+        Exception? failure = null;
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                _ = action().ContinueWith(task =>
+                {
+                    if (task.IsFaulted)
+                        failure = task.Exception?.InnerException ?? task.Exception;
+                    completed.TrySetResult();
+                    dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
+                }, TaskScheduler.Default);
+                Dispatcher.Run();
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+                completed.TrySetResult();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         thread.Join();
 
         if (failure is not null)
@@ -529,6 +723,8 @@ public sealed class WelcomeViewModelTests
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public int CreateSettingsViewCallCount { get; private set; }
+        public int LoadCallCount { get; private set; }
+        public Exception? LoadException { get; set; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -541,6 +737,16 @@ public sealed class WelcomeViewModelTests
         public void SelectModel(string modelId) => SelectedModelId = modelId;
         public bool IsModelDownloaded(string modelId) => !SupportsModelDownload || ModelDownloaded;
 
+        public Task LoadModelAsync(string modelId, CancellationToken ct)
+        {
+            LoadCallCount++;
+            if (LoadException is not null)
+                throw LoadException;
+
+            SelectedModelId = modelId;
+            return Task.CompletedTask;
+        }
+
         public Task<PluginTranscriptionResult> TranscribeAsync(
             byte[] wavAudio,
             string? language,
@@ -550,6 +756,13 @@ public sealed class WelcomeViewModelTests
             Task.FromResult(new PluginTranscriptionResult("ok", language ?? "en", 1));
 
         public void Dispose() { }
+    }
+
+    private sealed class FakeAppRestartService : IAppRestartService
+    {
+        public int RestartCount { get; private set; }
+
+        public void RestartMinimized() => RestartCount++;
     }
 
     private sealed class FakeAudioInputDeviceProvider : IAudioInputDeviceProvider

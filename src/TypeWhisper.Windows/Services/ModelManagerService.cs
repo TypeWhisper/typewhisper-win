@@ -44,6 +44,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly IDictionaryService? _dictionary;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
     private string? _activeModelId;
+    private ITranscriptionEnginePlugin? _activeTranscriptionPlugin;
     private TranscriptionAccelerationPreference? _activeModelAccelerationPreference;
     private System.Timers.Timer? _autoUnloadTimer;
     private bool _disposed;
@@ -103,29 +104,15 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         get
         {
-            if (_activeModelId is not null && IsPluginModel(_activeModelId))
-            {
-                var (pluginId, _) = ParsePluginModelId(_activeModelId);
-                var plugin = FindTranscriptionEngine(pluginId);
-                if (plugin is not null)
-                    return new PluginTranscriptionEngineAdapter(plugin, _dictionary);
-            }
+            if (_activeModelId is not null && _activeTranscriptionPlugin is not null)
+                return new PluginTranscriptionEngineAdapter(_activeTranscriptionPlugin, _dictionary);
 
             return NoOpTranscriptionEngine.Instance;
         }
     }
 
     /// <summary>Returns the active <see cref="ITranscriptionEnginePlugin"/> if a plugin model is selected.</summary>
-    public ITranscriptionEnginePlugin? ActiveTranscriptionPlugin
-    {
-        get
-        {
-            if (_activeModelId is null || !IsPluginModel(_activeModelId))
-                return null;
-            var (pluginId, _) = ParsePluginModelId(_activeModelId);
-            return FindTranscriptionEngine(pluginId);
-        }
-    }
+    public ITranscriptionEnginePlugin? ActiveTranscriptionPlugin => _activeTranscriptionPlugin;
 
     /// <summary>
     /// Initializes a new instance of the ModelManagerService class.
@@ -138,6 +125,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         _pluginManager = pluginManager;
         _settings = settings;
         _dictionary = dictionary;
+        _pluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
     /// <summary>
@@ -275,10 +263,20 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             if (plugin.SupportsModelDownload)
                 await plugin.LoadModelAsync(pluginModelId, cancellationToken);
 
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+                throw new InvalidOperationException("The transcription plugin changed while the model was loading.");
+
             plugin.SelectModel(pluginModelId);
             SetStatus(modelId, ModelStatus.Ready);
+            _activeTranscriptionPlugin = plugin;
             ActiveModelId = modelId;
             _activeModelAccelerationPreference = accelerationPreference;
+
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+            {
+                InvalidateActiveModelState(modelId);
+                throw new InvalidOperationException("The transcription plugin changed while the model was loading.");
+            }
         }
         catch (Exception ex)
         {
@@ -319,13 +317,15 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         CancelAutoUnload();
         if (ActiveModelId is not null)
         {
-            var plugin = ActiveTranscriptionPlugin;
+            var activeModelId = ActiveModelId;
+            var plugin = _activeTranscriptionPlugin;
             plugin?.UnloadModelAsync().ContinueWith(t =>
             {
                 if (t.IsFaulted)
                     System.Diagnostics.Debug.WriteLine($"UnloadModelAsync failed: {t.Exception?.Message}");
             });
-            SetStatus(ActiveModelId, ModelStatus.NotDownloaded);
+            SetStatus(activeModelId, ModelStatus.NotDownloaded);
+            _activeTranscriptionPlugin = null;
             ActiveModelId = null;
             _activeModelAccelerationPreference = null;
         }
@@ -380,8 +380,21 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (string.IsNullOrWhiteSpace(targetModelId))
             return false;
 
+        if (!IsPluginModel(targetModelId))
+            return false;
+
+        var (targetPluginId, _) = ParsePluginModelId(targetModelId);
+        var targetPlugin = FindTranscriptionEngine(targetPluginId);
+        if (targetPlugin is null)
+        {
+            if (ActiveModelId == targetModelId)
+                InvalidateActiveModelState(targetModelId);
+            return false;
+        }
+
         var targetAccelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
         if (ActiveModelId == targetModelId
+            && ReferenceEquals(_activeTranscriptionPlugin, targetPlugin)
             && _activeModelAccelerationPreference == targetAccelerationPreference
             && IsActiveAccelerationSatisfied(targetAccelerationPreference))
         {
@@ -606,6 +619,33 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         _pluginManager.TranscriptionEngines.FirstOrDefault(engine =>
             string.Equals(engine.GetTranscriptionSelectionId(), selectionId, StringComparison.OrdinalIgnoreCase));
 
+    private void OnPluginStateChanged(object? sender, EventArgs e)
+    {
+        if (ActiveModelId is null
+            || _activeTranscriptionPlugin is null
+            || !IsPluginModel(ActiveModelId))
+        {
+            return;
+        }
+
+        var (selectionId, _) = ParsePluginModelId(ActiveModelId);
+        var currentPlugin = FindTranscriptionEngine(selectionId);
+        if (ReferenceEquals(currentPlugin, _activeTranscriptionPlugin))
+            return;
+
+        InvalidateActiveModelState(ActiveModelId);
+    }
+
+    private void InvalidateActiveModelState(string modelId)
+    {
+        CancelAutoUnload();
+        _activeTranscriptionPlugin = null;
+        _activeModelAccelerationPreference = null;
+        _modelStatuses.Remove(modelId);
+        ActiveModelId = null;
+        OnPropertyChanged(nameof(GetStatus));
+    }
+
     private Task RestoreRequestModelAsync(string? previousActiveModelId)
     {
         if (previousActiveModelId is null)
@@ -701,6 +741,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (!_disposed)
         {
             CancelAutoUnload();
+            _pluginManager.PluginStateChanged -= OnPluginStateChanged;
             _disposed = true;
         }
     }

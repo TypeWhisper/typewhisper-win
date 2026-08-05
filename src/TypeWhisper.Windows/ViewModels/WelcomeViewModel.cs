@@ -62,6 +62,7 @@ public partial class WelcomeViewModel : ObservableObject
     private readonly AudioRecordingService _audio;
     private readonly PluginRegistryService _registry;
     private readonly DictationViewModel _dictation;
+    private readonly IAppRestartService _appRestart;
     private readonly EventHandler _pluginStateChangedHandler;
     private readonly Dispatcher? _uiDispatcher;
     private readonly Dictionary<string, (ITranscriptionEnginePlugin Plugin, UserControl? View)> _settingsViewCache = [];
@@ -125,6 +126,9 @@ public partial class WelcomeViewModel : ObservableObject
     public event EventHandler? Completed;
     private bool _isSyncingMainDictationHotkeys;
 
+    internal Func<string, string, bool> ConfirmModelUpdateRestart { get; set; } = static (message, title) =>
+        MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
     /// <summary>
     /// Initializes a new instance of the WelcomeViewModel class.
     /// </summary>
@@ -133,13 +137,15 @@ public partial class WelcomeViewModel : ObservableObject
         ISettingsService settings,
         AudioRecordingService audio,
         PluginRegistryService registry,
-        DictationViewModel dictation)
+        DictationViewModel dictation,
+        IAppRestartService appRestart)
     {
         _modelManager = modelManager;
         _settings = settings;
         _audio = audio;
         _registry = registry;
         _dictation = dictation;
+        _appRestart = appRestart;
         _uiDispatcher = CaptureActiveDispatcher();
         _lastObservedDictationState = dictation.State;
 
@@ -313,9 +319,30 @@ public partial class WelcomeViewModel : ObservableObject
     /// </summary>
     public string CloudRecommendationStatus => GetCloudRecommendationStatus();
     /// <summary>
+    /// Gets whether the selected model update requires an app restart before it can be used.
+    /// </summary>
+    public bool IsSelectedModelRestartRequired =>
+        IsLocalRecommendationPendingRestart
+        && (SelectedModelId == ParakeetModelId
+            || (string.IsNullOrWhiteSpace(SelectedModelId) && LocalEngine is null));
+    /// <summary>
+    /// Gets whether the selected model can be loaded again from the trial recovery state.
+    /// </summary>
+    public bool CanRetrySelectedModel =>
+        !string.IsNullOrWhiteSpace(SelectedModelId)
+        && !IsDownloading
+        && !IsSelectedModelRestartRequired
+        && !HasReadyEngine
+        && !SelectedModelNeedsConfiguration
+        && GetSelectedTranscriptionPlugin() is not null;
+    /// <summary>
     /// Gets whether can try it out.
     /// </summary>
-    public bool CanTryItOut => HasReadyEngine && HasConfiguredMainHotkey;
+    public bool CanTryItOut =>
+        HasReadyEngine
+        && HasConfiguredMainHotkey
+        && !IsDownloading
+        && !IsSelectedModelRestartRequired;
     /// <summary>
     /// Gets the trial is recording.
     /// </summary>
@@ -387,10 +414,16 @@ public partial class WelcomeViewModel : ObservableObject
     partial void OnSelectedModelIdChanged(string? value)
     {
         OnPropertyChanged(nameof(HasReadyEngine));
-        OnPropertyChanged(nameof(CanTryItOut));
+        NotifyModelRecoveryProperties();
         OnPropertyChanged(nameof(IsLocalRecommendationSelected));
         OnPropertyChanged(nameof(IsCloudRecommendationSelected));
         NotifySelectedModelConfigurationProperties();
+    }
+
+    partial void OnIsDownloadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanApplySelectedModel));
+        NotifyModelRecoveryProperties();
     }
 
     private async Task LoadPluginsAsync()
@@ -457,9 +490,13 @@ public partial class WelcomeViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DownloadModel()
+    private Task DownloadModel() => ActivateSelectedModelAsync();
+
+    private async Task<bool> ActivateSelectedModelAsync()
     {
-        if (string.IsNullOrEmpty(SelectedModelId)) return;
+        var modelId = SelectedModelId;
+        if (string.IsNullOrEmpty(modelId))
+            return false;
 
         IsDownloading = true;
         SetDownloadStatus(DownloadStatusKind.Starting);
@@ -468,19 +505,21 @@ public partial class WelcomeViewModel : ObservableObject
 
         try
         {
-            await _modelManager.DownloadAndLoadModelAsync(SelectedModelId);
+            await _modelManager.DownloadAndLoadModelAsync(modelId);
             SetDownloadStatus(DownloadStatusKind.Done);
-            _settings.Save(_settings.Current with { SelectedModelId = SelectedModelId });
+            _settings.Save(_settings.Current with { SelectedModelId = modelId });
+            return true;
         }
         catch (Exception ex)
         {
             SetDownloadStatus(DownloadStatusKind.Error, ex.Message);
-            return;
+            return false;
         }
         finally
         {
             IsDownloading = false;
             _modelManager.PropertyChanged -= OnModelManagerPropertyChanged;
+            NotifyModelRecoveryProperties();
         }
     }
 
@@ -537,7 +576,8 @@ public partial class WelcomeViewModel : ObservableObject
         if (plugin is null)
             return;
 
-        if (plugin.InstallState == PluginInstallState.UpdateAvailable)
+        var isUpdate = plugin.InstallState == PluginInstallState.UpdateAvailable;
+        if (isUpdate)
             await plugin.UpdateCommand.ExecuteAsync(null);
         else
             await plugin.InstallCommand.ExecuteAsync(null);
@@ -546,8 +586,32 @@ public partial class WelcomeViewModel : ObservableObject
         NotifyRecommendationProperties();
         RefreshModels();
 
-        if (plugin.InstallState == PluginInstallState.Installed)
-            SelectRecommendedLocal();
+        if (plugin.InstallState == PluginInstallState.PendingRestart)
+        {
+            SelectedModelId = ParakeetModelId;
+            NotifyModelRecoveryProperties();
+            return;
+        }
+
+        if (plugin.InstallState != PluginInstallState.Installed)
+            return;
+
+        SelectRecommendedLocal();
+        if (isUpdate)
+            await ActivateSelectedModelAsync();
+    }
+
+    [RelayCommand]
+    private void RestartForModelUpdate()
+    {
+        if (!ConfirmModelUpdateRestart(
+                Loc.Instance["Welcome.RestartConfirmMessage"],
+                Loc.Instance["Welcome.RestartConfirmTitle"]))
+        {
+            return;
+        }
+
+        _appRestart.RestartMinimized();
     }
 
     [RelayCommand]
@@ -628,7 +692,7 @@ public partial class WelcomeViewModel : ObservableObject
         if (args.PropertyName is nameof(ModelManagerService.GetStatus) or nameof(ModelManagerService.ActiveModelId))
         {
             OnPropertyChanged(nameof(HasReadyEngine));
-            OnPropertyChanged(nameof(CanTryItOut));
+            NotifyModelRecoveryProperties();
             NotifyRecommendationProperties();
         }
     }
@@ -877,7 +941,15 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(CloudRecommendationActionLabel));
         OnPropertyChanged(nameof(LocalRecommendationStatus));
         OnPropertyChanged(nameof(CloudRecommendationStatus));
+        NotifyModelRecoveryProperties();
         NotifySelectedModelConfigurationProperties();
+    }
+
+    private void NotifyModelRecoveryProperties()
+    {
+        OnPropertyChanged(nameof(IsSelectedModelRestartRequired));
+        OnPropertyChanged(nameof(CanRetrySelectedModel));
+        OnPropertyChanged(nameof(CanTryItOut));
     }
 
     private void NotifySelectedModelConfigurationProperties()

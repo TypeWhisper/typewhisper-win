@@ -754,16 +754,64 @@
                         <Border Style="{StaticResource SettingsGroupPanelStyle}">
                             <Grid Margin="18">
                                 <StackPanel Visibility="{Binding CanTryItOut, Converter={StaticResource InvertBoolToVis}}">
-                                    <Border Style="{StaticResource WizardInfoBannerStyle}">
+                                    <Border Style="{StaticResource WizardInfoBannerStyle}"
+                                            Visibility="{Binding IsSelectedModelRestartRequired, Converter={StaticResource BoolToVis}}">
                                         <StackPanel>
                                             <TextBlock Text="{loc:Str Welcome.TrialBlockedTitle}"
                                                        Foreground="{StaticResource WarningBrush}"
                                                        FontSize="13"
                                                        FontWeight="SemiBold"/>
-                                            <TextBlock Text="{loc:Str Welcome.TrialNoEngineReady}"
+                                            <TextBlock Text="{loc:Str Welcome.TrialModelRestartRequired}"
                                                        Style="{StaticResource PageSubtitleStyle}"
-                                                       Margin="0,10,0,0"
-                                                       Visibility="{Binding HasReadyEngine, Converter={StaticResource InvertBoolToVis}}"/>
+                                                       Margin="0,10,0,0"/>
+                                            <Button Content="{loc:Str Welcome.RestartNow}"
+                                                    Command="{Binding RestartForModelUpdateCommand}"
+                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0,12,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border>
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource WizardInfoBannerStyle}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelectedModelRestartRequired}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str Welcome.TrialBlockedTitle}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"/>
+
+                                            <StackPanel Visibility="{Binding HasReadyEngine, Converter={StaticResource InvertBoolToVis}}">
+                                                <TextBlock Text="{loc:Str Welcome.TrialNoEngineReady}"
+                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                           Margin="0,10,0,0"/>
+                                                <Button Content="{loc:Str Welcome.RetryModelLoad}"
+                                                        Command="{Binding DownloadModelCommand}"
+                                                        Style="{StaticResource SecondaryButtonStyle}"
+                                                        HorizontalAlignment="Left"
+                                                        Margin="0,12,0,0"
+                                                        Visibility="{Binding CanRetrySelectedModel, Converter={StaticResource BoolToVis}}"/>
+                                                <ProgressBar Value="{Binding DownloadProgress}"
+                                                             Maximum="1"
+                                                             Height="6"
+                                                             Margin="0,12,0,6"
+                                                             Background="#273140"
+                                                             Foreground="{StaticResource AccentBrush}"
+                                                             Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVis}}"/>
+                                                <TextBlock Text="{Binding DownloadStatus}"
+                                                           Style="{StaticResource PageSubtitleStyle}"
+                                                           Margin="0,6,0,0"
+                                                           Visibility="{Binding DownloadStatus, Converter={StaticResource NonEmptyToVis}}"/>
+                                            </StackPanel>
+
                                             <TextBlock Text="{loc:Str Welcome.TrialNoHotkey}"
                                                        Style="{StaticResource PageSubtitleStyle}"
                                                        Margin="0,8,0,0"
