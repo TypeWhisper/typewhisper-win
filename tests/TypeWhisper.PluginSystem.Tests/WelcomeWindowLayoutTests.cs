@@ -46,6 +46,28 @@ public sealed class WelcomeWindowLayoutTests
     }
 
     [Fact]
+    public void WelcomeWindow_ProvidesModelUpdateRecoveryActionsInTrialStep()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "WelcomeWindow.xaml");
+
+        Assert.Contains("IsSelectedModelRestartRequired", xaml);
+        Assert.Contains("RestartForModelUpdateCommand", xaml);
+        Assert.Contains("CanRetrySelectedModel", xaml);
+        Assert.Contains("DownloadModelCommand", xaml);
+        Assert.Contains("Welcome.TrialModelRestartRequired", xaml);
+        Assert.Contains("Welcome.RestartConfirmTitle", TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Resources",
+            "Localization",
+            "en.json"));
+    }
+
+    [Fact]
     public void WelcomeWindow_ShowsAutostartAndOmitsWritingFocus()
     {
         var xaml = TestFile.ReadProjectFile(
