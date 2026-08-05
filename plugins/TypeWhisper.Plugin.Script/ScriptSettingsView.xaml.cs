@@ -1,202 +1,222 @@
-using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Plugin.Script;
 
-/// <summary>
-/// Provides script settings view behavior.
-/// </summary>
+/// <summary>Hosts the Script Runner settings view model.</summary>
 public partial class ScriptSettingsView : UserControl
 {
-    private readonly ScriptPlugin _plugin;
-    private ScriptEntry? _editingScript;
-    private bool _suppressEditEvents;
-    private bool _suppressSelectionEvents;
+    private readonly ScriptSettingsViewModel _viewModel;
+    private Point _dragStart;
+    private ScriptListItemViewModel? _draggedItem;
+    private ScriptListItemViewModel? _dropTarget;
+    private bool _dropAfter;
 
-    /// <summary>
-    /// Initializes a new instance of the ScriptSettingsView class.
-    /// </summary>
+    /// <summary>Initializes the settings view.</summary>
     public ScriptSettingsView(ScriptPlugin plugin)
+        : this(plugin.Service ?? throw new InvalidOperationException("The Script Runner plugin is not active."))
     {
-        _plugin = plugin;
+    }
+
+    /// <summary>Initializes the settings view.</summary>
+    public ScriptSettingsView(ScriptService service)
+    {
         InitializeComponent();
+        var dialogs = new WindowConfirmationService(() => Window.GetWindow(this), service.Localization);
+        var editorHost = new WindowScriptEditorHost(this, service);
+        _viewModel = new ScriptSettingsViewModel(service, editorHost, dialogs);
+        DataContext = _viewModel;
+        Localize();
+    }
 
-        if (_plugin.Service is { } service)
+    internal ScriptSettingsViewModel ViewModel => _viewModel;
+
+    private void OnScriptDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (FindAncestor<ButtonBase>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
+        if (ScriptList.SelectedItem is not null)
+            _viewModel.EditSelected();
+    }
+
+    private void OnScriptListMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStart = e.GetPosition(ScriptList);
+        _draggedItem = FindAncestor<ButtonBase>(e.OriginalSource as DependencyObject) is null
+            ? FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext as ScriptListItemViewModel
+            : null;
+    }
+
+    private void OnScriptListMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _draggedItem is null)
+            return;
+
+        var current = e.GetPosition(ScriptList);
+        if (Math.Abs(current.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(current.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
         {
-            ScriptList.ItemsSource = service.Scripts;
-            service.Scripts.CollectionChanged += OnScriptsChanged;
-        }
-
-        UpdateEmptyState();
-    }
-
-    private void UpdateEmptyState()
-    {
-        var hasScripts = _plugin.Service is { Scripts.Count: > 0 };
-        EmptyState.Visibility = hasScripts ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    private void OnScriptsChanged(object? sender, NotifyCollectionChangedEventArgs e) => UpdateEmptyState();
-
-    private void OnAddScript(object sender, RoutedEventArgs e)
-    {
-        var script = new ScriptEntry { Name = "New Script" };
-        _plugin.Service?.AddScript(script);
-
-        // Select the newly added script
-        ScriptList.SelectedItem = script;
-    }
-
-    private void OnRemoveScript(object sender, RoutedEventArgs e)
-    {
-        if (ScriptList.SelectedItem is not ScriptEntry selected) return;
-        _plugin.Service?.RemoveScript(selected.Id);
-        EditPanel.Visibility = Visibility.Collapsed;
-    }
-
-    private void OnMoveUp(object sender, RoutedEventArgs e)
-    {
-        if (ScriptList.SelectedItem is not ScriptEntry selected) return;
-        var service = _plugin.Service;
-        if (service is null) return;
-
-        var index = service.Scripts.IndexOf(selected);
-        service.MoveUp(selected.Id);
-
-        // Keep selection on the moved item
-        if (index > 0) ScriptList.SelectedIndex = index - 1;
-    }
-
-    private void OnMoveDown(object sender, RoutedEventArgs e)
-    {
-        if (ScriptList.SelectedItem is not ScriptEntry selected) return;
-        var service = _plugin.Service;
-        if (service is null) return;
-
-        var index = service.Scripts.IndexOf(selected);
-        service.MoveDown(selected.Id);
-
-        // Keep selection on the moved item
-        if (index < service.Scripts.Count - 1) ScriptList.SelectedIndex = index + 1;
-    }
-
-    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressSelectionEvents) return;
-
-        if (ScriptList.SelectedItem is not ScriptEntry selected)
-        {
-            _editingScript = null;
-            EditPanel.Visibility = Visibility.Collapsed;
-            UpdateEditButtons();
             return;
         }
 
-        LoadEditor(selected);
+        var item = _draggedItem;
+        _draggedItem = null;
+        DragDrop.DoDragDrop(ScriptList, item, DragDropEffects.Move);
+        ClearDropIndicator();
     }
 
-    private void LoadEditor(ScriptEntry script)
+    private void OnScriptListDragOver(object sender, DragEventArgs e)
     {
-        _editingScript = script;
-        _suppressEditEvents = true;
-        try
+        if (_viewModel.IsReadOnly || !e.Data.GetDataPresent(typeof(ScriptListItemViewModel)))
         {
-            NameBox.Text = script.Name;
-            CommandBox.Text = script.Command;
-            ShellCombo.SelectedIndex = -1;
-
-            // Select matching shell in ComboBox
-            for (var i = 0; i < ShellCombo.Items.Count; i++)
-            {
-                if (ShellCombo.Items[i] is ComboBoxItem item
-                    && item.Content is string shell
-                    && shell.Equals(script.Shell, StringComparison.OrdinalIgnoreCase))
-                {
-                    ShellCombo.SelectedIndex = i;
-                    break;
-                }
-            }
-
-            EditPanel.Visibility = Visibility.Visible;
-        }
-        finally
-        {
-            _suppressEditEvents = false;
+            e.Effects = DragDropEffects.None;
+            ClearDropIndicator();
+            e.Handled = true;
+            return;
         }
 
-        UpdateEditButtons();
-    }
-
-    private void OnEditFieldChanged(object sender, RoutedEventArgs e)
-    {
-        if (_suppressEditEvents) return;
-        UpdateEditButtons();
-    }
-
-    private void OnSaveEdit(object sender, RoutedEventArgs e)
-    {
-        if (CreateEditedScript() is not { } updated || updated == _editingScript) return;
-        UpdateScriptAndKeepSelection(updated);
-        UpdateEditButtons();
-    }
-
-    private void OnCancelEdit(object sender, RoutedEventArgs e)
-    {
-        if (_editingScript is { } script) LoadEditor(script);
-    }
-
-    private ScriptEntry? CreateEditedScript()
-    {
-        if (_editingScript is not { } script) return null;
-
-        return script with
+        var targetContainer = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject);
+        var target = targetContainer?.DataContext as ScriptListItemViewModel;
+        var dropAfter = targetContainer is not null
+            && e.GetPosition(targetContainer).Y > targetContainer.ActualHeight / 2;
+        if (target is null && _viewModel.Items.Count > 0)
         {
-            Name = NameBox.Text,
-            Command = CommandBox.Text,
-            Shell = (ShellCombo.SelectedItem as ComboBoxItem)?.Content as string ?? script.Shell
-        };
-    }
-
-    private void UpdateEditButtons()
-    {
-        var hasChanges = CreateEditedScript() is { } edited && edited != _editingScript;
-        SaveButton.IsEnabled = hasChanges;
-        CancelButton.IsEnabled = hasChanges;
-    }
-
-    private void UpdateScriptAndKeepSelection(ScriptEntry updated)
-    {
-        if (_plugin.Service is not { } service) return;
-
-        _suppressSelectionEvents = true;
-        try
-        {
-            service.UpdateScript(updated);
-            ScriptList.SelectedItem = updated;
-            _editingScript = updated;
+            target = _viewModel.Items[^1];
+            dropAfter = true;
         }
-        finally
-        {
-            _suppressSelectionEvents = false;
-        }
+        SetDropIndicator(target, dropAfter);
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
     }
 
-    private void OnToggleChanged(object sender, RoutedEventArgs e)
+    private void OnScriptListDragLeave(object sender, DragEventArgs e)
     {
-        if (sender is not CheckBox { Tag: Guid id, IsChecked: var isChecked }) return;
-        var existing = _plugin.Service?.Scripts.FirstOrDefault(s => s.Id == id);
-        if (existing is null) return;
+        if (!ScriptList.IsMouseOver)
+            ClearDropIndicator();
+    }
 
-        var updated = existing with { IsEnabled = isChecked == true };
-        if (_editingScript?.Id == id)
+    private void OnScriptListDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(ScriptListItemViewModel)) is not ScriptListItemViewModel source)
+            return;
+
+        var sourceIndex = _viewModel.Items.IndexOf(source);
+        var insertionIndex = _viewModel.Items.Count;
+        if (_dropTarget is not null)
         {
-            UpdateScriptAndKeepSelection(updated);
-            UpdateEditButtons();
+            insertionIndex = _viewModel.Items.IndexOf(_dropTarget);
+            if (_dropAfter)
+                insertionIndex++;
         }
-        else
+
+        ClearDropIndicator();
+        if (insertionIndex > sourceIndex)
+            insertionIndex--;
+        _viewModel.MoveItem(source, insertionIndex);
+        e.Handled = true;
+    }
+
+    private void SetDropIndicator(ScriptListItemViewModel? target, bool dropAfter)
+    {
+        if (ReferenceEquals(_dropTarget, target) && _dropAfter == dropAfter)
+            return;
+        ClearDropIndicator();
+        _dropTarget = target;
+        _dropAfter = dropAfter;
+        _dropTarget?.SetDropIndicator(true, dropAfter);
+    }
+
+    private void ClearDropIndicator()
+    {
+        _dropTarget?.SetDropIndicator(false, false);
+        _dropTarget = null;
+        _dropAfter = false;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
         {
-            _plugin.Service?.UpdateScript(updated);
+            if (current is T match)
+                return match;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return null;
+    }
+
+    private void Localize()
+    {
+        PageTitle.Text = L("Settings.ScriptsTitle");
+        PageSubtitle.Text = L("Settings.ScriptsSubtitle");
+        AddButton.Content = L("Settings.Add");
+        EmptyTitle.Text = L("Settings.EmptyTitle");
+        EmptyHint.Text = L("Settings.EmptyHint");
+        EmptyAddButton.Content = L("Settings.Add");
+        EditButton.Content = L("Settings.Edit");
+        RemoveButton.Content = L("Settings.Remove");
+        MoveUpButton.Content = L("Settings.MoveUp");
+        MoveDownButton.Content = L("Settings.MoveDown");
+    }
+
+    private string L(string key) => _viewModel.L(key);
+
+    private sealed class WindowScriptEditorHost(ScriptSettingsView view, ScriptService service) : IScriptEditorHost
+    {
+        public Guid? ShowEditor(ScriptEntry? script)
+        {
+            var editor = new ScriptEditorWindow(service, script);
+            var owner = Window.GetWindow(view);
+            if (owner is not null)
+                editor.Owner = owner;
+            editor.ShowDialog();
+            return editor.SavedScript?.Id;
         }
     }
+}
+
+internal sealed class WindowConfirmationService(
+    Func<Window?> owner,
+    IPluginLocalization? localization) : IScriptConfirmationService
+{
+    public ConfirmationChoice ConfirmUnsavedChanges(string scriptName)
+    {
+        var dialog = ScriptConfirmationWindow.CreateUnsaved(
+            Get("Settings.UnsavedTitle"),
+            Get("Settings.UnsavedMessage", scriptName),
+            Get("Settings.Save"),
+            Get("Settings.Discard"),
+            Get("Settings.Cancel"),
+            Get("Settings.Close"));
+        SetOwner(dialog);
+        dialog.ShowDialog();
+        return dialog.Choice;
+    }
+
+    public bool ConfirmRemove(string scriptName)
+    {
+        var dialog = ScriptConfirmationWindow.CreateRemove(
+            Get("Settings.RemoveTitle"),
+            Get("Settings.RemoveMessage", scriptName),
+            Get("Settings.Remove"),
+            Get("Settings.Cancel"),
+            Get("Settings.Close"));
+        SetOwner(dialog);
+        dialog.ShowDialog();
+        return dialog.Choice == ConfirmationChoice.Primary;
+    }
+
+    private void SetOwner(Window dialog)
+    {
+        if (owner() is { IsVisible: true } window)
+            dialog.Owner = window;
+    }
+
+    private string Get(string key, params object[] args) => localization is null
+        ? key
+        : localization.GetString(key, args);
 }

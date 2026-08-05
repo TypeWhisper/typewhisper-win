@@ -134,13 +134,48 @@ public sealed class PluginManager : IDisposable
 
         foreach (var plugin in plugins)
         {
-            if (!selectedById.ContainsKey(plugin.Manifest.Id))
+            if (!selectedById.TryGetValue(plugin.Manifest.Id, out var selected))
+            {
                 orderedIds.Add(plugin.Manifest.Id);
+                selectedById[plugin.Manifest.Id] = plugin;
+                continue;
+            }
 
-            selectedById[plugin.Manifest.Id] = plugin;
+            if (ShouldPreferCandidate(selected, plugin))
+            {
+                Debug.WriteLine(
+                    $"[PluginManager] Prefer {plugin.Manifest.Id} {plugin.Manifest.Version} at {plugin.PluginDirectory} " +
+                    $"over {selected.Manifest.Version} at {selected.PluginDirectory}");
+                selectedById[plugin.Manifest.Id] = plugin;
+            }
+            else
+            {
+                Debug.WriteLine(
+                    $"[PluginManager] Keep {selected.Manifest.Id} {selected.Manifest.Version} at {selected.PluginDirectory} " +
+                    $"over {plugin.Manifest.Version} at {plugin.PluginDirectory}");
+            }
         }
 
         return orderedIds.Select(id => selectedById[id]).ToList();
+    }
+
+    private static bool ShouldPreferCandidate(LoadedPlugin selected, LoadedPlugin candidate)
+    {
+        var selectedIsValid = Version.TryParse(selected.Manifest.Version, out var selectedVersion);
+        var candidateIsValid = Version.TryParse(candidate.Manifest.Version, out var candidateVersion);
+
+        if (selectedIsValid != candidateIsValid)
+            return candidateIsValid;
+
+        if (selectedIsValid)
+        {
+            var comparison = candidateVersion!.CompareTo(selectedVersion);
+            if (comparison != 0)
+                return comparison > 0;
+        }
+
+        // Preserve the existing later-search-directory override for ties and invalid versions.
+        return true;
     }
 
     internal static void UnloadDiscardedSearchDirectoryPlugins(
