@@ -578,7 +578,26 @@ public class ModelManagerViewModelTests
             recentTranscriptions,
             workflowPalette);
 
-        await sut.StartRecordingAsync();
+        plugin.BlockNextLoad();
+        var startTask = sut.StartRecordingAsync();
+
+        try
+        {
+            Assert.True(
+                await plugin.WaitForLoadCountAsync(2, TimeSpan.FromSeconds(1)),
+                "Starting dictation should begin preparing the changed model.");
+            Assert.True(sut.IsRecording);
+            Assert.True(audio.IsRecording);
+            Assert.True(sut.IsOverlayVisible);
+            Assert.Equal(DictationState.Recording, sut.State);
+            Assert.False(startTask.IsCompleted);
+        }
+        finally
+        {
+            plugin.ReleaseBlockedLoad();
+        }
+
+        await startTask;
 
         Assert.Equal(
             [TranscriptionAccelerationPreference.Cpu, TranscriptionAccelerationPreference.NvidiaCuda],
@@ -665,6 +684,281 @@ public class ModelManagerViewModelTests
         Assert.False(sut.IsRecording);
         Assert.False(sut.ShowFeedback);
         Assert.False(sut.FeedbackIsError);
+    }
+
+    [Fact]
+    public async Task StopRecordingAsync_WaitsInProcessingForModelAndTranscribesCompleteAudioOnce()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true)
+        {
+            ResponseText = ""
+        };
+        plugin.BlockNextLoad();
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with
+            {
+                SelectedModelId = fullModelId,
+                LocalModelAcceleration = AppSettings.LocalModelAccelerationCpu,
+                TranscribeShortQuietClipsAggressively = true,
+                SaveToHistoryEnabled = false,
+                AutoPaste = false
+            },
+            plugin);
+
+        var startedEvents = new List<RecordingStartedEvent>();
+        var stoppedEvents = new List<RecordingStoppedEvent>();
+        using var startedSubscription = _eventBus.Subscribe<RecordingStartedEvent>(evt =>
+        {
+            lock (startedEvents)
+                startedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+        using var stoppedSubscription = _eventBus.Subscribe<RecordingStoppedEvent>(evt =>
+        {
+            lock (stoppedEvents)
+                stoppedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+
+        var startTask = fixture.ViewModel.StartRecordingAsync();
+        Assert.True(await plugin.WaitForLoadCountAsync(1, TimeSpan.FromSeconds(2)));
+        var capture = Assert.Single(fixture.Captures.Created);
+        var initialAudio = BuildSpeechPcm16Chunk();
+        capture.RaiseData(initialAudio, initialAudio.Length);
+
+        var stopTask = fixture.ViewModel.StopRecordingAsync();
+        Assert.True(await WaitForConditionAsync(
+            () => !fixture.Audio.IsRecording
+                && fixture.ViewModel.State == DictationState.Processing
+                && fixture.ViewModel.IsOverlayVisible,
+            TimeSpan.FromSeconds(2)));
+        Assert.False(stopTask.IsCompleted);
+
+        plugin.ReleaseBlockedLoad();
+        await Task.WhenAll(startTask, stopTask);
+        Assert.True(await WaitForConditionAsync(
+            () => plugin.TranscribeCallCount == 1,
+            TimeSpan.FromSeconds(2)));
+
+        Assert.Equal(1, plugin.TranscribeCallCount);
+        AssertWavContainsInitialAudio(plugin.LastTranscriptionAudio, initialAudio.Length);
+        Assert.Equal(1, capture.StopCount);
+        lock (startedEvents)
+            Assert.Single(startedEvents);
+        lock (stoppedEvents)
+            Assert.Single(stoppedEvents);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CloudBatchProvider_FinalRequestIncludesAudioFromRecordingStart(
+        bool liveTranscriptionEnabled)
+    {
+        const string pluginId = "com.typewhisper.cloud-batch";
+        const string modelId = "batch";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Cloud Batch",
+            modelId,
+            "Batch",
+            configured: true)
+        {
+            ResponseText = ""
+        };
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with
+            {
+                SelectedModelId = fullModelId,
+                LiveTranscriptionEnabled = liveTranscriptionEnabled,
+                TranscribeShortQuietClipsAggressively = true,
+                SaveToHistoryEnabled = false,
+                AutoPaste = false
+            },
+            plugin);
+
+        await fixture.ViewModel.StartRecordingAsync();
+        var capture = Assert.Single(fixture.Captures.Created);
+        var initialAudio = BuildSpeechPcm16Chunk();
+        capture.RaiseData(initialAudio, initialAudio.Length);
+        if (!liveTranscriptionEnabled)
+        {
+            var streamingHandler = GetPrivateField(fixture.ViewModel, "_streamingHandler");
+            Assert.Equal(0, (int)GetPrivateField(streamingHandler, "_pendingStreamingAudioBytes"));
+        }
+
+        await fixture.ViewModel.StopRecordingAsync();
+        Assert.True(await WaitForConditionAsync(
+            () => plugin.TranscribeCallCount == 1,
+            TimeSpan.FromSeconds(2)));
+
+        Assert.Equal(1, plugin.TranscribeCallCount);
+        AssertWavContainsInitialAudio(plugin.LastTranscriptionAudio, initialAudio.Length);
+        Assert.Equal(1, capture.StopCount);
+    }
+
+    [Fact]
+    public async Task LateModelContinuationAfterAbort_DoesNotRestartInvalidatedSession()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true)
+        {
+            ResponseText = ""
+        };
+        plugin.BlockNextLoadIgnoringCancellation();
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with { SelectedModelId = fullModelId },
+            plugin);
+        var startedEvents = new List<RecordingStartedEvent>();
+        var stoppedEvents = new List<RecordingStoppedEvent>();
+        var failedEvents = new List<TranscriptionFailedEvent>();
+        using var startedSubscription = _eventBus.Subscribe<RecordingStartedEvent>(evt =>
+        {
+            lock (startedEvents)
+                startedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+        using var stoppedSubscription = _eventBus.Subscribe<RecordingStoppedEvent>(evt =>
+        {
+            lock (stoppedEvents)
+                stoppedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+        using var failedSubscription = _eventBus.Subscribe<TranscriptionFailedEvent>(evt =>
+        {
+            lock (failedEvents)
+                failedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+
+        var startTask = fixture.ViewModel.StartRecordingAsync();
+        Assert.True(await plugin.WaitForLoadCountAsync(1, TimeSpan.FromSeconds(2)));
+        Assert.True(fixture.Audio.IsRecording);
+
+        await fixture.ViewModel.HandleCancelRequested();
+        await fixture.ViewModel.HandleCancelRequested();
+
+        Assert.False(fixture.Audio.IsRecording);
+        Assert.False(fixture.ViewModel.IsRecording);
+        Assert.False(fixture.ViewModel.IsOverlayVisible);
+
+        plugin.ReleaseBlockedLoad();
+        await startTask;
+        await Task.Delay(100);
+
+        Assert.False(fixture.Audio.IsRecording);
+        Assert.Equal(DictationState.Idle, fixture.ViewModel.State);
+        Assert.Equal(0, plugin.TranscribeCallCount);
+        lock (startedEvents)
+            Assert.Single(startedEvents);
+        lock (stoppedEvents)
+            Assert.Single(stoppedEvents);
+        lock (failedEvents)
+            Assert.Single(failedEvents);
+    }
+
+    [Fact]
+    public async Task DelayedModelFailure_StopsAudioAndPublishesOneFailure()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true)
+        {
+            LoadExceptionAfterBlock = new InvalidOperationException("Delayed load failed")
+        };
+        plugin.BlockNextLoad();
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with { SelectedModelId = fullModelId },
+            plugin);
+        var failedEvents = new List<TranscriptionFailedEvent>();
+        using var failedSubscription = _eventBus.Subscribe<TranscriptionFailedEvent>(evt =>
+        {
+            lock (failedEvents)
+                failedEvents.Add(evt);
+            return Task.CompletedTask;
+        });
+
+        var startTask = fixture.ViewModel.StartRecordingAsync();
+        Assert.True(await plugin.WaitForLoadCountAsync(1, TimeSpan.FromSeconds(2)));
+        Assert.True(fixture.Audio.IsRecording);
+        Assert.True(fixture.ViewModel.IsOverlayVisible);
+
+        plugin.ReleaseBlockedLoad();
+        await startTask;
+        Assert.True(await WaitForConditionAsync(
+            () =>
+            {
+                lock (failedEvents)
+                    return failedEvents.Count == 1;
+            },
+            TimeSpan.FromSeconds(2)));
+
+        Assert.False(fixture.Audio.IsRecording);
+        Assert.False(fixture.ViewModel.IsRecording);
+        Assert.False(fixture.ViewModel.IsOverlayVisible);
+        Assert.True(fixture.ViewModel.ShowFeedback);
+        Assert.True(fixture.ViewModel.FeedbackIsError);
+        Assert.Equal(0, plugin.TranscribeCallCount);
+        Assert.Equal(1, Assert.Single(fixture.Captures.Created).StopCount);
+        fixture.History.Verify(h => h.AddRecord(It.IsAny<TranscriptionRecord>()), Times.Never);
+        lock (failedEvents)
+            Assert.Single(failedEvents);
+    }
+
+    [Fact]
+    public async Task AlreadyLoadedModel_StartsWithoutReloading()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            "Parakeet",
+            modelId,
+            "Parakeet TDT",
+            configured: true,
+            supportsModelDownload: true);
+        using var fixture = CreateDictationFixture(
+            AppSettings.Default with { SelectedModelId = fullModelId },
+            plugin);
+        await fixture.ModelManager.LoadModelAsync(fullModelId);
+
+        await fixture.ViewModel.StartRecordingAsync();
+
+        Assert.True(fixture.ViewModel.IsRecording);
+        Assert.True(fixture.Audio.IsRecording);
+        Assert.True(fixture.ViewModel.IsOverlayVisible);
+        Assert.Equal(1, plugin.LoadCallCount);
+
+        await fixture.ViewModel.HandleCancelRequested();
+        await fixture.ViewModel.HandleCancelRequested();
+        Assert.False(fixture.Audio.IsRecording);
+        Assert.Equal(1, Assert.Single(fixture.Captures.Created).StopCount);
     }
 
     [Fact]
@@ -1088,6 +1382,106 @@ public class ModelManagerViewModelTests
         Assert.False(sut.IsActiveModelBusy);
     }
 
+    private DictationFixture CreateDictationFixture(
+        AppSettings initialSettings,
+        FakeTranscriptionPlugin plugin)
+    {
+        var settings = new FakeSettingsService(initialSettings);
+        var pluginManager = CreatePluginManager(settings, plugin);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var errorLog = new Mock<IErrorLogService>();
+        var captures = new FakeAudioInputCaptureFactory();
+        var audio = new AudioRecordingService(
+            new FakeAudioInputDeviceProvider("USB Microphone"),
+            captures,
+            Timeout.InfiniteTimeSpan);
+        var speechFeedback = new SpeechFeedbackService(
+            settings,
+            pluginManager,
+            new FakeTtsProvider("windows-sapi", "System Voice"));
+        var textInsertion = new TextInsertionService(errorLog.Object);
+        var history = new Mock<IHistoryService>();
+        history.Setup(h => h.Records).Returns([]);
+        var workflowTextProcessor = new Mock<IWorkflowTextProcessor>();
+        var recentTranscriptions = new RecentTranscriptionsService(
+            history.Object,
+            new RecentTranscriptionStore(),
+            textInsertion,
+            settings);
+        var workflowPalette = new WorkflowPaletteService(
+            _workflows.Object,
+            _activeWindow.Object,
+            textInsertion,
+            settings,
+            workflowTextProcessor.Object,
+            pluginManager,
+            new NoOpWorkflowPalettePresenter());
+        var hotkey = new HotkeyService(settings, _workflows.Object);
+        var viewModel = new DictationViewModel(
+            settings,
+            modelManager,
+            audio,
+            hotkey,
+            textInsertion,
+            _activeWindow.Object,
+            new SoundService { IsEnabled = false },
+            history.Object,
+            Mock.Of<IDictionaryService>(),
+            Mock.Of<IVocabularyBoostingService>(),
+            Mock.Of<ISnippetService>(),
+            _workflows.Object,
+            Mock.Of<ITranslationService>(),
+            Mock.Of<IAudioDuckingService>(),
+            Mock.Of<IMediaPauseService>(),
+            workflowTextProcessor.Object,
+            new PostProcessingPipeline(),
+            errorLog.Object,
+            speechFeedback,
+            recentTranscriptions,
+            workflowPalette);
+
+        return new DictationFixture(
+            viewModel,
+            audio,
+            captures,
+            modelManager,
+            pluginManager,
+            hotkey,
+            speechFeedback,
+            history,
+            plugin);
+    }
+
+    private static byte[] BuildSpeechPcm16Chunk()
+    {
+        var samples = Enumerable.Repeat((short)8192, 1600).ToArray();
+        var bytes = new byte[samples.Length * sizeof(short)];
+        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    private static void AssertWavContainsInitialAudio(byte[]? wavAudio, int expectedInitialBytes)
+    {
+        Assert.NotNull(wavAudio);
+        var dataOffset = -1;
+        for (var i = 12; i <= wavAudio.Length - 8; i++)
+        {
+            if (wavAudio[i] == (byte)'d'
+                && wavAudio[i + 1] == (byte)'a'
+                && wavAudio[i + 2] == (byte)'t'
+                && wavAudio[i + 3] == (byte)'a')
+            {
+                dataOffset = i + 8;
+                break;
+            }
+        }
+
+        Assert.True(dataOffset > 0, "The final transcription request should contain a WAV data chunk.");
+        var dataLength = BitConverter.ToInt32(wavAudio, dataOffset - sizeof(int));
+        Assert.True(dataLength >= expectedInitialBytes);
+        Assert.Contains(wavAudio.AsSpan(dataOffset, expectedInitialBytes).ToArray(), value => value != 0);
+    }
+
     private PluginManager CreatePluginManager(ISettingsService settings, params ITranscriptionEnginePlugin[] transcriptionEngines)
     {
         var pluginManager = new PluginManager(
@@ -1102,11 +1496,48 @@ public class ModelManagerViewModelTests
         return pluginManager;
     }
 
+    private sealed class DictationFixture(
+        DictationViewModel viewModel,
+        AudioRecordingService audio,
+        FakeAudioInputCaptureFactory captures,
+        ModelManagerService modelManager,
+        PluginManager pluginManager,
+        HotkeyService hotkey,
+        SpeechFeedbackService speechFeedback,
+        Mock<IHistoryService> history,
+        FakeTranscriptionPlugin plugin) : IDisposable
+    {
+        public DictationViewModel ViewModel { get; } = viewModel;
+        public AudioRecordingService Audio { get; } = audio;
+        public FakeAudioInputCaptureFactory Captures { get; } = captures;
+        public ModelManagerService ModelManager { get; } = modelManager;
+        public Mock<IHistoryService> History { get; } = history;
+
+        public void Dispose()
+        {
+            plugin.ReleaseBlockedLoad();
+            ViewModel.Dispose();
+            hotkey.Dispose();
+            speechFeedback.Dispose();
+            Audio.Dispose();
+            ModelManager.Dispose();
+            pluginManager.Dispose();
+        }
+    }
+
     private static void SetPrivateField(object target, string fieldName, object value)
     {
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
         field.SetValue(target, value);
+    }
+
+    private static object GetPrivateField(object target, string fieldName)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
+        return field.GetValue(target)
+            ?? throw new InvalidOperationException($"Field '{fieldName}' was unexpectedly null.");
     }
 
     private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout)
@@ -1214,9 +1645,14 @@ public class ModelManagerViewModelTests
             TranscriptionAccelerationPreference.Auto;
         public int LoadCallCount { get; private set; }
         public Exception? LoadException { get; set; }
+        public Exception? LoadExceptionAfterBlock { get; set; }
+        public string ResponseText { get; set; } = "ok";
+        public int TranscribeCallCount { get; private set; }
+        public byte[]? LastTranscriptionAudio { get; private set; }
         public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
         private TaskCompletionSource? _nextLoadBlocker;
         private TaskCompletionSource? _activeLoadBlocker;
+        private bool _nextLoadIgnoresCancellation;
         private readonly Func<TranscriptionAccelerationPreference, TranscriptionAccelerationStatus>? _accelerationStatusFactory;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
@@ -1233,6 +1669,12 @@ public class ModelManagerViewModelTests
         public void BlockNextLoad() =>
             _nextLoadBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public void BlockNextLoadIgnoringCancellation()
+        {
+            BlockNextLoad();
+            _nextLoadIgnoresCancellation = true;
+        }
+
         public void ReleaseBlockedLoad() =>
             (_activeLoadBlocker ?? _nextLoadBlocker)?.TrySetResult();
 
@@ -1244,13 +1686,18 @@ public class ModelManagerViewModelTests
                 throw LoadException;
 
             var blocker = _nextLoadBlocker;
+            var ignoresCancellation = _nextLoadIgnoresCancellation;
             _nextLoadBlocker = null;
+            _nextLoadIgnoresCancellation = false;
             if (blocker is not null)
             {
                 _activeLoadBlocker = blocker;
                 try
                 {
-                    await blocker.Task.WaitAsync(ct);
+                    if (ignoresCancellation)
+                        await blocker.Task;
+                    else
+                        await blocker.Task.WaitAsync(ct);
                 }
                 finally
                 {
@@ -1258,6 +1705,9 @@ public class ModelManagerViewModelTests
                         _activeLoadBlocker = null;
                 }
             }
+
+            if (LoadExceptionAfterBlock is not null)
+                throw LoadExceptionAfterBlock;
 
             SelectedModelId = modelId;
         }
@@ -1288,8 +1738,12 @@ public class ModelManagerViewModelTests
             string? language,
             bool translate,
             string? prompt,
-            CancellationToken ct) =>
-            Task.FromResult(new PluginTranscriptionResult("ok", language ?? "en", 1));
+            CancellationToken ct)
+        {
+            TranscribeCallCount++;
+            LastTranscriptionAudio = wavAudio;
+            return Task.FromResult(new PluginTranscriptionResult(ResponseText, language ?? "en", 1));
+        }
 
         public void Dispose() { }
     }

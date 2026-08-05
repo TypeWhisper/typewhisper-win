@@ -76,14 +76,21 @@ public class DictationOverlayPresentationTests
             source,
             "private void ApplyModelUnavailableFeedback(string? modelId, Exception? error = null)",
             900);
-        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 4200);
+        var preparation = TestFile.ExtractBlock(
+            source,
+            "private async Task<ModelPreparationOutcome> PrepareModelAsync(",
+            3200);
+        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 8500);
 
         Assert.Contains("_errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyTransientIdleFeedback(feedback, feedbackIsError: true);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId);", startRecording, StringComparison.Ordinal);
-        Assert.Equal(4, TestFile.CountOccurrences(
+        Assert.Contains("catch (Exception ex)", preparation, StringComparison.Ordinal);
+        Assert.Contains("Error: ex", preparation, StringComparison.Ordinal);
+        Assert.Contains(
+            "EndRecordingAfterPreparationFailure(session, preparationOutcome);",
             startRecording,
-            "ApplyModelUnavailableFeedback(desiredModelId, ex);"));
+            StringComparison.Ordinal);
     }
 
 }

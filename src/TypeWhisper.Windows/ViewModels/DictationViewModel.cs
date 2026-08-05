@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core;
@@ -81,6 +82,15 @@ public enum ApiDictationSessionStatus
     /// </summary>
     Failed
 }
+
+internal sealed record ModelPreparationOutcome(
+    Guid RecordingId,
+    string RequestedModelId,
+    string? ActiveModelId,
+    ITranscriptionEngine? Engine,
+    bool IsReady,
+    bool IsCancelled,
+    Exception? Error);
 
 /// <summary>
 /// API-facing dictation control surface.
@@ -165,6 +175,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private Guid? _activeApiDictationSessionId;
     // Identifies the current recording session; stamped on all related events.
     private Guid? _currentRecordingId;
+    private RecordingSession? _activeRecordingSession;
 
     private readonly Channel<TranscriptionJob> _jobChannel =
         Channel.CreateBounded<TranscriptionJob>(new BoundedChannelOptions(5)
@@ -184,6 +195,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private SimpleVoiceActivityDetector? _vad;
     private readonly List<string> _partialSegments = [];
     private readonly SemaphoreSlim _vadLock = new(1, 1);
+    private readonly SemaphoreSlim _modelPreparationLock = new(1, 1);
     private bool _disposed;
     private int _lastVadFlushedSegmentCount;
     private int _lastVadDiscardedShortSegmentCount;
@@ -295,13 +307,21 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
 
         _audio.AudioLevelChanged += OnAudioLevelChanged;
-        _audio.DeviceLost += (_, _) => Application.Current?.Dispatcher.InvokeAsync(async () =>
+        _audio.DeviceLost += (_, _) => Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            if (_isRecording)
+            var session = _activeRecordingSession;
+            if (session is not null && (_isRecording || _isStoppingRecording))
             {
+                var durationSeconds = _audio.RecordingDuration.TotalSeconds;
                 _isRecording = false;
-                _audio.StopRecording();
+                StopAudioOnce(session);
                 StopActiveRecordingInfrastructure();
+                PublishRecordingStoppedOnce(session, durationSeconds);
+                FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.NoMicrophone"]);
+                PublishTranscriptionFailureOnce(session, Loc.Instance["Status.NoMicrophone"]);
+                session.Invalidate();
+                _activeRecordingSession = null;
+                _currentRecordingId = null;
             }
 
             ApplyTransientIdleFeedback(Loc.Instance["Status.NoMicrophone"], feedbackIsError: true);
@@ -548,7 +568,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _workflowHotkeyOverrideId = workflowId;
         await StartRecording();
 
-        if (!_isRecording)
+        if (!_isRecording
+            && GetApiDictationSession(sessionId)?.Status == ApiDictationSessionStatus.Recording)
             FailApiDictationSession(sessionId, StatusText);
 
         return sessionId;
@@ -901,10 +922,206 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         ApplyTransientIdleFeedback(feedback, feedbackIsError: true);
     }
 
+    private async Task<ModelPreparationOutcome> PrepareModelAsync(
+        Guid recordingId,
+        string desiredModelId,
+        Task<bool> captureStarted,
+        CancellationToken cancellationToken)
+    {
+        var lockAcquired = false;
+        try
+        {
+            if (!await captureStarted.WaitAsync(cancellationToken))
+            {
+                return new ModelPreparationOutcome(
+                    recordingId,
+                    desiredModelId,
+                    null,
+                    null,
+                    IsReady: false,
+                    IsCancelled: true,
+                    Error: null);
+            }
+
+            await YieldForRecordingPresentationAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await _modelPreparationLock.WaitAsync(cancellationToken);
+            lockAcquired = true;
+            var loaded = await _modelManager.EnsureModelLoadedAsync(desiredModelId, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var activeModelId = _modelManager.ActiveModelId;
+            var engine = _modelManager.Engine;
+            return new ModelPreparationOutcome(
+                recordingId,
+                desiredModelId,
+                activeModelId,
+                engine,
+                IsReady: loaded && engine.IsModelLoaded,
+                IsCancelled: false,
+                Error: null);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ModelPreparationOutcome(
+                recordingId,
+                desiredModelId,
+                null,
+                null,
+                IsReady: false,
+                IsCancelled: true,
+                Error: null);
+        }
+        catch (Exception ex)
+        {
+            return new ModelPreparationOutcome(
+                recordingId,
+                desiredModelId,
+                null,
+                null,
+                IsReady: false,
+                IsCancelled: false,
+                Error: ex);
+        }
+        finally
+        {
+            if (lockAcquired)
+                _modelPreparationLock.Release();
+        }
+    }
+
+    private static async Task YieldForRecordingPresentationAsync()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            await Task.Yield();
+            return;
+        }
+
+        await dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Background);
+    }
+
+    private static async Task<bool> AwaitModelReadyAsync(Task<ModelPreparationOutcome> preparation) =>
+        (await preparation).IsReady;
+
+    private void PublishRecordingStartedOnce(RecordingSession session)
+    {
+        if (session.RecordingStartedPublished)
+            return;
+
+        session.RecordingStartedPublished = true;
+        _eventBus.Publish(new RecordingStartedEvent
+        {
+            AppName = session.Context.CapturedWindowTitle,
+            AppProcessName = session.Context.CapturedProcessName,
+            RecordingId = session.Context.RecordingId
+        });
+    }
+
+    private void PublishRecordingStoppedOnce(RecordingSession session, double durationSeconds)
+    {
+        if (session.RecordingStoppedPublished)
+            return;
+
+        session.RecordingStoppedPublished = true;
+        _eventBus.Publish(new RecordingStoppedEvent
+        {
+            DurationSeconds = durationSeconds,
+            RecordingId = session.Context.RecordingId
+        });
+    }
+
+    private void PublishTranscriptionFailureOnce(
+        RecordingSession session,
+        string message,
+        string? modelId = null)
+    {
+        if (session.TerminalTranscriptionEventPublished)
+            return;
+
+        session.TerminalTranscriptionEventPublished = true;
+        _eventBus.Publish(new TranscriptionFailedEvent
+        {
+            ErrorMessage = message,
+            ModelId = modelId ?? session.Context.DesiredModelId,
+            AppName = session.Context.CapturedWindowTitle,
+            RecordingId = session.Context.RecordingId
+        });
+    }
+
+    private void StopAudioOnce(RecordingSession session)
+    {
+        if (session.AudioStopped)
+            return;
+
+        session.AudioStopped = true;
+        _audio.StopRecording();
+    }
+
+    private async Task<float[]> StopAudioOnceAsync(RecordingSession session)
+    {
+        if (session.AudioStopped)
+            return [];
+
+        session.AudioStopped = true;
+        return await _audio.StopRecordingAsync() ?? [];
+    }
+
+    private void EndRecordingAfterPreparationCancellation(RecordingSession session)
+    {
+        if (!ReferenceEquals(_activeRecordingSession, session))
+            return;
+
+        var durationSeconds = _audio.RecordingDuration.TotalSeconds;
+        _isRecording = false;
+        StopAudioOnce(session);
+        StopActiveRecordingInfrastructure();
+        PublishRecordingStoppedOnce(session, durationSeconds);
+        FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.Cancelled"]);
+        session.Invalidate();
+        _activeRecordingSession = null;
+        _currentRecordingId = null;
+        ResetSessionToIdle(clearFeedback: false, forceHotkeyStop: true);
+    }
+
+    private void EndRecordingAfterPreparationFailure(
+        RecordingSession session,
+        ModelPreparationOutcome outcome)
+    {
+        if (!ReferenceEquals(_activeRecordingSession, session) || session.PreparationFailureHandled)
+            return;
+
+        session.PreparationFailureHandled = true;
+        var durationSeconds = _audio.RecordingDuration.TotalSeconds;
+        _isRecording = false;
+        StopAudioOnce(session);
+        StopActiveRecordingInfrastructure();
+        PublishRecordingStoppedOnce(session, durationSeconds);
+
+        var feedback = outcome.Error is null
+            ? Loc.Instance["Status.NoModelLoaded"]
+            : Loc.Instance.GetString("Status.ModelErrorFormat", outcome.Error.Message);
+        FailApiDictationSession(session.Context.ApiSessionId, feedback);
+        PublishTranscriptionFailureOnce(session, feedback, outcome.ActiveModelId);
+        session.Invalidate();
+        _activeRecordingSession = null;
+        _currentRecordingId = null;
+        ApplyModelUnavailableFeedback(session.Context.DesiredModelId, outcome.Error);
+    }
+
     private async Task StartRecording()
     {
-        if (_isRecording || _isStoppingRecording) return;
-        _isRecording = true;
+        if (_isRecording)
+            return;
+
+        if (_isStoppingRecording)
+        {
+            _workflowHotkeyOverrideId = null;
+            _hotkey.ForceStop();
+            return;
+        }
+
         CancelTargetAppCorrectionLearning();
         ClearFeedbackAction();
         FeedbackText = null;
@@ -926,48 +1143,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _activeWorkflow = _workflows.MatchWorkflow(_capturedProcessName, _capturedUrl)?.Workflow;
         }
 
-        var desiredModelId = EffectiveModelId ?? _settings.Current.SelectedModelId;
+        var settingsSnapshot = _settings.Current;
+        var desiredModelId = _activeWorkflow?.Behavior.TranscriptionModelOverride
+            ?? settingsSnapshot.SelectedModelId;
         if (string.IsNullOrWhiteSpace(desiredModelId))
-        {
-            ApplyModelUnavailableFeedback(desiredModelId);
-            return;
-        }
-
-        try
-        {
-            if (!await _modelManager.EnsureModelLoadedAsync(desiredModelId))
-            {
-                ApplyModelUnavailableFeedback(desiredModelId);
-                return;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _isRecording = false;
-            return;
-        }
-        catch (InvalidOperationException ex)
-        {
-            ApplyModelUnavailableFeedback(desiredModelId, ex);
-            return;
-        }
-        catch (IOException ex)
-        {
-            ApplyModelUnavailableFeedback(desiredModelId, ex);
-            return;
-        }
-        catch (ArgumentException ex)
-        {
-            ApplyModelUnavailableFeedback(desiredModelId, ex);
-            return;
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            ApplyModelUnavailableFeedback(desiredModelId, ex);
-            return;
-        }
-
-        if (!_modelManager.Engine.IsModelLoaded)
         {
             ApplyModelUnavailableFeedback(desiredModelId);
             return;
@@ -975,71 +1154,93 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
         if (!_audio.HasDevice)
         {
-            _isRecording = false;
             ApplyTransientIdleFeedback(Loc.Instance["Status.NoMicrophone"], feedbackIsError: true);
             return;
         }
 
+        var languageHints = (_activeWorkflow?.Behavior.GetLanguageHints(settingsSnapshot.GetLanguageHints())
+            ?? settingsSnapshot.GetLanguageHints()).ToList();
+        var effectiveLanguage = languageHints.FirstOrDefault() ?? "auto";
+        var effectiveTask = (_activeWorkflow?.Behavior.SelectedTask ?? settingsSnapshot.TranscriptionTask) == "translate"
+            ? TranscriptionTask.Translate
+            : TranscriptionTask.Transcribe;
+        var effectiveWhisperMode = _activeWorkflow?.Behavior.WhisperModeOverride
+            ?? settingsSnapshot.WhisperModeEnabled;
+        var recordingId = Guid.NewGuid();
+        var captureStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var preparationCts = new CancellationTokenSource();
+        var modelPreparation = PrepareModelAsync(
+            recordingId,
+            desiredModelId,
+            captureStarted.Task,
+            preparationCts.Token);
+        var context = new RecordingContext(
+            recordingId,
+            desiredModelId,
+            _activeWorkflow,
+            _capturedWindowHandle,
+            _capturedProcessName,
+            _capturedWindowTitle,
+            _capturedUrl,
+            effectiveLanguage,
+            languageHints,
+            effectiveTask,
+            effectiveWhisperMode,
+            settingsSnapshot.TranscribeShortQuietClipsAggressively,
+            _activeApiDictationSessionId);
+        var session = new RecordingSession(
+            context,
+            captureStarted,
+            preparationCts,
+            modelPreparation);
+        _activeRecordingSession = session;
+        _currentRecordingId = recordingId;
+
         ActiveProcessName = _capturedProcessName;
         ActiveWorkflowName = _activeWorkflow?.Name;
 
-        _audio.WhisperModeEnabled = EffectiveWhisperMode;
+        _audio.WhisperModeEnabled = effectiveWhisperMode;
 
-        // Live transcription: streaming handler polls growing buffer periodically
+        // Prepare live preview before capture so the first audio packet can be buffered.
         _partialSegments.Clear();
         PartialText = "";
         _vad?.Dispose();
         _vad = null;
         _streamingHandler.Stop();
 
-        var isPluginModel = _modelManager.ActiveModelId is not null
-            && ModelManagerService.IsPluginModel(_modelManager.ActiveModelId);
-        var activeTranscriptionPlugin = _modelManager.ActiveTranscriptionPlugin;
-        var dictionaryPrompt = activeTranscriptionPlugin?.SupportsDictionaryTerms == true
-            ? _dictionary.GetTermsForPrompt()
-            : null;
-
-        var liveTranscriptionMode = LiveTranscriptionStartupPolicy.Select(
-            _settings.Current,
-            isPluginModel,
-            activeTranscriptionPlugin,
-            dictionaryPrompt);
-
-        if (liveTranscriptionMode is LiveTranscriptionStartupMode.PluginStreaming
-            or LiveTranscriptionStartupMode.PluginPollingFallback)
+        if (settingsSnapshot.LiveTranscriptionEnabled
+            && ModelManagerService.IsPluginModel(desiredModelId))
         {
-            _streamingHandler.StartWithLanguageHints(EffectiveLanguageHints, EffectiveTask, () => _isRecording);
-        }
-        else if (liveTranscriptionMode == LiveTranscriptionStartupMode.LegacyVad)
-        {
-            // VAD fallback for non-plugin models
-            _vad = CreateVoiceActivityDetector();
-            _audio.SamplesAvailable += OnSamplesAvailable;
+            _streamingHandler.StartWhenReadyWithLanguageHints(
+                languageHints,
+                effectiveTask,
+                () => ReferenceEquals(_activeRecordingSession, session) && _isRecording,
+                AwaitModelReadyAsync(modelPreparation),
+                settingsSnapshot.OnlineAsrBatchLiveTranscriptionEnabled);
         }
 
         _audio.StartRecording();
         if (!_audio.IsRecording)
         {
-            _isRecording = false;
+            session.Invalidate();
+            if (ReferenceEquals(_activeRecordingSession, session))
+                _activeRecordingSession = null;
+            _currentRecordingId = null;
             StopActiveRecordingInfrastructure();
             ApplyTransientIdleFeedback(Loc.Instance["Status.NoMicrophone"], feedbackIsError: true);
             return;
         }
 
+        _isRecording = true;
+
         _sound.PlayStartSound();
 
-        if (_settings.Current.AudioDuckingEnabled)
-            _audioDucking.DuckAudio(_settings.Current.AudioDuckingLevel);
-        if (_settings.Current.PauseMediaDuringRecording)
+        if (settingsSnapshot.AudioDuckingEnabled)
+            _audioDucking.DuckAudio(settingsSnapshot.AudioDuckingLevel);
+        if (settingsSnapshot.PauseMediaDuringRecording)
             _mediaPause.PauseMedia();
 
-        _currentRecordingId = Guid.NewGuid();
-        _eventBus.Publish(new RecordingStartedEvent
-        {
-            AppName = _activeWindow.GetActiveWindowTitle(),
-            AppProcessName = _activeWindow.GetActiveWindowProcessName(),
-            RecordingId = _currentRecordingId
-        });
+        PublishRecordingStartedOnce(session);
 
         State = DictationState.Recording;
         CurrentHotkeyMode = _hotkey.CurrentMode;
@@ -1058,12 +1259,40 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 CurrentHotkeyMode = mode;
         };
         _durationTimer.Start();
+
+        captureStarted.TrySetResult(true);
+        var preparationOutcome = await modelPreparation;
+        if (!ReferenceEquals(_activeRecordingSession, session)
+            || session.IsInvalidated
+            || _isStoppingRecording
+            || !_isRecording)
+        {
+            return;
+        }
+
+        if (preparationOutcome.IsReady)
+            return;
+
+        if (preparationOutcome.IsCancelled)
+        {
+            EndRecordingAfterPreparationCancellation(session);
+            return;
+        }
+
+        EndRecordingAfterPreparationFailure(session, preparationOutcome);
     }
 
     [RelayCommand]
     private async Task StopRecording()
     {
         if (!_isRecording || _isStoppingRecording) return;
+        var session = _activeRecordingSession;
+        if (session is null)
+        {
+            _hotkey.ForceStop();
+            return;
+        }
+
         _isStoppingRecording = true;
 
         try
@@ -1072,13 +1301,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             var streamingText = _streamingHandler.Stop();
             _audio.SamplesAvailable -= OnSamplesAvailable;
 
-            var samples = await _audio.StopRecordingAsync();
+            var samples = await StopAudioOnceAsync(session);
             _isRecording = false;
             var audioTailSnapshot = _audio.CaptureTailSnapshot();
-            var originalSamples = samples ?? [];
+            var originalSamples = samples;
             var rawPeakRmsLevel = _audio.PreGainPeakRmsLevel;
             var rawDuration = originalSamples.Length / 16000.0;
-            _eventBus.Publish(new RecordingStoppedEvent { DurationSeconds = rawDuration, RecordingId = _currentRecordingId });
+            PublishRecordingStoppedOnce(session, rawDuration);
             _durationTimer?.Stop();
             _durationTimer?.Dispose();
             _durationTimer = null;
@@ -1086,6 +1315,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _mediaPause.ResumeMedia();
             RecordingSeconds = 0;
             CurrentHotkeyMode = null;
+            State = DictationState.Processing;
+            StatusText = Loc.Instance["Status.Processing"];
+            IsOverlayVisible = true;
+            _hotkey.IsCancelShortcutEnabled = true;
 
             // Flush remaining VAD segments
             _lastVadFlushedSegmentCount = 0;
@@ -1117,7 +1350,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 ? [trustedLiveText]
                 : [.. _partialSegments];
 
-            var aggressiveShortQuietHandling = _settings.Current.TranscribeShortQuietClipsAggressively;
+            var aggressiveShortQuietHandling = session.Context.TranscribeShortQuietClipsAggressively;
             var shortSpeechDecision = DictationShortSpeechPolicy.Classify(
                 rawDuration,
                 rawPeakRmsLevel,
@@ -1126,56 +1359,67 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             if (shortSpeechDecision == ShortSpeechDecision.DiscardTooShort)
             {
-                FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.TooShort"]);
-                _eventBus.Publish(new TranscriptionFailedEvent
-                {
-                    ErrorMessage = Loc.Instance["Status.TooShort"],
-                    ModelId = _modelManager.ActiveModelId,
-                    AppName = _capturedWindowTitle,
-                    RecordingId = _currentRecordingId
-                });
+                FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.TooShort"]);
+                PublishTranscriptionFailureOnce(session, Loc.Instance["Status.TooShort"]);
+                session.Invalidate();
                 ApplyTransientIdleFeedback(Loc.Instance["Status.TooShort"]);
                 return;
             }
 
             if (shortSpeechDecision == ShortSpeechDecision.DiscardNoSpeech)
             {
-                FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.NoSpeech"]);
-                PublishNoSpeechFailure(_modelManager.ActiveModelId, _capturedWindowTitle, _currentRecordingId);
+                FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.NoSpeech"]);
+                PublishTranscriptionFailureOnce(session, Loc.Instance["Status.NoSpeech"]);
+                session.Invalidate();
                 ApplyTransientIdleFeedback(Loc.Instance["Status.NoSpeech"]);
                 return;
             }
 
-            var apiSessionId = _activeApiDictationSessionId;
+            var preparationOutcome = await session.ModelPreparation;
+            if (!ReferenceEquals(_activeRecordingSession, session) || session.IsInvalidated)
+                return;
+
+            if (!preparationOutcome.IsReady)
+            {
+                if (preparationOutcome.IsCancelled)
+                    EndRecordingAfterPreparationCancellation(session);
+                else
+                    EndRecordingAfterPreparationFailure(session, preparationOutcome);
+                return;
+            }
+
+            var apiSessionId = session.Context.ApiSessionId;
             if (apiSessionId is not null)
             {
                 MarkApiDictationSessionProcessing(apiSessionId.Value);
                 _activeApiDictationSessionId = null;
             }
 
-            // Snapshot all context and enqueue — returns immediately
+            // Snapshot all context and enqueue, then return immediately.
             var transcriptionSamples = DictationShortSpeechPolicy.PadSamplesForFinalTranscription(originalSamples, rawDuration);
-            var activeModelIdAtCapture = _modelManager.ActiveModelId;
+            var activeModelIdAtCapture = preparationOutcome.ActiveModelId
+                ?? session.Context.DesiredModelId;
             var transcriptionIdentity = _modelManager.ResolveTranscriptionIdentity(activeModelIdAtCapture);
             var job = new TranscriptionJob(
                 transcriptionSamples,
                 originalSamples,
                 partialSnapshot,
-                _activeWorkflow,
-                _capturedWindowHandle,
-                _capturedProcessName,
-                _capturedWindowTitle,
-                _capturedUrl,
-                EffectiveLanguage,
-                EffectiveLanguageHints.ToList(),
-                EffectiveTask,
+                session.Context.ActiveWorkflow,
+                session.Context.CapturedWindowHandle,
+                session.Context.CapturedProcessName,
+                session.Context.CapturedWindowTitle,
+                session.Context.CapturedUrl,
+                session.Context.EffectiveLanguage,
+                session.Context.EffectiveLanguageHints,
+                session.Context.EffectiveTask,
+                preparationOutcome.Engine!,
                 activeModelIdAtCapture,
                 transcriptionIdentity?.EngineId,
                 transcriptionIdentity?.ModelId,
                 apiSessionId,
                 aggressiveShortQuietHandling,
                 new RecordingTailDiagnosticSnapshot(
-                    _modelManager.ActiveModelId,
+                    activeModelIdAtCapture,
                     "local",
                     stopRequestedAtUtc,
                     rawDuration,
@@ -1196,8 +1440,9 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     null,
                     null,
                     null),
-                _currentRecordingId);
+                session.Context.RecordingId);
 
+            session.JobEnqueued = true;
             Interlocked.Increment(ref _pendingJobCount);
             await _jobChannel.Writer.WriteAsync(job);
             UpdateVisualState();
@@ -1206,29 +1451,43 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         {
             _isRecording = false;
             _isStoppingRecording = false;
+            if (ReferenceEquals(_activeRecordingSession, session))
+                _activeRecordingSession = null;
+            if (!session.JobEnqueued && _currentRecordingId == session.Context.RecordingId)
+                _currentRecordingId = null;
+            session.DisposePreparationResources();
             _hotkey.ForceStop();
         }
     }
 
     private Task AbortActiveOperation()
     {
-        if (_isStoppingRecording)
-            return Task.CompletedTask;
-
-        if (_isRecording)
+        var session = _activeRecordingSession;
+        if (_isStoppingRecording && session is not null)
         {
-            var recordingId = _currentRecordingId;
+            session.CancelledByUser = true;
+            session.Invalidate();
+            FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.Cancelled"]);
+            PublishTranscriptionFailureOnce(session, Loc.Instance["Status.Cancelled"]);
+            _activeRecordingSession = null;
+            _currentRecordingId = null;
+            ApplyTransientIdleFeedback(Loc.Instance["Status.Cancelled"]);
+            return Task.CompletedTask;
+        }
+
+        if (_isRecording && session is not null)
+        {
             var durationSeconds = _audio.RecordingDuration.TotalSeconds;
             _isRecording = false;
-            _audio.StopRecording();
+            StopAudioOnce(session);
             StopActiveRecordingInfrastructure();
-            FailApiDictationSession(_activeApiDictationSessionId, Loc.Instance["Status.Cancelled"]);
-            _eventBus.Publish(new RecordingStoppedEvent
-            {
-                DurationSeconds = durationSeconds,
-                RecordingId = recordingId
-            });
-            PublishCancelledFailure(_modelManager.ActiveModelId, _capturedWindowTitle, recordingId);
+            PublishRecordingStoppedOnce(session, durationSeconds);
+            FailApiDictationSession(session.Context.ApiSessionId, Loc.Instance["Status.Cancelled"]);
+            PublishTranscriptionFailureOnce(session, Loc.Instance["Status.Cancelled"]);
+            session.CancelledByUser = true;
+            session.Invalidate();
+            _activeRecordingSession = null;
+            _currentRecordingId = null;
             ApplyTransientIdleFeedback(Loc.Instance["Status.Cancelled"]);
             return Task.CompletedTask;
         }
@@ -1290,7 +1549,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         await foreach (var job in _jobChannel.Reader.ReadAllAsync(ct))
         {
-            await Application.Current.Dispatcher.InvokeAsync(() => UpdateVisualState());
+            await DispatchToUiAsync(UpdateVisualState);
             try
             {
                 await ProcessSingleJobAsync(job, ct);
@@ -1298,7 +1557,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             finally
             {
                 DecrementPendingJobCount();
-                await Application.Current.Dispatcher.InvokeAsync(() => UpdateVisualState());
+                await DispatchToUiAsync(UpdateVisualState);
             }
         }
     }
@@ -1307,7 +1566,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         try
         {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            await DispatchToUiAsync(() =>
             {
                 State = DictationState.Processing;
                 StatusText = Loc.Instance["Status.Processing"];
@@ -1334,7 +1593,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             TranscriptionResult? result = null;
             try
             {
-                result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                result = await job.EngineAtCapture.TranscribeWithLanguageHintsAsync(
                     decodeSamples, job.EffectiveLanguageHints, job.EffectiveTask, ct);
                 fullDecodeText = result.Text ?? "";
                 fullDecodeDetectedLanguage = result.DetectedLanguage;
@@ -1440,7 +1699,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 if (!tailHardeningEnabled)
                 {
                     var compareStartedAt = DateTime.UtcNow;
-                    var compareResult = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
+                    var compareResult = await job.EngineAtCapture.TranscribeWithLanguageHintsAsync(
                         ParakeetTailHelper.AppendTailGuard(job.Samples),
                         job.EffectiveLanguageHints,
                         job.EffectiveTask,
@@ -2314,6 +2573,18 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         dispatcher.InvokeAsync(action);
     }
 
+    private static async Task DispatchToUiAsync(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        await dispatcher.InvokeAsync(action);
+    }
+
     private void UpdateVisualState()
     {
         if (_isRecording)
@@ -2368,8 +2639,10 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             try
             {
+                var languageHints = _activeRecordingSession?.Context.EffectiveLanguageHints
+                    ?? EffectiveLanguageHints;
                 var result = await _modelManager.Engine.TranscribeWithLanguageHintsAsync(
-                    segment.Samples, EffectiveLanguageHints);
+                    segment.Samples, languageHints);
                 if (!string.IsNullOrWhiteSpace(result.Text))
                 {
                     _partialSegments.Add(result.Text);
@@ -2452,6 +2725,12 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     {
         if (!_disposed)
         {
+            var recordingSession = _activeRecordingSession;
+            recordingSession?.Invalidate();
+            if (_isRecording && recordingSession is not null)
+                StopAudioOnce(recordingSession);
+            _activeRecordingSession = null;
+            _isRecording = false;
             _audioDucking.RestoreAudio();
             _mediaPause.ResumeMedia();
             _jobChannel.Writer.TryComplete();
@@ -2511,6 +2790,71 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _errorLog.AddEntry(JsonSerializer.Serialize(payload), "parakeet-tail");
     }
 
+    private sealed record RecordingContext(
+        Guid RecordingId,
+        string DesiredModelId,
+        Workflow? ActiveWorkflow,
+        IntPtr CapturedWindowHandle,
+        string? CapturedProcessName,
+        string? CapturedWindowTitle,
+        string? CapturedUrl,
+        string EffectiveLanguage,
+        IReadOnlyList<string> EffectiveLanguageHints,
+        TranscriptionTask EffectiveTask,
+        bool EffectiveWhisperMode,
+        bool TranscribeShortQuietClipsAggressively,
+        Guid? ApiSessionId);
+
+    private sealed class RecordingSession(
+        RecordingContext context,
+        TaskCompletionSource<bool> captureStarted,
+        CancellationTokenSource preparationCts,
+        Task<ModelPreparationOutcome> modelPreparation)
+    {
+        private int _preparationResourcesDisposed;
+
+        public RecordingContext Context { get; } = context;
+        public TaskCompletionSource<bool> CaptureStarted { get; } = captureStarted;
+        public CancellationTokenSource PreparationCts { get; } = preparationCts;
+        public Task<ModelPreparationOutcome> ModelPreparation { get; } = modelPreparation;
+        public bool IsInvalidated { get; private set; }
+        public bool AudioStopped { get; set; }
+        public bool RecordingStartedPublished { get; set; }
+        public bool RecordingStoppedPublished { get; set; }
+        public bool TerminalTranscriptionEventPublished { get; set; }
+        public bool PreparationFailureHandled { get; set; }
+        public bool CancelledByUser { get; set; }
+        public bool JobEnqueued { get; set; }
+
+        public void Invalidate()
+        {
+            if (IsInvalidated)
+                return;
+
+            IsInvalidated = true;
+            CaptureStarted.TrySetResult(false);
+            PreparationCts.Cancel();
+        }
+
+        public void DisposePreparationResources()
+        {
+            if (Interlocked.Exchange(ref _preparationResourcesDisposed, 1) != 0)
+                return;
+
+            if (ModelPreparation.IsCompleted)
+            {
+                PreparationCts.Dispose();
+                return;
+            }
+
+            _ = ModelPreparation.ContinueWith(
+                _ => PreparationCts.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+    }
+
     private sealed record TranscriptionJob(
         float[] Samples,
         float[] OriginalSamples,
@@ -2523,6 +2867,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         string? EffectiveLanguage,
         IReadOnlyList<string> EffectiveLanguageHints,
         TranscriptionTask EffectiveTask,
+        ITranscriptionEngine EngineAtCapture,
         string? ActiveModelIdAtCapture,
         string? EngineIdAtCapture,
         string? TranscriptionModelIdAtCapture,

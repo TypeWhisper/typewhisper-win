@@ -160,6 +160,102 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public async Task StreamingHandler_BuffersAudioCapturedBeforeModelBecomesReady()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+        var modelReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            modelReady.Task,
+            allowOnlineBatchPolling: false);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+        Assert.Equal(4, (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")!);
+
+        modelReady.SetResult(true);
+        var session = new CapturingStreamingSession();
+        plugin.CompleteStart(session);
+
+        await WaitUntilAsync(() => session.SentAudio.Count == 1);
+        await Task.Delay(50);
+
+        Assert.Equal(4, session.SentAudio.Single().Length);
+        Assert.Single(session.SentAudio);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_StaleReadinessCleanupCannotDetachNewSession()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(plugin.PluginId, "stream"));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+        var firstReadiness = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            firstReadiness.Task,
+            allowOnlineBatchPolling: false);
+        var transcriptState = GetPrivateField(handler, "_transcriptState")!;
+        var staleVersion = (int)GetPrivateField(transcriptState, "_sessionVersion")!;
+        handler.Stop();
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            Task.FromResult(true),
+            allowOnlineBatchPolling: false);
+        var staleCleanup = typeof(StreamingHandler).GetMethod(
+            "StopPreviewBuffering",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(staleCleanup);
+        staleCleanup.Invoke(handler, [staleVersion]);
+
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData([0, 0, 0, 0], 4);
+        var session = new CapturingStreamingSession();
+        plugin.CompleteStart(session);
+
+        await WaitUntilAsync(() => session.SentAudio.Count == 1);
+
+        Assert.Single(session.SentAudio);
+    }
+
+    [Fact]
     public async Task StreamingHandler_SerializesRealtimeAudioWrites()
     {
         var settings = new FakeSettingsService(AppSettings.Default);
