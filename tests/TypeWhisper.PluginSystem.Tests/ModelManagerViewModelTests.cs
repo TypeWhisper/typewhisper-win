@@ -941,6 +941,9 @@ public class ModelManagerViewModelTests
     [Fact]
     public async Task CancelWhileJobQueueIsFull_DoesNotEnqueueCancelledRecording()
     {
+        // Keep this in sync with DictationViewModel's bounded transcription channel capacity.
+        const int jobQueueCapacity = 5;
+        const int activeAndQueuedJobCount = jobQueueCapacity + 1;
         const string pluginId = "com.typewhisper.cloud-batch";
         const string modelId = "batch";
         var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
@@ -979,10 +982,12 @@ public class ModelManagerViewModelTests
             () => plugin.TranscribeCallCount == 1,
             TimeSpan.FromSeconds(2)));
 
-        for (var index = 0; index < 5; index++)
+        for (var index = 0; index < jobQueueCapacity; index++)
             await RecordSpeechAsync();
 
-        Assert.Equal(6, (int)GetPrivateField(fixture.ViewModel, "_pendingJobCount"));
+        Assert.Equal(
+            activeAndQueuedJobCount,
+            (int)GetPrivateField(fixture.ViewModel, "_pendingJobCount"));
 
         await fixture.ViewModel.StartRecordingAsync();
         var blockedCapture = fixture.Captures.Created.Last();
@@ -1001,7 +1006,9 @@ public class ModelManagerViewModelTests
             () => blockedStop.IsCompleted,
             TimeSpan.FromSeconds(2)));
         await blockedStop;
-        Assert.Equal(6, (int)GetPrivateField(fixture.ViewModel, "_pendingJobCount"));
+        Assert.Equal(
+            activeAndQueuedJobCount,
+            (int)GetPrivateField(fixture.ViewModel, "_pendingJobCount"));
         Assert.Equal(1, plugin.TranscribeCallCount);
 
         fixture.ViewModel.CancelProcessingCommand.Execute(null);

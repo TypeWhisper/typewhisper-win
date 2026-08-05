@@ -210,10 +210,11 @@ public class StreamingTranscriptionTests
         var settings = new FakeSettingsService(AppSettings.Default);
         using var pluginManager = TestPluginManagerFactory.Create(settings);
         var plugin = new DelayedStreamingPlugin();
+        var changedPlugin = new DelayedStreamingPlugin("com.test.changed-streaming");
         TestPluginManagerFactory.SetPrivateField(
             pluginManager,
             "_transcriptionEngines",
-            new List<ITranscriptionEnginePlugin> { plugin });
+            new List<ITranscriptionEnginePlugin> { plugin, changedPlugin });
 
         var modelManager = new ModelManagerService(pluginManager, settings);
         var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "stream");
@@ -237,12 +238,14 @@ public class StreamingTranscriptionTests
         var capture = Assert.Single(captures.Created);
         capture.RaiseData([0, 0, 0, 0], 4);
 
-        modelManager.UnloadModel();
+        await modelManager.LoadModelAsync(
+            ModelManagerService.GetPluginModelId(changedPlugin.PluginId, "stream"));
         readiness.SetResult(preparedModel);
 
         await WaitUntilAsync(() => (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")! == 0);
 
         Assert.Equal(0, plugin.StartCallCount);
+        Assert.Equal(0, changedPlugin.StartCallCount);
     }
 
     [Fact]
@@ -456,16 +459,17 @@ public class StreamingTranscriptionTests
         return field.GetValue(target);
     }
 
-    private sealed class DelayedStreamingPlugin : ITranscriptionEnginePlugin
+    private sealed class DelayedStreamingPlugin(
+        string pluginId = "com.test.delayed-streaming") : ITranscriptionEnginePlugin
     {
         private readonly TaskCompletionSource<IStreamingSession> _startCompletion =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _startCallCount;
 
-        public string PluginId => "com.test.delayed-streaming";
+        public string PluginId => pluginId;
         public string PluginName => "Delayed Streaming";
         public string PluginVersion => "1.0.0";
-        public string ProviderId => "delayed-streaming";
+        public string ProviderId => pluginId;
         public string ProviderDisplayName => "Delayed Streaming";
         public bool IsConfigured => true;
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =

@@ -2960,7 +2960,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 return;
 
             CaptureStarted.TrySetResult(false);
-            PreparationCts.Cancel();
             lock (_jobCancellationGate)
                 _jobCancellation?.Cancel();
             DisposePreparationResources();
@@ -2997,6 +2996,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             if (Interlocked.Exchange(ref _preparationResourcesDisposed, 1) != 0)
                 return;
 
+            PreparationCts.Cancel();
             if (ModelPreparation.IsCompleted)
             {
                 PreparationCts.Dispose();

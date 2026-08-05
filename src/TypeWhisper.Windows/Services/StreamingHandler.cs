@@ -207,11 +207,11 @@ public sealed class StreamingHandler : IDisposable
             }
 
             var plugin = preparation.Plugin!;
-            var prompt = plugin?.SupportsDictionaryTerms == true
+            var prompt = plugin.SupportsDictionaryTerms
                 ? _dictionary.GetTermsForPrompt()
                 : null;
 
-            if (plugin is not null && plugin.SupportsStreamingForPrompt(prompt))
+            if (plugin.SupportsStreamingForPrompt(prompt))
             {
                 await RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
                 return;
@@ -220,8 +220,7 @@ public sealed class StreamingHandler : IDisposable
             // Polling reads the recorder's complete growing buffer directly. The
             // bounded preview-only packet queue is unnecessary on this path.
             StopPreviewBuffering(sessionVersion);
-            if (plugin is not null
-                && (plugin.SupportsModelDownload || allowOnlineBatchPolling))
+            if (plugin.SupportsModelDownload || allowOnlineBatchPolling)
             {
                 await RunPollingFallbackAsync(
                     languageHints,
@@ -251,11 +250,11 @@ public sealed class StreamingHandler : IDisposable
             preparation.RequestedModelId,
             preparation.ActiveModelId,
             StringComparison.Ordinal)
+        && ReferenceEquals(_modelManager.ActiveTranscriptionPlugin, preparation.Plugin)
         && string.Equals(
             _modelManager.ActiveModelId,
             preparation.ActiveModelId,
-            StringComparison.Ordinal)
-        && ReferenceEquals(_modelManager.ActiveTranscriptionPlugin, preparation.Plugin);
+            StringComparison.Ordinal);
 
     private void StopPreviewBuffering(int sessionVersion)
     {
