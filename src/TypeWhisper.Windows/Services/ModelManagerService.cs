@@ -263,11 +263,20 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             if (plugin.SupportsModelDownload)
                 await plugin.LoadModelAsync(pluginModelId, cancellationToken);
 
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+                throw new InvalidOperationException("The transcription plugin changed while the model was loading.");
+
             plugin.SelectModel(pluginModelId);
             SetStatus(modelId, ModelStatus.Ready);
             _activeTranscriptionPlugin = plugin;
             ActiveModelId = modelId;
             _activeModelAccelerationPreference = accelerationPreference;
+
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+            {
+                InvalidateActiveModelState(modelId);
+                throw new InvalidOperationException("The transcription plugin changed while the model was loading.");
+            }
         }
         catch (Exception ex)
         {

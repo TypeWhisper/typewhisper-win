@@ -187,6 +187,7 @@ public sealed class WelcomeViewModelTests
             Assert.True(sut.SelectedModelNeedsConfiguration);
             Assert.NotNull(sut.SelectedModelSettingsView);
             Assert.False(sut.CanApplySelectedModel);
+            Assert.False(sut.CanRetrySelectedModel);
             Assert.Equal("Groq", sut.SelectedModelConfigurationProviderName);
             Assert.Equal(1, plugin.CreateSettingsViewCallCount);
         });

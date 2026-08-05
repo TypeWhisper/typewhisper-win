@@ -333,6 +333,7 @@ public partial class WelcomeViewModel : ObservableObject
         && !IsDownloading
         && !IsSelectedModelRestartRequired
         && !HasReadyEngine
+        && !SelectedModelNeedsConfiguration
         && GetSelectedTranscriptionPlugin() is not null;
     /// <summary>
     /// Gets whether can try it out.

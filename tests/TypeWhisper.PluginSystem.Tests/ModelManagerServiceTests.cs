@@ -110,6 +110,51 @@ public class ModelManagerServiceTests
     }
 
     [Fact]
+    public async Task PluginInstanceReplacement_DuringLoadCannotPublishRemovedPlugin()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var loadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var originalPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true)
+        {
+            LoadGate = loadGate
+        };
+        var replacementPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(originalPlugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+
+        var loadTask = sut.LoadModelAsync(fullModelId);
+        Assert.Equal(1, originalPlugin.LoadCallCount);
+        SetTranscriptionEnginesAndNotify(pluginManager, replacementPlugin);
+        loadGate.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => loadTask);
+
+        Assert.Null(sut.ActiveModelId);
+        Assert.IsType<NoOpTranscriptionEngine>(sut.Engine);
+        Assert.NotEqual(ModelStatusType.Ready, sut.GetStatus(fullModelId).Type);
+
+        Assert.True(await sut.EnsureModelLoadedAsync());
+        Assert.Equal(fullModelId, sut.ActiveModelId);
+        Assert.Equal(1, replacementPlugin.LoadCallCount);
+    }
+
+    [Fact]
     public async Task PluginRemoval_InvalidatesActiveModelAndCannotReportLoaded()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";
@@ -635,6 +680,7 @@ public class ModelManagerServiceTests
         public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
             ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
         public Exception? LoadException { get; init; }
+        public TaskCompletionSource? LoadGate { get; init; }
         public Exception? DownloadStatusException { get; init; }
         public bool ModelDownloaded { get; init; } = true;
 
@@ -663,7 +709,7 @@ public class ModelManagerServiceTests
             return Task.CompletedTask;
         }
 
-        public Task LoadModelAsync(string modelId, CancellationToken ct)
+        public async Task LoadModelAsync(string modelId, CancellationToken ct)
         {
             LoadCallCount++;
             AccelerationPreferenceAtLoad = LastAccelerationPreference;
@@ -671,9 +717,11 @@ public class ModelManagerServiceTests
             if (LoadException is not null)
                 throw LoadException;
 
+            if (LoadGate is not null)
+                await LoadGate.Task.WaitAsync(ct);
+
             LastLoadedModelId = modelId;
             SelectedModelId = modelId;
-            return Task.CompletedTask;
         }
 
         public Task<PluginTranscriptionResult> TranscribeAsync(
