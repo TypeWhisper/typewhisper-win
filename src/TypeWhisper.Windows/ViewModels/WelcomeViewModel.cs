@@ -79,6 +79,7 @@ public partial class WelcomeViewModel : ObservableObject
     [ObservableProperty] private bool _micWorking;
     [ObservableProperty] private string _mainDictationHotkey = "";
     [ObservableProperty] private string _newMainDictationHotkey = "";
+    [ObservableProperty] private string _hotkeyValidationMessage = "";
     [ObservableProperty] private bool _isLoadingPlugins;
     [ObservableProperty] private string _trialText = "";
     [ObservableProperty] private bool _trialSuccess;
@@ -145,6 +146,7 @@ public partial class WelcomeViewModel : ObservableObject
         _isInitializing = true;
         ReplaceCollection(MainDictationHotkeys, ResolveMainDictationHotkeys(settings.Current));
         MainDictationHotkey = FirstOrEmpty(MainDictationHotkeys);
+        RefreshHotkeyValidationMessage();
         _isInitializing = false;
 
         _pluginStateChangedHandler = (_, _) => DispatchToUi(RefreshModels);
@@ -194,7 +196,9 @@ public partial class WelcomeViewModel : ObservableObject
     /// <summary>
     /// Gets whether onboarding has at least one main dictation hotkey configured.
     /// </summary>
-    public bool HasConfiguredMainHotkey => MainDictationHotkeys.Count > 0;
+    public bool HasConfiguredMainHotkey => MainDictationHotkeys.Any(static hotkey =>
+        !string.IsNullOrWhiteSpace(HotkeyParser.Normalize(hotkey))
+        && !HotkeyParser.IsUnsafeMouseBinding(hotkey));
 
     /// <summary>
     /// Gets whether the selected local or plugin engine is ready.
@@ -368,6 +372,12 @@ public partial class WelcomeViewModel : ObservableObject
             return;
 
         var normalized = HotkeyParser.Normalize(value);
+        if (HotkeyParser.IsUnsafeMouseBinding(normalized))
+        {
+            HotkeyValidationMessage = Loc.Instance["Hotkey.ValidationUnsafeMouseButton"];
+            return;
+        }
+
         ReplaceCollection(
             MainDictationHotkeys,
             string.IsNullOrWhiteSpace(normalized) ? [] : [normalized]);
@@ -511,6 +521,7 @@ public partial class WelcomeViewModel : ObservableObject
             OnPropertyChanged(nameof(DownloadStatus));
             OnPropertyChanged(nameof(PrimaryActionLabel));
             OnPropertyChanged(nameof(MainDictationHotkeyDisplay));
+            RefreshHotkeyValidationMessage();
         });
 
     [RelayCommand]
@@ -554,6 +565,14 @@ public partial class WelcomeViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(normalized))
             return;
 
+        if (HotkeyParser.IsUnsafeMouseBinding(normalized))
+        {
+            HotkeyValidationMessage = Loc.Instance["Hotkey.ValidationUnsafeMouseButton"];
+            NewMainDictationHotkey = "";
+            NotifyMainHotkeyProperties();
+            return;
+        }
+
         if (MainDictationHotkeys.Any(hotkey =>
                 string.Equals(HotkeyParser.Normalize(hotkey), normalized, StringComparison.OrdinalIgnoreCase)))
         {
@@ -565,6 +584,7 @@ public partial class WelcomeViewModel : ObservableObject
         NewMainDictationHotkey = "";
         SyncMainDictationHotkeyFromCollection();
         PersistMainDictationHotkeys(MainDictationHotkeys);
+        RefreshHotkeyValidationMessage();
         NotifyMainHotkeyProperties();
     }
 
@@ -583,6 +603,7 @@ public partial class WelcomeViewModel : ObservableObject
         MainDictationHotkeys.Remove(existing);
         SyncMainDictationHotkeyFromCollection();
         PersistMainDictationHotkeys(MainDictationHotkeys);
+        RefreshHotkeyValidationMessage();
         NotifyMainHotkeyProperties();
     }
 
@@ -815,6 +836,13 @@ public partial class WelcomeViewModel : ObservableObject
         OnPropertyChanged(nameof(MainDictationHotkeyDisplay));
         OnPropertyChanged(nameof(HasConfiguredMainHotkey));
         OnPropertyChanged(nameof(CanTryItOut));
+    }
+
+    private void RefreshHotkeyValidationMessage()
+    {
+        HotkeyValidationMessage = MainDictationHotkeys.Any(HotkeyParser.IsUnsafeMouseBinding)
+            ? Loc.Instance["Hotkey.ValidationUnsafeMouseButton"]
+            : "";
     }
 
     private static IReadOnlyList<string> NormalizeHotkeyList(IEnumerable<string?> values) =>

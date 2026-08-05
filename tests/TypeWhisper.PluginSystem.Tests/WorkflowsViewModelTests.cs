@@ -171,6 +171,56 @@ public sealed class WorkflowsViewModelTests : IDisposable
         Assert.Equal("", sut.NewHotkey);
     }
 
+    [Theory]
+    [InlineData("MouseLeft")]
+    [InlineData("MouseRight")]
+    public void AddHotkeyCommand_RejectsUnsafeMouseBinding(string hotkey)
+    {
+        var sut = CreateViewModel();
+
+        sut.AddHotkeyCommand.Execute(hotkey);
+
+        Assert.Empty(sut.EditHotkeys);
+        Assert.Contains("modifier", sut.EditorError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("", sut.NewHotkey);
+    }
+
+    [Fact]
+    public void StartEdit_PreservesUnsafeMouseBindingAndShowsWarning()
+    {
+        var workflow = NewWorkflow("Mouse", WorkflowTrigger.Hotkey("MouseLeft"));
+        var workflows = new TestWorkflowService([workflow]);
+        var sut = CreateViewModel(workflows);
+
+        sut.StartEditCommand.Execute(workflow);
+
+        Assert.Equal(["MouseLeft"], sut.EditHotkeys);
+        Assert.Contains("modifier", sut.EditorError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["MouseLeft"], Assert.Single(workflows.Workflows).Trigger.Hotkeys);
+    }
+
+    [Fact]
+    public void SaveEditor_RejectsExistingUnsafeMouseBindingUntilRemoved()
+    {
+        var workflow = NewWorkflow("Mouse", WorkflowTrigger.Hotkey("MouseLeft"));
+        var workflows = new TestWorkflowService([workflow]);
+        var sut = CreateViewModel(workflows);
+        sut.StartEditCommand.Execute(workflow);
+
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.True(sut.IsEditorOpen);
+        Assert.Contains("modifier", sut.EditorError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["MouseLeft"], Assert.Single(workflows.Workflows).Trigger.Hotkeys);
+
+        sut.RemoveHotkeyCommand.Execute("MouseLeft");
+        sut.AddHotkeyCommand.Execute("Ctrl+MouseLeft");
+        sut.SaveEditorCommand.Execute(null);
+
+        Assert.False(sut.IsEditorOpen);
+        Assert.Equal(["Ctrl+MouseLeft"], Assert.Single(workflows.Workflows).Trigger.Hotkeys);
+    }
+
     [Fact]
     public void SaveEditor_PersistsMultipleWorkflowHotkeys()
     {

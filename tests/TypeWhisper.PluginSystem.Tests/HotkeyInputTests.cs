@@ -589,6 +589,42 @@ public class HotkeyInputTests
         Assert.Equal(hotkey, HotkeyParser.Normalize(hotkey));
     }
 
+    [Theory]
+    [InlineData("MouseLeft", true)]
+    [InlineData("MouseRight", true)]
+    [InlineData("Ctrl+MouseLeft", false)]
+    [InlineData("Shift+MouseRight", false)]
+    [InlineData("MouseMiddle", false)]
+    [InlineData("MouseBack", false)]
+    [InlineData("MouseForward", false)]
+    public void Parser_ClassifiesUnsafeMouseBindings(string hotkey, bool expectedUnsafe)
+    {
+        Assert.Equal(expectedUnsafe, HotkeyParser.IsUnsafeMouseBinding(hotkey));
+    }
+
+    [Fact]
+    public void KeyboardHook_DoesNotConfigureUnsafeMouseBinding()
+    {
+        using var sut = new KeyboardHook();
+
+        sut.SetHotkey("MouseLeft");
+
+        Assert.False(sut.HasConfiguredHotkey);
+    }
+
+    [Fact]
+    public void KeyboardHook_ConfiguresSupportedMouseBindings()
+    {
+        using var modifiedPrimary = new KeyboardHook();
+        using var auxiliary = new KeyboardHook();
+
+        modifiedPrimary.SetHotkey("Ctrl+MouseLeft");
+        auxiliary.SetHotkey("MouseBack");
+
+        Assert.True(modifiedPrimary.HasConfiguredHotkey);
+        Assert.True(auxiliary.HasConfiguredHotkey);
+    }
+
     [Fact]
     public void KeyedHotkey_RequiresExactModifiers()
     {

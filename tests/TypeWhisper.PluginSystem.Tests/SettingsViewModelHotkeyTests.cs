@@ -118,6 +118,63 @@ public sealed class SettingsViewModelHotkeyTests
         Assert.Contains("hold-only", sut.ShortcutsError, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("MouseLeft")]
+    [InlineData("MouseRight")]
+    public void AddShortcutHotkey_RejectsUnsafeMouseBinding(string hotkey)
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "",
+            ToggleHotkey = ""
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.AddMainDictationHotkeyCommand.Execute(hotkey);
+
+        Assert.Empty(sut.MainDictationHotkeys);
+        Assert.Empty(settings.Current.MainDictationHotkeys);
+        Assert.Contains("modifier", sut.ShortcutsError, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("", sut.NewMainDictationHotkey);
+    }
+
+    [Theory]
+    [InlineData("Ctrl+MouseLeft")]
+    [InlineData("MouseMiddle")]
+    [InlineData("MouseBack")]
+    public void AddShortcutHotkey_AcceptsSupportedMouseBinding(string hotkey)
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            MainDictationHotkeys = [],
+            PushToTalkHotkey = "",
+            ToggleHotkey = ""
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        sut.AddMainDictationHotkeyCommand.Execute(hotkey);
+
+        Assert.Equal([hotkey], sut.MainDictationHotkeys);
+        Assert.Equal([hotkey], settings.Current.MainDictationHotkeys);
+        Assert.Equal("", sut.ShortcutsError);
+    }
+
+    [Fact]
+    public void ExistingUnsafeMouseBinding_RemainsVisibleWithWarning()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            MainDictationHotkeys = ["MouseLeft"]
+        });
+
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.Equal(["MouseLeft"], sut.MainDictationHotkeys);
+        Assert.Equal(["MouseLeft"], settings.Current.MainDictationHotkeys);
+        Assert.Contains("modifier", sut.ShortcutsError, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void AddAndRemoveRecorderToggleHotkeys_PersistsListAndLegacyFirstValue()
     {

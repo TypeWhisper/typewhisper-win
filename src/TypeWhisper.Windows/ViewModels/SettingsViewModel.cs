@@ -890,6 +890,7 @@ public partial class SettingsViewModel : ObservableObject
         ReplaceCollection(CopyLastTranscriptionHotkeys, copyLastTranscriptionHotkeys);
         ReplaceCollection(WorkflowPaletteHotkeys, workflowPaletteHotkeys);
         ReplaceCollection(RecorderToggleHotkeys, recorderToggleHotkeys);
+        RefreshShortcutSafetyError();
 
         ToggleHotkey = mainDictationHotkey;
         PushToTalkHotkey = mainDictationHotkey;
@@ -967,8 +968,8 @@ public partial class SettingsViewModel : ObservableObject
         if (_isLoading)
             return;
 
-        ShortcutsError = "";
         SyncShortcutHotkeyPropertiesFromCollections();
+        RefreshShortcutSafetyError();
         Save();
     }
 
@@ -981,6 +982,13 @@ public partial class SettingsViewModel : ObservableObject
         var normalized = HotkeyParser.Normalize(hotkey);
         if (string.IsNullOrWhiteSpace(normalized))
             return;
+
+        if (HotkeyParser.IsUnsafeMouseBinding(normalized))
+        {
+            ShortcutsError = Loc.Instance["Hotkey.ValidationUnsafeMouseButton"];
+            setNewHotkey("");
+            return;
+        }
 
         if (rejectModifierOnly && HotkeyParser.IsModifierOnly(normalized))
         {
@@ -1025,6 +1033,13 @@ public partial class SettingsViewModel : ObservableObject
         .. NormalizeHotkeyList(WorkflowPaletteHotkeys),
         .. NormalizeHotkeyList(RecorderToggleHotkeys)
     ];
+
+    private void RefreshShortcutSafetyError()
+    {
+        ShortcutsError = GetAllShortcutHotkeys().Any(HotkeyParser.IsUnsafeMouseBinding)
+            ? Loc.Instance["Hotkey.ValidationUnsafeMouseButton"]
+            : "";
+    }
 
     private void SyncShortcutHotkeyPropertiesFromCollections()
     {
@@ -1154,6 +1169,7 @@ public partial class SettingsViewModel : ObservableObject
             OnPropertyChanged(nameof(PreviewBubbleAutoHideSecondsText));
             OnPropertyChanged(nameof(LiveTranscriptionFontSizeText));
             RefreshSpokenFeedbackProviders();
+            RefreshShortcutSafetyError();
             _isLoading = false;
         });
     }

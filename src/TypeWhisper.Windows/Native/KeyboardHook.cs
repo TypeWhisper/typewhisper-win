@@ -30,6 +30,8 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public bool IsEnabled { get; set; } = true;
 
+    internal bool HasConfiguredHotkey => _stateMachine.HasHotkey || _mouseStateMachine.HasHotkey;
+
     /// <summary>
     /// Initializes a new instance of the KeyboardHook class.
     /// </summary>
@@ -49,6 +51,9 @@ public sealed class KeyboardHook : IDisposable
 
         if (HotkeyParser.Parse(hotkeyString, out ParsedHotkey parsed))
         {
+            if (HotkeyParser.IsUnsafeMouseBinding(parsed))
+                return;
+
             _targetKind = parsed.Kind;
             if (parsed.Kind == HotkeyTargetKind.Mouse)
                 _mouseStateMachine.SetHotkey(parsed.Modifiers, parsed.MouseButton);
@@ -862,6 +867,14 @@ internal static class HotkeyParser
 
     public static bool IsModifierOnly(string? hotkeyString) =>
         Parse(hotkeyString ?? "", out ParsedHotkey parsed) && parsed.IsModifierOnly;
+
+    public static bool IsUnsafeMouseBinding(string? hotkeyString) =>
+        Parse(hotkeyString ?? "", out ParsedHotkey parsed) && IsUnsafeMouseBinding(parsed);
+
+    internal static bool IsUnsafeMouseBinding(in ParsedHotkey parsed) =>
+        parsed.Kind == HotkeyTargetKind.Mouse
+        && parsed.Modifiers == 0
+        && parsed.MouseButton is HotkeyMouseButton.Left or HotkeyMouseButton.Right;
 
     /// <summary>
     /// Parses the supplied value into the expected representation.

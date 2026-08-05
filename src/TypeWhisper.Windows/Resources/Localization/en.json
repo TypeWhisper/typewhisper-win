@@ -629,6 +629,7 @@
   "Shortcuts.RemoveHotkey": "Remove hotkey",
   "Shortcuts.ValidationDuplicateFormat": "{0} is already assigned to another shortcut.",
   "Shortcuts.ValidationModifierOnlyHold": "Modifier-only shortcuts cannot be used for hold-only dictation.",
+  "Hotkey.ValidationUnsafeMouseButton": "Left and right mouse buttons require Ctrl, Shift, Alt, or Win. MouseMiddle, MouseBack, and MouseForward can be used without a modifier.",
   "Appearance.LayoutSection": "Overlay layout",
   "Appearance.Style": "Indicator style",
   "Appearance.StyleStatusIsland": "Status Island",

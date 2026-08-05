@@ -629,6 +629,7 @@
   "Shortcuts.RemoveHotkey": "Hotkey entfernen",
   "Shortcuts.ValidationDuplicateFormat": "{0} ist bereits einem anderen Shortcut zugewiesen.",
   "Shortcuts.ValidationModifierOnlyHold": "Shortcuts nur aus Modifikatortasten können nicht für reine Halte-Diktate verwendet werden.",
+  "Hotkey.ValidationUnsafeMouseButton": "Linke und rechte Maustasten benötigen Ctrl, Shift, Alt oder Win. MouseMiddle, MouseBack und MouseForward können ohne Modifikatortaste verwendet werden.",
   "Appearance.LayoutSection": "Overlay-Layout",
   "Appearance.Style": "Indikator-Stil",
   "Appearance.StyleStatusIsland": "Status Island",

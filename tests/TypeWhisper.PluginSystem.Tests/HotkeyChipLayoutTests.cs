@@ -129,6 +129,7 @@ public sealed class HotkeyChipLayoutTests
         Assert.Contains("ItemsSource=\"{Binding MainDictationHotkeys}\"", welcomeXaml);
         Assert.Contains("NewMainDictationHotkey", welcomeXaml);
         Assert.Contains("RecordedCommand=\"{Binding AddMainDictationHotkeyCommand}\"", welcomeXaml);
+        Assert.Contains("Text=\"{Binding HotkeyValidationMessage}\"", welcomeXaml);
         Assert.Contains("RemoveMainDictationHotkeyCommand", welcomeXaml);
         Assert.Contains("AutomationProperties.Name=\"{loc:Str Shortcuts.RemoveHotkey}\"", welcomeXaml);
         Assert.Contains("UseAddGlyph=\"True\"", welcomeXaml);

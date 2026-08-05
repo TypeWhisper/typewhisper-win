@@ -171,7 +171,8 @@ public sealed class HotkeyService : IDisposable
                                && workflow.Trigger.IsAutomatic
                                && workflow.Trigger.HasHotkeyBindings)
             .SelectMany(workflow => workflow.Trigger.Hotkeys
-                .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey))
+                .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey)
+                                        && !HotkeyParser.IsUnsafeMouseBinding(hotkey))
                 .Select(hotkey => new WorkflowHotkeyBinding(
                     workflow.Id,
                     hotkey,
@@ -195,7 +196,8 @@ public sealed class HotkeyService : IDisposable
         AppHotkeyAction action,
         IEnumerable<string> hotkeys) =>
         hotkeys
-            .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey))
+            .Where(static hotkey => !string.IsNullOrWhiteSpace(hotkey)
+                                    && !HotkeyParser.IsUnsafeMouseBinding(hotkey))
             .Select(hotkey => new AppHotkeyBinding(action, hotkey));
 
     private void AttachAppHotkeyHandler(KeyboardHook hook, AppHotkeyAction action)

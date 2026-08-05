@@ -618,6 +618,7 @@
   "Shortcuts.RemoveHotkey": "移除快捷键",
   "Shortcuts.ValidationDuplicateFormat": "{0} 已分配给其他快捷键。",
   "Shortcuts.ValidationModifierOnlyHold": "仅修饰键快捷键不能用于仅按住听写。",
+  "Hotkey.ValidationUnsafeMouseButton": "鼠标左键和右键需要搭配 Ctrl、Shift、Alt 或 Win。MouseMiddle、MouseBack 和 MouseForward 可以不搭配修饰键使用。",
   "Appearance.LayoutSection": "悬浮层布局",
   "Appearance.Style": "指示器样式",
   "Appearance.StyleStatusIsland": "状态岛",
