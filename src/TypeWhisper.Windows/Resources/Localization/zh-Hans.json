@@ -1168,5 +1168,6 @@
   "SpokenFormatting.ExpectedLabel": "预期",
   "SpokenFormatting.KeepAutomatic": "保持自动",
   "SpokenFormatting.UseFallback": "使用回退",
-  "SpokenFormatting.NativeWorks": "原生可用"
+  "SpokenFormatting.NativeWorks": "原生可用",
+  "SpokenFormatting.Cancel": "取消"
 }

@@ -307,6 +307,8 @@ public sealed class WorkflowServiceTests : IDisposable
         Assert.Contains("AI", definition.Description, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(prompt);
         Assert.Contains("paragraph", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wording", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("meaning", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tone", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("source language", prompt, StringComparison.OrdinalIgnoreCase);
     }

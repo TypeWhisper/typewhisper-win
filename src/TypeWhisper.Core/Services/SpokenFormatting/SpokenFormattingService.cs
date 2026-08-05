@@ -18,6 +18,7 @@ public sealed class SpokenFormattingService
     private static readonly Regex RepeatedPeriodPair = new(@"(?<!\.)\.\.(?!\.)", RegexOptions.CultureInvariant);
     private static readonly Regex RepeatedSpaces = new(@" {2,}", RegexOptions.CultureInvariant);
     private readonly SpokenFormattingRulesLoader _rulesLoader;
+    private readonly ConcurrentDictionary<string, SpokenFormattingRule[]> _orderedRules = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Regex> _patterns = new(StringComparer.Ordinal);
 
     /// <summary>Initializes a new spoken formatting service.</summary>
@@ -37,14 +38,7 @@ public sealed class SpokenFormattingService
 
         var result = text;
         var replacementApplied = false;
-        var structuralRules = ruleSet.Rules
-            .Where(static rule => rule.Category == SpokenFormattingRuleCategory.Structural)
-            .OrderByDescending(static rule => rule.Phrase.Length);
-        var remainingRules = ruleSet.Rules
-            .Where(static rule => rule.Category != SpokenFormattingRuleCategory.Structural)
-            .OrderByDescending(static rule => rule.Phrase.Length);
-
-        foreach (var rule in structuralRules.Concat(remainingRules))
+        foreach (var rule in OrderedRules(ruleSet))
             result = ReplaceRule(result, rule, ref replacementApplied);
 
         if (mode == SpokenFormattingApplicationMode.SelectiveFallback && !replacementApplied)
@@ -52,6 +46,17 @@ public sealed class SpokenFormattingService
 
         return NormalizeSpacing(result);
     }
+
+    private SpokenFormattingRule[] OrderedRules(SpokenFormattingRuleSet ruleSet) =>
+        _orderedRules.GetOrAdd(ruleSet.Language, _ =>
+        [
+            .. ruleSet.Rules
+                .Where(static rule => rule.Category == SpokenFormattingRuleCategory.Structural)
+                .OrderByDescending(static rule => rule.Phrase.Length),
+            .. ruleSet.Rules
+                .Where(static rule => rule.Category != SpokenFormattingRuleCategory.Structural)
+                .OrderByDescending(static rule => rule.Phrase.Length)
+        ]);
 
     private string ReplaceRule(string text, SpokenFormattingRule rule, ref bool replacementApplied)
     {

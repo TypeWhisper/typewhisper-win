@@ -124,6 +124,9 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         try
         {
             var (selectionId, modelId) = ParsePluginModelId(fullModelId);
+            if (string.IsNullOrWhiteSpace(selectionId) || string.IsNullOrWhiteSpace(modelId))
+                return null;
+
             var plugin = FindTranscriptionEngine(selectionId);
             return plugin is null
                 ? null

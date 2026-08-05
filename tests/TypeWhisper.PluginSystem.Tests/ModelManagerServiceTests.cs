@@ -258,6 +258,24 @@ public class ModelManagerServiceTests
         Assert.Equal(modelId, identity.ModelId);
     }
 
+    [Theory]
+    [InlineData("plugin:selection:")]
+    [InlineData("plugin:selection:   ")]
+    [InlineData("plugin::model")]
+    [InlineData("plugin:   :model")]
+    public void ResolveTranscriptionIdentity_RejectsBlankComponents(string fullModelId)
+    {
+        var plugin = new FakeTranscriptionPlugin(
+            "provider",
+            configured: true,
+            selectedModelId: "model",
+            selectionId: "selection",
+            modelIds: ["model"]);
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        Assert.Null(sut.ResolveTranscriptionIdentity(fullModelId));
+    }
+
     [Fact]
     public async Task EnsureModelLoadedAsync_ReloadsActiveModel_WhenAccelerationPreferenceChanges()
     {

@@ -13,9 +13,9 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
 
     public SpokenFormattingStrategyResolverTests()
     {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), $"tw_spoken_formatting_{Guid.NewGuid():N}");
+        _tempDirectory = Path.Join(Path.GetTempPath(), $"tw_spoken_formatting_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDirectory);
-        _settings = new SettingsService(Path.Combine(_tempDirectory, "settings.json"));
+        _settings = new SettingsService(Path.Join(_tempDirectory, "settings.json"));
         _profileStore = new SpokenFormattingProfileStore(_settings);
         _sut = new SpokenFormattingStrategyResolver(_profileStore, new SpokenFormattingRulesLoader());
     }
@@ -82,7 +82,7 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
             SpokenFormattingVerificationState.UserVerifiedBad,
             updateVerificationDate: true);
 
-        var reloadedSettings = new SettingsService(Path.Combine(_tempDirectory, "settings.json"));
+        var reloadedSettings = new SettingsService(Path.Join(_tempDirectory, "settings.json"));
         var reloadedResolver = new SpokenFormattingStrategyResolver(
             new SpokenFormattingProfileStore(reloadedSettings),
             new SpokenFormattingRulesLoader());
@@ -122,6 +122,7 @@ public class SpokenFormattingStrategyResolverTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDirectory, recursive: true); } catch { }
+        if (Directory.Exists(_tempDirectory))
+            Directory.Delete(_tempDirectory, recursive: true);
     }
 }

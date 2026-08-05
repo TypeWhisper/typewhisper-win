@@ -74,6 +74,13 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <Button Grid.Column="0"
+                        Content="{loc:Str SpokenFormatting.Cancel}"
+                        AutomationProperties.AutomationId="SpokenFormattingCancel"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        IsCancel="True"
+                        HorizontalAlignment="Left"
+                        Padding="14,8"/>
                 <Button Grid.Column="1"
                         Content="{loc:Str SpokenFormatting.KeepAutomatic}"
                         AutomationProperties.AutomationId="SpokenFormattingKeepAutomatic"
@@ -96,6 +103,7 @@
                         Style="{StaticResource PrimaryButtonStyle}"
                         Command="{Binding NativeWorksCommand}"
                         Click="Decision_Click"
+                        IsDefault="True"
                         Padding="14,8"/>
             </Grid>
         </Grid>

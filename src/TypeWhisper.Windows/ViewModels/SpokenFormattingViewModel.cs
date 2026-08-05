@@ -246,8 +246,14 @@ public sealed partial class SpokenFormattingViewModel : ObservableObject
         CurrentEngineDisplayName = "";
         CurrentModelDisplayName = "";
 
+        if (string.IsNullOrWhiteSpace(fullModelId))
+        {
+            HasSelectedModel = false;
+            return;
+        }
+
         var identity = _modelManager.ResolveTranscriptionIdentity(fullModelId);
-        if (identity is null || fullModelId is null)
+        if (identity is null)
         {
             HasSelectedModel = false;
             return;

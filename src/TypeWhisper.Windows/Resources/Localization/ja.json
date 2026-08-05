@@ -1168,5 +1168,6 @@
   "SpokenFormatting.ExpectedLabel": "期待結果",
   "SpokenFormatting.KeepAutomatic": "自動のまま",
   "SpokenFormatting.UseFallback": "フォールバックを使用",
-  "SpokenFormatting.NativeWorks": "ネイティブで動作"
+  "SpokenFormatting.NativeWorks": "ネイティブで動作",
+  "SpokenFormatting.Cancel": "キャンセル"
 }

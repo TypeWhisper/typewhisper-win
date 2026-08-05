@@ -1168,5 +1168,6 @@
   "SpokenFormatting.ExpectedLabel": "Ожидается",
   "SpokenFormatting.KeepAutomatic": "Оставить автоматически",
   "SpokenFormatting.UseFallback": "Использовать резервный режим",
-  "SpokenFormatting.NativeWorks": "Встроенный режим работает"
+  "SpokenFormatting.NativeWorks": "Встроенный режим работает",
+  "SpokenFormatting.Cancel": "Отмена"
 }

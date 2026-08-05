@@ -1203,5 +1203,6 @@
   "SpokenFormatting.ExpectedLabel": "Expected",
   "SpokenFormatting.KeepAutomatic": "Keep Automatic",
   "SpokenFormatting.UseFallback": "Use Fallback",
-  "SpokenFormatting.NativeWorks": "Native Works"
+  "SpokenFormatting.NativeWorks": "Native Works",
+  "SpokenFormatting.Cancel": "Cancel"
 }
