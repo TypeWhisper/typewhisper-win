@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 
 namespace TypeWhisper.Plugin.Script;
@@ -38,8 +39,12 @@ internal partial class ScriptEditorWindow : Window
         var desiredTop = Owner is null
             ? workArea.Top + ((workArea.Height - Height) / 2)
             : Owner.Top + ((Owner.ActualHeight - Height) / 2);
-        Left = Math.Clamp(desiredLeft, workArea.Left + 16, workArea.Right - Width - 16);
-        Top = Math.Clamp(desiredTop, workArea.Top + 16, workArea.Bottom - Height - 16);
+        var minimumLeft = workArea.Left + 16;
+        var minimumTop = workArea.Top + 16;
+        var maximumLeft = Math.Max(minimumLeft, workArea.Right - Width - 16);
+        var maximumTop = Math.Max(minimumTop, workArea.Bottom - Height - 16);
+        Left = Math.Clamp(desiredLeft, minimumLeft, maximumLeft);
+        Top = Math.Clamp(desiredTop, minimumTop, maximumTop);
         NameBox.Focus();
         NameBox.SelectAll();
     }
@@ -104,5 +109,8 @@ internal partial class ScriptEditorWindow : Window
         StandardErrorLabel.Text = _viewModel.L("Settings.StandardError");
         CancelButton.Content = _viewModel.L("Settings.Cancel");
         SaveButton.Content = _viewModel.L("Settings.Save");
+        var closeLabel = _viewModel.L("Settings.Close");
+        CloseButton.ToolTip = closeLabel;
+        AutomationProperties.SetName(CloseButton, closeLabel);
     }
 }

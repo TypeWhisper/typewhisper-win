@@ -41,8 +41,8 @@ internal sealed class ScriptConfigurationStore : IScriptConfigurationStore
         try
         {
             var json = File.ReadAllText(_configPath, Encoding.UTF8);
-            var scripts = JsonSerializer.Deserialize<List<ScriptEntry>>(json, s_jsonOptions) ?? [];
-            return new ScriptConfigurationLoadResult(scripts.Select(Normalize).ToList());
+            var scripts = JsonSerializer.Deserialize<List<ScriptEntry?>>(json, s_jsonOptions) ?? [];
+            return new ScriptConfigurationLoadResult(scripts.OfType<ScriptEntry>().Select(Normalize).ToList());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {

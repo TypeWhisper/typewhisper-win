@@ -148,9 +148,21 @@ internal sealed class ScriptProcessRunner : IScriptProcessRunner
         {
             await process.StandardInput.WriteAsync(input.AsMemory(), cancellationToken).ConfigureAwait(false);
         }
+        catch (IOException)
+        {
+            // A command may exit successfully without consuming stdin. A closed input pipe is
+            // therefore not a script failure; stdout, stderr, and the exit code remain authoritative.
+        }
         finally
         {
-            process.StandardInput.Close();
+            try
+            {
+                process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+                // The child may have closed its end of the pipe before the parent closes the writer.
+            }
         }
     }
 

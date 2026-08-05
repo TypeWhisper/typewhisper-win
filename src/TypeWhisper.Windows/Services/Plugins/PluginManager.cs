@@ -167,7 +167,7 @@ public sealed class PluginManager : IDisposable
         if (selectedIsValid != candidateIsValid)
             return candidateIsValid;
 
-        if (selectedIsValid && candidateIsValid)
+        if (selectedIsValid)
         {
             var comparison = candidateVersion!.CompareTo(selectedVersion);
             if (comparison != 0)

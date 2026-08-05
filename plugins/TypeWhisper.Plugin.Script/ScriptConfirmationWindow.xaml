@@ -10,6 +10,7 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
+        PreviewKeyDown="OnPreviewKeyDown"
         Background="{DynamicResource ScriptWindowBrush}">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="48" ResizeBorderThickness="0" CornerRadius="8" GlassFrameThickness="0" />
@@ -38,7 +39,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <Button Grid.Column="1"
+                <Button x:Name="CloseButton"
+                        Grid.Column="1"
                         Content="&#x2715;"
                         Width="32"
                         Height="32"
@@ -63,7 +65,6 @@
                         VerticalAlignment="Center"
                         Margin="18,0">
                 <Button x:Name="CancelButton"
-                        IsCancel="True"
                         Click="OnCancel"
                         MinWidth="92"
                         Margin="0,0,8,0"

@@ -188,6 +188,21 @@ public sealed class ScriptPluginTests
     }
 
     [Fact]
+    public void ViewModel_ReloadToleratesDuplicateLegacyIds()
+    {
+        var duplicateId = Guid.NewGuid();
+        using var fixture = new ScriptFixture(
+            new ScriptEntry { Id = duplicateId, Name = "First", Command = "one" },
+            new ScriptEntry { Id = duplicateId, Name = "Second", Command = "two" });
+        var viewModel = fixture.CreateViewModel();
+
+        viewModel.MoveItem(viewModel.Items[0], 1);
+
+        Assert.Equal(2, viewModel.Items.Count);
+        Assert.Equal(["Second", "First"], viewModel.Items.Select(item => item.Name));
+    }
+
+    [Fact]
     public void ViewModel_DropIndicatorDistinguishesBeforeAfterAndClears()
     {
         using var fixture = new ScriptFixture(
@@ -221,6 +236,25 @@ public sealed class ScriptPluginTests
         Assert.True(viewModel.HasLoadError);
         Assert.Contains("broken json", viewModel.LoadErrorMessage, StringComparison.Ordinal);
         Assert.False(viewModel.AddCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ViewModel_ReadOnlyToggleRestoresPersistedValue()
+    {
+        var script = new ScriptEntry { Name = "Protected", Command = "more", IsEnabled = true };
+        var host = new Mock<IPluginHostServices>();
+        host.SetupGet(item => item.Localization).Returns(new TestLocalization());
+        using var service = new ScriptService(
+            host.Object,
+            new ErrorStore("broken json", [script]),
+            new FakeRunner());
+        var viewModel = new ScriptSettingsViewModel(service, new FakeEditorHost(), new FakeDialogs());
+        var item = Assert.Single(viewModel.Items);
+
+        item.IsEnabled = false;
+
+        Assert.True(item.IsEnabled);
+        Assert.True(Assert.Single(service.Scripts).IsEnabled);
     }
 
     [Fact]
@@ -341,6 +375,30 @@ public sealed class ScriptPluginTests
     }
 
     [Fact]
+    public void ConfigurationStore_IgnoresNullEntriesWithoutDiscardingValidScripts()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(directory, "scripts.json"),
+                """
+                [null,{"name":"Valid","command":"more","shell":"cmd","isEnabled":true}]
+                """);
+            var store = new ScriptConfigurationStore(directory);
+
+            var loaded = store.Load();
+
+            Assert.Null(loaded.Error);
+            Assert.Equal("Valid", Assert.Single(loaded.Scripts).Name);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ScriptService_FailedScriptKeepsTextAndContinues()
     {
         using var fixture = new ScriptFixture(
@@ -381,6 +439,20 @@ public sealed class ScriptPluginTests
         Assert.Equal(ScriptExecutionStatus.Success, result.Status);
         Assert.Contains("Notepad", result.Output, StringComparison.Ordinal);
         Assert.Contains("Grüße 世界", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessRunner_SuccessDoesNotRequireCommandToConsumeStandardInput()
+    {
+        var runner = new ScriptProcessRunner();
+        var result = await runner.RunAsync(
+            new ScriptEntry { Name = "early exit", Command = "echo done", TimeoutSeconds = 5 },
+            new string('x', 2 * 1024 * 1024),
+            new PostProcessingContext(),
+            CancellationToken.None);
+
+        Assert.Equal(ScriptExecutionStatus.Success, result.Status);
+        Assert.Contains("done", result.Output, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -520,6 +592,8 @@ public sealed class ScriptPluginTests
         Assert.Contains("x:Name=\"EditorFooter\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TestRunnerExpander\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsExpanded=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsCancel=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CloseButton\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -535,6 +609,8 @@ public sealed class ScriptPluginTests
         Assert.Contains("x:Name=\"PrimaryButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SecondaryButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CancelButton\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("PreviewKeyDown=\"OnPreviewKeyDown\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsCancel=\"True\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SizeToContent=\"WidthAndHeight\"", xaml, StringComparison.Ordinal);
     }
 
@@ -600,7 +676,8 @@ public sealed class ScriptPluginTests
                 "Save changes before closing?",
                 "Save",
                 "Discard",
-                "Cancel");
+                "Cancel",
+                "Close");
             MeasureWindow(window, 500, 220);
             var root = Assert.IsAssignableFrom<FrameworkElement>(window.Content);
             foreach (var name in new[] { "PrimaryButton", "SecondaryButton", "CancelButton" })
@@ -753,9 +830,9 @@ public sealed class ScriptPluginTests
         }
     }
 
-    private sealed class ErrorStore(string error) : IScriptConfigurationStore
+    private sealed class ErrorStore(string error, IEnumerable<ScriptEntry>? scripts = null) : IScriptConfigurationStore
     {
-        public ScriptConfigurationLoadResult Load() => new([], error);
+        public ScriptConfigurationLoadResult Load() => new(scripts?.ToList() ?? [], error);
         public void Save(IReadOnlyCollection<ScriptEntry> scripts) => throw new InvalidOperationException();
     }
 

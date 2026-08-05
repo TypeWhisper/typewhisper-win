@@ -157,6 +157,7 @@
                                                Margin="0,0,8,0" />
                                     <CheckBox Grid.Column="1"
                                               IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                              AutomationProperties.Name="{Binding Name}"
                                               VerticalAlignment="Center"
                                               Margin="0,0,11,0" />
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">

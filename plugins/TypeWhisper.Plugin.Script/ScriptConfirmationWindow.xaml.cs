@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 
 namespace TypeWhisper.Plugin.Script;
@@ -11,6 +12,7 @@ internal partial class ScriptConfirmationWindow : Window
         string primary,
         string? secondary,
         string cancel,
+        string close,
         bool primaryIsDanger)
     {
         InitializeComponent();
@@ -21,6 +23,8 @@ internal partial class ScriptConfirmationWindow : Window
         SecondaryButton.Content = secondary ?? "";
         SecondaryButton.Visibility = secondary is null ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Content = cancel;
+        CloseButton.ToolTip = close;
+        AutomationProperties.SetName(CloseButton, close);
         if (primaryIsDanger && TryFindResource("ScriptDangerButtonStyle") is Style dangerStyle)
             PrimaryButton.Style = dangerStyle;
     }
@@ -32,13 +36,15 @@ internal partial class ScriptConfirmationWindow : Window
         string message,
         string save,
         string discard,
-        string cancel) => new(title, message, save, discard, cancel, false);
+        string cancel,
+        string close) => new(title, message, save, discard, cancel, close, false);
 
     internal static ScriptConfirmationWindow CreateRemove(
         string title,
         string message,
         string remove,
-        string cancel) => new(title, message, remove, null, cancel, true);
+        string cancel,
+        string close) => new(title, message, remove, null, cancel, close, true);
 
     private void OnHeaderMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -61,6 +67,16 @@ internal partial class ScriptConfirmationWindow : Window
     private void OnCancel(object sender, RoutedEventArgs e)
     {
         Choice = ConfirmationChoice.Cancel;
+        Close();
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+            return;
+
+        Choice = ConfirmationChoice.Cancel;
+        e.Handled = true;
         Close();
     }
 }

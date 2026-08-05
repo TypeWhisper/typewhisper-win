@@ -169,8 +169,13 @@ internal sealed class ScriptSettingsViewModel : ObservableObject
 
     internal void SetEnabled(ScriptListItemViewModel item, bool isEnabled)
     {
-        if (item.Entry.IsEnabled == isEnabled || IsReadOnly)
+        if (item.Entry.IsEnabled == isEnabled)
             return;
+        if (IsReadOnly)
+        {
+            item.Update(item.Entry);
+            return;
+        }
 
         var updated = item.Entry with { IsEnabled = isEnabled };
         try
@@ -263,12 +268,26 @@ internal sealed class ScriptSettingsViewModel : ObservableObject
     private void ReloadItems(Guid? selectedId = null)
     {
         selectedId ??= SelectedItem?.Id;
-        var byId = Items.ToDictionary(item => item.Id);
+        var byId = new Dictionary<Guid, Queue<ScriptListItemViewModel>>();
+        foreach (var item in Items)
+        {
+            if (!byId.TryGetValue(item.Id, out var matches))
+            {
+                matches = new Queue<ScriptListItemViewModel>();
+                byId.Add(item.Id, matches);
+            }
+            matches.Enqueue(item);
+        }
+
         var ordered = new List<ScriptListItemViewModel>();
         foreach (var script in _service.Scripts)
         {
-            if (byId.TryGetValue(script.Id, out var item))
+            ScriptListItemViewModel item;
+            if (byId.TryGetValue(script.Id, out var matches) && matches.TryDequeue(out var existing))
+            {
+                item = existing;
                 item.Update(script);
+            }
             else
                 item = new ScriptListItemViewModel(this, script);
             ordered.Add(item);

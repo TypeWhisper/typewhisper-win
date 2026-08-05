@@ -25,6 +25,7 @@
   "Settings.Example.Lowercase": "lowercase",
   "Settings.Example.Trim": "Trim whitespace",
   "Settings.Cancel": "Cancel",
+  "Settings.Close": "Close",
   "Settings.Save": "Save",
   "Settings.TestTitle": "Test runner",
   "Settings.TestInput": "Test input",

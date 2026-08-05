@@ -47,7 +47,8 @@
                                Margin="0,3,0,0"
                                Foreground="{StaticResource ScriptMutedTextBrush}" />
                 </StackPanel>
-                <Button Grid.Column="1"
+                <Button x:Name="CloseButton"
+                        Grid.Column="1"
                         Content="&#x2715;"
                         Width="34"
                         Height="34"
@@ -217,6 +218,7 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="CancelButton"
                             MinWidth="96"
+                            IsCancel="True"
                             Command="{Binding CancelCommand}"
                             Margin="0,0,9,0"
                             Style="{StaticResource ScriptSecondaryButtonStyle}" />

@@ -37,6 +37,9 @@ public partial class ScriptSettingsView : UserControl
 
     private void OnScriptDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        if (FindAncestor<ButtonBase>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
         if (ScriptList.SelectedItem is not null)
             _viewModel.EditSelected();
     }
@@ -69,7 +72,7 @@ public partial class ScriptSettingsView : UserControl
 
     private void OnScriptListDragOver(object sender, DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(typeof(ScriptListItemViewModel)))
+        if (_viewModel.IsReadOnly || !e.Data.GetDataPresent(typeof(ScriptListItemViewModel)))
         {
             e.Effects = DragDropEffects.None;
             ClearDropIndicator();
@@ -187,7 +190,8 @@ internal sealed class WindowConfirmationService(
             Get("Settings.UnsavedMessage", scriptName),
             Get("Settings.Save"),
             Get("Settings.Discard"),
-            Get("Settings.Cancel"));
+            Get("Settings.Cancel"),
+            Get("Settings.Close"));
         SetOwner(dialog);
         dialog.ShowDialog();
         return dialog.Choice;
@@ -199,7 +203,8 @@ internal sealed class WindowConfirmationService(
             Get("Settings.RemoveTitle"),
             Get("Settings.RemoveMessage", scriptName),
             Get("Settings.Remove"),
-            Get("Settings.Cancel"));
+            Get("Settings.Cancel"),
+            Get("Settings.Close"));
         SetOwner(dialog);
         dialog.ShowDialog();
         return dialog.Choice == ConfirmationChoice.Primary;
