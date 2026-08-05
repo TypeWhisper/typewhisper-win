@@ -1,0 +1,232 @@
+<Window x:Class="TypeWhisper.Plugin.Script.ScriptEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        x:ClassModifier="internal"
+        Width="660"
+        Height="640"
+        MinWidth="520"
+        MinHeight="440"
+        SizeToContent="Manual"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource ScriptWindowBrush}">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="48" ResizeBorderThickness="6" CornerRadius="8" GlassFrameThickness="0" />
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/TypeWhisper.Plugin.Script;component/ScriptTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{StaticResource ScriptWindowBrush}"
+            BorderBrush="{StaticResource ScriptBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid x:Name="EditorHeader" Height="72" Margin="22,0,14,0" MouseLeftButtonDown="OnHeaderMouseDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="EditorTitle" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock x:Name="EditorSubtitle"
+                               Margin="0,3,0,0"
+                               Foreground="{StaticResource ScriptMutedTextBrush}" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="&#x2715;"
+                        Width="34"
+                        Height="34"
+                        Padding="0"
+                        Click="OnCloseClick"
+                        Style="{StaticResource ScriptSecondaryButtonStyle}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" />
+            </Grid>
+
+            <ScrollViewer x:Name="EditorScrollViewer"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="22,0,22,16">
+                <StackPanel>
+                    <TextBlock x:Name="NameLabel" Margin="0,0,0,6" FontWeight="SemiBold" />
+                    <TextBox x:Name="NameBox"
+                             Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource ScriptCompactTextBoxStyle}" />
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="18" />
+                            <ColumnDefinition Width="150" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="ShellLabel" Margin="0,0,0,6" FontWeight="SemiBold" />
+                            <ComboBox x:Name="ShellCombo"
+                                      ItemsSource="{Binding ShellOptions}"
+                                      SelectedItem="{Binding Shell, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Style="{StaticResource ScriptCompactComboBoxStyle}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock x:Name="TimeoutLabel" Margin="0,0,0,6" FontWeight="SemiBold" />
+                            <TextBox x:Name="TimeoutBox"
+                                     Text="{Binding Timeout, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource ScriptCompactTextBoxStyle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock x:Name="CommandLabel" Margin="0,14,0,6" FontWeight="SemiBold" />
+                    <TextBox x:Name="CommandBox"
+                             MinHeight="120"
+                             MaxHeight="210"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource ScriptCompactTextBoxStyle}" />
+                    <TextBlock x:Name="InputHint"
+                               Margin="0,7,0,0"
+                               FontSize="11"
+                               Foreground="{StaticResource ScriptMutedTextBrush}"
+                               TextWrapping="Wrap" />
+
+                    <StackPanel Margin="0,13,0,0">
+                        <TextBlock x:Name="ExamplesLabel" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ExamplesHint"
+                                   Margin="0,3,0,7"
+                                   FontSize="11"
+                                   Foreground="{StaticResource ScriptMutedTextBrush}"
+                                   TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Examples}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding DisplayName}"
+                                            Command="{Binding DataContext.ApplyExampleCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            Margin="0,0,8,6"
+                                            Style="{StaticResource ScriptSecondaryButtonStyle}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <Border Margin="0,12,0,0"
+                            Padding="10"
+                            Background="#332C1111"
+                            BorderBrush="{StaticResource ScriptDangerBrush}"
+                            BorderThickness="1"
+                            CornerRadius="5"
+                            Visibility="{Binding HasValidationMessage, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Text="{Binding ValidationMessage}" TextWrapping="Wrap" Foreground="{StaticResource ScriptErrorBrush}" />
+                    </Border>
+
+                    <Expander x:Name="TestRunnerExpander"
+                              Margin="0,16,0,0"
+                              IsExpanded="False"
+                              Foreground="{StaticResource ScriptTextBrush}">
+                        <Expander.Header>
+                            <TextBlock x:Name="TestTitle" FontSize="15" FontWeight="SemiBold" />
+                        </Expander.Header>
+                        <Border Margin="0,10,0,0" Padding="14" Style="{StaticResource ScriptCardStyle}">
+                            <StackPanel>
+                                <TextBlock x:Name="TestInputLabel" Margin="0,0,0,6" FontWeight="SemiBold" />
+                                <TextBox x:Name="TestInputBox"
+                                         MinHeight="64"
+                                         MaxHeight="110"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Text="{Binding TestInput, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource ScriptCompactTextBoxStyle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button x:Name="RunTestButton" Command="{Binding RunTestCommand}" Margin="0,0,8,0" Style="{StaticResource ScriptPrimaryButtonStyle}" />
+                                    <Button x:Name="CancelTestButton" Command="{Binding CancelTestCommand}" Style="{StaticResource ScriptSecondaryButtonStyle}" />
+                                </StackPanel>
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="92" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock x:Name="TestStatusLabel" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{Binding TestStatus}" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="TestExitCodeLabel" Grid.Row="1" Margin="0,5,0,0" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Text="{Binding TestExitCode}" />
+                                    <TextBlock x:Name="TestElapsedLabel" Grid.Row="2" Margin="0,5,0,0" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,5,0,0" Text="{Binding TestElapsed}" />
+                                </Grid>
+
+                                <StackPanel Margin="0,12,0,0" Visibility="{Binding HasTestOutput, Converter={StaticResource BooleanToVisibility}}">
+                                    <TextBlock x:Name="StandardOutputLabel" Margin="0,0,0,5" FontWeight="SemiBold" />
+                                    <TextBox Text="{Binding TestOutput, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             Height="92"
+                                             TextWrapping="NoWrap"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Style="{StaticResource ScriptCompactTextBoxStyle}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,12,0,0" Visibility="{Binding HasTestError, Converter={StaticResource BooleanToVisibility}}">
+                                    <TextBlock x:Name="StandardErrorLabel" Margin="0,0,0,5" FontWeight="SemiBold" />
+                                    <TextBox Text="{Binding TestError, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             Height="92"
+                                             TextWrapping="NoWrap"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Style="{StaticResource ScriptCompactTextBoxStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border x:Name="EditorFooter"
+                    Grid.Row="2"
+                    BorderBrush="{StaticResource ScriptBorderBrush}"
+                    BorderThickness="0,1,0,0"
+                    Padding="22,13">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="CancelButton"
+                            MinWidth="96"
+                            Command="{Binding CancelCommand}"
+                            Margin="0,0,9,0"
+                            Style="{StaticResource ScriptSecondaryButtonStyle}" />
+                    <Button x:Name="SaveButton"
+                            MinWidth="96"
+                            IsDefault="True"
+                            Command="{Binding SaveCommand}"
+                            Style="{StaticResource ScriptPrimaryButtonStyle}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

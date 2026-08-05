@@ -1,9 +1,10 @@
 {
   "id": "com.typewhisper.script",
   "name": "Script Runner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "TypeWhisper",
   "description": "Process transcriptions through custom shell scripts",
+  "isLocal": true,
   "assemblyName": "TypeWhisper.Plugin.Script.dll",
   "pluginClass": "TypeWhisper.Plugin.Script.ScriptPlugin"
 }
