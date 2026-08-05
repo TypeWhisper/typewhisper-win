@@ -70,6 +70,103 @@ public class ModelManagerServiceTests
     }
 
     [Fact]
+    public async Task PluginInstanceReplacement_InvalidatesAndReloadsActiveModel()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var originalPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var replacementPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(originalPlugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+        await sut.LoadModelAsync(fullModelId);
+
+        SetTranscriptionEnginesAndNotify(pluginManager, replacementPlugin);
+
+        Assert.Null(sut.ActiveModelId);
+        Assert.IsType<NoOpTranscriptionEngine>(sut.Engine);
+
+        var loaded = await sut.EnsureModelLoadedAsync();
+
+        Assert.True(loaded);
+        Assert.Equal(fullModelId, sut.ActiveModelId);
+        Assert.Equal(1, originalPlugin.LoadCallCount);
+        Assert.Equal(1, replacementPlugin.LoadCallCount);
+        Assert.Equal(modelId, replacementPlugin.SelectedModelId);
+    }
+
+    [Fact]
+    public async Task PluginRemoval_InvalidatesActiveModelAndCannotReportLoaded()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = fullModelId
+        });
+
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+        await sut.LoadModelAsync(fullModelId);
+
+        SetTranscriptionEnginesAndNotify(pluginManager);
+
+        Assert.Null(sut.ActiveModelId);
+        Assert.IsType<NoOpTranscriptionEngine>(sut.Engine);
+        Assert.Equal(ModelStatusType.NotDownloaded, sut.GetStatus(fullModelId).Type);
+        Assert.False(await sut.EnsureModelLoadedAsync());
+    }
+
+    [Fact]
+    public async Task Dispose_StopsObservingPluginInstanceReplacement()
+    {
+        const string pluginId = "com.typewhisper.sherpa-onnx";
+        const string modelId = "parakeet";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(s => s.Current).Returns(new AppSettings());
+
+        var originalPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var replacementPlugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true);
+        var pluginManager = CreatePluginManager(originalPlugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object);
+        await sut.LoadModelAsync(fullModelId);
+        sut.Dispose();
+
+        SetTranscriptionEnginesAndNotify(pluginManager, replacementPlugin);
+
+        Assert.Equal(fullModelId, sut.ActiveModelId);
+    }
+
+    [Fact]
     public async Task LoadModelAsync_UsesTranscriptionSelectionIdForAdditionalProfileRole()
     {
         const string rootPluginId = "com.typewhisper.openai-compatible";
@@ -477,6 +574,18 @@ public class ModelManagerServiceTests
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(target.GetType().FullName, fieldName);
         field.SetValue(target, value);
+    }
+
+    private static void SetTranscriptionEnginesAndNotify(
+        PluginManager pluginManager,
+        params ITranscriptionEnginePlugin[] transcriptionEngines)
+    {
+        SetPrivateField(pluginManager, "_transcriptionEngines", transcriptionEngines.ToList());
+        var eventField = typeof(PluginManager).GetField(
+            nameof(PluginManager.PluginStateChanged),
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(typeof(PluginManager).FullName, nameof(PluginManager.PluginStateChanged));
+        ((EventHandler?)eventField.GetValue(pluginManager))?.Invoke(pluginManager, EventArgs.Empty);
     }
 
     private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity
