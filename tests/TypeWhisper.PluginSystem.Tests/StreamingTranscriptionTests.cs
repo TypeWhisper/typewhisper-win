@@ -160,6 +160,150 @@ public class StreamingTranscriptionTests
     }
 
     [Fact]
+    public async Task StreamingHandler_BuffersAudioCapturedBeforeModelBecomesReady()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "stream");
+        await modelManager.LoadModelAsync(fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+        var modelReady = new TaskCompletionSource<StreamingModelPreparation>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            modelReady.Task,
+            allowOnlineBatchPolling: false);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+
+        capture.RaiseData([0, 0, 0, 0], 4);
+        Assert.Equal(4, (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")!);
+
+        modelReady.SetResult(CreateReadyPreparation(modelManager, fullModelId));
+        var session = new CapturingStreamingSession();
+        plugin.CompleteStart(session);
+
+        await WaitUntilAsync(() => session.SentAudio.Count == 1);
+        await Task.Delay(50);
+
+        Assert.Equal(4, session.SentAudio.Single().Length);
+        Assert.Single(session.SentAudio);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_DoesNotStartPreviewForChangedModelIdentity()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        var changedPlugin = new DelayedStreamingPlugin("com.test.changed-streaming");
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin, changedPlugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "stream");
+        await modelManager.LoadModelAsync(fullModelId);
+        var preparedModel = CreateReadyPreparation(modelManager, fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+        var readiness = new TaskCompletionSource<StreamingModelPreparation>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            readiness.Task,
+            allowOnlineBatchPolling: false);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData([0, 0, 0, 0], 4);
+
+        await modelManager.LoadModelAsync(
+            ModelManagerService.GetPluginModelId(changedPlugin.PluginId, "stream"));
+        readiness.SetResult(preparedModel);
+
+        await WaitUntilAsync(() => (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")! == 0);
+
+        Assert.Equal(0, plugin.StartCallCount);
+        Assert.Equal(0, changedPlugin.StartCallCount);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_StaleReadinessCleanupCannotDetachNewSession()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new DelayedStreamingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "stream");
+        await modelManager.LoadModelAsync(fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+        var firstReadiness = new TaskCompletionSource<StreamingModelPreparation>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            firstReadiness.Task,
+            allowOnlineBatchPolling: false);
+        var transcriptState = GetPrivateField(handler, "_transcriptState")!;
+        var staleVersion = (int)GetPrivateField(transcriptState, "_sessionVersion")!;
+        handler.Stop();
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            Task.FromResult(CreateReadyPreparation(modelManager, fullModelId)),
+            allowOnlineBatchPolling: false);
+        var staleCleanup = typeof(StreamingHandler).GetMethod(
+            "StopPreviewBuffering",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(staleCleanup);
+        staleCleanup.Invoke(handler, [staleVersion]);
+
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData([0, 0, 0, 0], 4);
+        var session = new CapturingStreamingSession();
+        plugin.CompleteStart(session);
+
+        await WaitUntilAsync(() => session.SentAudio.Count == 1);
+
+        Assert.Single(session.SentAudio);
+    }
+
+    [Fact]
     public async Task StreamingHandler_SerializesRealtimeAudioWrites()
     {
         var settings = new FakeSettingsService(AppSettings.Default);
@@ -298,6 +442,16 @@ public class StreamingTranscriptionTests
         return await Task.WhenAny(task, delay) == task;
     }
 
+    private static StreamingModelPreparation CreateReadyPreparation(
+        ModelManagerService modelManager,
+        string requestedModelId) =>
+        new(
+            requestedModelId,
+            modelManager.ActiveModelId,
+            modelManager.Engine,
+            modelManager.ActiveTranscriptionPlugin,
+            IsReady: true);
+
     private static object? GetPrivateField(object target, string fieldName)
     {
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -305,15 +459,17 @@ public class StreamingTranscriptionTests
         return field.GetValue(target);
     }
 
-    private sealed class DelayedStreamingPlugin : ITranscriptionEnginePlugin
+    private sealed class DelayedStreamingPlugin(
+        string pluginId = "com.test.delayed-streaming") : ITranscriptionEnginePlugin
     {
         private readonly TaskCompletionSource<IStreamingSession> _startCompletion =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _startCallCount;
 
-        public string PluginId => "com.test.delayed-streaming";
+        public string PluginId => pluginId;
         public string PluginName => "Delayed Streaming";
         public string PluginVersion => "1.0.0";
-        public string ProviderId => "delayed-streaming";
+        public string ProviderId => pluginId;
         public string ProviderDisplayName => "Delayed Streaming";
         public bool IsConfigured => true;
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
@@ -322,14 +478,18 @@ public class StreamingTranscriptionTests
         public bool SupportsTranslation => false;
         public bool SupportsStreaming => true;
         public string? LastLanguage { get; private set; }
+        public int StartCallCount => Volatile.Read(ref _startCallCount);
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
         public void Dispose() { }
         public void SelectModel(string modelId) => SelectedModelId = modelId;
-        public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct) =>
-            _startCompletion.Task.WaitAsync(ct);
+        public Task<IStreamingSession> StartStreamingAsync(string? language, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _startCallCount);
+            return _startCompletion.Task.WaitAsync(ct);
+        }
         public void CompleteStart(IStreamingSession session) => _startCompletion.SetResult(session);
 
         public Task<PluginTranscriptionResult> TranscribeAsync(

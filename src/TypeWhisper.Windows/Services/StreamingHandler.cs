@@ -7,6 +7,13 @@ using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.Windows.Services;
 
+internal sealed record StreamingModelPreparation(
+    string RequestedModelId,
+    string? ActiveModelId,
+    ITranscriptionEngine? Engine,
+    ITranscriptionEnginePlugin? Plugin,
+    bool IsReady);
+
 /// <summary>
 /// Provides live transcription during recording. Uses real-time WebSocket streaming
 /// when the plugin supports it, otherwise falls back to polling-based transcription.
@@ -96,6 +103,37 @@ public sealed class StreamingHandler : IDisposable
     }
 
     /// <summary>
+    /// Starts buffering live-preview audio immediately and opens the provider path
+    /// after the requested model is ready.
+    /// </summary>
+    internal void StartWhenReadyWithLanguageHints(
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task,
+        Func<bool> isStillRecording,
+        Task<StreamingModelPreparation> modelPreparation,
+        bool allowOnlineBatchPolling)
+    {
+        Stop();
+        ClearPendingStreamingAudio();
+
+        var sessionVersion = _transcriptState.StartSession();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        // Subscribe before capture starts so a slow model or provider cannot lose
+        // the beginning of a real-time preview session.
+        _audio.SamplesAvailable += OnStreamingSamplesAvailable;
+        _streamingTask = RunWhenReadyAsync(
+            languageHints,
+            task,
+            isStillRecording,
+            modelPreparation,
+            allowOnlineBatchPolling,
+            sessionVersion,
+            ct);
+    }
+
+    /// <summary>
     /// Stops the service or session.
     /// </summary>
     public string Stop()
@@ -147,6 +185,85 @@ public sealed class StreamingHandler : IDisposable
     }
 
     // ── WebSocket streaming path ──
+
+    private async Task RunWhenReadyAsync(
+        IReadOnlyList<string> languageHints,
+        TranscriptionTask task,
+        Func<bool> isStillRecording,
+        Task<StreamingModelPreparation> modelPreparation,
+        bool allowOnlineBatchPolling,
+        int sessionVersion,
+        CancellationToken ct)
+    {
+        try
+        {
+            var preparation = await modelPreparation.WaitAsync(ct);
+            if (!IsCurrentPreparation(preparation)
+                || !_transcriptState.IsCurrentSession(sessionVersion)
+                || ct.IsCancellationRequested)
+            {
+                StopPreviewBuffering(sessionVersion);
+                return;
+            }
+
+            var plugin = preparation.Plugin!;
+            var prompt = plugin.SupportsDictionaryTerms
+                ? _dictionary.GetTermsForPrompt()
+                : null;
+
+            if (plugin.SupportsStreamingForPrompt(prompt))
+            {
+                await RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
+                return;
+            }
+
+            // Polling reads the recorder's complete growing buffer directly. The
+            // bounded preview-only packet queue is unnecessary on this path.
+            StopPreviewBuffering(sessionVersion);
+            if (plugin.SupportsModelDownload || allowOnlineBatchPolling)
+            {
+                await RunPollingFallbackAsync(
+                    languageHints,
+                    task,
+                    isStillRecording,
+                    sessionVersion,
+                    ct,
+                    preparation.Engine);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StopPreviewBuffering(sessionVersion);
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            Debug.WriteLine($"Delayed streaming startup error: {ex.Message}");
+            StopPreviewBuffering(sessionVersion);
+        }
+    }
+
+    private bool IsCurrentPreparation(StreamingModelPreparation preparation) =>
+        preparation.IsReady
+        && preparation.Engine?.IsModelLoaded == true
+        && preparation.Plugin is not null
+        && string.Equals(
+            preparation.RequestedModelId,
+            preparation.ActiveModelId,
+            StringComparison.Ordinal)
+        && ReferenceEquals(_modelManager.ActiveTranscriptionPlugin, preparation.Plugin)
+        && string.Equals(
+            _modelManager.ActiveModelId,
+            preparation.ActiveModelId,
+            StringComparison.Ordinal);
+
+    private void StopPreviewBuffering(int sessionVersion)
+    {
+        if (!_transcriptState.IsCurrentSession(sessionVersion))
+            return;
+
+        _audio.SamplesAvailable -= OnStreamingSamplesAvailable;
+        ClearPendingStreamingAudio();
+    }
 
     private async Task RunWebSocketStreamingAsync(
         ITranscriptionEnginePlugin plugin,
@@ -362,9 +479,10 @@ public sealed class StreamingHandler : IDisposable
 
     private async Task RunPollingFallbackAsync(
         IReadOnlyList<string> languageHints, TranscriptionTask task,
-        Func<bool> isStillRecording, int sessionVersion, CancellationToken ct)
+        Func<bool> isStillRecording, int sessionVersion, CancellationToken ct,
+        ITranscriptionEngine? preparedEngine = null)
     {
-        var engine = _modelManager.Engine;
+        var engine = preparedEngine ?? _modelManager.Engine;
         var pollInterval = TimeSpan.FromSeconds(3.0);
 
         try
