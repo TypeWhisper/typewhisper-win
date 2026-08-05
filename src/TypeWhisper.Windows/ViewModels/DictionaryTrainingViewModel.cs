@@ -194,7 +194,7 @@ public sealed partial class DictionaryTrainingViewModel : ObservableObject
                 return;
             }
 
-            _audio.StartRecording();
+            _audio.StartRecording(enableRecovery: false);
             if (!_audio.IsRecording)
             {
                 SetSampleError(sample, Loc.Instance["Dictionary.TrainingNoMicrophone"]);

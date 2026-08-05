@@ -791,7 +791,7 @@ public partial class WelcomeViewModel : ObservableObject
             return;
         }
         _audio.WarmUp();
-        _audio.StartRecording();
+        _audio.StartRecording(enableRecovery: false);
         _isMicTestRunning = true;
     }
 

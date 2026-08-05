@@ -339,7 +339,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StartRecording()
     {
-        StartRecording(enableRecovery: false);
+        StartRecording(enableRecovery: true);
     }
 
     /// <summary>

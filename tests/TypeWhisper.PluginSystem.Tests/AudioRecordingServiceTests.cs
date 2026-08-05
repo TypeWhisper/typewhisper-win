@@ -557,7 +557,7 @@ public sealed class AudioRecordingServiceDeviceChangeTests
             sut.NormalizationEnabled = false;
             var bytes = new byte[] { 0, 32, 0, 64 };
 
-            sut.StartRecording(enableRecovery: true);
+            sut.StartRecording();
             Assert.Single(captures.Created).RaiseData(bytes, bytes.Length);
             var result = await sut.StopRecordingWithRecoveryAsync();
 
@@ -592,7 +592,7 @@ public sealed class AudioRecordingServiceDeviceChangeTests
                 recoveryStore);
             var bytes = new byte[] { 0, 32, 0, 64 };
 
-            sut.StartRecording(enableRecovery: true);
+            sut.StartRecording();
             var capture = Assert.Single(captures.Created);
             capture.RaiseData(bytes, bytes.Length);
             capture.RaiseStopped(new InvalidOperationException("Device removed."));

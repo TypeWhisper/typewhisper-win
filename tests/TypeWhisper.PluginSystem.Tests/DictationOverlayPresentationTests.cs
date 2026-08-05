@@ -76,14 +76,52 @@ public class DictationOverlayPresentationTests
             source,
             "private void ApplyModelUnavailableFeedback(string? modelId, Exception? error = null)",
             900);
-        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 4200);
+        var preparation = TestFile.ExtractBlock(
+            source,
+            "private async Task<ModelPreparationOutcome> PrepareModelAsync(",
+            3200);
+        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 8500);
 
         Assert.Contains("_errorLog.AddEntry(diagnostic, ErrorCategory.Transcription);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyTransientIdleFeedback(feedback, feedbackIsError: true);", helper, StringComparison.Ordinal);
         Assert.Contains("ApplyModelUnavailableFeedback(desiredModelId);", startRecording, StringComparison.Ordinal);
-        Assert.Equal(4, TestFile.CountOccurrences(
+        Assert.Contains("catch (Exception ex)", preparation, StringComparison.Ordinal);
+        Assert.Contains("Error: ex", preparation, StringComparison.Ordinal);
+        Assert.Contains(
+            "EndRecordingAfterPreparationFailure(session, preparationOutcome);",
             startRecording,
-            "ApplyModelUnavailableFeedback(desiredModelId, ex);"));
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyLivePreview_PreparesVadBeforeAudioCaptureStarts()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "ViewModels",
+            "DictationViewModel.cs");
+        var startRecording = TestFile.ExtractBlock(source, "private async Task StartRecording()", 8500);
+
+        var pluginBranchIndex = startRecording.IndexOf(
+            "if (ModelManagerService.IsPluginModel(desiredModelId))",
+            StringComparison.Ordinal);
+        var vadIndex = startRecording.IndexOf(
+            "_vad = CreateVoiceActivityDetector();",
+            StringComparison.Ordinal);
+        var samplesSubscriptionIndex = startRecording.IndexOf(
+            "_audio.SamplesAvailable += OnSamplesAvailable;",
+            StringComparison.Ordinal);
+        var captureStartIndex = startRecording.IndexOf("_audio.StartRecording();", StringComparison.Ordinal);
+
+        Assert.True(pluginBranchIndex >= 0, "Expected separate plugin and legacy preview paths.");
+        Assert.True(vadIndex > pluginBranchIndex, "Expected the legacy preview path to create its VAD.");
+        Assert.True(
+            samplesSubscriptionIndex > vadIndex,
+            "Expected legacy audio samples to feed the VAD.");
+        Assert.True(
+            captureStartIndex > samplesSubscriptionIndex,
+            "Expected live preview subscriptions before audio capture starts.");
     }
 
 }
