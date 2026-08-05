@@ -160,22 +160,20 @@
   {
     "id": "com.typewhisper.script",
     "name": "Script Runner",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "minHostVersion": null,
     "author": "TypeWhisper",
-    "description": "Process transcriptions through custom shell scripts (cmd/PowerShell)",
+    "description": "Process transcriptions through custom shell scripts",
     "category": "post-processing",
-    "size": 12476,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.script-1.0.0.zip",
+    "size": 45710,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.script-1.1.0.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
-    "descriptions": {
-      "de": "Transkriptionen durch eigene Shell-Skripte verarbeiten (cmd/PowerShell)"
-    },
+    "descriptions": null,
     "categories": [
       "post-processing"
     ],
-    "sha256": "67a50678cf075647fd3e906507117396e870b09723acc86732ef05ddc92a6ecf"
+    "sha256": "64014bf9e0a11e6c6e1ffa9971d3b05e1324733151f9f1360f74e143a59e3491"
   },
   {
     "id": "com.typewhisper.live-transcript",
