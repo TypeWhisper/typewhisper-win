@@ -1,4 +1,21 @@
+using System.Text.Json.Serialization;
+
 namespace TypeWhisper.Core.Models;
+
+/// <summary>
+/// Describes whether a transcription record completed successfully.
+/// </summary>
+public enum TranscriptionRecordStatus
+{
+    /// <summary>
+    /// The complete dictation pipeline succeeded.
+    /// </summary>
+    Succeeded = 0,
+    /// <summary>
+    /// Speech-to-text succeeded, but workflow post-processing failed.
+    /// </summary>
+    WorkflowPostProcessingFailed
+}
 
 /// <summary>
 /// Represents transcription record data.
@@ -46,6 +63,18 @@ public sealed record TranscriptionRecord
     /// </summary>
     public string? ProfileName { get; init; }
     /// <summary>
+    /// Gets or sets the workflow id used for post-processing.
+    /// </summary>
+    public string? WorkflowId { get; init; }
+    /// <summary>
+    /// Gets or sets the record status.
+    /// </summary>
+    public TranscriptionRecordStatus Status { get; init; } = TranscriptionRecordStatus.Succeeded;
+    /// <summary>
+    /// Gets or sets the sanitized workflow failure message.
+    /// </summary>
+    public string? WorkflowFailureMessage { get; init; }
+    /// <summary>
     /// Gets or sets the engine used value.
     /// </summary>
     public string EngineUsed { get; init; } = "whisper";
@@ -58,16 +87,37 @@ public sealed record TranscriptionRecord
     /// </summary>
     public string? AudioFileName { get; init; }
     /// <summary>
+    /// Gets or sets the separate recovery audio file name.
+    /// </summary>
+    public string? RecoveryAudioFileName { get; init; }
+    /// <summary>
+    /// Gets or sets the transcription task that was used.
+    /// </summary>
+    public string? TranscriptionTaskUsed { get; init; }
+    /// <summary>
+    /// Gets or sets whether the configured transcription fallback was used.
+    /// </summary>
+    public bool UsedTranscriptionFallback { get; init; }
+    /// <summary>
     /// Gets or sets the created at value.
     /// </summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>
-    /// Returns the word count.
+    /// Returns final text when available, otherwise the preserved raw text.
     /// </summary>
-    public int WordCount => FinalText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+    [JsonIgnore]
+    public string DisplayText => string.IsNullOrWhiteSpace(FinalText) ? RawText : FinalText;
+    /// <summary>
+    /// Returns the word count based on the displayed text.
+    /// </summary>
+    [JsonIgnore]
+    public int WordCount => DisplayText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     /// <summary>
     /// Returns the preview.
     /// </summary>
-    public string Preview => FinalText.Length > 100 ? string.Concat(FinalText.AsSpan(0, 100), "...") : FinalText;
+    [JsonIgnore]
+    public string Preview => DisplayText.Length > 100
+        ? string.Concat(DisplayText.AsSpan(0, 100), "...")
+        : DisplayText;
 }

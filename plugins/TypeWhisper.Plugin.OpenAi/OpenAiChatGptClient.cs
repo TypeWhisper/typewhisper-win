@@ -1,6 +1,8 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.OpenAi;
 
@@ -41,13 +43,13 @@ internal sealed class OpenAiChatGptClient
         request.Content = OpenAiJson.CreateJsonContent(
             CreateRequestBody(model, systemPrompt, userText, reasoningEffort));
 
-        var response = await _httpClient.SendAsync(request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(ParseErrorMessage(body, (int)response.StatusCode));
 
         return ParseResponseText(body)
-            ?? throw new InvalidOperationException("The ChatGPT response could not be parsed.");
+            ?? throw new PluginRequestException(
+                "The ChatGPT response did not contain text.",
+                PluginRequestFailureKind.EmptyResponse);
     }
 
     internal static Dictionary<string, JsonElement> CreateRequestBody(

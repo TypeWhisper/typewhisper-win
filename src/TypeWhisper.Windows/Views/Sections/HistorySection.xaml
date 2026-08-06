@@ -202,6 +202,13 @@
 
                                     <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
                                         <Border Style="{StaticResource BadgeStyle}"
+                                                Background="#4A1F24"
+                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryWorkflowFailedBadge.{0}}"
+                                                Visibility="{Binding IsWorkflowFailed, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="{loc:Str History.WorkflowFailedBadge}"
+                                                       Foreground="{StaticResource DangerBrush}" FontSize="11"/>
+                                        </Border>
+                                        <Border Style="{StaticResource BadgeStyle}"
                                                 Background="#2A3A5A"
                                                 Visibility="{Binding Record.ProfileName, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                                             <TextBlock Text="{Binding Record.ProfileName}"
@@ -223,11 +230,77 @@
                                 <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                                     <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,8,0,8"/>
 
+                                    <!-- Failed workflow recovery -->
+                                    <Border CornerRadius="6" Padding="12" Margin="0,0,0,10"
+                                            Background="#321C20" BorderBrush="{StaticResource DangerBrush}"
+                                            BorderThickness="1"
+                                            Visibility="{Binding IsWorkflowFailed, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str History.WorkflowFailedTitle}"
+                                                       Foreground="{StaticResource DangerBrush}"
+                                                       FontWeight="SemiBold" FontSize="13"/>
+                                             <TextBlock Text="{Binding Record.WorkflowFailureMessage}"
+                                                        AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryWorkflowFailureMessage.{0}}"
+                                                        Foreground="{StaticResource HintBrush}"
+                                                       TextWrapping="Wrap" Margin="0,3,0,10"/>
+                                            <TextBlock Text="{loc:Str History.RawTextLabel}"
+                                                       Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                             <TextBlock Text="{Binding Record.RawText}" TextWrapping="Wrap"
+                                                        AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRawText.{0}}"
+                                                        Foreground="{StaticResource TextBrush}" FontSize="13"
+                                                       Margin="0,3,0,10"/>
+                                            <Button Content="{loc:Str History.CopyRawText}"
+                                                    Command="{Binding CopyRawTextCommand}"
+                                                    AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryCopyRawText.{0}}"
+                                                    Style="{StaticResource LinkButtonStyle}"
+                                                    HorizontalAlignment="Left" Margin="0,0,0,10"/>
+                                            <TextBlock Text="{loc:Str History.WorkflowSelection}"
+                                                       Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                            <ComboBox ItemsSource="{Binding RetryWorkflows}"
+                                                      SelectedItem="{Binding SelectedWorkflow}"
+                                                      DisplayMemberPath="Name"
+                                                      AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRetryWorkflowSelection.{0}}"
+                                                      AutomationProperties.Name="{loc:Str History.WorkflowSelection}"
+                                                      MinWidth="240" HorizontalAlignment="Left" Margin="0,3,0,8"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ui:Button Content="{loc:Str History.RetryWorkflow}"
+                                                           Command="{Binding RetryWorkflowCommand}"
+                                                           AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRetryWorkflow.{0}}"
+                                                           Appearance="Primary" Padding="12,6"/>
+                                                 <ui:ProgressRing IsIndeterminate="True" Width="18" Height="18"
+                                                                 AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRetryProgress.{0}}"
+                                                                 Margin="10,0,0,0"
+                                                                 Visibility="{Binding IsRetrying, Converter={StaticResource BoolToVis}}"/>
+                                                 <TextBlock Text="{Binding RetryStatusText}"
+                                                            AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRetryStatus.{0}}"
+                                                            Foreground="{StaticResource HintBrush}" FontSize="12"
+                                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                            </StackPanel>
+                                             <TextBlock Text="{Binding RetryErrorText}" TextWrapping="Wrap"
+                                                        AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryRetryError.{0}}"
+                                                        Foreground="{StaticResource DangerBrush}" FontSize="12"
+                                                       Margin="0,6,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
                                     <!-- Full text (read-only) -->
-                                    <TextBlock Text="{Binding Record.FinalText}" TextWrapping="Wrap"
+                                    <TextBlock Text="{Binding Record.DisplayText}" TextWrapping="Wrap"
                                                Foreground="{StaticResource TextBrush}" FontSize="13"
-                                               Margin="0,0,0,8"
-                                               Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}"/>
+                                               Margin="0,0,0,8">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsWorkflowFailed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
 
                                     <!-- Edit mode -->
                                     <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
@@ -308,7 +381,8 @@
                                                 Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
                                         <Button Content="{loc:Str History.Edit}" Command="{Binding StartEditCommand}"
                                                 AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryEdit.{0}}"
-                                                Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>
+                                                Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"
+                                                Visibility="{Binding IsWorkflowFailed, Converter={StaticResource InverseBoolToVis}}"/>
                                         <Button Content="{loc:Str History.ReadBack}" Command="{Binding ReadBackCommand}"
                                                 AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryReadBack.{0}}"
                                                 Style="{StaticResource LinkButtonStyle}" Margin="0,0,12,0"/>

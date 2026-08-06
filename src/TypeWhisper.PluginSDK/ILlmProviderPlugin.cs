@@ -19,3 +19,12 @@ public interface ILlmProviderPlugin : ITypeWhisperPlugin
     /// <summary>Sends a chat completion request and returns the response text.</summary>
     Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct);
 }
+
+/// <summary>
+/// Optional capability implemented by concurrency-safe cloud LLM providers.
+/// </summary>
+public interface ILlmRequestHedgingSupport
+{
+    /// <summary>Gets whether the provider supports one concurrent duplicate request.</summary>
+    bool SupportsRequestHedging { get; }
+}

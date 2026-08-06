@@ -161,6 +161,74 @@ public class HistoryServiceTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_audioDirectory, audioFile)));
     }
 
+    [Fact]
+    public void LegacyRecordWithEmptyFinalText_UsesRawTextForDisplaySearchStatsAndExports()
+    {
+        const string rawText = "recover these original words";
+        File.WriteAllText(
+            _filePath,
+            """
+            [
+              {
+                "Id": "legacy",
+                "Timestamp": "2026-08-05T10:00:00Z",
+                "RawText": "recover these original words",
+                "FinalText": ""
+              }
+            ]
+            """);
+        var legacyHistory = new HistoryService(_filePath);
+
+        var loaded = Assert.Single(legacyHistory.Records);
+
+        Assert.Equal(rawText, loaded.DisplayText);
+        Assert.Equal(4, loaded.WordCount);
+        Assert.Equal(rawText, loaded.Preview);
+        Assert.Single(legacyHistory.Search("original"));
+        Assert.Contains(rawText, legacyHistory.ExportToText([loaded]));
+        Assert.Contains(rawText, legacyHistory.ExportToCsv([loaded]));
+        Assert.Contains(rawText, legacyHistory.ExportToMarkdown([loaded]));
+    }
+
+    [Fact]
+    public void TryReplaceRecord_AtomicallyReplacesFullRecordAndRebuildsStatistics()
+    {
+        var original = CreateRecord("same-id", DateTime.UtcNow);
+        Assert.True(_sut.TryAddRecord(original));
+        var replacement = original with
+        {
+            FinalText = "one two three four",
+            Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+            WorkflowFailureMessage = "provider failed",
+            WorkflowId = "workflow-id"
+        };
+
+        Assert.True(_sut.TryReplaceRecord(replacement));
+
+        var current = Assert.Single(_sut.Records);
+        Assert.Equal("same-id", current.Id);
+        Assert.Equal(replacement.FinalText, current.FinalText);
+        Assert.Equal(TranscriptionRecordStatus.WorkflowPostProcessingFailed, current.Status);
+        Assert.Equal(4, _sut.TotalWords);
+        Assert.Single(new HistoryService(_filePath).Records);
+    }
+
+    [Fact]
+    public void FailedAtomicWrite_DoesNotMutateCacheOrStatistics()
+    {
+        var blockingParent = Path.Combine(_tempDir, "not-a-directory");
+        File.WriteAllText(blockingParent, "file");
+        var sut = new HistoryService(Path.Combine(blockingParent, "history.json"));
+        var record = CreateRecord("not-saved", DateTime.UtcNow);
+
+        var saved = sut.TryAddRecord(record);
+
+        Assert.False(saved);
+        Assert.Empty(sut.Records);
+        Assert.Equal(0, sut.TotalRecords);
+        Assert.Equal(0, sut.TotalWords);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_tempDir, recursive: true); } catch { }

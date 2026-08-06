@@ -3,6 +3,7 @@ using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -38,6 +39,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private readonly IAudioInputDeviceProvider _deviceProvider;
     private readonly IAudioInputCaptureFactory _captureFactory;
     private readonly IAudioInputDeviceChangeNotifier? _deviceChangeNotifier;
+    private readonly DictationRecoveryAudioStore? _recoveryStore;
     private readonly TimeSpan _devicePollInterval;
     private readonly object _deviceInfoCacheLock = new();
     private readonly object _deviceChangeCheckLock = new();
@@ -79,6 +81,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private long _activeRecordingSequence;
     private long _captureGeneration;
     private long _activeCaptureGeneration;
+    private Guid? _activeRecoveryRecordingId;
 
     /// <summary>
     /// Initializes a new instance of the AudioRecordingService class.
@@ -90,7 +93,23 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 new WasapiAudioInputCaptureFactory(),
                 new WaveInAudioInputCaptureFactory()),
             FallbackDevicePollInterval,
-            new WasapiAudioInputDeviceChangeNotifier())
+            new WasapiAudioInputDeviceChangeNotifier(),
+            recoveryStore: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes an audio recording service with durable dictation recovery.
+    /// </summary>
+    public AudioRecordingService(DictationRecoveryAudioStore recoveryStore)
+        : this(
+            new WaveInAudioInputDeviceProvider(),
+            new FallbackAudioInputCaptureFactory(
+                new WasapiAudioInputCaptureFactory(),
+                new WaveInAudioInputCaptureFactory()),
+            FallbackDevicePollInterval,
+            new WasapiAudioInputDeviceChangeNotifier(),
+            recoveryStore)
     {
     }
 
@@ -98,7 +117,12 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         IAudioInputDeviceProvider deviceProvider,
         IAudioInputCaptureFactory captureFactory,
         TimeSpan devicePollInterval)
-        : this(deviceProvider, captureFactory, devicePollInterval, deviceChangeNotifier: null)
+        : this(
+            deviceProvider,
+            captureFactory,
+            devicePollInterval,
+            deviceChangeNotifier: null,
+            recoveryStore: null)
     {
     }
 
@@ -106,12 +130,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         IAudioInputDeviceProvider deviceProvider,
         IAudioInputCaptureFactory captureFactory,
         TimeSpan devicePollInterval,
-        IAudioInputDeviceChangeNotifier? deviceChangeNotifier)
+        IAudioInputDeviceChangeNotifier? deviceChangeNotifier,
+        DictationRecoveryAudioStore? recoveryStore = null)
     {
         _deviceProvider = deviceProvider;
         _captureFactory = captureFactory;
         _devicePollInterval = devicePollInterval;
         _deviceChangeNotifier = deviceChangeNotifier;
+        _recoveryStore = recoveryStore;
     }
 
     /// <summary>
@@ -313,6 +339,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public void StartRecording()
     {
+        StartRecording(enableRecovery: true);
+    }
+
+    /// <summary>
+    /// Starts recording and optionally writes normalized chunks to durable recovery storage.
+    /// </summary>
+    public void StartRecording(bool enableRecovery)
+    {
         var startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         lock (_captureLifecycleLock)
         {
@@ -355,6 +389,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
 
             try
             {
+                _activeRecoveryRecordingId = enableRecovery
+                    ? _recoveryStore?.BeginRecording()
+                    : null;
                 _waveIn.StartRecording();
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording active sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} isRecording={_isRecording} format={DescribeWaveFormat(_waveIn.WaveFormat)}");
@@ -364,6 +401,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 AudioCaptureDiagnostics.Log(
                     $"StartRecording failed sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} {ex.GetType().Name}: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"StartRecording failed: {ex.Message}");
+                DiscardActiveRecoveryRecording();
                 ClearRecordingState();
                 DisposeWaveIn(
                     reason: "start failure",
@@ -386,8 +424,26 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public float[]? StopRecording()
     {
+        var samples = StopRecordingCore(out var recoveryRecordingId, out var preserveImmediately);
+        if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
+        {
+            if (preserveImmediately)
+                RunRecoveryOperation(() => _recoveryStore.PreserveActiveRecordingAsync(recordingId));
+            else
+                RunRecoveryOperation(() => _recoveryStore.DiscardActiveRecordingAsync(recordingId));
+        }
+
+        return samples;
+    }
+
+    private float[]? StopRecordingCore(
+        out Guid? recoveryRecordingId,
+        out bool preserveImmediately)
+    {
         lock (_captureLifecycleLock)
         {
+            recoveryRecordingId = null;
+            preserveImmediately = false;
             AudioCaptureDiagnostics.Log(
                 $"StopRecording enter sequence={_activeRecordingSequence} captureGeneration={_activeCaptureGeneration} serviceRecording={_isRecording} waveIn={_waveIn is not null} bufferCount={_sampleBuffer?.Count ?? -1} peak={_peakRmsLevel:F6} preGain={_preGainPeakRms:F6}");
             if (!_isRecording)
@@ -396,11 +452,14 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (_waveIn is null)
             {
                 AudioCaptureDiagnostics.Log("StopRecording no capture");
+                recoveryRecordingId = TakeActiveRecoveryRecordingId();
+                preserveImmediately = true;
                 ClearRecordingState();
                 return null;
             }
 
             _isRecording = false;
+            recoveryRecordingId = TakeActiveRecoveryRecordingId();
 
             float[]? samples;
             lock (_bufferLock)
@@ -438,8 +497,20 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     /// </summary>
     public async Task<float[]?> StopRecordingAsync(CancellationToken cancellationToken = default)
     {
-        if (!_isRecording || _waveIn is null)
-            return null;
+        var result = await StopRecordingWithRecoveryAsync(cancellationToken).ConfigureAwait(false);
+        if (result.RecoveryLease is not null)
+            await result.RecoveryLease.DiscardAsync().ConfigureAwait(false);
+        return result.Samples;
+    }
+
+    /// <summary>
+    /// Stops recording and returns a pending recovery lease with the captured samples.
+    /// </summary>
+    public async Task<AudioRecordingResult> StopRecordingWithRecoveryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!_isRecording)
+            return new AudioRecordingResult(null, null);
 
         try
         {
@@ -450,7 +521,25 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             // Still stop and return the samples captured so far.
         }
 
-        return StopRecording();
+        var samples = StopRecordingCore(out var recoveryRecordingId, out var preserveImmediately);
+        RecoveryRecordingLease? lease = null;
+        if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
+        {
+            try
+            {
+                if (preserveImmediately)
+                    _ = await _recoveryStore.PreserveActiveRecordingAsync(recordingId).ConfigureAwait(false);
+                else
+                    lease = await _recoveryStore.FinalizeRecordingAsync(recordingId).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"Recovery store stop operation failed {ex.GetType().Name}");
+            }
+        }
+
+        return new AudioRecordingResult(samples, lease);
     }
 
     internal AudioTailSnapshot CaptureTailSnapshot()
@@ -543,6 +632,9 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 _recentChunks.Dequeue();
         }
 
+        if (_activeRecoveryRecordingId is { } recoveryRecordingId)
+            _recoveryStore?.AppendSamples(recoveryRecordingId, chunkBuffer);
+
         _currentRmsLevel = rms;
         if (rms > _peakRmsLevel) _peakRmsLevel = rms;
 
@@ -568,6 +660,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 ? $"Audio input capture stopped unexpectedly: {e.Exception!.Message}"
                 : "Audio input capture stopped unexpectedly without an exception.");
 
+            PreserveActiveRecoveryRecording();
             ClearRecordingState();
             DisposeWaveIn(
                 stopRecording: false,
@@ -1051,6 +1144,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     {
         lock (_captureLifecycleLock)
         {
+            PreserveActiveRecoveryRecording();
             ClearRecordingState();
             DisposeWaveIn(
                 reason: "device loss",
@@ -1320,6 +1414,55 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         }
     }
 
+    private Guid? TakeActiveRecoveryRecordingId()
+    {
+        var recordingId = _activeRecoveryRecordingId;
+        _activeRecoveryRecordingId = null;
+        return recordingId;
+    }
+
+    private void PreserveActiveRecoveryRecording()
+    {
+        if (TakeActiveRecoveryRecordingId() is { } recordingId && _recoveryStore is not null)
+            RunRecoveryOperation(() => _recoveryStore.PreserveActiveRecordingAsync(recordingId));
+    }
+
+    private void DiscardActiveRecoveryRecording()
+    {
+        if (TakeActiveRecoveryRecordingId() is { } recordingId && _recoveryStore is not null)
+            RunRecoveryOperation(() => _recoveryStore.DiscardActiveRecordingAsync(recordingId));
+    }
+
+    private static void RunRecoveryOperation(Func<Task> operation)
+    {
+        Task task;
+        try
+        {
+            task = operation();
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Recovery store operation failed {ex.GetType().Name}");
+            return;
+        }
+
+        _ = ObserveRecoveryOperationAsync(task);
+    }
+
+    private static async Task ObserveRecoveryOperationAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Recovery store operation failed {ex.GetType().Name}");
+        }
+    }
+
     private void DisposeWaveIn(
         bool stopRecording = true,
         bool resetWarmUp = true,
@@ -1382,6 +1525,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                     _deviceChangeNotifier.Dispose();
                 }
                 _isRecording = false;
+                DiscardActiveRecoveryRecording();
                 StopPreview();
                 DisposeWaveIn();
             }

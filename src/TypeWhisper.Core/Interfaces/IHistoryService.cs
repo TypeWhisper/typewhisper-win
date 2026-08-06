@@ -21,9 +21,17 @@ public interface IHistoryService
     /// </summary>
     void AddRecord(TranscriptionRecord record);
     /// <summary>
+    /// Atomically persists and adds a complete record.
+    /// </summary>
+    bool TryAddRecord(TranscriptionRecord record) => false;
+    /// <summary>
     /// Updates record.
     /// </summary>
     void UpdateRecord(string id, string finalText);
+    /// <summary>
+    /// Atomically replaces a complete record while preserving its identity.
+    /// </summary>
+    bool TryReplaceRecord(TranscriptionRecord record) => false;
     /// <summary>
     /// Deletes record.
     /// </summary>

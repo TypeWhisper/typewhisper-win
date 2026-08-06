@@ -24,6 +24,10 @@ public enum SettingsRoute
     /// </summary>
     FileTranscription,
     /// <summary>
+    /// Represents dictation recovery.
+    /// </summary>
+    Recovery,
+    /// <summary>
     /// Represents the recorder option.
     /// </summary>
     Recorder,
@@ -215,6 +219,7 @@ public static class SettingsNavigationCatalog
             new SettingsNavigationItem(SettingsRoute.Dictation, text("Nav.Dictation"), "\uE720"),
             new SettingsNavigationItem(SettingsRoute.Shortcuts, text("Nav.Shortcuts"), "\uE765"),
             new SettingsNavigationItem(SettingsRoute.FileTranscription, text("Nav.FileTranscription"), "\uE8A5"),
+            new SettingsNavigationItem(SettingsRoute.Recovery, text("Nav.Recovery"), "\uE777"),
             new SettingsNavigationItem(SettingsRoute.Recorder, text("Nav.Recorder"), "\uE189")
         ]),
         CreateGroup(SettingsGroup.Library, text("SettingsGroup.Library"),

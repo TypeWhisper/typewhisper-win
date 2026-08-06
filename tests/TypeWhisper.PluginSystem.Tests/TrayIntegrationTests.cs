@@ -49,4 +49,25 @@ public sealed class TrayIntegrationTests
         Assert.Contains("catch (Exception ex) when (IsNonFatalTrayActionException(ex))", code);
         Assert.Contains("IsNonFatalTrayActionException", code);
     }
+
+    [Fact]
+    public void RecoveryTrayActionTracksStoreAndOpensNewestRecording()
+    {
+        var trayCode = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Services",
+            "TrayIconService.cs");
+        var appCode = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+
+        Assert.Contains("_recoveryStore.Changed += OnRecoveryStoreChanged;", trayCode);
+        Assert.Contains("Visibility = _recoveryStore.HasRecordings ? Visibility.Visible : Visibility.Collapsed", trayCode);
+        Assert.Contains("_recoverLastItem.Visibility = _recoveryStore.HasRecordings ? Visibility.Visible : Visibility.Collapsed;", trayCode);
+        Assert.Contains("RecoverLastRecordingRequested?.Invoke(this, EventArgs.Empty)", trayCode);
+        Assert.Contains("GetRequiredService<RecoveryViewModel>().SelectRecording();", appCode);
+        Assert.Contains("ShowSettingsWindow(SettingsRoute.Recovery);", appCode);
+    }
 }

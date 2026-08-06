@@ -9,9 +9,11 @@ public sealed class DictationOutputPersistenceTests
 
         var finalTextIndex = processJob.IndexOf("var finalText = pipelineResult.Text;", StringComparison.Ordinal);
         var recentIndex = processJob.IndexOf("_recentTranscriptions.RecordTranscription(", StringComparison.Ordinal);
-        var historyIndex = processJob.IndexOf("_history.AddRecord(", StringComparison.Ordinal);
+        var historyIndex = processJob.IndexOf("_history.TryAddRecord(historyRecord)", StringComparison.Ordinal);
         var actionOutputIndex = processJob.IndexOf("actionPlugin.ExecuteAsync(", StringComparison.Ordinal);
+        var actionSuccessCheckIndex = processJob.IndexOf("if (!actionResult.Success)", StringComparison.Ordinal);
         var pasteOutputIndex = processJob.IndexOf("_textInsertion.InsertTextAsync(", StringComparison.Ordinal);
+        var recoveryDecisionIndex = processJob.LastIndexOf("await job.RecoveryLease.DiscardAsync()", StringComparison.Ordinal);
 
         Assert.True(finalTextIndex >= 0, "The job must finish post-processing before persisting output.");
         Assert.True(recentIndex > finalTextIndex, "Recent transcription persistence should use the final post-processed text.");
@@ -20,6 +22,29 @@ public sealed class DictationOutputPersistenceTests
         Assert.True(historyIndex < actionOutputIndex, "History persistence must happen before action-plugin output.");
         Assert.True(recentIndex < pasteOutputIndex, "Recent transcription persistence must happen before paste/clipboard output.");
         Assert.True(historyIndex < pasteOutputIndex, "History persistence must happen before paste/clipboard output.");
+        Assert.True(actionSuccessCheckIndex > actionOutputIndex, "Action output must be confirmed before the job succeeds.");
+        Assert.True(recoveryDecisionIndex > actionSuccessCheckIndex, "Recovery audio must remain pending until action output succeeds.");
+    }
+
+    [Fact]
+    public void ProcessSingleJobAsync_HistoryFailureStillDeliversTextAndPreservesRecovery()
+    {
+        var processJob = ReadProcessSingleJobAsync();
+        var historyFailureIndex = processJob.IndexOf(
+            "if (!_history.TryAddRecord(historyRecord))",
+            StringComparison.Ordinal);
+        var outputIndex = processJob.IndexOf(
+            "stage = DictationProcessingStage.Output;",
+            StringComparison.Ordinal);
+        var recoveryIndex = processJob.IndexOf(
+            "if (preserveAfterSuccessfulPreviewFallback || historyPersistenceFailed)",
+            StringComparison.Ordinal);
+
+        Assert.True(historyFailureIndex >= 0, "History persistence failure handling must exist.");
+        Assert.True(outputIndex > historyFailureIndex, "Output delivery must continue after a history persistence failure.");
+        Assert.True(recoveryIndex > outputIndex, "Recovery audio should be decided after output delivery.");
+        Assert.Contains("historyPersistenceFailed = true;", processJob);
+        Assert.DoesNotContain("throw new IOException(\"The transcription history could not be saved.\")", processJob);
     }
 
     [Fact]
@@ -72,7 +97,7 @@ public sealed class DictationOutputPersistenceTests
         Assert.True(completedGuardIndex > catchIndex, "Output failures must check for an already-completed API session.");
 
         var failIndex = processJob.IndexOf(
-            "FailApiDictationSession(job.ApiSessionId, ex.Message);",
+            "FailApiDictationSession(job.ApiSessionId, failureMessage);",
             catchIndex,
             StringComparison.Ordinal);
 
@@ -82,26 +107,54 @@ public sealed class DictationOutputPersistenceTests
     }
 
     [Fact]
-    public void ProcessSingleJobAsync_ConstrainsAudioHistoryFileNameBeforeCombining()
+    public void ProcessSingleJobAsync_DiscardsOnlyExplicitCancellationAndPreservesOtherFailures()
     {
         var processJob = ReadProcessSingleJobAsync();
+        var cancellationIndex = processJob.LastIndexOf(
+            "catch (OperationCanceledException) when (ct.IsCancellationRequested)",
+            StringComparison.Ordinal);
+        var failureIndex = processJob.IndexOf(
+            "catch (Exception ex)",
+            cancellationIndex,
+            StringComparison.Ordinal);
+        Assert.True(cancellationIndex >= 0, "The explicit cancellation path must exist.");
+        Assert.True(failureIndex > cancellationIndex, "The non-cancellation failure path must follow cancellation handling.");
+        var cancellationBlock = processJob[cancellationIndex..failureIndex];
+        var failureBlock = processJob[failureIndex..];
 
-        Assert.Contains("var safeAudioFileName = Path.GetFileName(audioFileName);", processJob);
+        Assert.Contains("await job.RecoveryLease.DiscardAsync();", cancellationBlock);
+        Assert.DoesNotContain("job.RecoveryLease.PreserveAsync()", cancellationBlock);
+        Assert.Contains("recoveryDescriptor = await job.RecoveryLease.PreserveAsync();", failureBlock);
         Assert.Contains(
-            "if (string.IsNullOrEmpty(safeAudioFileName) || Path.IsPathRooted(safeAudioFileName))",
-            processJob);
-        Assert.Contains("safeAudioFileName = $\"{Guid.NewGuid():N}.wav\";", processJob);
-        Assert.Contains("Path.Combine(TypeWhisperEnvironment.AudioPath, safeAudioFileName)", processJob);
+            "stage is DictationProcessingStage.WorkflowPostProcessing\n                    or DictationProcessingStage.OtherPostProcessing",
+            failureBlock.Replace("\r\n", "\n"));
     }
 
     [Fact]
-    public void ProcessSingleJobAsync_AudioHistorySaveOnlyCatchesExpectedIoFailures()
+    public void HistoryAudioHelpers_GenerateNamesInternallyAndValidateNamesBeforeDeleting()
     {
-        var processJob = ReadProcessSingleJobAsync();
+        var source = ReadDictationViewModel();
+        var writeAudio = TestFile.ExtractBlock(source, "private static async Task<string?> WriteHistoryAudioAsync", 1200);
+        var deleteAudio = TestFile.ExtractBlock(source, "private static void DeleteHistoryAudio", 1400);
+
+        Assert.Contains("var fileName = $\"{Guid.NewGuid():N}.wav\";", writeAudio);
+        Assert.Contains("Path.Combine(TypeWhisperEnvironment.AudioPath, fileName)", writeAudio);
+        Assert.Contains(
+            "!string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal)",
+            deleteAudio);
+        Assert.Contains("Path.IsPathRooted(fileName)", deleteAudio);
+        Assert.Contains("Path.GetFullPath(Path.Combine(audioRoot, fileName))", deleteAudio);
+        Assert.Contains("string.Equals(parent, audioRoot, StringComparison.OrdinalIgnoreCase)", deleteAudio);
+    }
+
+    [Fact]
+    public void WriteHistoryAudioAsync_OnlyCatchesExpectedIoFailures()
+    {
+        var source = ReadDictationViewModel();
         var audioSaveBlock = TestFile.ExtractBlock(
-            processJob,
-            "audioFileName = $\"{Guid.NewGuid():N}.wav\";",
-            900);
+            source,
+            "private static async Task<string?> WriteHistoryAudioAsync",
+            1200);
 
         Assert.Contains("catch (IOException)", audioSaveBlock);
         Assert.Contains("catch (UnauthorizedAccessException)", audioSaveBlock);
@@ -110,12 +163,15 @@ public sealed class DictationOutputPersistenceTests
 
     private static string ReadProcessSingleJobAsync()
     {
-        var source = TestFile.ReadProjectFile(
+        var source = ReadDictationViewModel();
+
+        return TestFile.ExtractBlock(source, "private async Task ProcessSingleJobAsync", 26000);
+    }
+
+    private static string ReadDictationViewModel() =>
+        TestFile.ReadProjectFile(
             "src",
             "TypeWhisper.Windows",
             "ViewModels",
             "DictationViewModel.cs");
-
-        return TestFile.ExtractBlock(source, "private async Task ProcessSingleJobAsync", 26000);
-    }
 }

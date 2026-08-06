@@ -50,9 +50,15 @@ public sealed record FileTranscriptionProcessProgress(
 /// </summary>
 /// <param name="RawResult">Raw result supplied to the member.</param>
 /// <param name="ProcessedText">Processed text supplied to the member.</param>
+/// <param name="EngineId">Actual transcription engine id.</param>
+/// <param name="ModelId">Actual transcription model id.</param>
+/// <param name="Task">Actual transcription task.</param>
 public sealed record FileTranscriptionProcessResult(
     TranscriptionResult RawResult,
-    string ProcessedText);
+    string ProcessedText,
+    string? EngineId = null,
+    string? ModelId = null,
+    TranscriptionTask Task = TranscriptionTask.Transcribe);
 
 /// <summary>
 /// Provides file transcription processor behavior.
@@ -127,6 +133,11 @@ public sealed class FileTranscriptionProcessor(
 
         modelManager.ScheduleAutoUnload();
 
-        return new FileTranscriptionProcessResult(normalizedResult, pipelineResult.Text);
+        return new FileTranscriptionProcessResult(
+            normalizedResult,
+            pipelineResult.Text,
+            activeResult.EngineSelectionId,
+            activeResult.ModelId,
+            task);
     }
 }

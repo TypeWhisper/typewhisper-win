@@ -1,5 +1,7 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -17,6 +19,7 @@ namespace TypeWhisper.Plugin.OpenAiCompatible;
 public sealed class OpenAiCompatiblePlugin :
     ITranscriptionEnginePlugin,
     ILlmProviderPlugin,
+    ILlmRequestHedgingSupport,
     IAdditionalTranscriptionEnginesProvider,
     IAdditionalLlmProvidersProvider
 {
@@ -33,6 +36,9 @@ public sealed class OpenAiCompatiblePlugin :
     {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
     };
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => SupportsRequestHedgingForProfile(DefaultProfileId);
 
     private readonly HttpClient _httpClient;
     private readonly Dictionary<string, string?> _apiKeys = new(StringComparer.OrdinalIgnoreCase);
@@ -442,7 +448,9 @@ public sealed class OpenAiCompatiblePlugin :
     {
         var profile = RequireProfile(profileId);
         if (string.IsNullOrEmpty(profile.BaseUrl))
-            throw new InvalidOperationException("Server-URL nicht konfiguriert");
+            throw new PluginRequestException(
+                "Server URL not configured",
+                PluginRequestFailureKind.Configuration);
         if (string.IsNullOrEmpty(profile.SelectedModelId))
             throw new InvalidOperationException("Kein Transkriptions-Modell ausgewählt");
 
@@ -468,11 +476,15 @@ public sealed class OpenAiCompatiblePlugin :
     {
         var profile = RequireProfile(profileId);
         if (string.IsNullOrEmpty(profile.BaseUrl))
-            throw new InvalidOperationException("Server-URL nicht konfiguriert");
+            throw new PluginRequestException(
+                "Server URL is not configured.",
+                PluginRequestFailureKind.Configuration);
 
         var modelId = !string.IsNullOrEmpty(model) ? model : profile.SelectedLlmModelId ?? "";
         if (string.IsNullOrEmpty(modelId))
-            throw new InvalidOperationException("Kein LLM-Modell ausgewählt");
+            throw new PluginRequestException(
+                "No LLM model selected",
+                PluginRequestFailureKind.Configuration);
 
         return await SendChatCompletionAsync(
             profile,
@@ -523,22 +535,33 @@ public sealed class OpenAiCompatiblePlugin :
 
     private static string ParseChatCompletionResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "OpenAI-compatible chat completion returned an empty response.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        if (root.TryGetProperty("choices", out var choices)
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("choices", out var choices)
             && choices.ValueKind == JsonValueKind.Array
             && choices.GetArrayLength() > 0
             && choices[0].TryGetProperty("message", out var message)
             && message.TryGetProperty("content", out var content)
             && content.ValueKind == JsonValueKind.String)
         {
-            return content.GetString()?.Trim() ?? "";
+            var text = content.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+                return text;
         }
 
-        throw new InvalidOperationException(
+        throw new PluginRequestException(
             "OpenAI-compatible chat completion response did not contain a string "
-            + "choices[0].message.content value.");
+            + "choices[0].message.content value.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 
     private static void AddThinkingConfiguration(
@@ -604,6 +627,51 @@ public sealed class OpenAiCompatiblePlugin :
         var resolved = ResolveProfileId(profileId);
         return _profiles.FirstOrDefault(profile =>
             string.Equals(profile.Id, resolved, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool SupportsRequestHedgingForProfile(string? profileId)
+    {
+        var baseUrl = FindProfile(profileId)?.BaseUrl;
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        var host = uri.IdnHost.TrimEnd('.');
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)
+            || !host.Contains('.'))
+        {
+            return false;
+        }
+
+        if (!IPAddress.TryParse(host, out var address))
+            return true;
+        if (IPAddress.IsLoopback(address)
+            || address.Equals(IPAddress.Any)
+            || address.Equals(IPAddress.IPv6Any))
+        {
+            return false;
+        }
+
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        var bytes = address.GetAddressBytes();
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            return !(bytes[0] == 10
+                || bytes[0] == 127
+                || bytes[0] == 169 && bytes[1] == 254
+                || bytes[0] == 172 && bytes[1] is >= 16 and <= 31
+                || bytes[0] == 192 && bytes[1] == 168
+                || bytes[0] == 100 && bytes[1] is >= 64 and <= 127);
+        }
+
+        return !address.IsIPv6LinkLocal
+            && !address.IsIPv6SiteLocal
+            && (bytes[0] & 0xfe) != 0xfc;
     }
 
     private OpenAiCompatibleProfile RequireProfile(string? profileId)
@@ -725,6 +793,7 @@ public sealed class OpenAiCompatiblePlugin :
         string profileId) :
         ITranscriptionEnginePlugin,
         ILlmProviderPlugin,
+        ILlmRequestHedgingSupport,
         ITranscriptionEngineSelectionIdentity,
         ILlmProviderSelectionIdentity
     {
@@ -742,6 +811,7 @@ public sealed class OpenAiCompatiblePlugin :
         public string ProviderName => owner.GetDisplayName(profileId);
         public bool IsAvailable => owner.IsProfileLlmAvailable(profileId);
         public IReadOnlyList<PluginModelInfo> SupportedModels => owner.GetLlmModels(profileId);
+        public bool SupportsRequestHedging => owner.SupportsRequestHedgingForProfile(profileId);
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public UserControl? CreateSettingsView() => owner.CreateSettingsView();

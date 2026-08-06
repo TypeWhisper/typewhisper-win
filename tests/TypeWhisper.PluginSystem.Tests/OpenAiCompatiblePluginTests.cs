@@ -11,6 +11,23 @@ namespace TypeWhisper.PluginSystem.Tests;
 
 public class OpenAiCompatiblePluginTests
 {
+    [Theory]
+    [InlineData("https://api.example.com", true)]
+    [InlineData("http://localhost:8080", false)]
+    [InlineData("http://127.0.0.1:8080", false)]
+    [InlineData("http://192.168.1.5:8080", false)]
+    [InlineData("http://10.1.2.3:8080", false)]
+    [InlineData("http://service.local:8080", false)]
+    [InlineData("http://169.254.1.5:8080", false)]
+    public async Task RequestHedging_IsDisabledForLocalAndPrivateEndpoints(string baseUrl, bool expected)
+    {
+        var sut = new OpenAiCompatiblePlugin();
+        await sut.ActivateAsync(new TestPluginHostServices());
+        sut.SetBaseUrl(baseUrl);
+
+        Assert.Equal(expected, ((ILlmRequestHedgingSupport)sut).SupportsRequestHedging);
+    }
+
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
@@ -419,9 +436,9 @@ public class OpenAiCompatiblePluginTests
             "disabled",
             body.RootElement.GetProperty("thinking").GetProperty("type").GetString());
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
             sut.ProcessAsync("system", "user", "", CancellationToken.None));
-        Assert.Equal("Kein LLM-Modell ausgewählt", error.Message);
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
     }
 
     [Fact]
@@ -446,13 +463,34 @@ public class OpenAiCompatiblePluginTests
         sut.SetBaseUrl("https://reasoning-only.example/v1");
         sut.SelectLlmModel("chat-model");
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
             sut.ProcessAsync("system", "user", "", CancellationToken.None));
 
         Assert.Equal(
             "OpenAI-compatible chat completion response did not contain a string "
             + "choices[0].message.content value.",
             error.Message);
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ThrowsEmptyResponseForBlankAssistantContent()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse(
+            """{ "choices": [ { "message": { "content": "   " } } ] }"""));
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://blank.example/v1");
+        sut.SelectLlmModel("chat-model");
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            sut.ProcessAsync("system", "user", "", CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+        Assert.True(error.IsTransient);
     }
 
     private static PluginManifest LoadManifest()

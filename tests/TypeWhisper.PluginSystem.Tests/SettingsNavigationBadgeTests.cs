@@ -60,6 +60,7 @@ public sealed class SettingsNavigationBadgeTests
     [InlineData("AudioSection.xaml")]
     [InlineData("ShortcutsSection.xaml")]
     [InlineData("FileTranscriptionSection.xaml")]
+    [InlineData("RecoverySection.xaml")]
     [InlineData("RecorderSection.xaml")]
     [InlineData("HistorySection.xaml")]
     [InlineData("DictionarySection.xaml")]

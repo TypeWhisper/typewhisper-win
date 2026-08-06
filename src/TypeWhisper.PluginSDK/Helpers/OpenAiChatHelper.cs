@@ -117,7 +117,7 @@ public static class OpenAiChatHelper
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseChatCompletionResponse(json);
     }
@@ -127,20 +127,34 @@ public static class OpenAiChatHelper
     /// </summary>
     internal static string ParseChatCompletionResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "The provider returned an empty response.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        if (root.TryGetProperty("choices", out var choices) &&
-            choices.GetArrayLength() > 0)
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("choices", out var choices)
+            && choices.ValueKind == JsonValueKind.Array
+            && choices.GetArrayLength() > 0)
         {
             var firstChoice = choices[0];
-            if (firstChoice.TryGetProperty("message", out var message) &&
-                message.TryGetProperty("content", out var content))
+            if (firstChoice.TryGetProperty("message", out var message)
+                && message.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.String)
             {
-                return content.GetString()?.Trim() ?? "";
+                var text = content.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                    return text;
             }
         }
 
-        return "";
+        throw new PluginRequestException(
+            "The provider returned an empty response.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 }

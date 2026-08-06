@@ -30,6 +30,7 @@ public partial class SettingsWindow : FluentWindow
         viewModel.RegisterSection(SettingsRoute.Dictation, () => new AudioSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Shortcuts, () => new ShortcutsSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.FileTranscription, () => new FileTranscriptionSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Recovery, () => new RecoverySection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Recorder, () => new RecorderSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.History, () => new HistorySection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Dictionary, () => new DictionarySection { DataContext = viewModel });

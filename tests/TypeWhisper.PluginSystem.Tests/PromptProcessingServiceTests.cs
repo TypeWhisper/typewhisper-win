@@ -113,6 +113,371 @@ public sealed class PromptProcessingServiceTests : IDisposable
         Assert.Equal("Profile input", ExtractDictatedText(profile.LastUserText!));
     }
 
+    [Fact]
+    public async Task ProcessAsync_ImmediateSuccessStartsExactlyOneRequest()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model");
+        SetLlmProviders(_pluginManager, provider);
+
+        var result = await CreateService().ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+
+        Assert.Equal("processed", result);
+        Assert.Equal(1, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_TransientFailureStartsExactlyOneSequentialRetry()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            SupportsRequestHedging = false,
+            Handler = (attempt, _) => attempt == 1
+                ? Task.FromException<string>(new PluginRequestException(
+                    "network",
+                    PluginRequestFailureKind.Network))
+                : Task.FromResult("recovered")
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var delays = new List<TimeSpan>();
+
+        var result = await CreateService(
+            delay: (value, _) =>
+            {
+                delays.Add(value);
+                return Task.CompletedTask;
+            }).ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+
+        Assert.Equal("recovered", result);
+        Assert.Equal(2, provider.CallCount);
+        Assert.Equal([PromptProcessingService.DefaultRetryDelay], delays);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HedgeStartsAfterConfiguredFiveSecondDelayAndCancelsPrimary()
+    {
+        var primaryCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 2)
+                    return "hedge result";
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    return "unexpected";
+                }
+                catch (OperationCanceledException)
+                {
+                    primaryCancelled.TrySetResult();
+                    throw;
+                }
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var observedDelay = TimeSpan.Zero;
+
+        var result = await CreateService(
+            delay: (value, _) =>
+            {
+                observedDelay = value;
+                return Task.CompletedTask;
+            }).ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+
+        Assert.Equal("hedge result", result);
+        Assert.Equal(TimeSpan.FromSeconds(5), PromptProcessingService.DefaultHedgeDelay);
+        Assert.Equal(PromptProcessingService.DefaultHedgeDelay, observedDelay);
+        Assert.Equal(2, provider.CallCount);
+        Assert.True(primaryCancelled.Task.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PrimaryCanWinAfterHedgeStartsAndCancelsHedge()
+    {
+        var releasePrimary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hedgeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hedgeCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 1)
+                {
+                    await releasePrimary.Task.WaitAsync(ct);
+                    return "primary result";
+                }
+
+                hedgeStarted.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    return "unexpected";
+                }
+                catch (OperationCanceledException)
+                {
+                    hedgeCancelled.TrySetResult();
+                    throw;
+                }
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var processing = CreateService(delay: (_, _) => Task.CompletedTask)
+            .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+        await hedgeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        releasePrimary.TrySetResult();
+        var result = await processing;
+
+        Assert.Equal("primary result", result);
+        Assert.True(hedgeCancelled.Task.IsCompletedSuccessfully);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WaitsForHedgeWhenPrimaryFailsAfterBothRequestsStarted()
+    {
+        var releasePrimaryFailure = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHedgeSuccess = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hedgeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 1)
+                {
+                    await releasePrimaryFailure.Task.WaitAsync(ct);
+                    throw new PluginRequestException("network", PluginRequestFailureKind.Network);
+                }
+
+                hedgeStarted.TrySetResult();
+                await releaseHedgeSuccess.Task.WaitAsync(ct);
+                return "hedge result after primary failure";
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var processing = CreateService(delay: (_, _) => Task.CompletedTask)
+            .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+        await hedgeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        releasePrimaryFailure.TrySetResult();
+        await Task.Yield();
+        Assert.False(processing.IsCompleted);
+
+        releaseHedgeSuccess.TrySetResult();
+        var result = await processing;
+
+        Assert.Equal("hedge result after primary failure", result);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UnmarkedProviderDoesNotHedgeButStillRetriesTransientFailure()
+    {
+        var releasePrimary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new UnmarkedLlmProvider(async (attempt, ct) =>
+        {
+            if (attempt == 1)
+            {
+                await releasePrimary.Task.WaitAsync(ct);
+                throw new PluginRequestException("network", PluginRequestFailureKind.Network);
+            }
+
+            return "sequential result";
+        });
+        SetLlmProviders(_pluginManager, provider);
+        var delays = new List<TimeSpan>();
+        var processing = CreateService(delay: (value, _) =>
+            {
+                delays.Add(value);
+                return Task.CompletedTask;
+            })
+            .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+
+        await Task.Yield();
+        Assert.Equal(1, provider.CallCount);
+        Assert.Empty(delays);
+
+        releasePrimary.TrySetResult();
+        var result = await processing;
+
+        Assert.Equal("sequential result", result);
+        Assert.Equal(2, provider.CallCount);
+        Assert.Equal([PromptProcessingService.DefaultRetryDelay], delays);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UserCancellationStopsBothHedgedRequestsWithoutThirdAttempt()
+    {
+        var bothStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 2)
+                    bothStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                return "unexpected";
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        using var cancellation = new CancellationTokenSource();
+        var processing = CreateService(delay: (_, _) => Task.CompletedTask)
+            .ProcessAsync("Prompt", "Input", null, null, cancellation.Token);
+        await bothStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processing);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HedgedFailuresReturnCombinedErrorAfterExactlyTwoRequests()
+    {
+        var bothStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFailures = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 2)
+                    bothStarted.TrySetResult();
+                await releaseFailures.Task.WaitAsync(ct);
+                throw new PluginRequestException(
+                    attempt == 1 ? "network" : "server",
+                    attempt == 1
+                        ? PluginRequestFailureKind.Network
+                        : PluginRequestFailureKind.ServerError);
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var processing = CreateService(delay: (_, _) => Task.CompletedTask)
+            .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+        await bothStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        releaseFailures.TrySetResult();
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => processing);
+
+        Assert.Contains("Both workflow requests failed", error.Message);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NonTransientFailureDoesNotRetry()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            SupportsRequestHedging = false,
+            Handler = (_, _) => Task.FromException<string>(new PluginRequestException(
+                "configuration",
+                PluginRequestFailureKind.Configuration))
+        };
+        SetLlmProviders(_pluginManager, provider);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            CreateService().ProcessAsync("Prompt", "Input", null, null, CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Equal(1, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EmptyResponseIsTransientAndHardCappedAtTwoRequests()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            SupportsRequestHedging = false,
+            Handler = (_, _) => Task.FromResult("   ")
+        };
+        SetLlmProviders(_pluginManager, provider);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            CreateService(delay: (_, _) => Task.CompletedTask)
+                .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None));
+
+        Assert.Contains("Both workflow requests failed", error.Message);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RetryAfterIsCappedAtFifteenSeconds()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            SupportsRequestHedging = false,
+            Handler = (_, _) => Task.FromException<string>(new PluginRequestException(
+                "rate limit",
+                PluginRequestFailureKind.RateLimit,
+                httpStatusCode: 429,
+                retryAfter: TimeSpan.FromMinutes(2)))
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var delays = new List<TimeSpan>();
+
+        _ = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            CreateService(delay: (value, _) =>
+                {
+                    delays.Add(value);
+                    return Task.CompletedTask;
+                })
+                .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None));
+
+        Assert.Equal([TimeSpan.FromSeconds(15)], delays);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DisabledRecoveryKeepsSingleRequestBehavior()
+    {
+        _settings.Save(_settings.Current with { WorkflowRequestRecoveryEnabled = false });
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = (_, _) => Task.FromException<string>(new PluginRequestException(
+                "network",
+                PluginRequestFailureKind.Network))
+        };
+        SetLlmProviders(_pluginManager, provider);
+
+        _ = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            CreateService(delay: (_, _) => Task.CompletedTask)
+                .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None));
+
+        Assert.Equal(1, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DiagnosticsContainOnlyRequestMetadata()
+    {
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model");
+        SetLlmProviders(_pluginManager, provider);
+        var diagnostics = new List<string>();
+
+        _ = await CreateService(diagnostic: diagnostics.Add).ProcessAsync(
+            "private system prompt",
+            "private dictated transcript",
+            null,
+            null,
+            CancellationToken.None);
+
+        var log = string.Join(Environment.NewLine, diagnostics);
+        Assert.Contains("provider=com.test.primary", log);
+        Assert.Contains("model=test-model", log);
+        Assert.DoesNotContain("private system prompt", log);
+        Assert.DoesNotContain("private dictated transcript", log);
+        Assert.DoesNotContain("dictated_text", log);
+    }
+
+    private PromptProcessingService CreateService(
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        Action<string>? diagnostic = null) =>
+        new(
+            _pluginManager,
+            _settings,
+            PromptProcessingService.DefaultHedgeDelay,
+            PromptProcessingService.DefaultRetryDelay,
+            delay ?? ((value, ct) => Task.Delay(value, ct)),
+            diagnostic ?? (_ => { }));
+
     private static string ExtractDictatedText(string framedText)
     {
         using var doc = JsonDocument.Parse(ExtractJsonPayload(framedText));
@@ -132,7 +497,7 @@ public sealed class PromptProcessingServiceTests : IDisposable
         return framedText[jsonStart..];
     }
 
-    private static void SetLlmProviders(PluginManager manager, params CapturingLlmProvider[] providers)
+    private static void SetLlmProviders(PluginManager manager, params ILlmProviderPlugin[] providers)
     {
         var loadedPlugins = providers.Select(provider =>
         {
@@ -157,9 +522,13 @@ public sealed class PromptProcessingServiceTests : IDisposable
 
     public void Dispose() => _pluginManager.Dispose();
 
-    private sealed class CapturingLlmProvider : ILlmProviderPlugin, ILlmProviderSelectionIdentity
+    private sealed class CapturingLlmProvider :
+        ILlmProviderPlugin,
+        ILlmProviderSelectionIdentity,
+        ILlmRequestHedgingSupport
     {
         private readonly string? _selectionId;
+        private int _callCount;
 
         public CapturingLlmProvider(
             string pluginId,
@@ -182,6 +551,9 @@ public sealed class PromptProcessingServiceTests : IDisposable
         public bool IsAvailable { get; set; } = true;
         public IReadOnlyList<PluginModelInfo> SupportedModels { get; }
         public string ResponseText { get; set; } = "processed";
+        public bool SupportsRequestHedging { get; set; } = true;
+        public Func<int, CancellationToken, Task<string>>? Handler { get; set; }
+        public int CallCount => Volatile.Read(ref _callCount);
         public string? LastSystemPrompt { get; private set; }
         public string? LastUserText { get; private set; }
         public string? LastModel { get; private set; }
@@ -192,11 +564,45 @@ public sealed class PromptProcessingServiceTests : IDisposable
 
         public Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
         {
+            var attempt = Interlocked.Increment(ref _callCount);
             LastSystemPrompt = systemPrompt;
             LastUserText = userText;
             LastModel = model;
-            return Task.FromResult(ResponseText);
+            return Handler?.Invoke(attempt, ct) ?? Task.FromResult(ResponseText);
         }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class UnmarkedLlmProvider(
+        Func<int, CancellationToken, Task<string>> handler) :
+        ILlmProviderPlugin,
+        ILlmProviderSelectionIdentity
+    {
+        private int _callCount;
+
+        public string PluginId => "com.test.unmarked";
+        public string PluginName => "Unmarked";
+        public string PluginVersion => "1.0.0";
+        public string LlmSelectionId => PluginId;
+        public string ProviderName => PluginName;
+        public bool IsAvailable => true;
+        public IReadOnlyList<PluginModelInfo> SupportedModels { get; } =
+            [new PluginModelInfo("test-model", "Test Model")];
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public UserControl? CreateSettingsView() => null;
+
+        public Task<string> ProcessAsync(
+            string systemPrompt,
+            string userText,
+            string model,
+            CancellationToken ct) =>
+            handler(Interlocked.Increment(ref _callCount), ct);
 
         public void Dispose()
         {

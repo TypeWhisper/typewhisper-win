@@ -82,6 +82,11 @@ public partial class App : Application
         // Load settings
         var settings = _serviceProvider.GetRequiredService<ISettingsService>();
         settings.Load();
+        var recoveryStore = _serviceProvider.GetRequiredService<DictationRecoveryAudioStore>();
+        await recoveryStore.InitializeAsync();
+        await recoveryStore.SetRetentionAsync(settings.Current.DictationRecoveryRetentionDays);
+        settings.SettingsChanged += updated =>
+            _ = recoveryStore.SetRetentionAsync(updated.DictationRecoveryRetentionDays);
         var licenseService = _serviceProvider.GetRequiredService<LicenseService>();
 
         // Restore enabled term packs into the dictionary on startup.
@@ -120,6 +125,11 @@ public partial class App : Application
         _trayIcon.Initialize();
         _trayIcon.ShowSettingsRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow());
         _trayIcon.ShowFileTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(() => ShowSettingsWindow(SettingsRoute.FileTranscription, presentFileImporter: true));
+        _trayIcon.RecoverLastRecordingRequested += (_, _) => RunTrayActionOnUiThread(() =>
+        {
+            _serviceProvider!.GetRequiredService<RecoveryViewModel>().SelectRecording();
+            ShowSettingsWindow(SettingsRoute.Recovery);
+        });
         _trayIcon.ShowRecentTranscriptionsRequested += (_, _) => RunTrayActionOnUiThread(() =>
             _serviceProvider!.GetRequiredService<DictationViewModel>().ShowRecentTranscriptionsPalette());
         _trayIcon.CopyLastTranscriptionRequested += (_, _) => RunTrayActionOnUiThread(async () =>
@@ -473,6 +483,7 @@ public partial class App : Application
         services.AddSingleton<IFileTranscriptionProcessor, FileTranscriptionProcessor>();
 
         // Audio
+        services.AddSingleton<DictationRecoveryAudioStore>();
         services.AddSingleton<AudioRecordingService>();
         services.AddSingleton<SystemAudioCaptureService>();
         services.AddSingleton<RecorderCaptureService>();
@@ -540,6 +551,11 @@ public partial class App : Application
         // License
         services.AddSingleton<LicenseService>();
         services.AddSingleton<SupporterDiscordService>();
+        services.AddSingleton<AutomaticTranscriptionFallbackService>();
+        services.AddSingleton<WorkflowPostProcessingService>();
+        services.AddSingleton<IWorkflowPostProcessingService>(sp => sp.GetRequiredService<WorkflowPostProcessingService>());
+        services.AddSingleton<HistoryWorkflowRetryService>();
+        services.AddSingleton<ManualAudioRecoveryService>();
 
         // ViewModels
         services.AddSingleton<AudioRecorderViewModel>();
@@ -559,6 +575,7 @@ public partial class App : Application
         services.AddSingleton<CloudFolderSyncViewModel>();
         services.AddSingleton<SettingsWindowViewModel>();
         services.AddSingleton<FileTranscriptionViewModel>();
+        services.AddSingleton<RecoveryViewModel>();
         services.AddSingleton<DashboardViewModel>();
         services.AddTransient<WelcomeViewModel>();
 

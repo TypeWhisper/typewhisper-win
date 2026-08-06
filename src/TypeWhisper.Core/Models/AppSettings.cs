@@ -180,6 +180,36 @@ public record AppSettings
     /// </summary>
     public string? FileTranscriptionModelOverride { get; init; }
 
+    // Dictation recovery
+    /// <summary>
+    /// Gets or sets recovery audio retention in days. -1 means immediately and 0 means never.
+    /// </summary>
+    public int DictationRecoveryRetentionDays { get; init; } = 30;
+    /// <summary>
+    /// Gets or sets the recovery transcription engine id.
+    /// </summary>
+    public string? DictationRecoveryEngineId { get; init; }
+    /// <summary>
+    /// Gets or sets the recovery transcription model id.
+    /// </summary>
+    public string? DictationRecoveryModelId { get; init; }
+    /// <summary>
+    /// Gets or sets the recovery transcription language.
+    /// </summary>
+    public string DictationRecoveryLanguage { get; init; } = "auto";
+    /// <summary>
+    /// Gets or sets the recovery transcription task.
+    /// </summary>
+    public string DictationRecoveryTask { get; init; } = "transcribe";
+    /// <summary>
+    /// Gets or sets whether automatic transcription fallback is enabled.
+    /// </summary>
+    public bool DictationRecoveryAutomaticFallbackEnabled { get; init; }
+    /// <summary>
+    /// Gets or sets whether workflow retry and request hedging are enabled.
+    /// </summary>
+    public bool WorkflowRequestRecoveryEnabled { get; init; } = true;
+
     // Recorder
     /// <summary>
     /// Gets or sets whether recorder microphone capture is enabled.

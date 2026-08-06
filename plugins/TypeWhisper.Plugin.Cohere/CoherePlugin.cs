@@ -9,12 +9,15 @@ namespace TypeWhisper.Plugin.Cohere;
 /// <summary>
 /// Provides cohere plugin behavior.
 /// </summary>
-public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
+public sealed class CoherePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport, IDisposable
 {
     private const string BaseUrl = "https://api.cohere.com/compatibility";
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     private IPluginHostServices? _host;
     private string? _apiKey;
+
+    /// <inheritdoc />
+    public bool SupportsRequestHedging => true;
 
     // ITypeWhisperPlugin
 
@@ -75,7 +78,9 @@ public sealed class CoherePlugin : ILlmProviderPlugin, IDisposable
     public async Task<string> ProcessAsync(string systemPrompt, string userText, string model, CancellationToken ct)
     {
         if (!IsAvailable)
-            throw new InvalidOperationException("API key not configured");
+            throw new PluginRequestException(
+                "API key not configured",
+                PluginRequestFailureKind.Configuration);
 
         return await OpenAiChatHelper.SendChatCompletionAsync(
             _httpClient, BaseUrl, _apiKey!, model, systemPrompt, userText, ct);

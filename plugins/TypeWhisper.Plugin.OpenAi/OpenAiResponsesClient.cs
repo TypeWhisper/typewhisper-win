@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.OpenAi;
@@ -36,7 +37,7 @@ internal sealed class OpenAiResponsesClient
         request.Content = OpenAiJson.CreateJsonContent(
             CreateRequestBody(model, systemPrompt, userText, reasoningEffort));
 
-        var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
         return ParseResponse(json);
     }
@@ -77,6 +78,13 @@ internal sealed class OpenAiResponsesClient
 
     internal static string ParseResponse(string json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new PluginRequestException(
+                "The OpenAI response did not contain text.",
+                PluginRequestFailureKind.EmptyResponse);
+        }
+
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -122,6 +130,8 @@ internal sealed class OpenAiResponsesClient
                 return joined;
         }
 
-        throw new InvalidOperationException("Failed to parse OpenAI response text.");
+        throw new PluginRequestException(
+            "The OpenAI response did not contain text.",
+            PluginRequestFailureKind.EmptyResponse);
     }
 }

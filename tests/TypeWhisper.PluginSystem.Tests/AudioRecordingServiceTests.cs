@@ -1,9 +1,11 @@
 using Moq;
+using System.IO;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Audio;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
@@ -534,6 +536,108 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         sut.StartRecording();
 
         Assert.Equal(2, captures.Created.Count);
+    }
+
+    [Fact]
+    public async Task DictationRecovery_NormalStopReturnsPendingLease()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"tw_capture_recovery_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var recoveryStore = new DictationRecoveryAudioStore(directory);
+            var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+            var captures = new FakeAudioInputCaptureFactory();
+            using var sut = new AudioRecordingService(
+                devices,
+                captures,
+                Timeout.InfiniteTimeSpan,
+                deviceChangeNotifier: null,
+                recoveryStore);
+            sut.NormalizationEnabled = false;
+            var bytes = new byte[] { 0, 32, 0, 64 };
+
+            sut.StartRecording();
+            Assert.Single(captures.Created).RaiseData(bytes, bytes.Length);
+            var result = await sut.StopRecordingWithRecoveryAsync();
+
+            Assert.Equal(2, Assert.IsType<float[]>(result.Samples).Length);
+            var lease = Assert.IsType<RecoveryRecordingLease>(result.RecoveryLease);
+            Assert.Empty(recoveryStore.Recordings);
+
+            await lease.PreserveAsync();
+            Assert.Single(recoveryStore.Recordings);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task DictationRecovery_UnexpectedCaptureStopPreservesActiveRecording()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"tw_capture_recovery_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var recoveryStore = new DictationRecoveryAudioStore(directory);
+            var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+            var captures = new FakeAudioInputCaptureFactory();
+            using var sut = new AudioRecordingService(
+                devices,
+                captures,
+                Timeout.InfiniteTimeSpan,
+                deviceChangeNotifier: null,
+                recoveryStore);
+            var bytes = new byte[] { 0, 32, 0, 64 };
+
+            sut.StartRecording();
+            var capture = Assert.Single(captures.Created);
+            capture.RaiseData(bytes, bytes.Length);
+            capture.RaiseStopped(new InvalidOperationException("Device removed."));
+            await recoveryStore.RefreshAsync();
+
+            Assert.Single(recoveryStore.Recordings);
+            Assert.False(sut.IsRecording);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task Dispose_StillReleasesCaptureWhenRecoveryStoreWasAlreadyDisposed()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"tw_capture_recovery_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var recoveryStore = new DictationRecoveryAudioStore(directory);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan,
+            deviceChangeNotifier: null,
+            recoveryStore);
+        try
+        {
+            sut.StartRecording();
+            var capture = Assert.Single(captures.Created);
+            await recoveryStore.DisposeAsync();
+
+            var error = Record.Exception(sut.Dispose);
+
+            Assert.Null(error);
+            Assert.True(capture.Disposed);
+        }
+        finally
+        {
+            sut.Dispose();
+            await recoveryStore.DisposeAsync();
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
     }
 
     [Fact]
