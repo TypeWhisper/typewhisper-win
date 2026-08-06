@@ -178,8 +178,18 @@ public sealed class TextInsertionService : IDisposable
     /// <summary>
     /// Performs try get clipboard text asynchronously.
     /// </summary>
-    public async Task<string?> TryGetClipboardTextAsync() =>
-        (await _platform.TryGetClipboardTextStateAsync(CancellationToken.None)).Text;
+    public async Task<string?> TryGetClipboardTextAsync()
+    {
+        await _clipboardOperationGate.WaitAsync();
+        try
+        {
+            return (await _platform.TryGetClipboardTextStateAsync(CancellationToken.None)).Text;
+        }
+        finally
+        {
+            _clipboardOperationGate.Release();
+        }
+    }
 
     /// <summary>
     /// Performs try capture selected text asynchronously.
@@ -238,6 +248,10 @@ public sealed class TextInsertionService : IDisposable
                 }
 
                 return captured.Text;
+            }
+            catch (Exception ex) when (ex is COMException or ExternalException or InvalidOperationException)
+            {
+                return null;
             }
             finally
             {
@@ -333,6 +347,7 @@ public sealed class TextInsertionService : IDisposable
             await _platform.DelayAsync(ClipboardCapturePollInterval, cancellationToken);
             var clipboardState = await _platform.TryGetClipboardTextStateAsync(cancellationToken);
             if (clipboardState.SequenceNumber != 0
+                && clipboardState.Text is not null
                 && !string.Equals(clipboardState.Text, marker, StringComparison.Ordinal))
             {
                 return clipboardState;

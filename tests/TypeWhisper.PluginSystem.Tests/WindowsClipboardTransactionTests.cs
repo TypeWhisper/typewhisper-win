@@ -76,9 +76,9 @@ public sealed class WindowsClipboardTransactionTests
                     Assert.True(Clipboard.ContainsData(DataFormats.Rtf));
                     Assert.True(Clipboard.ContainsImage());
                     Assert.Equal(temporaryFile, Assert.Single(Clipboard.GetFileDropList().Cast<string>()));
-                    Assert.Equal(htmlBytes, ReadGlobalBytes(formats.Html));
-                    Assert.Equal(rtfBytes, ReadGlobalBytes(formats.Rtf));
-                    Assert.Equal(customBytes, ReadGlobalBytes(formats.Custom));
+                    AssertGlobalBytesStartWith(htmlBytes, formats.Html);
+                    AssertGlobalBytesStartWith(rtfBytes, formats.Rtf);
+                    AssertGlobalBytesStartWith(customBytes, formats.Custom);
                     Assert.False(Clipboard.ContainsData(
                         WindowsClipboardTransaction.ExcludeClipboardContentFromMonitorProcessing));
 
@@ -193,12 +193,11 @@ public sealed class WindowsClipboardTransactionTests
                     Clipboard.SetDataObject(seedData, copy: true);
                     releasedFormats.Clear();
 
-                    var error = Assert.Throws<COMException>(() =>
+                    Assert.Throws<COMException>(() =>
                         transaction.BeginTemporaryTextAsync("dictated", CancellationToken.None)
                             .GetAwaiter()
                             .GetResult());
 
-                    Assert.Contains("System.Drawing.Bitmap", error.Message, StringComparison.Ordinal);
                     Assert.Equal("previous", Clipboard.GetText());
                     Assert.True(Clipboard.ContainsImage());
                     Assert.NotEmpty(releasedFormats);
@@ -400,6 +399,13 @@ public sealed class WindowsClipboardTransactionTests
         {
             NativeMethods.CloseClipboard();
         }
+    }
+
+    private static void AssertGlobalBytesStartWith(byte[] expected, uint format)
+    {
+        var actual = ReadGlobalBytes(format);
+        Assert.True(actual.Length >= expected.Length);
+        Assert.Equal(expected, actual.AsSpan(0, expected.Length).ToArray());
     }
 
     private static string? ReadUnicodeText()

@@ -164,6 +164,10 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         {
             // The dispatcher may already be shutting down.
         }
+        catch (OperationCanceledException)
+        {
+            // The dispatcher shut down between the check and the invoke.
+        }
     }
 
     private WindowsClipboardLease BeginTemporaryTextCore(string text)

@@ -323,6 +323,39 @@ public sealed class TextInsertionServiceTests
     }
 
     [Fact]
+    public async Task TryGetClipboardTextAsync_WaitsForActiveTemporaryLease()
+    {
+        var restoreDelayEntered = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var continueRestoreDelay = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            RestoreDelayEntered = restoreDelayEntered,
+            ContinueRestoreDelay = continueRestoreDelay
+        };
+        var sut = new TextInsertionService(platform);
+
+        var paste = sut.InsertTextAsync("dictated");
+        await restoreDelayEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var clipboardRead = sut.TryGetClipboardTextAsync();
+
+        try
+        {
+            await Task.Yield();
+            Assert.False(clipboardRead.IsCompleted);
+        }
+        finally
+        {
+            continueRestoreDelay.TrySetResult(true);
+        }
+
+        Assert.Equal(InsertionResult.Pasted, await paste);
+        Assert.Equal("previous", await clipboardRead);
+    }
+
+    [Fact]
     public async Task SuccessfulPaste_RestoresAllClipboardFormats()
     {
         var platform = new FakeTextInsertionPlatform();
@@ -563,9 +596,28 @@ public sealed class TextInsertionServiceTests
             static pair => pair.Value);
         var sut = new TextInsertionService(platform);
 
-        await Assert.ThrowsAsync<ExternalException>(() => sut.TryCaptureSelectedTextAsync());
+        var result = await sut.TryCaptureSelectedTextAsync();
 
+        Assert.Null(result);
         Assert.Equal(expected, platform.ClipboardFormats);
+        Assert.Equal(1, platform.RestoreClipboardCalls);
+    }
+
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_RetriesTransientNullClipboardReads()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            CapturedSelectionText = "selected text",
+            ClipboardNullReadsRemaining = 1
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.TryCaptureSelectedTextAsync();
+
+        Assert.Equal("selected text", result);
+        Assert.Equal("previous", platform.ClipboardText);
         Assert.Equal(1, platform.RestoreClipboardCalls);
     }
 
@@ -628,6 +680,7 @@ public sealed class TextInsertionServiceTests
         public Exception? RestoreClipboardException { get; set; }
         public Exception? BeginTemporaryClipboardException { get; set; }
         public Exception? ClipboardReadException { get; set; }
+        public int ClipboardNullReadsRemaining { get; set; }
         private string? SelectionMarker { get; set; }
         private int MarkerReadsCompleted { get; set; }
         private uint ClipboardSequenceNumber { get; set; } = 1;
@@ -638,6 +691,12 @@ public sealed class TextInsertionServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             if (ClipboardReadException is not null)
                 throw ClipboardReadException;
+
+            if (ClipboardNullReadsRemaining > 0)
+            {
+                ClipboardNullReadsRemaining--;
+                return Task.FromResult(new ClipboardTextState(null, ClipboardSequenceNumber));
+            }
 
             if (SelectionMarker is not null && CopyInputCalls > 0)
             {
