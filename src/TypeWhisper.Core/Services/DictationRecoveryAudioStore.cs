@@ -384,15 +384,17 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
 
         await CleanupRetentionCoreAsync().ConfigureAwait(false);
 
+        FileStream? stream = null;
+        string? fileName = null;
         try
         {
             var createdAt = _utcNow();
             var baseName = ReserveBaseName(createdAt);
-            var fileName = baseName + ".active.wav";
+            fileName = baseName + ".active.wav";
             if (!TryResolveSafeFile(fileName, ActiveFileNamePattern, out var path))
                 return;
 
-            var stream = new FileStream(
+            stream = new FileStream(
                 path,
                 FileMode.CreateNew,
                 FileAccess.ReadWrite,
@@ -407,9 +409,13 @@ public sealed class DictationRecoveryAudioStore : IAsyncDisposable, IDisposable
                 fileName,
                 path,
                 stream);
+            stream = null;
         }
         catch
         {
+            await DisposeStreamAsync(stream).ConfigureAwait(false);
+            if (fileName is not null)
+                TryDeleteSafeFile(fileName, ActiveFileNamePattern);
             // Recovery storage is best effort and must never stop in-memory transcription.
         }
     }

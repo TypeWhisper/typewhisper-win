@@ -332,6 +332,37 @@ public sealed class PromptProcessingServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ProcessAsync_HedgedFailuresReturnCombinedErrorAfterExactlyTwoRequests()
+    {
+        var bothStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFailures = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")
+        {
+            Handler = async (attempt, ct) =>
+            {
+                if (attempt == 2)
+                    bothStarted.TrySetResult();
+                await releaseFailures.Task.WaitAsync(ct);
+                throw new PluginRequestException(
+                    attempt == 1 ? "network" : "server",
+                    attempt == 1
+                        ? PluginRequestFailureKind.Network
+                        : PluginRequestFailureKind.ServerError);
+            }
+        };
+        SetLlmProviders(_pluginManager, provider);
+        var processing = CreateService(delay: (_, _) => Task.CompletedTask)
+            .ProcessAsync("Prompt", "Input", null, null, CancellationToken.None);
+        await bothStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        releaseFailures.TrySetResult();
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => processing);
+
+        Assert.Contains("Both workflow requests failed", error.Message);
+        Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_NonTransientFailureDoesNotRetry()
     {
         var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model")

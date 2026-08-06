@@ -91,7 +91,9 @@ public sealed class PremiumSettingsNavigationTests
             .Single(group => group.Group == SettingsGroup.Capture)
             .Items.Select(item => item.Route).ToList();
 
-        Assert.Equal(routes.IndexOf(SettingsRoute.FileTranscription) + 1, routes.IndexOf(SettingsRoute.Recovery));
+        var fileTranscriptionIndex = routes.IndexOf(SettingsRoute.FileTranscription);
+        Assert.True(fileTranscriptionIndex >= 0);
+        Assert.Equal(fileTranscriptionIndex + 1, routes.IndexOf(SettingsRoute.Recovery));
         Assert.True(typeof(RecoverySection).IsAssignableTo(typeof(System.Windows.Controls.UserControl)));
     }
 }

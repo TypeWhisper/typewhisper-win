@@ -153,14 +153,26 @@ public sealed class DictationRecoveryAudioStoreTests : IAsyncLifetime
     public async Task Delete_RejectsTraversalAndIgnoresForeignFiles()
     {
         var foreignPath = Path.Combine(_directory, "dictation-recovery-not-ours.wav");
+        var externalPath = Path.Combine(
+            Path.GetDirectoryName(_directory)!,
+            $"dictation-recovery-external-{Guid.NewGuid():N}.wav");
         await File.WriteAllTextAsync(foreignPath, "do not touch");
-        await using var store = CreateStore();
+        await File.WriteAllTextAsync(externalPath, "do not touch");
+        try
+        {
+            await using var store = CreateStore();
 
-        Assert.False(await store.DeleteAsync("../dictation-recovery-not-ours.wav"));
-        await store.DeleteAllAsync();
+            Assert.False(await store.DeleteAsync($"../{Path.GetFileName(externalPath)}"));
+            await store.DeleteAllAsync();
 
-        Assert.True(File.Exists(foreignPath));
-        Assert.Empty(store.Recordings);
+            Assert.True(File.Exists(externalPath));
+            Assert.True(File.Exists(foreignPath));
+            Assert.Empty(store.Recordings);
+        }
+        finally
+        {
+            try { File.Delete(externalPath); } catch { }
+        }
     }
 
     [Fact]

@@ -608,6 +608,39 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
+    public async Task Dispose_StillReleasesCaptureWhenRecoveryStoreWasAlreadyDisposed()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"tw_capture_recovery_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var recoveryStore = new DictationRecoveryAudioStore(directory);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        var sut = new AudioRecordingService(
+            devices,
+            captures,
+            Timeout.InfiniteTimeSpan,
+            deviceChangeNotifier: null,
+            recoveryStore);
+        try
+        {
+            sut.StartRecording();
+            var capture = Assert.Single(captures.Created);
+            await recoveryStore.DisposeAsync();
+
+            var error = Record.Exception(sut.Dispose);
+
+            Assert.Null(error);
+            Assert.True(capture.Disposed);
+        }
+        finally
+        {
+            sut.Dispose();
+            await recoveryStore.DisposeAsync();
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void RecordingStopped_UnexpectedlyDisposesRestartableCapture()
     {
         var devices = new FakeAudioInputDeviceProvider("USB Microphone");

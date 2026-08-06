@@ -140,16 +140,28 @@ public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         }
 
         using var doc = JsonDocument.Parse(responseBody);
-        var content = doc.RootElement.GetProperty("content");
-        if (content.GetArrayLength() == 0)
-            throw new PluginRequestException(
-                "Anthropic API returned empty content",
-                PluginRequestFailureKind.EmptyResponse);
+        if (doc.RootElement.ValueKind == JsonValueKind.Object
+            && doc.RootElement.TryGetProperty("content", out var content)
+            && content.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var block in content.EnumerateArray())
+            {
+                if (block.ValueKind != JsonValueKind.Object
+                    || !block.TryGetProperty("text", out var textElement)
+                    || textElement.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
 
-        return content[0].GetProperty("text").GetString()
-            ?? throw new PluginRequestException(
-                "Anthropic API returned empty content",
-                PluginRequestFailureKind.EmptyResponse);
+                var text = textElement.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    return text;
+            }
+        }
+
+        throw new PluginRequestException(
+            "Anthropic API returned empty content",
+            PluginRequestFailureKind.EmptyResponse);
     }
 
     // Internal helpers for settings view

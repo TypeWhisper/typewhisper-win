@@ -461,6 +461,24 @@ public class OpenRouterPluginTests
         Assert.Equal("custom", result);
     }
 
+    [Fact]
+    public async Task ProcessAsync_ThrowsEmptyResponseForBlankAssistantContent()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse(
+            """{ "choices": [ { "message": { "content": "   " } } ] }"""));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "openrouter-key";
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenRouterPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            sut.ProcessAsync("system", "user", "", CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+        Assert.True(error.IsTransient);
+    }
+
     private static JsonElement LoadManifest()
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(GetRepoPath(

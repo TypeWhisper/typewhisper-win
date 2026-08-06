@@ -525,6 +525,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             engine = r.EngineUsed,
             model = r.ModelUsed,
             profile = r.ProfileName,
+            status = r.Status.ToString(),
+            workflow_failure_message = r.WorkflowFailureMessage,
             words = r.WordCount,
             words_count = r.WordCount
         }).ToList();

@@ -427,9 +427,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         var samples = StopRecordingCore(out var recoveryRecordingId, out var preserveImmediately);
         if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
         {
-            _ = preserveImmediately
-                ? _recoveryStore.PreserveActiveRecordingAsync(recordingId)
-                : _recoveryStore.DiscardActiveRecordingAsync(recordingId);
+            if (preserveImmediately)
+                RunRecoveryOperation(() => _recoveryStore.PreserveActiveRecordingAsync(recordingId));
+            else
+                RunRecoveryOperation(() => _recoveryStore.DiscardActiveRecordingAsync(recordingId));
         }
 
         return samples;
@@ -524,10 +525,18 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         RecoveryRecordingLease? lease = null;
         if (recoveryRecordingId is { } recordingId && _recoveryStore is not null)
         {
-            if (preserveImmediately)
-                _ = await _recoveryStore.PreserveActiveRecordingAsync(recordingId).ConfigureAwait(false);
-            else
-                lease = await _recoveryStore.FinalizeRecordingAsync(recordingId).ConfigureAwait(false);
+            try
+            {
+                if (preserveImmediately)
+                    _ = await _recoveryStore.PreserveActiveRecordingAsync(recordingId).ConfigureAwait(false);
+                else
+                    lease = await _recoveryStore.FinalizeRecordingAsync(recordingId).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsNonFatalAudioException(ex))
+            {
+                AudioCaptureDiagnostics.Log(
+                    $"Recovery store stop operation failed {ex.GetType().Name}");
+            }
         }
 
         return new AudioRecordingResult(samples, lease);
@@ -1415,13 +1424,43 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
     private void PreserveActiveRecoveryRecording()
     {
         if (TakeActiveRecoveryRecordingId() is { } recordingId && _recoveryStore is not null)
-            _ = _recoveryStore.PreserveActiveRecordingAsync(recordingId);
+            RunRecoveryOperation(() => _recoveryStore.PreserveActiveRecordingAsync(recordingId));
     }
 
     private void DiscardActiveRecoveryRecording()
     {
         if (TakeActiveRecoveryRecordingId() is { } recordingId && _recoveryStore is not null)
-            _ = _recoveryStore.DiscardActiveRecordingAsync(recordingId);
+            RunRecoveryOperation(() => _recoveryStore.DiscardActiveRecordingAsync(recordingId));
+    }
+
+    private static void RunRecoveryOperation(Func<Task> operation)
+    {
+        Task task;
+        try
+        {
+            task = operation();
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Recovery store operation failed {ex.GetType().Name}");
+            return;
+        }
+
+        _ = ObserveRecoveryOperationAsync(task);
+    }
+
+    private static async Task ObserveRecoveryOperationAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsNonFatalAudioException(ex))
+        {
+            AudioCaptureDiagnostics.Log(
+                $"Recovery store operation failed {ex.GetType().Name}");
+        }
     }
 
     private void DisposeWaveIn(

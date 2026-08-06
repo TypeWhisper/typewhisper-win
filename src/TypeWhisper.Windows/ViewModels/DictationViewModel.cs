@@ -1732,6 +1732,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         var stage = DictationProcessingStage.Transcription;
         var recoveryDecided = false;
         var preserveAfterSuccessfulPreviewFallback = false;
+        var historyPersistenceFailed = false;
         var usedTranscriptionFallback = false;
         var engineUsed = ResolveEngineUsed(job.ActiveModelIdAtCapture);
         var modelUsed = ResolveModelUsed(job.ActiveModelIdAtCapture);
@@ -2024,10 +2025,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 if (!_history.TryAddRecord(historyRecord))
                 {
                     DeleteHistoryAudio(audioFileName);
-                    throw new IOException("The transcription history could not be saved.");
+                    historyPersistenceFailed = true;
+                    _errorLog.AddEntry(
+                        "The transcription history could not be saved.",
+                        ErrorCategory.Transcription);
                 }
-
-                persistedHistoryRecord = historyRecord;
+                else
+                {
+                    persistedHistoryRecord = historyRecord;
+                }
             }
 
             // Route to action plugin if configured
@@ -2142,7 +2148,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
 
             if (job.RecoveryLease is not null)
             {
-                if (preserveAfterSuccessfulPreviewFallback)
+                if (preserveAfterSuccessfulPreviewFallback || historyPersistenceFailed)
                 {
                     var descriptor = await job.RecoveryLease.PreserveAsync();
                     if (descriptor is not null && persistedHistoryRecord is not null)
@@ -2199,7 +2205,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 recoveryDecided = true;
             }
 
-            if (stage == DictationProcessingStage.WorkflowPostProcessing
+            if ((stage is DictationProcessingStage.WorkflowPostProcessing
+                    or DictationProcessingStage.OtherPostProcessing)
                 && !string.IsNullOrWhiteSpace(rawText)
                 && _settings.Current.SaveToHistoryEnabled)
             {
@@ -2884,7 +2891,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         while (_jobChannel.Reader.TryRead(out var pendingJob))
         {
             if (pendingJob.RecoveryLease is not null)
-                _ = pendingJob.RecoveryLease.DiscardAsync();
+                DiscardRecoveryLeaseInBackground(pendingJob.RecoveryLease);
             FailApiDictationSession(pendingJob.ApiSessionId, Loc.Instance["Status.Cancelled"]);
             PublishCancelledFailure(
                 pendingJob.ActiveModelIdAtCapture,
@@ -2899,6 +2906,28 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _consumerTask = Task.Run(() => ProcessJobsAsync(_consumerCts.Token));
 
         UpdateVisualState();
+    }
+
+    private static void DiscardRecoveryLeaseInBackground(RecoveryRecordingLease lease)
+    {
+        Task discardTask;
+        try
+        {
+            discardTask = lease.DiscardAsync();
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Recovery lease discard failed: {ex.GetType().Name}");
+            return;
+        }
+
+        _ = discardTask.ContinueWith(
+            static task => System.Diagnostics.Debug.WriteLine(
+                $"Recovery lease discard failed: {task.Exception?.GetBaseException().GetType().Name}"),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private void OnAudioLevelChanged(object? sender, AudioLevelEventArgs e)
@@ -3088,7 +3117,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             while (_jobChannel.Reader.TryRead(out var pendingJob))
             {
                 if (pendingJob.RecoveryLease is not null)
-                    _ = pendingJob.RecoveryLease.DiscardAsync();
+                    DiscardRecoveryLeaseInBackground(pendingJob.RecoveryLease);
                 pendingJob.Session.ReleaseJobCancellation(pendingJob.SessionCancellationSource);
                 DecrementPendingJobCount();
             }

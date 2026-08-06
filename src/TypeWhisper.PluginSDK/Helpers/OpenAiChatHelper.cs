@@ -137,14 +137,19 @@ public static class OpenAiChatHelper
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        if (root.TryGetProperty("choices", out var choices) &&
-            choices.GetArrayLength() > 0)
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("choices", out var choices)
+            && choices.ValueKind == JsonValueKind.Array
+            && choices.GetArrayLength() > 0)
         {
             var firstChoice = choices[0];
-            if (firstChoice.TryGetProperty("message", out var message) &&
-                message.TryGetProperty("content", out var content))
+            if (firstChoice.TryGetProperty("message", out var message)
+                && message.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.String)
             {
-                return content.GetString()?.Trim() ?? "";
+                var text = content.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                    return text;
             }
         }
 

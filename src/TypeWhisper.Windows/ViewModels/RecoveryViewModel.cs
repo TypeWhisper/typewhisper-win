@@ -251,7 +251,20 @@ public sealed partial class RecoveryViewModel : ObservableObject
     {
         if (_loadingSettings) return;
         SaveSettings(settings => settings with { DictationRecoveryRetentionDays = value });
-        _ = _store.SetRetentionAsync(value);
+        _ = ApplyRetentionAsync(value);
+    }
+
+    private async Task ApplyRetentionAsync(int value)
+    {
+        try
+        {
+            await _store.SetRetentionAsync(value);
+            InvokeOnUiThread(RefreshSnapshot);
+        }
+        catch (Exception ex)
+        {
+            InvokeOnUiThread(() => ErrorText = HistoryWorkflowRetryService.SanitizeFailure(ex));
+        }
     }
 
     partial void OnEngineIdChanged(string? value)
@@ -345,8 +358,8 @@ public sealed partial class RecoveryViewModel : ObservableObject
         ReplaceCollection(LanguageOptions,
         [
             new("auto", Loc.Instance["Profiles.Auto"]),
-            new("de", "Deutsch"), new("en", "English"), new("fr", "Francais"),
-            new("es", "Espanol"), new("ja", "日本語"), new("ru", "Русский"), new("zh", "中文")
+            new("de", "Deutsch"), new("en", "English"), new("fr", "Français"),
+            new("es", "Español"), new("ja", "日本語"), new("ru", "Русский"), new("zh", "中文")
         ]);
         ReplaceCollection(TaskOptions,
         [

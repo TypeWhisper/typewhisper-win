@@ -241,8 +241,8 @@ public sealed class AutomaticTranscriptionFallbackService
             || message.Contains("network", StringComparison.OrdinalIgnoreCase)
             || message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
             || message.Contains("no model loaded", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("model", StringComparison.OrdinalIgnoreCase)
-                && message.Contains("load", StringComparison.OrdinalIgnoreCase)
+            || (message.Contains("model", StringComparison.OrdinalIgnoreCase)
+                && message.Contains("load", StringComparison.OrdinalIgnoreCase))
                     ? TranscriptionFallbackFailureKind.Eligible
                     : TranscriptionFallbackFailureKind.Ineligible;
     }

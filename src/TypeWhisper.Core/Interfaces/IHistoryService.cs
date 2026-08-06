@@ -23,11 +23,7 @@ public interface IHistoryService
     /// <summary>
     /// Atomically persists and adds a complete record.
     /// </summary>
-    bool TryAddRecord(TranscriptionRecord record)
-    {
-        AddRecord(record);
-        return true;
-    }
+    bool TryAddRecord(TranscriptionRecord record) => false;
     /// <summary>
     /// Updates record.
     /// </summary>
@@ -35,11 +31,7 @@ public interface IHistoryService
     /// <summary>
     /// Atomically replaces a complete record while preserving its identity.
     /// </summary>
-    bool TryReplaceRecord(TranscriptionRecord record)
-    {
-        UpdateRecord(record.Id, record.FinalText);
-        return true;
-    }
+    bool TryReplaceRecord(TranscriptionRecord record) => false;
     /// <summary>
     /// Deletes record.
     /// </summary>

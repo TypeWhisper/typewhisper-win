@@ -473,6 +473,26 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
     }
 
+    [Fact]
+    public async Task ProcessAsync_ThrowsEmptyResponseForBlankAssistantContent()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse(
+            """{ "choices": [ { "message": { "content": "   " } } ] }"""));
+
+        var host = new TestPluginHostServices();
+        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://blank.example/v1");
+        sut.SelectLlmModel("chat-model");
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            sut.ProcessAsync("system", "user", "", CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+        Assert.True(error.IsTransient);
+    }
+
     private static PluginManifest LoadManifest()
     {
         var basePath = Path.GetFullPath(AppContext.BaseDirectory);

@@ -25,8 +25,10 @@ public partial class HistoryViewModel : ObservableObject
     private readonly HistoryWorkflowRetryService _workflowRetry;
     private readonly IWorkflowService _workflows;
     private readonly DictationRecoveryAudioStore _recoveryStore;
-    private bool _suppressRefresh;
+    private int _suppressRefreshDepth;
     private bool _hasLoaded;
+
+    private bool SuppressRefresh => Volatile.Read(ref _suppressRefreshDepth) > 0;
 
     [ObservableProperty] private string _searchQuery = "";
     [ObservableProperty] private string? _selectedAppFilter;
@@ -82,7 +84,7 @@ public partial class HistoryViewModel : ObservableObject
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
-                if (_suppressRefresh) return;
+                if (SuppressRefresh) return;
                 RefreshRecords();
                 OnPropertyChanged(nameof(TotalRecords));
                 OnPropertyChanged(nameof(TotalWords));
@@ -259,7 +261,7 @@ public partial class HistoryViewModel : ObservableObject
         Func<string, Task> statusCallback,
         CancellationToken cancellationToken)
     {
-        _suppressRefresh = true;
+        Interlocked.Increment(ref _suppressRefreshDepth);
         try
         {
             return await _workflowRetry.RetryAsync(
@@ -270,7 +272,7 @@ public partial class HistoryViewModel : ObservableObject
         }
         finally
         {
-            _suppressRefresh = false;
+            Interlocked.Decrement(ref _suppressRefreshDepth);
             OnPropertyChanged(nameof(TotalRecords));
             OnPropertyChanged(nameof(TotalWords));
         }
@@ -284,14 +286,14 @@ public partial class HistoryViewModel : ObservableObject
         var originalText = entry.Record.DisplayText;
 
         // Suppress refresh so RecordsChanged doesn't rebuild entries and lose suggestions
-        _suppressRefresh = true;
+        Interlocked.Increment(ref _suppressRefreshDepth);
         try
         {
             _history.UpdateRecord(entry.Record.Id, newText);
         }
         finally
         {
-            _suppressRefresh = false;
+            Interlocked.Decrement(ref _suppressRefreshDepth);
         }
 
         // Extract correction suggestions

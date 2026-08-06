@@ -818,14 +818,14 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task HistorySearch_IncludesRaycastCompatibleAliases()
+    public async Task HistorySearch_IncludesAliasesAndFailedWorkflowStatus()
     {
         var record = new TranscriptionRecord
         {
             Id = Guid.NewGuid().ToString(),
             Timestamp = new DateTime(2026, 4, 23, 10, 15, 0, DateTimeKind.Utc),
             RawText = "raw transcript",
-            FinalText = "final transcript",
+            FinalText = "",
             AppName = "Notepad",
             AppProcessName = "notepad.exe",
             AppUrl = "https://example.com",
@@ -833,7 +833,9 @@ public class HttpApiServiceTests : IDisposable
             Language = "en",
             ProfileName = "Writing",
             EngineUsed = "mock",
-            ModelUsed = "tiny"
+            ModelUsed = "tiny",
+            Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+            WorkflowFailureMessage = "provider unavailable"
         };
         _history.Setup(h => h.Records).Returns([record]);
 
@@ -855,6 +857,13 @@ public class HttpApiServiceTests : IDisposable
         Assert.Equal("notepad.exe", entries[0].GetProperty("app_process_name").GetString());
         Assert.Equal(JsonValueKind.Null, entries[0].GetProperty("app_bundle_id").ValueKind);
         Assert.Equal("https://example.com", entries[0].GetProperty("app_url").GetString());
+        Assert.Equal("raw transcript", entries[0].GetProperty("text").GetString());
+        Assert.Equal(
+            nameof(TranscriptionRecordStatus.WorkflowPostProcessingFailed),
+            entries[0].GetProperty("status").GetString());
+        Assert.Equal(
+            "provider unavailable",
+            entries[0].GetProperty("workflow_failure_message").GetString());
         Assert.Equal(2, entries[0].GetProperty("words_count").GetInt32());
         Assert.Equal(2, records[0].GetProperty("words").GetInt32());
     }

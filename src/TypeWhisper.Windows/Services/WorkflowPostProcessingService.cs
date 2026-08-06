@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -203,7 +204,14 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         if (application is null)
             return text;
 
-        application.Dispatcher.Invoke(() => text = Clipboard.GetText());
+        try
+        {
+            application.Dispatcher.Invoke(() => text = Clipboard.GetText());
+        }
+        catch (ExternalException)
+        {
+            // Clipboard context is optional and must not fail dictation processing.
+        }
         return text;
     }
 }

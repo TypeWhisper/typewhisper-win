@@ -78,6 +78,29 @@ public sealed class OpenAiApiHelperTests
     }
 
     [Fact]
+    public async Task SendChatCompletionAsync_ClassifiesBlankAssistantContentAsTransient()
+    {
+        using var client = CreateClient(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"choices":[{"message":{"content":"   "}}]}""")
+        });
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            OpenAiChatHelper.SendChatCompletionAsync(
+                client,
+                "https://provider.example",
+                "test-key",
+                "test-model",
+                "system",
+                "input",
+                CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+        Assert.True(error.IsTransient);
+    }
+
+    [Fact]
     public async Task SendWithErrorHandlingAsync_ClassifiesNetworkAndTimeoutWithoutSwallowingUserCancellation()
     {
         using var networkClient = new HttpClient(new ThrowingHandler(
