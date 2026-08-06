@@ -164,6 +164,47 @@ public sealed class WindowsClipboardTransactionTests
     }
 
     [Fact]
+    public void TemporaryText_HandlesEmptyWindowsInformationProtectionMarker()
+    {
+        lock (ClipboardTestLock)
+        {
+            RunOnStaThread(() =>
+            {
+                using var transaction = new WindowsClipboardTransaction(Dispatcher.CurrentDispatcher);
+                var originalClipboard = BackupClipboard(transaction);
+                try
+                {
+                    using var enterpriseOwner = SeedEmptyEnterpriseClipboardMarker();
+                    var enterpriseFormat = NativeMethods.RegisterClipboardFormat(
+                        WindowsClipboardTransaction.EnterpriseDataProtectionId);
+                    Assert.Contains(enterpriseFormat, EnumerateClipboardFormats());
+                    Assert.Equal(IntPtr.Zero, ReadClipboardHandle(enterpriseFormat));
+                    Assert.True(string.IsNullOrEmpty(ReadEnterpriseClipboardId()));
+
+                    using var lease = transaction.BeginTemporaryTextAsync(
+                            "dictated",
+                            CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    Assert.Equal("dictated", ReadUnicodeText());
+
+                    var result = transaction.RestoreAsync(lease, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    Assert.Equal(ClipboardRestoreResult.Restored, result);
+                    Assert.Equal("previous", ReadUnicodeText());
+                    Assert.True(string.IsNullOrEmpty(ReadEnterpriseClipboardId()));
+                }
+                finally
+                {
+                    RestoreClipboardBackup(transaction, originalClipboard);
+                }
+            });
+        }
+    }
+
+    [Fact]
     public void UnsupportedOleFormat_AbortsBeforeClearingAndReleasesCapturedHandles()
     {
         lock (ClipboardTestLock)
@@ -245,6 +286,76 @@ public sealed class WindowsClipboardTransactionTests
         finally
         {
             NativeMethods.CloseClipboard();
+        }
+    }
+
+    private static HwndSource SeedEmptyEnterpriseClipboardMarker()
+    {
+        var enterpriseFormat = NativeMethods.RegisterClipboardFormat(
+            WindowsClipboardTransaction.EnterpriseDataProtectionId);
+        Assert.NotEqual(0u, enterpriseFormat);
+
+        var owner = new HwndSource(new HwndSourceParameters(
+            "TypeWhisper enterprise clipboard test owner")
+        {
+            ParentWindow = new IntPtr(-3),
+            WindowStyle = 0
+        });
+
+        Assert.True(NativeMethods.OpenClipboard(owner.Handle));
+        try
+        {
+            Assert.True(NativeMethods.EmptyClipboard());
+            SetGlobalData(
+                NativeMethods.CF_UNICODETEXT,
+                Encoding.Unicode.GetBytes("previous\0"));
+            Marshal.SetLastPInvokeError(0);
+            Assert.Equal(
+                IntPtr.Zero,
+                NativeMethods.SetClipboardData(enterpriseFormat, IntPtr.Zero));
+            Assert.Equal(0, Marshal.GetLastPInvokeError());
+        }
+        finally
+        {
+            NativeMethods.CloseClipboard();
+        }
+
+        return owner;
+    }
+
+    private static IntPtr ReadClipboardHandle(uint format)
+    {
+        Assert.True(NativeMethods.OpenClipboard(IntPtr.Zero));
+        try
+        {
+            Marshal.SetLastPInvokeError(0);
+            var handle = NativeMethods.GetClipboardData(format);
+            Assert.Equal(0, Marshal.GetLastPInvokeError());
+            return handle;
+        }
+        finally
+        {
+            NativeMethods.CloseClipboard();
+        }
+    }
+
+    private static string? ReadEnterpriseClipboardId()
+    {
+        var result = NativeMethods.EdpGetEnterpriseIdForClipboard(out var enterpriseIdPointer);
+        Assert.True(result >= 0);
+        if (enterpriseIdPointer == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            return Marshal.PtrToStringUni(enterpriseIdPointer);
+        }
+        finally
+        {
+            Assert.True(NativeMethods.HeapFree(
+                NativeMethods.GetProcessHeap(),
+                0,
+                enterpriseIdPointer));
         }
     }
 

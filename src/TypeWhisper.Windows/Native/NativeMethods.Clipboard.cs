@@ -89,6 +89,19 @@ internal static partial class NativeMethods
     [LibraryImport("ole32.dll")]
     public static partial IntPtr OleDuplicateData(IntPtr sourceHandle, ushort format, uint flags);
 
+    [LibraryImport("edputil.dll")]
+    public static partial int EdpGetEnterpriseIdForClipboard(out IntPtr enterpriseId);
+
+    [LibraryImport("edputil.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int EdpSetEnterpriseIdForClipboard(string? enterpriseId);
+
+    [LibraryImport("kernel32.dll")]
+    public static partial IntPtr GetProcessHeap();
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool HeapFree(IntPtr heap, uint flags, IntPtr memory);
+
     [LibraryImport(
         "gdi32.dll",
         EntryPoint = "CopyEnhMetaFileW",

@@ -23,6 +23,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 {
     internal const string ExcludeClipboardContentFromMonitorProcessing =
         "ExcludeClipboardContentFromMonitorProcessing";
+    internal const string EnterpriseDataProtectionId = "EnterpriseDataProtectionId";
 
     private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(50);
     private const int MaxClipboardOpenAttempts = 3;
@@ -177,7 +178,11 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         if (excludeFormat == 0)
             throw LastClipboardError("Could not register the clipboard history exclusion format.");
 
-        var snapshot = CaptureSnapshotCore();
+        var enterpriseFormat = NativeMethods.RegisterClipboardFormat(EnterpriseDataProtectionId);
+        if (enterpriseFormat == 0)
+            throw LastClipboardError("Could not register the enterprise clipboard metadata format.");
+
+        var snapshot = CaptureSnapshotCore(enterpriseFormat);
         var clipboardCleared = false;
         try
         {
@@ -212,9 +217,10 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         }
     }
 
-    private WindowsClipboardSnapshot CaptureSnapshotCore()
+    private WindowsClipboardSnapshot CaptureSnapshotCore(uint enterpriseFormat)
     {
         var entries = new List<ClipboardFormatHandle>();
+        string? enterpriseId = null;
         try
         {
             uint currentFormat = 0;
@@ -243,6 +249,15 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                         $"The clipboard contains owner-managed format {nextFormat} that cannot be restored independently.");
                 }
 
+                if (nextFormat == enterpriseFormat)
+                {
+                    // CFSTR_ENTERPRISE_ID is WIP metadata exposed through the EDP APIs. It may
+                    // intentionally enumerate without a clipboard data handle.
+                    enterpriseId = ReadEnterpriseIdCore();
+                    currentFormat = nextFormat;
+                    continue;
+                }
+
                 var sourceHandle = NativeMethods.GetClipboardData(nextFormat);
                 if (sourceHandle == IntPtr.Zero)
                 {
@@ -264,13 +279,50 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                 currentFormat = nextFormat;
             }
 
-            return new WindowsClipboardSnapshot(entries);
+            return new WindowsClipboardSnapshot(entries, enterpriseId);
         }
         catch
         {
             foreach (var entry in entries)
                 entry.Dispose();
             throw;
+        }
+    }
+
+    private static string? ReadEnterpriseIdCore()
+    {
+        var result = NativeMethods.EdpGetEnterpriseIdForClipboard(out var enterpriseIdPointer);
+        if (result < 0)
+        {
+            throw new COMException(
+                "Could not read Windows Information Protection clipboard metadata.",
+                result);
+        }
+
+        if (enterpriseIdPointer == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            return Marshal.PtrToStringUni(enterpriseIdPointer);
+        }
+        finally
+        {
+            NativeMethods.HeapFree(
+                NativeMethods.GetProcessHeap(),
+                0,
+                enterpriseIdPointer);
+        }
+    }
+
+    private static void SetEnterpriseIdCore(string enterpriseId)
+    {
+        var result = NativeMethods.EdpSetEnterpriseIdForClipboard(enterpriseId);
+        if (result < 0)
+        {
+            throw new COMException(
+                "Could not restore Windows Information Protection clipboard metadata.",
+                result);
         }
     }
 
@@ -546,9 +598,12 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         public void Dispose() => CompleteWithoutRestore();
     }
 
-    private sealed class WindowsClipboardSnapshot(List<ClipboardFormatHandle> entries) : IDisposable
+    private sealed class WindowsClipboardSnapshot(
+        List<ClipboardFormatHandle> entries,
+        string? enterpriseId = null) : IDisposable
     {
         private readonly List<ClipboardFormatHandle> _entries = entries;
+        private readonly string? _enterpriseId = enterpriseId;
         private bool _disposed;
 
         public WindowsClipboardSnapshot DuplicateForTransfer()
@@ -560,7 +615,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                 foreach (var entry in _entries)
                     duplicates.Add(entry.Duplicate());
 
-                return new WindowsClipboardSnapshot(duplicates);
+                return new WindowsClipboardSnapshot(duplicates, _enterpriseId);
             }
             catch
             {
@@ -575,6 +630,9 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             foreach (var entry in _entries)
                 entry.TransferToClipboard();
+
+            if (_enterpriseId is not null)
+                SetEnterpriseIdCore(_enterpriseId);
         }
 
         public void Dispose()
