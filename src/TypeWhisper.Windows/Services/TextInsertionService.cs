@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Windows;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Native;
@@ -9,12 +8,12 @@ namespace TypeWhisper.Windows.Services;
 /// <summary>
 /// Provides text insertion service behavior.
 /// </summary>
-public sealed class TextInsertionService
+public sealed class TextInsertionService : IDisposable
 {
     private static readonly TimeSpan ModifierPollInterval = TimeSpan.FromMilliseconds(25);
     private static readonly TimeSpan FocusDelay = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan EnterDelay = TimeSpan.FromMilliseconds(50);
-    private static readonly TimeSpan ClipboardRestoreDelay = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ClipboardRestoreDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ClipboardCapturePollInterval = TimeSpan.FromMilliseconds(50);
     private const int MaxModifierReleaseChecks = 32;
     private const int MaxModifierReleaseChecksAfterNormalization = 8;
@@ -25,12 +24,14 @@ public sealed class TextInsertionService
 
     private readonly ITextInsertionPlatform _platform;
     private readonly IErrorLogService? _errorLog;
+    private readonly bool _ownsPlatform;
+    private readonly SemaphoreSlim _clipboardOperationGate = new(1, 1);
 
     /// <summary>
     /// Initializes a new instance of the TextInsertionService class.
     /// </summary>
     public TextInsertionService()
-        : this(new WindowsTextInsertionPlatform(), null)
+        : this(new WindowsTextInsertionPlatform(), null, ownsPlatform: true)
     {
     }
 
@@ -38,14 +39,23 @@ public sealed class TextInsertionService
     /// Initializes a new instance of the TextInsertionService class.
     /// </summary>
     public TextInsertionService(IErrorLogService errorLog)
-        : this(new WindowsTextInsertionPlatform(), errorLog)
+        : this(new WindowsTextInsertionPlatform(), errorLog, ownsPlatform: true)
     {
     }
 
     internal TextInsertionService(ITextInsertionPlatform platform, IErrorLogService? errorLog = null)
+        : this(platform, errorLog, ownsPlatform: false)
+    {
+    }
+
+    private TextInsertionService(
+        ITextInsertionPlatform platform,
+        IErrorLogService? errorLog,
+        bool ownsPlatform)
     {
         _platform = platform;
         _errorLog = errorLog;
+        _ownsPlatform = ownsPlatform;
     }
 
     /// <summary>
@@ -55,156 +65,247 @@ public sealed class TextInsertionService
         string text,
         bool autoPaste = true,
         bool autoEnter = false,
-        IntPtr targetHwnd = default)
+        IntPtr targetHwnd = default,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(text))
             return InsertionResult.NoText;
 
-        var previousClipboard = await _platform.TryGetClipboardTextAsync();
-        await _platform.SetClipboardTextAsync(text);
+        await _clipboardOperationGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await InsertTextCoreAsync(
+                text,
+                autoPaste,
+                autoEnter,
+                targetHwnd,
+                cancellationToken);
+        }
+        finally
+        {
+            _clipboardOperationGate.Release();
+        }
+    }
 
+    private async Task<InsertionResult> InsertTextCoreAsync(
+        string text,
+        bool autoPaste,
+        bool autoEnter,
+        IntPtr targetHwnd,
+        CancellationToken cancellationToken)
+    {
         if (!autoPaste)
-            return InsertionResult.CopiedToClipboard;
-
-        if (!await WaitForModifierKeysReleasedAsync())
         {
-            LogInsertionFallback("Auto paste fell back to clipboard: modifier keys stayed pressed before paste.");
+            await _platform.SetClipboardTextAsync(text, cancellationToken);
             return InsertionResult.CopiedToClipboard;
         }
 
-        if (!await FocusTargetWindowAsync(targetHwnd))
+        IClipboardLease? clipboardLease = null;
+        var leaseFinalized = false;
+        var pasteQueued = false;
+        try
         {
-            LogInsertionFallback("Auto paste fell back to clipboard: target window could not be focused.");
-            return InsertionResult.CopiedToClipboard;
-        }
+            clipboardLease = await _platform.BeginTemporaryClipboardTextAsync(text, cancellationToken);
 
-        var pasteInputCount = _platform.SendPasteInput();
-        if (pasteInputCount != ExpectedPasteInputCount)
-        {
-            LogInsertionFallback($"Auto paste fell back to clipboard: Ctrl+V input sent {pasteInputCount}/{ExpectedPasteInputCount} events.");
-            return InsertionResult.CopiedToClipboard;
-        }
-
-        if (autoEnter)
-        {
-            await _platform.DelayAsync(EnterDelay);
-            var enterInputCount = _platform.SendEnterInput();
-            if (enterInputCount != ExpectedEnterInputCount)
+            if (!await WaitForModifierKeysReleasedAsync(cancellationToken))
             {
-                LogInsertionFallback($"Auto paste sent Ctrl+V, but Enter input sent {enterInputCount}/{ExpectedEnterInputCount} events.");
+                var fallback = await CommitClipboardFallbackAsync(
+                    clipboardLease,
+                    text,
+                    "Auto paste fell back to clipboard: modifier keys stayed pressed before paste.",
+                    cancellationToken);
+                leaseFinalized = true;
+                return fallback;
             }
-        }
 
-        await RestorePreviousClipboardAsync(previousClipboard);
-        return InsertionResult.Pasted;
+            if (!await FocusTargetWindowAsync(targetHwnd, cancellationToken))
+            {
+                var fallback = await CommitClipboardFallbackAsync(
+                    clipboardLease,
+                    text,
+                    "Auto paste fell back to clipboard: target window could not be focused.",
+                    cancellationToken);
+                leaseFinalized = true;
+                return fallback;
+            }
+
+            var pasteInputCount = _platform.SendPasteInput();
+            if (pasteInputCount != ExpectedPasteInputCount)
+            {
+                var fallback = await CommitClipboardFallbackAsync(
+                    clipboardLease,
+                    text,
+                    $"Auto paste fell back to clipboard: Ctrl+V input sent {pasteInputCount}/{ExpectedPasteInputCount} events.",
+                    cancellationToken);
+                leaseFinalized = true;
+                return fallback;
+            }
+
+            pasteQueued = true;
+            if (autoEnter)
+            {
+                await _platform.DelayAsync(EnterDelay, cancellationToken);
+                var enterInputCount = _platform.SendEnterInput();
+                if (enterInputCount != ExpectedEnterInputCount)
+                {
+                    LogInsertionDiagnostic($"Auto paste sent Ctrl+V, but Enter input sent {enterInputCount}/{ExpectedEnterInputCount} events.");
+                }
+            }
+
+            await _platform.DelayAsync(ClipboardRestoreDelay, CancellationToken.None);
+            await TryRestoreClipboardAsync(clipboardLease);
+            leaseFinalized = true;
+            cancellationToken.ThrowIfCancellationRequested();
+            return InsertionResult.Pasted;
+        }
+        catch
+        {
+            if (clipboardLease is not null && !leaseFinalized)
+            {
+                if (pasteQueued)
+                    await _platform.DelayAsync(ClipboardRestoreDelay, CancellationToken.None);
+                await TryRestoreClipboardAsync(clipboardLease);
+            }
+
+            throw;
+        }
+        finally
+        {
+            clipboardLease?.Dispose();
+        }
     }
 
     /// <summary>
     /// Performs try get clipboard text asynchronously.
     /// </summary>
-    public Task<string?> TryGetClipboardTextAsync() => _platform.TryGetClipboardTextAsync();
+    public async Task<string?> TryGetClipboardTextAsync() =>
+        (await _platform.TryGetClipboardTextStateAsync(CancellationToken.None)).Text;
 
     /// <summary>
     /// Performs try capture selected text asynchronously.
     /// </summary>
     public async Task<string?> TryCaptureSelectedTextAsync(IntPtr targetHwnd = default)
     {
-        var previousClipboard = await _platform.TryGetClipboardTextAsync();
+        await _clipboardOperationGate.WaitAsync();
+        try
+        {
+            return await TryCaptureSelectedTextCoreAsync(targetHwnd);
+        }
+        finally
+        {
+            _clipboardOperationGate.Release();
+        }
+    }
+
+    private async Task<string?> TryCaptureSelectedTextCoreAsync(IntPtr targetHwnd)
+    {
         var marker = $"__typewhisper-selection-{Guid.NewGuid():N}__";
+        IClipboardLease? clipboardLease;
 
         try
         {
-            await _platform.SetClipboardTextAsync(marker);
+            clipboardLease = await _platform.BeginTemporaryClipboardTextAsync(
+                marker,
+                CancellationToken.None);
         }
-        catch (COMException)
-        {
-            return null;
-        }
-        catch (ExternalException)
+        catch (Exception ex) when (ex is COMException or ExternalException or InvalidOperationException)
         {
             return null;
         }
 
-        if (!await WaitForModifierKeysReleasedAsync())
+        using (clipboardLease)
         {
-            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
-            return null;
+            try
+            {
+                if (!await WaitForModifierKeysReleasedAsync(CancellationToken.None))
+                    return null;
+
+                if (!await FocusTargetWindowAsync(targetHwnd, CancellationToken.None))
+                    return null;
+
+                if (_platform.SendCopyInput() != ExpectedCopyInputCount)
+                    return null;
+
+                var capturedState = await WaitForClipboardTextChangeAsync(marker, CancellationToken.None);
+                if (capturedState is { } state)
+                    _platform.AcceptClipboardSequence(clipboardLease, state.SequenceNumber);
+
+                if (capturedState is not { } captured
+                    || string.IsNullOrWhiteSpace(captured.Text)
+                    || string.Equals(captured.Text, marker, StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
+                return captured.Text;
+            }
+            finally
+            {
+                await TryRestoreClipboardAsync(clipboardLease);
+            }
         }
-
-        if (!await FocusTargetWindowAsync(targetHwnd))
-        {
-            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
-            return null;
-        }
-
-        if (_platform.SendCopyInput() != ExpectedCopyInputCount)
-        {
-            await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
-            return null;
-        }
-
-        var capturedText = await WaitForClipboardTextChangeAsync(marker);
-        await RestorePreviousClipboardAsync(previousClipboard, clearWhenMissing: true);
-
-        return string.IsNullOrWhiteSpace(capturedText) || string.Equals(capturedText, marker, StringComparison.Ordinal)
-            ? null
-            : capturedText;
     }
 
-    private async Task<bool> WaitForModifierKeysReleasedAsync()
+    private async Task<bool> WaitForModifierKeysReleasedAsync(CancellationToken cancellationToken)
     {
-        if (await WaitForModifierKeysReleasedAsync(MaxModifierReleaseChecks))
+        if (await WaitForModifierKeysReleasedAsync(MaxModifierReleaseChecks, cancellationToken))
             return true;
 
         var releaseInputCount = _platform.SendModifierKeyUpInputs();
         if (releaseInputCount > 0)
         {
-            await _platform.DelayAsync(ModifierPollInterval);
-            if (await WaitForModifierKeysReleasedAsync(MaxModifierReleaseChecksAfterNormalization))
+            await _platform.DelayAsync(ModifierPollInterval, cancellationToken);
+            if (await WaitForModifierKeysReleasedAsync(
+                    MaxModifierReleaseChecksAfterNormalization,
+                    cancellationToken))
                 return true;
         }
 
         return !_platform.IsAnyModifierKeyDown();
     }
 
-    private async Task<bool> WaitForModifierKeysReleasedAsync(int maxChecks)
+    private async Task<bool> WaitForModifierKeysReleasedAsync(
+        int maxChecks,
+        CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < maxChecks; attempt++)
         {
             if (!_platform.IsAnyModifierKeyDown())
                 return true;
 
-            await _platform.DelayAsync(ModifierPollInterval);
+            await _platform.DelayAsync(ModifierPollInterval, cancellationToken);
         }
 
         return false;
     }
 
-    private async Task<bool> FocusTargetWindowAsync(IntPtr targetHwnd)
+    private async Task<bool> FocusTargetWindowAsync(
+        IntPtr targetHwnd,
+        CancellationToken cancellationToken)
     {
         if (targetHwnd == IntPtr.Zero)
         {
-            await _platform.DelayAsync(FocusDelay);
+            await _platform.DelayAsync(FocusDelay, cancellationToken);
             return true;
         }
 
         if (IsTargetForeground(targetHwnd))
         {
-            await _platform.DelayAsync(FocusDelay);
+            await _platform.DelayAsync(FocusDelay, cancellationToken);
             return true;
         }
 
         _platform.SetForegroundWindow(targetHwnd);
-        await _platform.DelayAsync(FocusDelay);
+        await _platform.DelayAsync(FocusDelay, cancellationToken);
         if (IsTargetForeground(targetHwnd))
             return true;
 
         var activationInputCount = _platform.SendForegroundActivationInput();
         if (activationInputCount > 0)
         {
-            await _platform.DelayAsync(ModifierPollInterval);
+            await _platform.DelayAsync(ModifierPollInterval, cancellationToken);
             _platform.SetForegroundWindow(targetHwnd);
-            await _platform.DelayAsync(FocusDelay);
+            await _platform.DelayAsync(FocusDelay, cancellationToken);
         }
 
         return IsTargetForeground(targetHwnd);
@@ -223,57 +324,66 @@ public sealed class TextInsertionService
         return targetRoot != IntPtr.Zero && targetRoot == _platform.GetRootWindow(foregroundHwnd);
     }
 
-    private async Task<string?> WaitForClipboardTextChangeAsync(string marker)
+    private async Task<ClipboardTextState?> WaitForClipboardTextChangeAsync(
+        string marker,
+        CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < MaxClipboardCaptureReadAttempts; attempt++)
         {
-            await _platform.DelayAsync(ClipboardCapturePollInterval);
-            var clipboardText = await _platform.TryGetClipboardTextAsync();
-            if (!string.Equals(clipboardText, marker, StringComparison.Ordinal))
-                return clipboardText;
+            await _platform.DelayAsync(ClipboardCapturePollInterval, cancellationToken);
+            var clipboardState = await _platform.TryGetClipboardTextStateAsync(cancellationToken);
+            if (clipboardState.SequenceNumber != 0
+                && !string.Equals(clipboardState.Text, marker, StringComparison.Ordinal))
+            {
+                return clipboardState;
+            }
         }
 
         return null;
     }
 
-    private async Task RestorePreviousClipboardAsync(string? previousClipboard, bool clearWhenMissing = false)
+    private async Task<InsertionResult> CommitClipboardFallbackAsync(
+        IClipboardLease clipboardLease,
+        string text,
+        string diagnostic,
+        CancellationToken cancellationToken)
     {
-        await _platform.DelayAsync(ClipboardRestoreDelay);
-        if (previousClipboard is null)
+        var committed = await _platform.CommitTemporaryClipboardTextAsync(
+            clipboardLease,
+            text,
+            cancellationToken);
+        if (!committed)
         {
-            if (clearWhenMissing)
-            {
-                try
-                {
-                    await _platform.ClearClipboardTextAsync();
-                }
-                catch (COMException)
-                {
-                    // Best effort restore.
-                }
-                catch (ExternalException)
-                {
-                    // Best effort restore.
-                }
-            }
-            return;
+            LogInsertionDiagnostic(
+                "Auto paste fallback was skipped because the clipboard changed.");
+            throw new InvalidOperationException(
+                "The clipboard changed before TypeWhisper could complete text insertion.");
         }
 
+        LogInsertionDiagnostic(diagnostic);
+        return InsertionResult.CopiedToClipboard;
+    }
+
+    private async Task TryRestoreClipboardAsync(IClipboardLease clipboardLease)
+    {
         try
         {
-            await _platform.SetClipboardTextAsync(previousClipboard);
+            var result = await _platform.RestoreClipboardAsync(
+                clipboardLease,
+                CancellationToken.None);
+            if (result == ClipboardRestoreResult.ClipboardChanged)
+            {
+                LogInsertionDiagnostic(
+                    "Clipboard restore skipped because the clipboard changed after the temporary write.");
+            }
         }
-        catch (COMException)
+        catch (Exception ex)
         {
-            // Best effort restore.
-        }
-        catch (ExternalException)
-        {
-            // Best effort restore.
+            LogInsertionDiagnostic($"Clipboard restore failed: {ex.Message}");
         }
     }
 
-    private void LogInsertionFallback(string message)
+    private void LogInsertionDiagnostic(string message)
     {
         try
         {
@@ -284,14 +394,35 @@ public sealed class TextInsertionService
             // Diagnostics must never block dictation output.
         }
     }
+
+    /// <summary>
+    /// Releases native clipboard resources owned by this service.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_ownsPlatform && _platform is IDisposable disposablePlatform)
+            disposablePlatform.Dispose();
+
+        _clipboardOperationGate.Dispose();
+    }
 }
 
 internal interface ITextInsertionPlatform
 {
-    Task<string?> TryGetClipboardTextAsync();
-    Task SetClipboardTextAsync(string text);
-    Task ClearClipboardTextAsync();
-    Task DelayAsync(TimeSpan delay);
+    Task<ClipboardTextState> TryGetClipboardTextStateAsync(CancellationToken cancellationToken);
+    Task<IClipboardLease> BeginTemporaryClipboardTextAsync(
+        string text,
+        CancellationToken cancellationToken);
+    Task SetClipboardTextAsync(string text, CancellationToken cancellationToken);
+    Task<bool> CommitTemporaryClipboardTextAsync(
+        IClipboardLease lease,
+        string text,
+        CancellationToken cancellationToken);
+    Task<ClipboardRestoreResult> RestoreClipboardAsync(
+        IClipboardLease lease,
+        CancellationToken cancellationToken);
+    void AcceptClipboardSequence(IClipboardLease lease, uint sequenceNumber);
+    Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken);
     bool IsAnyModifierKeyDown();
     IntPtr GetForegroundWindow();
     bool SetForegroundWindow(IntPtr hwnd);
@@ -304,7 +435,7 @@ internal interface ITextInsertionPlatform
     uint SendEnterInput();
 }
 
-internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
+internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform, IDisposable
 {
     private const uint ExpectedCopyInputCount = 4;
     private const uint ExpectedPasteInputCount = 4;
@@ -341,66 +472,66 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
         NativeMethods.VK_RWIN
     ];
 
+    private readonly WindowsClipboardTransaction _clipboard = new();
+
     /// <summary>
     /// Performs try get clipboard text asynchronously.
     /// </summary>
-    public async Task<string?> TryGetClipboardTextAsync()
+    public async Task<ClipboardTextState> TryGetClipboardTextStateAsync(
+        CancellationToken cancellationToken)
     {
         try
         {
-            return await Application.Current.Dispatcher.InvokeAsync(() =>
-                Clipboard.ContainsText() ? Clipboard.GetText() : null);
+            return await _clipboard.ReadTextStateAsync(cancellationToken);
         }
-        catch
+        catch (Exception ex) when (ex is COMException or ExternalException or InvalidOperationException)
         {
-            return null;
+            return new ClipboardTextState(null, NativeMethods.GetClipboardSequenceNumber());
         }
     }
 
     /// <summary>
-    /// Sets clipboard text asynchronously.
+    /// Begins a temporary clipboard text operation asynchronously.
     /// </summary>
-    public Task SetClipboardTextAsync(string text) =>
-        Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            for (var attempt = 0; attempt < 3; attempt++)
-            {
-                try
-                {
-                    Clipboard.SetText(text);
-                    return;
-                }
-                catch (COMException) when (attempt < 2)
-                {
-                    Thread.Sleep(50);
-                }
-            }
-        }).Task;
+    public Task<IClipboardLease> BeginTemporaryClipboardTextAsync(
+        string text,
+        CancellationToken cancellationToken) =>
+        _clipboard.BeginTemporaryTextAsync(text, cancellationToken);
 
     /// <summary>
-    /// Clears clipboard text asynchronously.
+    /// Sets persistent clipboard text asynchronously.
     /// </summary>
-    public Task ClearClipboardTextAsync() =>
-        Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            for (var attempt = 0; attempt < 3; attempt++)
-            {
-                try
-                {
-                    Clipboard.Clear();
-                    return;
-                }
-                catch (COMException) when (attempt < 2)
-                {
-                    Thread.Sleep(50);
-                }
-            }
-        }).Task;
+    public Task SetClipboardTextAsync(string text, CancellationToken cancellationToken) =>
+        _clipboard.SetPersistentTextAsync(text, cancellationToken);
+
+    /// <summary>
+    /// Commits temporary clipboard text as a persistent copy fallback.
+    /// </summary>
+    public Task<bool> CommitTemporaryClipboardTextAsync(
+        IClipboardLease lease,
+        string text,
+        CancellationToken cancellationToken) =>
+        _clipboard.CommitTemporaryTextAsync(lease, text, cancellationToken);
+
+    /// <summary>
+    /// Restores the clipboard represented by a temporary lease.
+    /// </summary>
+    public Task<ClipboardRestoreResult> RestoreClipboardAsync(
+        IClipboardLease lease,
+        CancellationToken cancellationToken) =>
+        _clipboard.RestoreAsync(lease, cancellationToken);
+
+    /// <summary>
+    /// Accepts an expected clipboard sequence for a temporary lease.
+    /// </summary>
+    public void AcceptClipboardSequence(IClipboardLease lease, uint sequenceNumber) =>
+        _clipboard.AcceptSequence(lease, sequenceNumber);
 
     /// <summary>
     /// Performs delay asynchronously.
     /// </summary>
-    public Task DelayAsync(TimeSpan delay) => Task.Delay(delay);
+    public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
+        Task.Delay(delay, cancellationToken);
 
     /// <summary>
     /// Returns whether any modifier key down.
@@ -508,6 +639,11 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform
                 KeyInput(NativeMethods.VK_RETURN, keyUp: true)
             ],
             Marshal.SizeOf<NativeMethods.INPUT>());
+
+    /// <summary>
+    /// Releases native clipboard resources.
+    /// </summary>
+    public void Dispose() => _clipboard.Dispose();
 
     private static bool IsKeyDown(int virtualKey) =>
         (NativeMethods.GetAsyncKeyState(virtualKey) & unchecked((short)0x8000)) != 0;

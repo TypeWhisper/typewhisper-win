@@ -321,34 +321,44 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
         public int CopyInputCalls { get; private set; }
         private string? SelectionMarker { get; set; }
         private int MarkerReadsCompleted { get; set; }
+        private uint ClipboardSequenceNumber { get; set; } = 1;
 
-        public Task<string?> TryGetClipboardTextAsync()
+        public Task<ClipboardTextState> TryGetClipboardTextStateAsync(
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (SelectionMarker is not null && CopyInputCalls > 0)
             {
                 if (CapturedSelectionText is null)
                 {
                     ClipboardText = SelectionMarker;
-                    return Task.FromResult<string?>(ClipboardText);
+                    return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
                 }
 
                 if (MarkerReadsCompleted < MarkerReadsBeforeSelection)
                 {
                     MarkerReadsCompleted++;
                     ClipboardText = SelectionMarker;
-                    return Task.FromResult<string?>(ClipboardText);
+                    return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
                 }
 
                 ClipboardText = CapturedSelectionText;
                 SelectionMarker = null;
+                ClipboardSequenceNumber++;
             }
 
-            return Task.FromResult<string?>(ClipboardText);
+            return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
         }
 
-        public Task SetClipboardTextAsync(string text)
+        public Task<IClipboardLease> BeginTemporaryClipboardTextAsync(
+            string text,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lease = new FakeClipboardLease(ClipboardText);
             ClipboardText = text;
+            ClipboardSequenceNumber++;
+            lease.ExpectedSequenceNumber = ClipboardSequenceNumber;
             if (text.StartsWith("__typewhisper-selection-", StringComparison.Ordinal))
             {
                 SelectionMarker = text;
@@ -359,17 +369,59 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
                 SelectionMarker = null;
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult<IClipboardLease>(lease);
         }
 
-        public Task ClearClipboardTextAsync()
+        public Task SetClipboardTextAsync(string text, CancellationToken cancellationToken)
         {
-            ClipboardText = null;
+            cancellationToken.ThrowIfCancellationRequested();
+            ClipboardText = text;
+            ClipboardSequenceNumber++;
             SelectionMarker = null;
             return Task.CompletedTask;
         }
 
-        public Task DelayAsync(TimeSpan delay) => Task.CompletedTask;
+        public Task<bool> CommitTemporaryClipboardTextAsync(
+            IClipboardLease lease,
+            string text,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ClipboardText = text;
+            ClipboardSequenceNumber++;
+            ((FakeClipboardLease)lease).Completed = true;
+            return Task.FromResult(true);
+        }
+
+        public Task<ClipboardRestoreResult> RestoreClipboardAsync(
+            IClipboardLease lease,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fakeLease = (FakeClipboardLease)lease;
+            if (fakeLease.Completed)
+                return Task.FromResult(ClipboardRestoreResult.Restored);
+            if (fakeLease.ExpectedSequenceNumber != ClipboardSequenceNumber)
+            {
+                fakeLease.Completed = true;
+                return Task.FromResult(ClipboardRestoreResult.ClipboardChanged);
+            }
+
+            ClipboardText = fakeLease.PreviousText;
+            ClipboardSequenceNumber++;
+            fakeLease.Completed = true;
+            SelectionMarker = null;
+            return Task.FromResult(ClipboardRestoreResult.Restored);
+        }
+
+        public void AcceptClipboardSequence(IClipboardLease lease, uint sequenceNumber) =>
+            ((FakeClipboardLease)lease).ExpectedSequenceNumber = sequenceNumber;
+
+        public Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
 
         public bool IsAnyModifierKeyDown() => false;
 
@@ -401,5 +453,13 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
         public uint SendPasteInput() => PasteInputResult;
 
         public uint SendEnterInput() => EnterInputResult;
+
+        private sealed class FakeClipboardLease(string? previousText) : IClipboardLease
+        {
+            public string? PreviousText { get; } = previousText;
+            public uint ExpectedSequenceNumber { get; set; }
+            public bool Completed { get; set; }
+            public void Dispose() => Completed = true;
+        }
     }
 }

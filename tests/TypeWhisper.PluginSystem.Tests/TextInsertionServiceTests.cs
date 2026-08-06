@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Native;
@@ -18,6 +19,8 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(InsertionResult.CopiedToClipboard, result);
         Assert.Equal("dictated", platform.ClipboardText);
         Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Equal(0, platform.TemporaryClipboardWrites);
+        Assert.Equal(1, platform.PersistentClipboardWrites);
     }
 
     [Fact]
@@ -231,6 +234,210 @@ public sealed class TextInsertionServiceTests
         Assert.Equal("previous", platform.ClipboardText);
         Assert.Equal(1, platform.PasteInputCalls);
         Assert.Equal(["dictated", "previous"], platform.ClipboardWrites);
+        Assert.Equal(1, platform.TemporaryClipboardWrites);
+        Assert.Equal(0, platform.PersistentClipboardWrites);
+        Assert.Equal(1, platform.RestoreClipboardCalls);
+        Assert.Contains(TimeSpan.FromMilliseconds(500), platform.Delays);
+        Assert.Equal(
+            ["temporary-write", "delay:100", "paste", "delay:500", "restore"],
+            platform.InsertionEvents);
+    }
+
+    [Fact]
+    public async Task SuccessfulPaste_KeepsTransientTextAvailableForSlowTargetUntilRestoreDelay()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ReadClipboardDuringRestoreDelay = true,
+            SimulatedTargetReadOffset = TimeSpan.FromMilliseconds(400)
+        };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated");
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("dictated", platform.TextReadByTarget);
+        Assert.Equal(TimeSpan.FromMilliseconds(400), platform.TargetReadOffsetObserved);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.True(platform.LastTemporaryWriteExcludedFromHistory);
+    }
+
+    [Fact]
+    public async Task AutoEnter_RestoresOnlyAfterPasteEnterAndFullRestoreDelay()
+    {
+        var platform = new FakeTextInsertionPlatform { ClipboardText = "previous" };
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated", autoEnter: true);
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal(
+            [
+                "temporary-write",
+                "delay:100",
+                "paste",
+                "delay:50",
+                "enter",
+                "delay:500",
+                "restore"
+            ],
+            platform.InsertionEvents);
+    }
+
+    [Fact]
+    public async Task ConcurrentClipboardOperations_AreSerializedAcrossTheRestoreWindow()
+    {
+        var restoreDelayEntered = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var continueRestoreDelay = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            RestoreDelayEntered = restoreDelayEntered,
+            ContinueRestoreDelay = continueRestoreDelay
+        };
+        var sut = new TextInsertionService(platform);
+
+        var paste = sut.InsertTextAsync("dictated");
+        await restoreDelayEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var copy = sut.InsertTextAsync("copied", autoPaste: false);
+
+        try
+        {
+            await Task.Yield();
+            Assert.False(copy.IsCompleted);
+        }
+        finally
+        {
+            continueRestoreDelay.TrySetResult(true);
+        }
+
+        Assert.Equal(InsertionResult.Pasted, await paste);
+        Assert.Equal(InsertionResult.CopiedToClipboard, await copy);
+        Assert.Equal("copied", platform.ClipboardText);
+        Assert.True(
+            platform.InsertionEvents.IndexOf("restore")
+            < platform.InsertionEvents.IndexOf("persistent-write"));
+    }
+
+    [Fact]
+    public async Task SuccessfulPaste_RestoresAllClipboardFormats()
+    {
+        var platform = new FakeTextInsertionPlatform();
+        platform.ClipboardFormats["UnicodeText"] = "previous";
+        platform.ClipboardFormats["HTML Format"] = "<b>previous</b>";
+        platform.ClipboardFormats["Rich Text Format"] = "{\\rtf1 previous}";
+        platform.ClipboardFormats["FileDrop"] = "C:\\temp\\previous.txt";
+        platform.ClipboardFormats["Bitmap"] = "bitmap-bytes";
+        platform.ClipboardFormats["TypeWhisper.Test.Custom"] = "custom-bytes";
+        var expected = platform.ClipboardFormats.ToDictionary(static pair => pair.Key, static pair => pair.Value);
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.InsertTextAsync("dictated");
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal(expected, platform.ClipboardFormats);
+    }
+
+    [Fact]
+    public async Task SuccessfulPaste_DoesNotOverwriteNewerClipboardChange()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ChangeClipboardDuringRestoreDelay = true
+        };
+        var errorLog = new FakeErrorLogService();
+        var sut = new TextInsertionService(platform, errorLog);
+
+        var result = await sut.InsertTextAsync("dictated");
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal("newer", platform.ClipboardText);
+        Assert.Equal(1, platform.RestoreClipboardCalls);
+        Assert.Contains(errorLog.Entries, entry =>
+            entry.Category == ErrorCategory.Insertion
+            && entry.Message.Contains("changed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SnapshotFailure_LeavesOriginalClipboardUntouched()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            BeginTemporaryClipboardException = new InvalidOperationException("unsupported format")
+        };
+        platform.ClipboardFormats["OwnerDisplay"] = "owner-dependent";
+        var expected = platform.ClipboardFormats.ToDictionary(static pair => pair.Key, static pair => pair.Value);
+        var sut = new TextInsertionService(platform);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.InsertTextAsync("dictated"));
+
+        Assert.Equal(expected, platform.ClipboardFormats);
+        Assert.Equal(0, platform.TemporaryClipboardWrites);
+    }
+
+    [Fact]
+    public async Task CancellationBeforePaste_RestoresClipboardImmediately()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            CancellationSource = cancellation,
+            CancelDuringFocusDelay = true
+        };
+        var sut = new TextInsertionService(platform);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            sut.InsertTextAsync("dictated", cancellationToken: cancellation.Token));
+
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Equal(0, platform.PasteInputCalls);
+        Assert.DoesNotContain(TimeSpan.FromMilliseconds(500), platform.Delays);
+    }
+
+    [Fact]
+    public async Task CancellationAfterPaste_WaitsBeforeRestoringClipboard()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            CancellationSource = cancellation,
+            CancelDuringRestoreDelay = true,
+            ReadClipboardDuringRestoreDelay = true
+        };
+        var sut = new TextInsertionService(platform);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            sut.InsertTextAsync("dictated", cancellationToken: cancellation.Token));
+
+        Assert.Equal("dictated", platform.TextReadByTarget);
+        Assert.Equal("previous", platform.ClipboardText);
+        Assert.Contains(TimeSpan.FromMilliseconds(500), platform.Delays);
+    }
+
+    [Fact]
+    public async Task RestoreFailure_StillReportsPasteAndLogsDiagnostic()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            RestoreClipboardException = new ExternalException("restore failed")
+        };
+        var errorLog = new FakeErrorLogService();
+        var sut = new TextInsertionService(platform, errorLog);
+
+        var result = await sut.InsertTextAsync("dictated");
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Contains(errorLog.Entries, entry =>
+            entry.Category == ErrorCategory.Insertion
+            && entry.Message.Contains("restore", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -275,6 +482,9 @@ public sealed class TextInsertionServiceTests
             CapturedSelectionText = "selected text",
             MarkerReadsBeforeSelection = 1
         };
+        platform.ClipboardFormats["HTML Format"] = "<b>previous</b>";
+        platform.ClipboardFormats["Bitmap"] = "bitmap-bytes";
+        var expected = platform.ClipboardFormats.ToDictionary(static pair => pair.Key, static pair => pair.Value);
         var sut = new TextInsertionService(platform);
 
         var result = await sut.TryCaptureSelectedTextAsync(new IntPtr(321));
@@ -285,6 +495,7 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(new IntPtr(321), platform.LastSetForegroundWindow);
         Assert.Contains(platform.ClipboardWrites, value => value.StartsWith("__typewhisper-selection-", StringComparison.Ordinal));
         Assert.Equal("previous", platform.ClipboardWrites[^1]);
+        Assert.Equal(expected, platform.ClipboardFormats);
     }
 
     [Fact]
@@ -316,10 +527,65 @@ public sealed class TextInsertionServiceTests
         Assert.Equal(1, platform.ClearClipboardCalls);
     }
 
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_CopyInputFailureRestoresAllFormats()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            CopyInputResult = 0
+        };
+        platform.ClipboardFormats["HTML Format"] = "<b>previous</b>";
+        platform.ClipboardFormats["TypeWhisper.Test.Custom"] = "custom-bytes";
+        var expected = platform.ClipboardFormats.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value);
+        var sut = new TextInsertionService(platform);
+
+        var result = await sut.TryCaptureSelectedTextAsync();
+
+        Assert.Null(result);
+        Assert.Equal(expected, platform.ClipboardFormats);
+        Assert.Equal(1, platform.RestoreClipboardCalls);
+    }
+
+    [Fact]
+    public async Task TryCaptureSelectedTextAsync_ReadErrorStillRestoresAllFormats()
+    {
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ClipboardReadException = new ExternalException("read failed")
+        };
+        platform.ClipboardFormats["Bitmap"] = "bitmap-bytes";
+        var expected = platform.ClipboardFormats.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value);
+        var sut = new TextInsertionService(platform);
+
+        await Assert.ThrowsAsync<ExternalException>(() => sut.TryCaptureSelectedTextAsync());
+
+        Assert.Equal(expected, platform.ClipboardFormats);
+        Assert.Equal(1, platform.RestoreClipboardCalls);
+    }
+
     private sealed class FakeTextInsertionPlatform : ITextInsertionPlatform
     {
-        public string? ClipboardText { get; set; }
+        public Dictionary<string, string> ClipboardFormats { get; } = [];
+        public string? ClipboardText
+        {
+            get => ClipboardFormats.GetValueOrDefault("UnicodeText");
+            set
+            {
+                if (value is null)
+                    ClipboardFormats.Remove("UnicodeText");
+                else
+                    ClipboardFormats["UnicodeText"] = value;
+            }
+        }
         public List<string> ClipboardWrites { get; } = [];
+        public List<TimeSpan> Delays { get; } = [];
+        public List<string> InsertionEvents { get; } = [];
         public Queue<bool> ModifierStates { get; } = [];
         public bool ModifierDefaultState { get; set; }
         public bool ModifierKeyUpInputClearsState { get; set; }
@@ -345,37 +611,77 @@ public sealed class TextInsertionServiceTests
         public int SetForegroundWindowCalls { get; private set; }
         public int ClearClipboardCalls { get; private set; }
         public int DelayCalls { get; private set; }
+        public int TemporaryClipboardWrites { get; private set; }
+        public int PersistentClipboardWrites { get; private set; }
+        public int RestoreClipboardCalls { get; private set; }
+        public bool LastTemporaryWriteExcludedFromHistory { get; private set; }
+        public bool ReadClipboardDuringRestoreDelay { get; set; }
+        public TimeSpan? SimulatedTargetReadOffset { get; set; }
+        public TimeSpan? TargetReadOffsetObserved { get; private set; }
+        public bool ChangeClipboardDuringRestoreDelay { get; set; }
+        public string? TextReadByTarget { get; private set; }
+        public CancellationTokenSource? CancellationSource { get; set; }
+        public bool CancelDuringFocusDelay { get; set; }
+        public bool CancelDuringRestoreDelay { get; set; }
+        public TaskCompletionSource<bool>? RestoreDelayEntered { get; set; }
+        public TaskCompletionSource<bool>? ContinueRestoreDelay { get; set; }
+        public Exception? RestoreClipboardException { get; set; }
+        public Exception? BeginTemporaryClipboardException { get; set; }
+        public Exception? ClipboardReadException { get; set; }
         private string? SelectionMarker { get; set; }
         private int MarkerReadsCompleted { get; set; }
+        private uint ClipboardSequenceNumber { get; set; } = 1;
+        private bool RestoreDelayActionsCompleted { get; set; }
 
-        public Task<string?> TryGetClipboardTextAsync()
+        public Task<ClipboardTextState> TryGetClipboardTextStateAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ClipboardReadException is not null)
+                throw ClipboardReadException;
+
             if (SelectionMarker is not null && CopyInputCalls > 0)
             {
                 if (CapturedSelectionText is null)
                 {
                     ClipboardText = SelectionMarker;
-                    return Task.FromResult<string?>(ClipboardText);
+                    return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
                 }
 
                 if (MarkerReadsCompleted < MarkerReadsBeforeSelection)
                 {
                     MarkerReadsCompleted++;
                     ClipboardText = SelectionMarker;
-                    return Task.FromResult<string?>(ClipboardText);
+                    return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
                 }
 
+                ClipboardFormats.Clear();
                 ClipboardText = CapturedSelectionText;
                 SelectionMarker = null;
+                ClipboardSequenceNumber++;
             }
 
-            return Task.FromResult<string?>(ClipboardText);
+            return Task.FromResult(new ClipboardTextState(ClipboardText, ClipboardSequenceNumber));
         }
 
-        public Task SetClipboardTextAsync(string text)
+        public Task<IClipboardLease> BeginTemporaryClipboardTextAsync(
+            string text,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (BeginTemporaryClipboardException is not null)
+                throw BeginTemporaryClipboardException;
+
+            var lease = new FakeClipboardLease(
+                ClipboardFormats.ToDictionary(static pair => pair.Key, static pair => pair.Value));
+            ClipboardFormats.Clear();
             ClipboardText = text;
+            ClipboardFormats[WindowsClipboardTransaction.ExcludeClipboardContentFromMonitorProcessing] = "1";
             ClipboardWrites.Add(text);
+            TemporaryClipboardWrites++;
+            InsertionEvents.Add("temporary-write");
+            LastTemporaryWriteExcludedFromHistory = true;
+            ClipboardSequenceNumber++;
+            lease.ExpectedSequenceNumber = ClipboardSequenceNumber;
             if (text.StartsWith("__typewhisper-selection-", StringComparison.Ordinal))
             {
                 SelectionMarker = text;
@@ -385,21 +691,121 @@ public sealed class TextInsertionServiceTests
             {
                 SelectionMarker = null;
             }
-            return Task.CompletedTask;
+            return Task.FromResult<IClipboardLease>(lease);
         }
 
-        public Task ClearClipboardTextAsync()
+        public Task SetClipboardTextAsync(string text, CancellationToken cancellationToken)
         {
-            ClipboardText = null;
+            cancellationToken.ThrowIfCancellationRequested();
+            ClipboardFormats.Clear();
+            ClipboardText = text;
+            ClipboardWrites.Add(text);
+            PersistentClipboardWrites++;
+            InsertionEvents.Add("persistent-write");
+            ClipboardSequenceNumber++;
             SelectionMarker = null;
-            ClearClipboardCalls++;
             return Task.CompletedTask;
         }
 
-        public Task DelayAsync(TimeSpan delay)
+        public Task<bool> CommitTemporaryClipboardTextAsync(
+            IClipboardLease lease,
+            string text,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fakeLease = Assert.IsType<FakeClipboardLease>(lease);
+            if (fakeLease.ExpectedSequenceNumber != ClipboardSequenceNumber)
+            {
+                fakeLease.Completed = true;
+                return Task.FromResult(false);
+            }
+
+            ClipboardFormats.Clear();
+            ClipboardText = text;
+            ClipboardWrites.Add(text);
+            PersistentClipboardWrites++;
+            InsertionEvents.Add("fallback-write");
+            ClipboardSequenceNumber++;
+            SelectionMarker = null;
+            fakeLease.Completed = true;
+            return Task.FromResult(true);
+        }
+
+        public Task<ClipboardRestoreResult> RestoreClipboardAsync(
+            IClipboardLease lease,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RestoreClipboardCalls++;
+            InsertionEvents.Add("restore");
+            if (RestoreClipboardException is not null)
+                throw RestoreClipboardException;
+
+            var fakeLease = Assert.IsType<FakeClipboardLease>(lease);
+            if (fakeLease.Completed)
+                return Task.FromResult(ClipboardRestoreResult.Restored);
+
+            if (fakeLease.ExpectedSequenceNumber != ClipboardSequenceNumber)
+            {
+                fakeLease.Completed = true;
+                return Task.FromResult(ClipboardRestoreResult.ClipboardChanged);
+            }
+
+            ClipboardFormats.Clear();
+            foreach (var pair in fakeLease.Snapshot)
+                ClipboardFormats[pair.Key] = pair.Value;
+
+            ClipboardSequenceNumber++;
+            fakeLease.Completed = true;
+            SelectionMarker = null;
+            if (ClipboardText is { } restoredText)
+                ClipboardWrites.Add(restoredText);
+            else
+                ClearClipboardCalls++;
+
+            return Task.FromResult(ClipboardRestoreResult.Restored);
+        }
+
+        public void AcceptClipboardSequence(IClipboardLease lease, uint sequenceNumber)
+        {
+            var fakeLease = Assert.IsType<FakeClipboardLease>(lease);
+            fakeLease.ExpectedSequenceNumber = sequenceNumber;
+        }
+
+        public async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
         {
             DelayCalls++;
-            return Task.CompletedTask;
+            Delays.Add(delay);
+            InsertionEvents.Add($"delay:{delay.TotalMilliseconds:0}");
+
+            if (delay == TimeSpan.FromMilliseconds(100) && CancelDuringFocusDelay)
+                CancellationSource?.Cancel();
+
+            if (delay == TimeSpan.FromMilliseconds(500) && !RestoreDelayActionsCompleted)
+            {
+                RestoreDelayActionsCompleted = true;
+                RestoreDelayEntered?.TrySetResult(true);
+                if (ContinueRestoreDelay is not null)
+                    await ContinueRestoreDelay.Task.WaitAsync(cancellationToken);
+
+                if (ReadClipboardDuringRestoreDelay)
+                {
+                    var readOffset = SimulatedTargetReadOffset ?? TimeSpan.Zero;
+                    Assert.True(readOffset <= delay);
+                    TextReadByTarget = ClipboardText;
+                    TargetReadOffsetObserved = readOffset;
+                }
+                if (ChangeClipboardDuringRestoreDelay)
+                {
+                    ClipboardFormats.Clear();
+                    ClipboardText = "newer";
+                    ClipboardSequenceNumber++;
+                }
+                if (CancelDuringRestoreDelay)
+                    CancellationSource?.Cancel();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         public bool IsAnyModifierKeyDown() =>
@@ -444,6 +850,7 @@ public sealed class TextInsertionServiceTests
         public uint SendPasteInput()
         {
             PasteInputCalls++;
+            InsertionEvents.Add("paste");
             return PasteInputResult;
         }
 
@@ -456,7 +863,16 @@ public sealed class TextInsertionServiceTests
         public uint SendEnterInput()
         {
             EnterInputCalls++;
+            InsertionEvents.Add("enter");
             return EnterInputResult;
+        }
+
+        private sealed class FakeClipboardLease(Dictionary<string, string> snapshot) : IClipboardLease
+        {
+            public Dictionary<string, string> Snapshot { get; } = snapshot;
+            public uint ExpectedSequenceNumber { get; set; }
+            public bool Completed { get; set; }
+            public void Dispose() => Completed = true;
         }
     }
 

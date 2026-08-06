@@ -667,7 +667,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             insertionText,
             _settings.Current.AutoPaste,
             autoEnter,
-            targetWindowHandle);
+            targetWindowHandle,
+            ct);
 
         var tracking = await TryStartTargetAppCorrectionLearningAsync(
             null,
@@ -2095,7 +2096,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         insertionText,
                         _settings.Current.AutoPaste,
                         job.ActiveWorkflow?.Output.AutoEnter == true,
-                        job.CapturedWindowHandle);
+                        job.CapturedWindowHandle,
+                        ct);
                     textInsertedEventText = insertionText;
                     StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
                 }
@@ -2113,7 +2115,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     insertionText,
                     _settings.Current.AutoPaste,
                     job.ActiveWorkflow?.Output.AutoEnter == true,
-                    job.CapturedWindowHandle);
+                    job.CapturedWindowHandle,
+                    ct);
                 textInsertedEventText = insertionText;
                 StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
             }
