@@ -661,7 +661,9 @@ public partial class FileTranscriptionViewModel : ObservableObject
             }, ct);
             var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
                 TranscriptionNumberNormalizationService.NormalizeResult(
-                    result,
+                    ShortUtterancePunctuationService.NormalizeResult(
+                        result,
+                        _settings.Current.ShortUtterancePunctuationEnabled),
                     TranscriptionTask.Transcribe,
                     language,
                     languageHints,

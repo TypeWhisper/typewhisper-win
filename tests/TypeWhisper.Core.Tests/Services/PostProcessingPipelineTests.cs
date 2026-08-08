@@ -21,6 +21,7 @@ public class PostProcessingPipelineTests
     [InlineData("Hallo, Marco.", "Hallo Marco")]
     [InlineData("Hallo Marco?", "Hallo Marco")]
     [InlineData("Hallo, Marco ?", "Hallo Marco")]
+    [InlineData("Hallo,", "Hallo")]
     public async Task ProcessAsync_ShortUtterancePunctuationDisabled_RemovesModelPunctuation(
         string rawText,
         string expected)
@@ -42,6 +43,58 @@ public class PostProcessingPipelineTests
         });
 
         Assert.Equal("Heute besprechen wir die nächsten Schritte.", result.Text);
+    }
+
+    [Theory]
+    [InlineData("Yes, please", "Yes, please")]
+    [InlineData("Wait, what?", "Wait, what")]
+    public async Task ProcessAsync_ShortUtterancePunctuationDisabled_PreservesNonGreetingComma(
+        string rawText,
+        string expected)
+    {
+        var result = await _sut.ProcessAsync(rawText, new PipelineOptions
+        {
+            ShortUtterancePunctuationEnabled = false
+        });
+
+        Assert.Equal(expected, result.Text);
+    }
+
+    [Fact]
+    public void NormalizeResult_ShortUtterancePunctuationDisabled_NormalizesTextAndSegments()
+    {
+        var transcription = new TranscriptionResult
+        {
+            Text = "Hallo, Marco.",
+            Segments = [new TranscriptionSegment("Hallo, Marco.", 0.25, 1.75)]
+        };
+
+        var result = ShortUtterancePunctuationService.NormalizeResult(transcription, punctuationEnabled: false);
+
+        Assert.Equal("Hallo Marco", result.Text);
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal("Hallo Marco", segment.Text);
+        Assert.Equal(0.25, segment.Start);
+        Assert.Equal(1.75, segment.End);
+    }
+
+    [Fact]
+    public void NormalizeResult_LongerUtterance_PreservesShortSegments()
+    {
+        var transcription = new TranscriptionResult
+        {
+            Text = "Heute besprechen wir die nächsten Schritte.",
+            Segments =
+            [
+                new TranscriptionSegment("Heute besprechen.", 0, 1),
+                new TranscriptionSegment("wir die", 1, 2),
+                new TranscriptionSegment("nächsten Schritte.", 2, 3)
+            ]
+        };
+
+        var result = ShortUtterancePunctuationService.NormalizeResult(transcription, punctuationEnabled: false);
+
+        Assert.Same(transcription, result);
     }
 
     [Fact]

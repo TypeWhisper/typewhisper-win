@@ -445,7 +445,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         }, ct);
         var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
             TranscriptionNumberNormalizationService.NormalizeResult(
-                result,
+                ShortUtterancePunctuationService.NormalizeResult(
+                    result,
+                    currentSettings.ShortUtterancePunctuationEnabled),
                 transcribeRequest.Task,
                 languageHints.FirstOrDefault(),
                 languageHints,

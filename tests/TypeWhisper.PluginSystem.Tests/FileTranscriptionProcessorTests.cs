@@ -65,6 +65,7 @@ public sealed class FileTranscriptionProcessorTests
         Assert.True(history.Success, history.ErrorMessage);
         Assert.Equal("23 TYPEWHISPER", await File.ReadAllTextAsync(outputPath));
         Assert.Equal(["vocabulary:23 type whisper", "dictionary:23 TypeWhisper"], harness.PostProcessingCalls);
+        Assert.False(harness.Pipeline.LastOptions?.ShortUtterancePunctuationEnabled);
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

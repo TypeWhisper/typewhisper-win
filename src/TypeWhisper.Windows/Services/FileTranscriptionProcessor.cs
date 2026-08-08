@@ -129,7 +129,9 @@ public sealed class FileTranscriptionProcessor(
         }, cancellationToken);
         var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
             TranscriptionNumberNormalizationService.NormalizeResult(
-                result,
+                ShortUtterancePunctuationService.NormalizeResult(
+                    result,
+                    currentSettings.ShortUtterancePunctuationEnabled),
                 task,
                 language,
                 languageHints,
