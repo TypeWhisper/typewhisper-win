@@ -12,6 +12,10 @@ public enum SettingsRoute
     /// </summary>
     Dashboard,
     /// <summary>
+    /// Represents the statistics option.
+    /// </summary>
+    Statistics,
+    /// <summary>
     /// Represents the dictation option.
     /// </summary>
     Dictation,
@@ -212,7 +216,8 @@ public static class SettingsNavigationCatalog
     [
         CreateGroup(SettingsGroup.Overview, text("SettingsGroup.Overview"),
         [
-            new SettingsNavigationItem(SettingsRoute.Dashboard, text("Nav.Dashboard"), "\uE80F")
+            new SettingsNavigationItem(SettingsRoute.Dashboard, text("Nav.Dashboard"), "\uE80F"),
+            new SettingsNavigationItem(SettingsRoute.Statistics, text("Nav.Statistics"), "\uE9D2")
         ]),
         CreateGroup(SettingsGroup.Capture, text("SettingsGroup.Capture"),
         [

@@ -63,6 +63,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// </summary>
     public DashboardViewModel Dashboard { get; }
     /// <summary>
+    /// Gets the retention-independent usage statistics.
+    /// </summary>
+    public StatisticsViewModel Statistics { get; }
+    /// <summary>
     /// Gets the loaded plugin view models.
     /// </summary>
     public PluginsViewModel Plugins { get; }
@@ -304,6 +308,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         SnippetsViewModel snippets,
         WorkflowsViewModel workflows,
         DashboardViewModel dashboard,
+        StatisticsViewModel statistics,
         PluginsViewModel plugins,
         CloudFolderSyncViewModel cloudFolderSync,
         LicenseService license,
@@ -324,6 +329,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Snippets = snippets;
         Workflows = workflows;
         Dashboard = dashboard;
+        Statistics = statistics;
         Plugins = plugins;
         CloudFolderSync = cloudFolderSync;
         License = license;
@@ -381,6 +387,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Open(route);
         if (route == SettingsRoute.History)
             await History.LoadAsync();
+        else if (route == SettingsRoute.Statistics)
+            Statistics.Refresh();
     }
 
     [RelayCommand]
@@ -898,12 +906,14 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             SettingsRoute.Snippets => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1040),
             SettingsRoute.Integrations => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1120),
             SettingsRoute.History => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1100),
+            SettingsRoute.Statistics => new SettingsPageMetadata(SettingsPageKind.CollectionPage, 1080),
             _ => new SettingsPageMetadata(SettingsPageKind.PreferencePage, 980)
         };
 
         CurrentPageTitle = route switch
         {
             SettingsRoute.Dashboard => Loc.Instance["Nav.Dashboard"],
+            SettingsRoute.Statistics => Loc.Instance["Nav.Statistics"],
             SettingsRoute.Dictation => Loc.Instance["Nav.Dictation"],
             SettingsRoute.Shortcuts => Loc.Instance["Nav.Shortcuts"],
             SettingsRoute.FileTranscription => Loc.Instance["Nav.FileTranscription"],
@@ -926,6 +936,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         CurrentPageSubtitle = route switch
         {
             SettingsRoute.Dashboard => Loc.Instance["Page.DashboardSubtitle"],
+            SettingsRoute.Statistics => Loc.Instance["Page.StatisticsSubtitle"],
             SettingsRoute.Dictation => Loc.Instance["Page.DictationSubtitle"],
             SettingsRoute.Shortcuts => Loc.Instance["Page.ShortcutsSubtitle"],
             SettingsRoute.FileTranscription => Loc.Instance["Page.FileTranscriptionSubtitle"],
