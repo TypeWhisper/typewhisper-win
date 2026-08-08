@@ -6,6 +6,11 @@ namespace TypeWhisper.Core;
 public static class TypeWhisperEnvironment
 {
     /// <summary>
+    /// Defines the public website URL constant.
+    /// </summary>
+    public const string WebsiteUrl = "https://www.typewhisper.com/";
+
+    /// <summary>
     /// Defines the github repo url constant.
     /// </summary>
     public const string GithubRepoUrl = "https://github.com/TypeWhisper/typewhisper-win";

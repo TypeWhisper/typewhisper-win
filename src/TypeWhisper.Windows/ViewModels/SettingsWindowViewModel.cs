@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
@@ -120,6 +122,20 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Builds current app version display.
     /// </summary>
     public string CurrentAppVersionDisplay => BuildCurrentAppVersionDisplay();
+    /// <summary>
+    /// Gets the public project website URL.
+    /// </summary>
+    public string ProjectWebsiteUrl => TypeWhisperEnvironment.WebsiteUrl;
+    /// <summary>
+    /// Gets the public project repository URL.
+    /// </summary>
+    public string ProjectRepositoryUrl => TypeWhisperEnvironment.GithubRepoUrl;
+    /// <summary>
+    /// Gets the directory containing the running application.
+    /// </summary>
+    public string InstallationPath { get; } = ResolveInstallationPath(
+        Environment.ProcessPath,
+        AppContext.BaseDirectory);
     /// <summary>
     /// Gets whether development-only dashboard tools should be visible.
     /// </summary>
@@ -441,6 +457,48 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     private void ClearErrorLog()
     {
         _errorLog.ClearAll();
+    }
+
+    [RelayCommand]
+    private void OpenProjectLink(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return;
+        }
+
+        OpenShellTarget(uri.AbsoluteUri);
+    }
+
+    [RelayCommand]
+    private void OpenInstallationFolder() => OpenShellTarget(InstallationPath);
+
+    private static void OpenShellTarget(string target)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            MessageBox.Show(
+                Loc.Instance.GetString("App.ErrorFormat", ex.Message),
+                Loc.Instance["App.ErrorTitle"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    internal static string ResolveInstallationPath(string? processPath, string baseDirectory)
+    {
+        var directory = string.IsNullOrWhiteSpace(processPath)
+            ? null
+            : Path.GetDirectoryName(processPath);
+        if (string.IsNullOrWhiteSpace(directory))
+            directory = baseDirectory;
+
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
     }
 
     [RelayCommand]
