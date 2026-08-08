@@ -342,6 +342,19 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_NumberNormalization_AutoWithoutDetectedLanguage_NormalizesGermanSentence()
+    {
+        var options = new PipelineOptions
+        {
+            TranscriptionNumberNormalizationEnabled = true
+        };
+
+        var result = await _sut.ProcessAsync("Ein Tag hat vierundzwanzig Stunden.", options);
+
+        Assert.Equal("Ein Tag hat 24 Stunden.", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_NumberNormalization_UsesEnglishForTranslateTask()
     {
         var options = new PipelineOptions
@@ -552,6 +565,7 @@ public class PostProcessingPipelineTests
     {
         var options = new PipelineOptions
         {
+            TranscriptionNumberNormalizationEnabled = false,
             AppFormatter = AppFormatterService.Format,
             TargetProcessName = "OUTLOOK"
         };
