@@ -15,6 +15,7 @@ public sealed class ManualAudioRecoveryService
     private readonly DictationRecoveryAudioStore _store;
     private readonly IFileTranscriptionProcessor _processor;
     private readonly IHistoryService _history;
+    private readonly IUsageStatisticsService? _usageStatistics;
     private readonly string _historyAudioPath;
 
     /// <summary>
@@ -23,8 +24,9 @@ public sealed class ManualAudioRecoveryService
     public ManualAudioRecoveryService(
         DictationRecoveryAudioStore store,
         IFileTranscriptionProcessor processor,
-        IHistoryService history)
-        : this(store, processor, history, TypeWhisperEnvironment.AudioPath)
+        IHistoryService history,
+        IUsageStatisticsService? usageStatistics = null)
+        : this(store, processor, history, TypeWhisperEnvironment.AudioPath, usageStatistics)
     {
     }
 
@@ -32,12 +34,14 @@ public sealed class ManualAudioRecoveryService
         DictationRecoveryAudioStore store,
         IFileTranscriptionProcessor processor,
         IHistoryService history,
-        string historyAudioPath)
+        string historyAudioPath,
+        IUsageStatisticsService? usageStatistics = null)
     {
         _store = store;
         _processor = processor;
         _history = history;
         _historyAudioPath = historyAudioPath;
+        _usageStatistics = usageStatistics;
     }
 
     /// <summary>
@@ -90,6 +94,15 @@ public sealed class ManualAudioRecoveryService
 
         if (!await _store.DeleteAsync(descriptor.Id, CancellationToken.None).ConfigureAwait(false))
             throw new IOException("History was saved, but the recovery recording could not be removed.");
+
+        _usageStatistics?.RecordTranscription(
+            record.Timestamp,
+            record.WordCount,
+            record.DurationSeconds,
+            "typewhisper-recovery",
+            "Dictation Recovery",
+            record.EngineUsed,
+            record.ModelUsed);
 
         return record;
     }

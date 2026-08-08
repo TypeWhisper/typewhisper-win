@@ -1,0 +1,695 @@
+<UserControl x:Class="TypeWhisper.Windows.Views.Sections.StatisticsSection"
+             AutomationProperties.AutomationId="SettingsSection.Statistics"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
+             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
+             xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+            <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
+            <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
+            <conv:EnumEqualsConverter x:Key="EnumEquals"/>
+            <conv:StatisticsBarHeightConverter x:Key="StatisticsBarHeight"/>
+
+            <Style x:Key="StatisticsCardButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource SurfaceStrokeBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="14,16"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Card"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="12"
+                                    Padding="{TemplateBinding Padding}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform/>
+                                </Border.RenderTransform>
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Card" Property="Background" Value="{StaticResource CardAltBrush}"/>
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="#660078D4"/>
+                                    <Setter TargetName="Card" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TranslateTransform Y="-2"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Card" Property="Background" Value="{StaticResource SecondaryPressedBrush}"/>
+                                    <Setter TargetName="Card" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TranslateTransform Y="0"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Card" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="StatisticsTrendTextStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource SuccessBrush}"/>
+                <Setter Property="FontSize" Value="10.5"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="0,3,0,0"/>
+            </Style>
+
+            <Style x:Key="StatisticsChartPointButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="2,0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="FocusBorder"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="FocusBorder" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="FocusBorder" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="StatisticsBreakdownItemStyle" TargetType="ListBoxItem">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="9,7"/>
+                <Setter Property="Margin" Value="0,0,0,2"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Row"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="7"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource SidebarHoverBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Row" Property="Background" Value="{StaticResource SidebarActiveBrush}"/>
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="#660078D4"/>
+                                </Trigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsSelected" Value="True"/>
+                                        <Condition Property="IsMouseOver" Value="True"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="Row" Property="Background" Value="#44507BAA"/>
+                                </MultiTrigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Row" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="StatisticsHeatmapCellStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Margin" Value="1"/>
+                <Setter Property="Height" Value="19"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Cell"
+                                    Background="#17233244"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="3">
+                                <Border Background="{StaticResource AccentBrush}"
+                                        CornerRadius="2"
+                                        Opacity="{Binding Intensity}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Cell" Property="BorderBrush" Value="{StaticResource AccentHoverBrush}"/>
+                                    <Setter TargetName="Cell" Property="Background" Value="#283B526D"/>
+                                </Trigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Cell" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Cell" Property="BorderThickness" Value="2"/>
+                                </DataTrigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Cell" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Cell" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel MaxWidth="980" Margin="28">
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{loc:Str Statistics.Title}" Style="{StaticResource PageTitleStyle}"/>
+                    <TextBlock Text="{loc:Str Statistics.Subtitle}"
+                               Style="{StaticResource PageSubtitleStyle}"
+                               Margin="0,8,0,0"/>
+                </StackPanel>
+                <Border Grid.Column="1"
+                        Background="{StaticResource InputBackgroundBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="3"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="{loc:Str Statistics.Week}"
+                                     Style="{StaticResource TabRadioStyle}"
+                                     GroupName="StatisticsPeriod"
+                                     AutomationProperties.AutomationId="StatisticsRangeWeek"
+                                     IsChecked="{Binding Statistics.SelectedPeriod, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static vm:StatisticsPeriod.Week}, Mode=TwoWay}"/>
+                        <RadioButton Content="{loc:Str Statistics.Month}"
+                                     Style="{StaticResource TabRadioStyle}"
+                                     GroupName="StatisticsPeriod"
+                                     AutomationProperties.AutomationId="StatisticsRangeMonth"
+                                     IsChecked="{Binding Statistics.SelectedPeriod, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static vm:StatisticsPeriod.Month}, Mode=TwoWay}"/>
+                        <RadioButton Content="{loc:Str Statistics.AllTime}"
+                                     Style="{StaticResource TabRadioStyle}"
+                                     GroupName="StatisticsPeriod"
+                                     AutomationProperties.AutomationId="StatisticsRangeAllTime"
+                                     IsChecked="{Binding Statistics.SelectedPeriod, Converter={StaticResource EnumEquals}, ConverterParameter={x:Static vm:StatisticsPeriod.AllTime}, Mode=TwoWay}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Border Style="{StaticResource SettingsCardStyle}"
+                    Padding="28"
+                    Visibility="{Binding Statistics.HasAnyData, Converter={StaticResource InverseBoolToVisibility}}">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="&#xE9D2;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="34"
+                               Foreground="{StaticResource HintBrush}"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str Statistics.Empty}"
+                               Foreground="{StaticResource HintBrush}"
+                               FontSize="13"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Margin="0,12,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Visibility="{Binding Statistics.HasAnyData, Converter={StaticResource BoolToVisibility}}">
+                <UniformGrid Columns="4" Margin="0,0,0,10">
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="DaysActive"
+                            AutomationProperties.AutomationId="StatisticsDaysActive">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE787;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.TotalDaysActive}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{loc:Str Statistics.DaysActive}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="CurrentStreak"
+                            AutomationProperties.AutomationId="StatisticsCurrentStreak">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE7E7;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.CurrentStreak}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{loc:Str Statistics.CurrentStreak}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="LongestStreak"
+                            AutomationProperties.AutomationId="StatisticsLongestStreak">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xECA7;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.LongestStreak}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{loc:Str Statistics.LongestStreak}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="Transcriptions"
+                            AutomationProperties.AutomationId="StatisticsTranscriptions">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.TotalTranscriptions}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{loc:Str Statistics.Transcriptions}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                </UniformGrid>
+
+                <UniformGrid Columns="4" Margin="0,0,0,10">
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="Words"
+                            AutomationProperties.AutomationId="StatisticsWords">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE8D2;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.WordsCount}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{Binding Statistics.WordsTrend}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatisticsTrendTextStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Statistics.WordsTrendIsNegative}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{loc:Str Statistics.Words}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="AverageWpm"
+                            AutomationProperties.AutomationId="StatisticsAverageWpm">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE7F4;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.AverageWpm}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{Binding Statistics.WpmTrend}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatisticsTrendTextStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Statistics.WpmTrendIsNegative}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{loc:Str Statistics.AverageWpm}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Margin="0,0,8,0"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="AppsUsed"
+                            AutomationProperties.AutomationId="StatisticsAppsUsed">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.AppsUsed}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{Binding Statistics.AppsTrend}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatisticsTrendTextStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Statistics.AppsTrendIsNegative}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{loc:Str Statistics.AppsUsed}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource StatisticsCardButtonStyle}"
+                            Command="{Binding Statistics.ShowMetricDetailCommand}"
+                            CommandParameter="TimeSaved"
+                            AutomationProperties.AutomationId="StatisticsTimeSaved">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                       Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding Statistics.TimeSaved}" FontSize="28" FontWeight="Bold"
+                                       Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                            <TextBlock Text="{Binding Statistics.TimeSavedTrend}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource StatisticsTrendTextStyle}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Statistics.TimeSavedTrendIsNegative}" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{loc:Str Statistics.TimeSaved}" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Button>
+                </UniformGrid>
+
+                <Border Background="#0D0078D4"
+                        BorderBrush="#260078D4"
+                        BorderThickness="1"
+                        CornerRadius="7"
+                        Padding="10,7"
+                        Margin="0,0,0,16"
+                        Visibility="{Binding Statistics.SelectedMetricDetail, Converter={StaticResource NonEmptyToVisibility}}">
+                    <TextBlock Text="{Binding Statistics.SelectedMetricDetail}"
+                               Foreground="{StaticResource LabelBrush}"
+                               FontSize="11.5"
+                               TextWrapping="Wrap"/>
+                </Border>
+
+                <Border Style="{StaticResource SettingsCardStyle}" Padding="18" Margin="0,0,0,16">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{loc:Str Statistics.Activity}" Style="{StaticResource SettingsGroupTitleStyle}" Margin="0"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Statistics.SelectedActivityDetail}"
+                                       Foreground="{StaticResource AccentHoverBrush}"
+                                       FontSize="11.5"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding Statistics.SelectedActivityDetail, Converter={StaticResource NonEmptyToVisibility}}"/>
+                        </Grid>
+
+                        <TextBlock Text="{loc:Str Statistics.NoActivity}"
+                                   Foreground="{StaticResource HintBrush}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,70"
+                                   Visibility="{Binding Statistics.HasPeriodActivity, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                        <ItemsControl Height="195"
+                                      ItemsSource="{Binding Statistics.ChartData}"
+                                      Visibility="{Binding Statistics.HasPeriodActivity, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:StatisticsActivityPoint}">
+                                        <Button Style="{StaticResource StatisticsChartPointButtonStyle}"
+                                                Command="{Binding DataContext.Statistics.SelectActivityPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding Tooltip}"
+                                                ToolTipService.InitialShowDelay="120"
+                                                ToolTipService.ShowDuration="60000"
+                                                AutomationProperties.Name="{Binding Detail}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="155"/>
+                                                    <RowDefinition Height="28"/>
+                                                </Grid.RowDefinitions>
+                                                <Border Grid.Row="0"
+                                                        VerticalAlignment="Bottom"
+                                                        CornerRadius="4,4,1,1"
+                                                        RenderTransformOrigin="0.5,1">
+                                                    <Border.Height>
+                                                        <MultiBinding Converter="{StaticResource StatisticsBarHeight}" ConverterParameter="150">
+                                                            <Binding Path="WordCount"/>
+                                                            <Binding Path="DataContext.Statistics.ChartMaxValue" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                                        </MultiBinding>
+                                                    </Border.Height>
+                                                    <Border.RenderTransform>
+                                                        <ScaleTransform ScaleY="1"/>
+                                                    </Border.RenderTransform>
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                                            <Setter Property="Opacity" Value="0.68"/>
+                                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                                            <Setter Property="BorderThickness" Value="1"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                                                    <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                                                    <Setter Property="Opacity" Value="1"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                                                    <Setter Property="Opacity" Value="1"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Border.Triggers>
+                                                        <EventTrigger RoutedEvent="Loaded">
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                                                     From="0" To="1" Duration="0:0:0.45">
+                                                                        <DoubleAnimation.EasingFunction>
+                                                                            <CubicEase EasingMode="EaseOut"/>
+                                                                        </DoubleAnimation.EasingFunction>
+                                                                    </DoubleAnimation>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </EventTrigger>
+                                                    </Border.Triggers>
+                                                </Border>
+                                                <TextBlock Grid.Row="1"
+                                                           Text="{Binding AxisLabel}"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           FontSize="9.5"
+                                                           TextAlignment="Center"
+                                                           Width="72"
+                                                           HorizontalAlignment="Center"
+                                                           TextWrapping="NoWrap"
+                                                           Panel.ZIndex="2"
+                                                           IsHitTestVisible="False"
+                                                           Margin="0,6,0,0"
+                                                           Visibility="{Binding ShowAxisLabel, Converter={StaticResource BoolToVisibility}}"/>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource SettingsCardStyle}" Padding="16" Margin="0">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Statistics.TopApps}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                            <TextBlock Text="{loc:Str Statistics.NoAppData}"
+                                       Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,28"
+                                       Visibility="{Binding Statistics.AppUsageStats.Count, Converter={StaticResource ZeroToVisibility}}"/>
+                            <ListBox ItemsSource="{Binding Statistics.AppUsageStats}"
+                                     SelectedItem="{Binding Statistics.SelectedAppStat, Mode=TwoWay}"
+                                     ItemContainerStyle="{StaticResource StatisticsBreakdownItemStyle}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     MaxHeight="285"
+                                     ScrollViewer.CanContentScroll="True"
+                                     ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:StatisticsUsageStat}">
+                                        <StackPanel ToolTip="{Binding Tooltip}" ToolTipService.InitialShowDelay="120">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource LabelBrush}" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{StaticResource HintBrush}" Margin="12,0,0,0"/>
+                                            </Grid>
+                                            <ProgressBar Value="{Binding Percentage}" Maximum="100" Height="5" Margin="0,6,0,0"
+                                                         Foreground="{StaticResource AccentBrush}" Background="{StaticResource BorderBrush}" BorderThickness="0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Text="{Binding Statistics.SelectedAppDetail}"
+                                       Foreground="{StaticResource AccentHoverBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="9,8,9,0"
+                                       Visibility="{Binding Statistics.SelectedAppDetail, Converter={StaticResource NonEmptyToVisibility}}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource SettingsCardStyle}" Padding="16" Margin="0">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Statistics.ModelsUsed}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                            <TextBlock Text="{loc:Str Statistics.NoModelData}"
+                                       Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,28"
+                                       Visibility="{Binding Statistics.ModelUsageStats.Count, Converter={StaticResource ZeroToVisibility}}"/>
+                            <ListBox ItemsSource="{Binding Statistics.ModelUsageStats}"
+                                     SelectedItem="{Binding Statistics.SelectedModelStat, Mode=TwoWay}"
+                                     ItemContainerStyle="{StaticResource StatisticsBreakdownItemStyle}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     MaxHeight="285"
+                                     ScrollViewer.CanContentScroll="True"
+                                     ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:StatisticsUsageStat}">
+                                        <StackPanel ToolTip="{Binding Tooltip}" ToolTipService.InitialShowDelay="120">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Label}" Foreground="{StaticResource LabelBrush}" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{StaticResource HintBrush}" Margin="12,0,0,0"/>
+                                            </Grid>
+                                            <ProgressBar Value="{Binding Percentage}" Maximum="100" Height="5" Margin="0,6,0,0"
+                                                         Foreground="{StaticResource AccentBrush}" Background="{StaticResource BorderBrush}" BorderThickness="0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Text="{Binding Statistics.SelectedModelDetail}"
+                                       Foreground="{StaticResource AccentHoverBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="9,8,9,0"
+                                       Visibility="{Binding Statistics.SelectedModelDetail, Converter={StaticResource NonEmptyToVisibility}}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Border Style="{StaticResource SettingsCardStyle}" Padding="18" Margin="0">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str Statistics.UsageByTime}" Style="{StaticResource SettingsGroupTitleStyle}"/>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ItemsControl Grid.Column="1" ItemsSource="{Binding Statistics.HeatmapHourLabels}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="1" Columns="24"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="{StaticResource HintBrush}" FontSize="9" TextAlignment="Center"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Statistics.HeatmapRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:StatisticsHeatmapRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="42"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}"
+                                                   Foreground="{StaticResource HintBrush}"
+                                                   FontSize="10.5"
+                                                   VerticalAlignment="Center"/>
+                                        <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Rows="1" Columns="24"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:StatisticsHeatmapCell}">
+                                                    <Button Style="{StaticResource StatisticsHeatmapCellStyle}"
+                                                            Command="{Binding DataContext.Statistics.SelectHeatmapCellCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            ToolTip="{Binding Tooltip}"
+                                                            ToolTipService.InitialShowDelay="100"
+                                                            ToolTipService.ShowDuration="60000"
+                                                            AutomationProperties.Name="{Binding Detail}"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding Statistics.SelectedHeatmapDetail}"
+                                   Foreground="{StaticResource AccentHoverBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="42,9,0,0"
+                                   Visibility="{Binding Statistics.SelectedHeatmapDetail, Converter={StaticResource NonEmptyToVisibility}}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
