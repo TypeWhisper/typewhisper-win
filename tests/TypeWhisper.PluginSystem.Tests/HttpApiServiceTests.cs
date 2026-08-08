@@ -766,6 +766,39 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TranscribeVerboseJsonNormalizesShortUtterancePunctuationInSegmentText()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "Hello, Marco ?" };
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"),
+                SaveToHistoryEnabled = true,
+                ShortUtterancePunctuationEnabled = false
+            },
+            plugins: [plugin]);
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/transcribe",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "audio/wav",
+                ["x-language"] = "en",
+                ["x-response-format"] = "verbose_json"
+            },
+            WavEncoder.Encode([0f, 0f, 0f, 0f]));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+        var segment = json["segments"].EnumerateArray().Single();
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("Hello Marco", json["text"].GetString());
+        Assert.Equal("Hello Marco", segment.GetProperty("text").GetString());
+    }
+
+    [Fact]
     public async Task Status_IncludesActiveAccelerationDetails()
     {
         var plugin = new FakeTranscriptionPlugin

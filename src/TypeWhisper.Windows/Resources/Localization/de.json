@@ -704,6 +704,8 @@
   "Dictation.ShortQuietAggressiveHint": "Verwirft weiterhin versehentliche ultrakurze Taps, behält aber mehr sehr kurze oder leise Aufnahmen.",
   "Dictation.NormalizeNumbers": "Gesprochene Zahlen in Ziffern umwandeln",
   "Dictation.NormalizeNumbersHint": "Wandelt gesprochene Zahlen wie twenty three oder dreiundzwanzig vor dem Einfügen und Exportieren in Ziffern um.",
+  "Dictation.ShortUtterancePunctuation": "Satzzeichen bei kurzen Äußerungen beibehalten",
+  "Dictation.ShortUtterancePunctuationHint": "Ist diese Option ausgeschaltet, entfernt TypeWhisper bei Äußerungen mit ein oder zwei Wörtern automatisch gesetzte Grußkommas und Satzendzeichen, zum Beispiel in \"Hallo Marco\".",
   "Dictation.SystemAudio": "Systemaudio",
   "Dictation.ReduceOtherAudio": "Andere Audioquellen während der Aufnahme absenken",
   "Dictation.DuckingLevel": "Ducking-Stufe",

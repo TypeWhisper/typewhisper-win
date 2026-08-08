@@ -432,6 +432,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
             GermanOutputVariant = pipelineGermanOutputVariant,
             TranscriptionTask = transcribeRequest.Task,
@@ -444,7 +445,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         }, ct);
         var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
             TranscriptionNumberNormalizationService.NormalizeResult(
-                result,
+                ShortUtterancePunctuationService.NormalizeResult(
+                    result,
+                    currentSettings.ShortUtterancePunctuationEnabled),
                 transcribeRequest.Task,
                 languageHints.FirstOrDefault(),
                 languageHints,

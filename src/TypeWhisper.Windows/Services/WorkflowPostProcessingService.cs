@@ -153,6 +153,7 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         var options = new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
+            ShortUtterancePunctuationEnabled = _settings.Current.ShortUtterancePunctuationEnabled,
             NormalizeNumbersOverride = request.Workflow?.Output.NumberNormalizationMode.OverrideValue(),
             GermanOutputVariant = _settings.Current.GermanOutputVariant,
             TranscriptionTask = request.TranscriptionTask,

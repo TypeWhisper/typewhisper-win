@@ -6,6 +6,7 @@ namespace TypeWhisper.Core.Services;
 /// <summary>
 /// Priority-based post-processing pipeline. Steps are sorted by priority (ascending)
 /// and executed sequentially. Built-in priorities:
+///   Short Utterance Punctuation: 50
 ///   Number Normalization: 100
 ///   Plugin PostProcessors: their own Priority value
 ///   App Formatting: 150
@@ -19,6 +20,7 @@ namespace TypeWhisper.Core.Services;
 /// </summary>
 public sealed class PostProcessingPipeline : IPostProcessingPipeline
 {
+    private const int ShortUtterancePunctuationPriority = 50;
     private const int NumberNormalizationPriority = 100;
     private const int FormattingPriority = 150;
     private const int SpokenFormattingPriority = 200;
@@ -88,6 +90,11 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
         BuildSteps(PipelineOptions options)
     {
         var steps = new List<(int, string, Func<string, CancellationToken, Task<string>>)>();
+
+        steps.Add((ShortUtterancePunctuationPriority, "ShortUtterancePunctuation",
+            (text, _) => Task.FromResult(ShortUtterancePunctuationService.NormalizeText(
+                text,
+                options.ShortUtterancePunctuationEnabled))));
 
         steps.Add((NumberNormalizationPriority, "NumberNormalization",
             (text, _) => Task.FromResult(TranscriptionNumberNormalizationService.NormalizeText(
