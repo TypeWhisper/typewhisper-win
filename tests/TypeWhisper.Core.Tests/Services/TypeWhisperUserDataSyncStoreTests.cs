@@ -89,6 +89,34 @@ public sealed class TypeWhisperUserDataSyncStoreTests : IDisposable
     }
 
     [Fact]
+    public void SnapshotAndApplyPreserveRegexMode()
+    {
+        var dictionary = new DictionaryService(_dictionaryPath);
+        dictionary.AddEntry(new DictionaryEntry
+        {
+            Id = "regex-correction",
+            EntryType = DictionaryEntryType.Correction,
+            Original = @"\s+Doppelpunkt\b",
+            Replacement = ":",
+            IsRegex = true
+        });
+        var store = new TypeWhisperUserDataSyncStore(dictionary, new SnippetService(_snippetsPath));
+
+        var synced = Assert.Single(store.Snapshot().DictionaryEntries);
+
+        Assert.True(synced.IsRegex);
+
+        var target = new DictionaryService(Path.Join(_tempDir, "regex-target-dictionary.json"));
+        new TypeWhisperUserDataSyncStore(
+                target,
+                new SnippetService(Path.Join(_tempDir, "regex-target-snippets.json")))
+            .Apply([new UserDataSyncMutation.UpsertDictionary(synced)]);
+
+        Assert.True(Assert.Single(target.Entries).IsRegex);
+        Assert.Equal("Text: Beispiel", target.ApplyCorrections("Text Doppelpunkt Beispiel"));
+    }
+
+    [Fact]
     public void LegacySyncEntryDefaultsToManual()
     {
         var dictionary = new DictionaryService(_dictionaryPath);

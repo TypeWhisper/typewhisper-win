@@ -1192,7 +1192,9 @@
   "Api.RateLimitReached": "レート制限に達しました。しばらくお待ちください",
   "Api.ErrorFormat": "APIエラー {0}: {1}",
 
-  "Dictionary.ReplacementEscapesHint": "置換エスケープ: \\n 改行、\\r 復帰、\\t タブ、\\\\ バックスラッシュ。検索はリテラルのままです。",
+  "Dictionary.ReplacementEscapesHint": "置換エスケープ: \\n 改行、\\r 復帰、\\t タブ、\\\\ バックスラッシュ。正規表現を有効にしない限り、検索はリテラルです。",
+  "Dictionary.Regex": "正規表現",
+  "Dictionary.InvalidRegexFormat": "無効な正規表現: {0}",
   "Workflows.ProviderWarningTitle": "AIプロバイダーが必要です",
   "Workflows.ProviderWarningMessage": "スマートフォーマットなどのAIワークフローは保存できますが、AIプロバイダーが利用可能になるまで実行できません。",
   "Workflows.OpenIntegrations": "連携を開く",
