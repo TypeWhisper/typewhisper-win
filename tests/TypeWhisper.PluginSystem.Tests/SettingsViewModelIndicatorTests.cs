@@ -71,6 +71,7 @@ public class SettingsViewModelIndicatorTests
         var sut = CreateSettingsViewModel(settings);
         var changedProperties = new List<string?>();
         sut.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+        var saveCountBeforeChange = settings.SaveCount;
 
         Assert.True(sut.HasSelectedGermanLanguage);
 
@@ -78,6 +79,7 @@ public class SettingsViewModelIndicatorTests
 
         Assert.False(sut.HasSelectedGermanLanguage);
         Assert.Contains(nameof(SettingsViewModel.HasSelectedGermanLanguage), changedProperties);
+        Assert.Equal(saveCountBeforeChange + 1, settings.SaveCount);
     }
 
     [Fact]

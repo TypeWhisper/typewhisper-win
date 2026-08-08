@@ -1090,6 +1090,7 @@ public partial class SettingsViewModel : ObservableObject
             or nameof(SelectedLanguageHintToAdd)
             or nameof(HasSelectedLanguageHints)
             or nameof(HasNoSelectedLanguageHints)
+            or nameof(HasSelectedGermanLanguage)
             or nameof(ShortcutsError)
             or nameof(HasMicrophonePriorityItems);
 
