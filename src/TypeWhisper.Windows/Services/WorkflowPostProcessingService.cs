@@ -154,6 +154,7 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         {
             TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
             NormalizeNumbersOverride = request.Workflow?.Output.NumberNormalizationMode.OverrideValue(),
+            GermanOutputVariant = _settings.Current.GermanOutputVariant,
             TranscriptionTask = request.TranscriptionTask,
             DetectedLanguage = request.DetectedLanguage,
             ConfiguredLanguage = request.ConfiguredLanguage == "auto" ? null : request.ConfiguredLanguage,

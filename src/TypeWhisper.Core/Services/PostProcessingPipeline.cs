@@ -14,7 +14,8 @@ namespace TypeWhisper.Core.Services;
 ///   Snippet Expansion: 500
 ///   Vocabulary Boosting: 550
 ///   Dictionary Corrections: 600
-///   Translation: 900 (always last)
+///   Translation: 900
+///   Regional German Output: always last
 /// </summary>
 public sealed class PostProcessingPipeline : IPostProcessingPipeline
 {
@@ -70,6 +71,15 @@ public sealed class PostProcessingPipeline : IPostProcessingPipeline
                 // Continue with current text — don't let one step break the pipeline
             }
         }
+
+        text = GermanOutputNormalizationService.NormalizeText(
+            text,
+            options.GermanOutputVariant,
+            options.TranscriptionTask,
+            options.DetectedLanguage,
+            options.ConfiguredLanguage,
+            options.ConfiguredLanguageCandidates,
+            options.TranslationTarget);
 
         return new PostProcessingResult { Text = text };
     }

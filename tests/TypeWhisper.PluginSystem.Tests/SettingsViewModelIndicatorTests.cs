@@ -44,6 +44,23 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void GermanOutputVariant_LoadsOptionsAndPersistsSelection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            GermanOutputVariant = GermanOutputVariant.Austria
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.Equal(GermanOutputVariant.Austria, sut.GermanOutputVariant);
+        Assert.Equal(4, sut.GermanOutputVariantOptions.Count);
+
+        sut.GermanOutputVariant = GermanOutputVariant.Switzerland;
+
+        Assert.Equal(GermanOutputVariant.Switzerland, settings.Current.GermanOutputVariant);
+    }
+
+    [Fact]
     public void LoadsAndPersistsApiAuthenticationSetting()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

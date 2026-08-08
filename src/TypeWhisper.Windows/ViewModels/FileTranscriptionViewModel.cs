@@ -650,6 +650,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
             var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
             {
                 TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
+                GermanOutputVariant = _settings.Current.GermanOutputVariant,
                 TranscriptionTask = TranscriptionTask.Transcribe,
                 DetectedLanguage = result.DetectedLanguage,
                 ConfiguredLanguage = language,
@@ -657,12 +658,17 @@ public partial class FileTranscriptionViewModel : ObservableObject
                 VocabularyBooster = GetVocabularyBooster(),
                 DictionaryCorrector = _dictionary.ApplyCorrections
             }, ct);
-            var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
-                result,
+            var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
+                TranscriptionNumberNormalizationService.NormalizeResult(
+                    result,
+                    TranscriptionTask.Transcribe,
+                    language,
+                    languageHints,
+                    _settings.Current.TranscriptionNumberNormalizationEnabled),
+                _settings.Current.GermanOutputVariant,
                 TranscriptionTask.Transcribe,
                 language,
-                languageHints,
-                _settings.Current.TranscriptionNumberNormalizationEnabled);
+                languageHints);
 
             _modelManager.ScheduleAutoUnload();
 

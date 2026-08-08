@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Services.NumberNormalization;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -429,20 +430,27 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
+            GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = transcribeRequest.Task,
             DetectedLanguage = result.DetectedLanguage,
             ConfiguredLanguage = languageHints.FirstOrDefault(),
             ConfiguredLanguageCandidates = languageHints,
             VocabularyBooster = GetVocabularyBooster(),
-            DictionaryCorrector = _dictionary.ApplyCorrections
+            DictionaryCorrector = _dictionary.ApplyCorrections,
+            TranslationTarget = transcribeRequest.TargetLanguage
         }, ct);
-        var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
-            result,
+        var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
+            TranscriptionNumberNormalizationService.NormalizeResult(
+                result,
+                transcribeRequest.Task,
+                languageHints.FirstOrDefault(),
+                languageHints,
+                currentSettings.TranscriptionNumberNormalizationEnabled,
+                transcribeRequest.NormalizeNumbers),
+            currentSettings.GermanOutputVariant,
             transcribeRequest.Task,
             languageHints.FirstOrDefault(),
-            languageHints,
-            currentSettings.TranscriptionNumberNormalizationEnabled,
-            transcribeRequest.NormalizeNumbers);
+            languageHints);
 
         var finalText = pipelineResult.Text;
         if (!string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage))
@@ -458,6 +466,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                     sourceLanguage,
                     transcribeRequest.TargetLanguage,
                     ct);
+                finalText = GermanOutputNormalizationService.NormalizeText(
+                    finalText,
+                    currentSettings.GermanOutputVariant,
+                    transcribeRequest.Task,
+                    result.DetectedLanguage,
+                    languageHints.FirstOrDefault(),
+                    languageHints,
+                    transcribeRequest.TargetLanguage);
             }
             catch (NotSupportedException ex)
             {

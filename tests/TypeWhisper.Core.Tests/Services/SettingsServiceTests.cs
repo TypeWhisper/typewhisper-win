@@ -72,6 +72,7 @@ public class SettingsServiceTests : IDisposable
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
             TranscriptionNumberNormalizationEnabled = false,
+            GermanOutputVariant = GermanOutputVariant.Switzerland,
             LastTranslationTargetLanguage = "fr",
             IndicatorStyle = IndicatorStyle.EdgeDock,
             LiveTranscriptionEnabled = false,
@@ -123,6 +124,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.False(sut2.Current.TranscriptionNumberNormalizationEnabled);
+        Assert.Equal(GermanOutputVariant.Switzerland, sut2.Current.GermanOutputVariant);
         Assert.Equal("fr", sut2.Current.LastTranslationTargetLanguage);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
         Assert.False(sut2.Current.LiveTranscriptionEnabled);
@@ -144,6 +146,19 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("translate", sut2.Current.DictationRecoveryTask);
         Assert.True(sut2.Current.DictationRecoveryAutomaticFallbackEnabled);
         Assert.False(sut2.Current.WorkflowRequestRecoveryEnabled);
+    }
+
+    [Fact]
+    public void Save_InvalidGermanOutputVariant_UsesDefault()
+    {
+        var sut = new SettingsService(_filePath);
+
+        sut.Save(AppSettings.Default with
+        {
+            GermanOutputVariant = (GermanOutputVariant)999
+        });
+
+        Assert.Equal(GermanOutputVariant.AsTranscribed, sut.Current.GermanOutputVariant);
     }
 
     [Fact]
