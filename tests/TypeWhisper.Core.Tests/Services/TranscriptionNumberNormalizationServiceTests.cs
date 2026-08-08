@@ -61,6 +61,33 @@ public class TranscriptionNumberNormalizationServiceTests
     }
 
     [Fact]
+    public void NormalizeText_AutoWithoutDetectedLanguage_NormalizesGermanCompoundInSentence()
+    {
+        var result = TranscriptionNumberNormalizationService.NormalizeText(
+            "Ein Tag hat vierundzwanzig Stunden.",
+            TranscriptionTask.Transcribe,
+            detectedLanguage: null,
+            configuredLanguage: null,
+            configuredLanguageCandidates: []);
+
+        Assert.Equal("Ein Tag hat 24 Stunden.", result);
+    }
+
+    [Fact]
+    public void NormalizeText_AutoWithoutDetectedLanguage_GlobalOffPreservesNumberWords()
+    {
+        var result = TranscriptionNumberNormalizationService.NormalizeText(
+            "Ein Tag hat vierundzwanzig Stunden.",
+            TranscriptionTask.Transcribe,
+            detectedLanguage: null,
+            configuredLanguage: null,
+            configuredLanguageCandidates: [],
+            globalEnabled: false);
+
+        Assert.Equal("Ein Tag hat vierundzwanzig Stunden.", result);
+    }
+
+    [Fact]
     public void NormalizeResult_NormalizesTextAndSegments()
     {
         var transcription = new TranscriptionResult

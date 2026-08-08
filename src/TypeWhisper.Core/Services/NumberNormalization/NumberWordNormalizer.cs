@@ -8,8 +8,11 @@ namespace TypeWhisper.Core.Services.NumberNormalization;
 /// </summary>
 public static class NumberWordNormalizer
 {
-    private static readonly HashSet<string> SupportedLanguageCodes = ["en", "de", "fr", "es", "zh", "ja"];
+    private static readonly string[] SupportedLanguageCodeOrder = ["en", "de", "fr", "es", "zh", "ja"];
+    private static readonly HashSet<string> SupportedLanguageCodes = [.. SupportedLanguageCodeOrder];
     private static readonly HashSet<char> CjkNumberCharacters = ['零', '〇', '一', '二', '两', '兩', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万', '萬', '亿', '億', '点', '點', '負', '负'];
+
+    internal static IReadOnlyList<string> SupportedLanguages => SupportedLanguageCodeOrder;
 
     /// <summary>
     /// Normalizes supported number words in the supplied text for the requested language.
@@ -54,6 +57,8 @@ public static class NumberWordNormalizer
         var normalized = primary.Trim().ToLowerInvariant();
         return normalized.Length == 0 ? null : normalized;
     }
+
+    internal static bool IsSupportedLanguage(string language) => SupportedLanguageCodes.Contains(language);
 
     internal sealed record ParsedWords(string Value, int ConsumedWords);
 

@@ -105,9 +105,13 @@ public static class TranscriptionNumberNormalizationService
         if (transcriptionTask == TranscriptionTask.Translate)
             return ["en"];
 
-        return PrioritizedLanguages(
+        var languages = PrioritizedLanguages(
             detectedLanguage,
             [.. new[] { configuredLanguage }.Where(static language => language is not null).Select(static language => language!), .. configuredLanguageCandidates]);
+
+        return languages.Count > 0
+            ? languages
+            : NumberWordNormalizer.SupportedLanguages;
     }
 
     private static string NormalizeText(
@@ -149,7 +153,9 @@ public static class TranscriptionNumberNormalizationService
         foreach (var rawLanguage in new[] { primary }.Where(static language => language is not null).Select(static language => language!).Concat(candidates))
         {
             var normalized = NumberWordNormalizer.NormalizeLanguageCode(rawLanguage);
-            if (normalized is null || !seen.Add(normalized))
+            if (normalized is null ||
+                !NumberWordNormalizer.IsSupportedLanguage(normalized) ||
+                !seen.Add(normalized))
                 continue;
 
             result.Add(normalized);
