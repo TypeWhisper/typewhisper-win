@@ -364,7 +364,7 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,4"
                                                 Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVis}}">
                                         <TextBlock Foreground="{StaticResource HintBrush}" FontSize="11">
-                                            <Run Text="{Binding Record.Timestamp, StringFormat='{}{0:dd.MM.yyyy HH:mm}', Mode=OneWay}"/>
+                                            <Run Text="{Binding LocalTimestamp, StringFormat='{}{0:dd.MM.yyyy HH:mm}', Mode=OneWay}"/>
                                             <Run Text=" · "/>
                                             <Run Text="{Binding Record.WordCount, StringFormat='{}{0} words', Mode=OneWay}"/>
                                         </TextBlock>
