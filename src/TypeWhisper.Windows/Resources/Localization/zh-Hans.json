@@ -1239,7 +1239,9 @@
   "Api.RateLimitReached": "已达到速率限制，请稍候",
   "Api.ErrorFormat": "API 错误 {0}：{1}",
 
-  "Dictionary.ReplacementEscapesHint": "替换转义：\\n 换行、\\r 回车、\\t 制表符、\\\\ 反斜杠。搜索仍按字面匹配。",
+  "Dictionary.ReplacementEscapesHint": "替换转义：\\n 换行、\\r 回车、\\t 制表符、\\\\ 反斜杠。除非启用正则表达式，否则搜索按字面匹配。",
+  "Dictionary.Regex": "正则表达式",
+  "Dictionary.InvalidRegexFormat": "无效的正则表达式：{0}",
   "Workflows.ProviderWarningTitle": "需要 AI 提供商",
   "Workflows.ProviderWarningMessage": "智能格式化和其他 AI 工作流可以保存，但在 AI 提供商可用之前无法运行。",
   "Workflows.OpenIntegrations": "打开集成",

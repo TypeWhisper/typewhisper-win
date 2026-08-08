@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
+using System.Xml.Linq;
 using Moq;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
@@ -281,6 +282,11 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("AutomationProperties.AutomationId=\"DictionaryVocabularyBoosting\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"DictionarySearch\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"DictionaryNewOriginal\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryNewIsRegex\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryEditIsRegex\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryNewRegexValidationError\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryEditRegexValidationError\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"DictionaryEditScroller\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"DictionaryAddEntry\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"DictionaryEntries\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"DictionaryPacks\"", xaml);
@@ -308,6 +314,27 @@ public sealed class DictionaryViewModelTests
         Assert.Contains("AutomationProperties.LabeledBy=\"{Binding ElementName=TrainingSampleLabel}\"", xaml);
         Assert.Contains("Dictionary.TrainingApproveCandidateFormat", xaml);
         Assert.Contains("ConverterParameter=0, Mode=TwoWay", xaml);
+    }
+
+    [Fact]
+    public void DictionarySection_EditDialogUsesTheFullSectionOverlay()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "DictionarySection.xaml");
+        var document = XDocument.Parse(xaml);
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
+        var rootGrid = Assert.Single(document.Root!.Elements(presentation + "Grid"));
+        var editOverlay = Assert.Single(
+            document.Descendants(presentation + "Border"),
+            element => (string?)element.Attribute("AutomationProperties.AutomationId") == "DictionaryEditOverlay");
+
+        Assert.Same(rootGrid, editOverlay.Parent);
+        Assert.Equal("10", (string?)editOverlay.Attribute("Panel.ZIndex"));
     }
 
     [Fact]
@@ -349,6 +376,13 @@ public sealed class DictionaryViewModelTests
                 Assert.Equal(GetPlaceholders(english[key]), GetPlaceholders(localized[key]));
             }
         }
+
+        foreach (var language in new[] { "en", "de", "ja", "ru", "zh-Hans" })
+        {
+            var localized = ReadLocalization(language);
+            Assert.False(string.IsNullOrWhiteSpace(localized["Dictionary.Regex"]));
+            Assert.Equal(["{0}"], GetPlaceholders(localized["Dictionary.InvalidRegexFormat"]));
+        }
     }
 
     [Fact]
@@ -368,6 +402,42 @@ public sealed class DictionaryViewModelTests
 
         Assert.NotNull(added);
         Assert.Equal("", added.Replacement);
+    }
+
+    [Fact]
+    public void AddEntry_PreservesRegexOptIn()
+    {
+        DictionaryEntry? added = null;
+        var dictionary = CreateDictionaryMock();
+        dictionary
+            .Setup(service => service.AddEntry(It.IsAny<DictionaryEntry>()))
+            .Callback<DictionaryEntry>(entry => added = entry);
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.NewOriginal = @"\s+Doppelpunkt\b";
+        viewModel.NewReplacement = ":";
+        viewModel.NewIsRegex = true;
+        viewModel.AddEntryCommand.Execute(null);
+
+        Assert.NotNull(added);
+        Assert.True(added.IsRegex);
+        Assert.False(viewModel.HasNewRegexValidationError);
+    }
+
+    [Fact]
+    public void AddEntry_RejectsInvalidRegexWithValidationError()
+    {
+        var dictionary = CreateDictionaryMock();
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.NewOriginal = "[";
+        viewModel.NewReplacement = "replacement";
+        viewModel.NewIsRegex = true;
+        viewModel.AddEntryCommand.Execute(null);
+
+        dictionary.Verify(service => service.AddEntry(It.IsAny<DictionaryEntry>()), Times.Never);
+        Assert.True(viewModel.HasNewRegexValidationError);
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.NewRegexValidationError));
     }
 
     [Fact]
@@ -393,6 +463,49 @@ public sealed class DictionaryViewModelTests
 
         Assert.NotNull(updated);
         Assert.Equal("", updated.Replacement);
+    }
+
+    [Fact]
+    public void SaveEdit_RejectsInvalidRegexWithoutClosingEditor()
+    {
+        var entry = Correction("correction-1", "teh", "the");
+        var dictionary = CreateDictionaryMock([entry]);
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.StartEditCommand.Execute(entry);
+        viewModel.EditOriginal = "[";
+        viewModel.EditIsRegex = true;
+        viewModel.SaveEditCommand.Execute(null);
+
+        dictionary.Verify(service => service.UpdateEntry(It.IsAny<DictionaryEntry>()), Times.Never);
+        Assert.True(viewModel.IsEditing);
+        Assert.True(viewModel.HasEditRegexValidationError);
+    }
+
+    [Fact]
+    public void SaveEdit_PreservesRegexOptIn()
+    {
+        var entry = new DictionaryEntry
+        {
+            Id = "correction-1",
+            EntryType = DictionaryEntryType.Correction,
+            Original = @"\s+Doppelpunkt\b",
+            Replacement = ":",
+            IsRegex = true
+        };
+        DictionaryEntry? updated = null;
+        var dictionary = CreateDictionaryMock([entry]);
+        dictionary
+            .Setup(service => service.UpdateEntry(It.IsAny<DictionaryEntry>()))
+            .Callback<DictionaryEntry>(candidate => updated = candidate);
+        var viewModel = CreateViewModel(dictionary.Object);
+
+        viewModel.StartEditCommand.Execute(entry);
+        Assert.True(viewModel.EditIsRegex);
+        viewModel.SaveEditCommand.Execute(null);
+
+        Assert.NotNull(updated);
+        Assert.True(updated.IsRegex);
     }
 
     [Fact]

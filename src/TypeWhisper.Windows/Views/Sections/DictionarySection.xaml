@@ -317,6 +317,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Original field with watermark -->
@@ -404,8 +405,31 @@
                                   Content="Aa" FontSize="12" Opacity="0.6"/>
                     </Border>
 
+                    <!-- Regular expression (subtle icon button) -->
+                    <Border Grid.Column="5" CornerRadius="6" Margin="6,0,0,0"
+                            VerticalAlignment="Center" Cursor="Hand"
+                            ToolTip="{loc:Str Dictionary.Regex}"
+                            Visibility="{Binding Dictionary.IsNewTypeCorrection, Converter={StaticResource BoolToVis}}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Padding" Value="5,4"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Dictionary.NewIsRegex}" Value="True">
+                                        <Setter Property="Background" Value="#2A3A2A"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <CheckBox IsChecked="{Binding Dictionary.NewIsRegex}"
+                                  AutomationProperties.AutomationId="DictionaryNewIsRegex"
+                                  AutomationProperties.Name="{loc:Str Dictionary.Regex}"
+                                  Style="{StaticResource InputCheckBoxStyle}"
+                                  Content=".*" FontSize="12" Opacity="0.6"/>
+                    </Border>
+
                     <!-- Add button -->
-                    <ui:Button Grid.Column="5" Command="{Binding Dictionary.AddEntryCommand}"
+                    <ui:Button Grid.Column="6" Command="{Binding Dictionary.AddEntryCommand}"
                             AutomationProperties.AutomationId="DictionaryAddEntry"
                             AutomationProperties.Name="{loc:Str Dictionary.Add}"
                             Appearance="Primary" Padding="14,8"
@@ -420,8 +444,14 @@
                 <TextBlock Text="{loc:Str Dictionary.ReplacementEscapesHint}"
                            AutomationProperties.AutomationId="DictionaryNewReplacementEscapesHint"
                            Style="{StaticResource HintStyle}"
-                           Margin="0,8,0,0"
+                           Margin="0,6,0,0"
                            TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Dictionary.NewRegexValidationError}"
+                           AutomationProperties.AutomationId="DictionaryNewRegexValidationError"
+                           Foreground="#E57373"
+                           Margin="0,6,0,0"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding Dictionary.HasNewRegexValidationError, Converter={StaticResource BoolToVis}}"/>
             </StackPanel>
         </Border>
 
@@ -620,6 +650,12 @@
                                                                     <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
                                                                                ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
                                                                 </Border>
+                                                                <Border CornerRadius="3" Padding="4,1" Margin="8,0,0,0"
+                                                                        Background="#333333" VerticalAlignment="Center"
+                                                                        Visibility="{Binding IsRegex, Converter={StaticResource BoolToVis}}">
+                                                                    <TextBlock Text=".*" FontSize="10" Foreground="{StaticResource HintBrush}"
+                                                                               ToolTip="{loc:Str Dictionary.Regex}"/>
+                                                                </Border>
                                                                 <Border CornerRadius="3" Padding="5,1" Margin="8,0,0,0"
                                                                         Background="#183B35" VerticalAlignment="Center">
                                                                     <Border.Style>
@@ -783,6 +819,12 @@
                                                                             Visibility="{Binding CaseSensitive, Converter={StaticResource BoolToVis}}">
                                                                         <TextBlock Text="Aa" FontSize="10" Foreground="{StaticResource HintBrush}"
                                                                                    ToolTip="{loc:Str Dictionary.CaseSensitive}"/>
+                                                                    </Border>
+                                                                    <Border CornerRadius="3" Padding="4,1" Margin="8,0,0,0"
+                                                                            Background="#333333" VerticalAlignment="Center"
+                                                                            Visibility="{Binding IsRegex, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Text=".*" FontSize="10" Foreground="{StaticResource HintBrush}"
+                                                                                   ToolTip="{loc:Str Dictionary.Regex}"/>
                                                                     </Border>
                                                                     <Border CornerRadius="3" Padding="5,1" Margin="8,0,0,0"
                                                                             Background="#183B35" VerticalAlignment="Center">
@@ -977,96 +1019,126 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Edit Overlay -->
-            <Border Background="#CC1E1E1E"
+        </Grid>
+    </DockPanel>
+
+            <!-- Edit overlay spans the full section so the dialog can size to its content. -->
+            <Border Panel.ZIndex="10"
+                    AutomationProperties.AutomationId="DictionaryEditOverlay"
+                    Background="#CC1E1E1E"
                     Visibility="{Binding Dictionary.IsEditing, Converter={StaticResource BoolToVis}}"
                     MouseDown="EditOverlay_MouseDown"
                     KeyDown="EditOverlay_KeyDown" Focusable="True">
                 <Border Background="{StaticResource InputBackgroundBrush}"
                         BorderBrush="{StaticResource AccentBrush}"
                         BorderThickness="1" CornerRadius="12"
-                        Padding="24" MaxWidth="420" MaxHeight="320"
+                        Padding="24" Margin="32"
+                        MaxWidth="560" MaxHeight="520"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Border.Effect>
                         <DropShadowEffect Color="{StaticResource AccentColor}"
                                           BlurRadius="20" ShadowDepth="0" Opacity="0.15"/>
                     </Border.Effect>
-                    <StackPanel>
-                        <!-- Header with type badge -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <TextBlock Text="{loc:Str Dictionary.EditEntry}"
-                                       Foreground="{StaticResource TextBrush}"
-                                       FontSize="16" FontWeight="SemiBold"
-                                       VerticalAlignment="Center"/>
-                            <Border CornerRadius="4" Padding="6,2" Margin="10,0,0,0"
-                                    VerticalAlignment="Center">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="#2A3A5A"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Dictionary.EditEntry.EntryType}" Value="Correction">
-                                                <Setter Property="Background" Value="#3A2A1A"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <TextBlock FontSize="11" FontWeight="Medium">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="#5B9BD5"/>
-                                            <Setter Property="Text" Value="{loc:Str Dictionary.Term}"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Dictionary.EditEntry.EntryType}" Value="Correction">
-                                                    <Setter Property="Foreground" Value="#D4915B"/>
-                                                    <Setter Property="Text" Value="{loc:Str Dictionary.Correction}"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </Border>
-                        </StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <ScrollViewer Grid.Row="0"
+                                      AutomationProperties.AutomationId="DictionaryEditScroller"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Margin="0,0,8,0">
+                                <!-- Header with type badge -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <TextBlock Text="{loc:Str Dictionary.EditEntry}"
+                                               Foreground="{StaticResource TextBrush}"
+                                               FontSize="16" FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                    <Border CornerRadius="4" Padding="6,2" Margin="10,0,0,0"
+                                            VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#2A3A5A"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Dictionary.EditEntry.EntryType}" Value="Correction">
+                                                        <Setter Property="Background" Value="#3A2A1A"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock FontSize="11" FontWeight="Medium">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#5B9BD5"/>
+                                                    <Setter Property="Text" Value="{loc:Str Dictionary.Term}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Dictionary.EditEntry.EntryType}" Value="Correction">
+                                                            <Setter Property="Foreground" Value="#D4915B"/>
+                                                            <Setter Property="Text" Value="{loc:Str Dictionary.Correction}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                </StackPanel>
 
-                        <TextBlock Text="{loc:Str Dictionary.Original}" Style="{StaticResource LabelStyle}"/>
-                        <TextBox Text="{Binding Dictionary.EditOriginal, UpdateSourceTrigger=PropertyChanged}"
-                                 AutomationProperties.AutomationId="DictionaryEditOriginal"
-                                 AutomationProperties.Name="{loc:Str Dictionary.Original}"
-                                 Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,12"/>
+                                <TextBlock Text="{loc:Str Dictionary.Original}" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding Dictionary.EditOriginal, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.AutomationId="DictionaryEditOriginal"
+                                         AutomationProperties.Name="{loc:Str Dictionary.Original}"
+                                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding Dictionary.EditRegexValidationError}"
+                                           AutomationProperties.AutomationId="DictionaryEditRegexValidationError"
+                                           Foreground="#E57373"
+                                           Margin="0,0,0,12"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding Dictionary.HasEditRegexValidationError, Converter={StaticResource BoolToVis}}"/>
 
-                        <TextBlock Text="{loc:Str Dictionary.Replacement}" Style="{StaticResource LabelStyle}"/>
-                        <TextBox Text="{Binding Dictionary.EditReplacement, UpdateSourceTrigger=PropertyChanged}"
-                                 AutomationProperties.AutomationId="DictionaryEditReplacement"
-                                 AutomationProperties.Name="{loc:Str Dictionary.Replacement}"
-                                 Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,6"/>
-                        <TextBlock Text="{loc:Str Dictionary.ReplacementEscapesHint}"
-                                   AutomationProperties.AutomationId="DictionaryEditReplacementEscapesHint"
-                                   Style="{StaticResource HintStyle}"
-                                   Margin="0,0,0,12"
-                                   TextWrapping="Wrap"/>
+                                <TextBlock Text="{loc:Str Dictionary.Replacement}" Style="{StaticResource LabelStyle}"/>
+                                <TextBox Text="{Binding Dictionary.EditReplacement, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.AutomationId="DictionaryEditReplacement"
+                                         AutomationProperties.Name="{loc:Str Dictionary.Replacement}"
+                                         Style="{StaticResource InputTextBoxStyle}" Margin="0,0,0,6"/>
+                                <TextBlock Text="{loc:Str Dictionary.ReplacementEscapesHint}"
+                                           AutomationProperties.AutomationId="DictionaryEditReplacementEscapesHint"
+                                           Style="{StaticResource HintStyle}"
+                                           Margin="0,0,0,12"
+                                           TextWrapping="Wrap"/>
 
-                        <CheckBox Content="{loc:Str Dictionary.CaseSensitive}"
-                                  AutomationProperties.AutomationId="DictionaryEditCaseSensitive"
-                                  IsChecked="{Binding Dictionary.EditCaseSensitive}"
-                                  Style="{StaticResource InputCheckBoxStyle}" Margin="0,0,0,16"/>
+                                <WrapPanel>
+                                    <CheckBox Content="{loc:Str Dictionary.CaseSensitive}"
+                                              AutomationProperties.AutomationId="DictionaryEditCaseSensitive"
+                                              IsChecked="{Binding Dictionary.EditCaseSensitive}"
+                                              Style="{StaticResource InputCheckBoxStyle}"/>
+                                    <CheckBox Content="{loc:Str Dictionary.Regex}"
+                                              AutomationProperties.AutomationId="DictionaryEditIsRegex"
+                                              AutomationProperties.Name="{loc:Str Dictionary.Regex}"
+                                              IsChecked="{Binding Dictionary.EditIsRegex}"
+                                              Visibility="{Binding Dictionary.IsEditEntryCorrection, Converter={StaticResource BoolToVis}}"
+                                              Style="{StaticResource InputCheckBoxStyle}"
+                                              Margin="16,0,0,0"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </ScrollViewer>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right" Margin="0,16,0,0">
                             <ui:Button Content="{loc:Str Dictionary.Cancel}"
                                        AutomationProperties.AutomationId="DictionaryEditCancel"
-                                    Command="{Binding Dictionary.CancelEditCommand}"
-                                    Appearance="Secondary"
-                                    Padding="16,8" Margin="0,0,8,0"/>
+                                       Command="{Binding Dictionary.CancelEditCommand}"
+                                       Appearance="Secondary"
+                                       Padding="16,8" Margin="0,0,8,0"/>
                             <ui:Button Content="{loc:Str Dictionary.Save}"
                                        AutomationProperties.AutomationId="DictionaryEditSave"
-                                    Command="{Binding Dictionary.SaveEditCommand}"
-                                    Appearance="Primary"
-                                    Padding="16,8"/>
+                                       Command="{Binding Dictionary.SaveEditCommand}"
+                                       Appearance="Primary"
+                                       Padding="16,8"/>
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
                 </Border>
             </Border>
-
-        </Grid>
-    </DockPanel>
 
             <!-- Guided microphone correction trainer -->
             <Border Panel.ZIndex="20" Background="#EE101318"

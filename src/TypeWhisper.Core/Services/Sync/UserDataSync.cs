@@ -51,6 +51,7 @@ public enum UserDataSyncDictionaryEntryType
 /// <param name="CreatedAt">Created at supplied to the member.</param>
 /// <param name="UpdatedAt">Updated at supplied to the member.</param>
 /// <param name="Source">Optional correction provenance supplied to the member.</param>
+/// <param name="IsRegex">Whether the original value is a regular expression.</param>
 public sealed record UserDataSyncDictionaryEntry(
     UserDataSyncDictionaryEntryType EntryType,
     string Original,
@@ -59,7 +60,8 @@ public sealed record UserDataSyncDictionaryEntry(
     bool IsEnabled,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    DictionaryEntrySource Source = DictionaryEntrySource.Manual);
+    DictionaryEntrySource Source = DictionaryEntrySource.Manual,
+    bool IsRegex = false);
 
 /// <summary>
 /// Represents user data sync snippet data.

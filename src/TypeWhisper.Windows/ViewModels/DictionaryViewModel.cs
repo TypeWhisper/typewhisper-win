@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -46,6 +47,8 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _newReplacement = "";
     [ObservableProperty] private DictionaryEntryType _newEntryType = DictionaryEntryType.Correction;
     [ObservableProperty] private bool _newCaseSensitive;
+    [ObservableProperty] private bool _newIsRegex;
+    [ObservableProperty] private string _newRegexValidationError = "";
 
     // Segmented button helpers
     /// <summary>
@@ -72,6 +75,23 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _editOriginal = "";
     [ObservableProperty] private string _editReplacement = "";
     [ObservableProperty] private bool _editCaseSensitive;
+    [ObservableProperty] private bool _editIsRegex;
+    [ObservableProperty] private string _editRegexValidationError = "";
+
+    /// <summary>
+    /// Gets whether the new-entry form has a regex validation error.
+    /// </summary>
+    public bool HasNewRegexValidationError => !string.IsNullOrWhiteSpace(NewRegexValidationError);
+
+    /// <summary>
+    /// Gets whether the edit form has a regex validation error.
+    /// </summary>
+    public bool HasEditRegexValidationError => !string.IsNullOrWhiteSpace(EditRegexValidationError);
+
+    /// <summary>
+    /// Gets whether the edited entry is a correction.
+    /// </summary>
+    public bool IsEditEntryCorrection => EditEntry?.EntryType == DictionaryEntryType.Correction;
 
     // Entry count for display
     /// <summary>
@@ -207,7 +227,29 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsNewTypeCorrection));
         OnPropertyChanged(nameof(IsNewTypeTerm));
+        if (value != DictionaryEntryType.Correction)
+        {
+            NewIsRegex = false;
+            NewRegexValidationError = "";
+        }
     }
+
+    partial void OnNewOriginalChanged(string value) => NewRegexValidationError = "";
+
+    partial void OnNewIsRegexChanged(bool value) => NewRegexValidationError = "";
+
+    partial void OnNewRegexValidationErrorChanged(string value) =>
+        OnPropertyChanged(nameof(HasNewRegexValidationError));
+
+    partial void OnEditOriginalChanged(string value) => EditRegexValidationError = "";
+
+    partial void OnEditIsRegexChanged(bool value) => EditRegexValidationError = "";
+
+    partial void OnEditRegexValidationErrorChanged(string value) =>
+        OnPropertyChanged(nameof(HasEditRegexValidationError));
+
+    partial void OnEditEntryChanged(DictionaryEntry? value) =>
+        OnPropertyChanged(nameof(IsEditEntryCorrection));
 
     [RelayCommand]
     private void ClearSearch() => SearchText = "";
@@ -339,18 +381,29 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(NewOriginal)) return;
 
+        var original = NewOriginal.Trim();
+        if (NewEntryType == DictionaryEntryType.Correction &&
+            NewIsRegex &&
+            !TryValidateRegex(original, out var validationError))
+        {
+            NewRegexValidationError = validationError;
+            return;
+        }
+
         _dictionary.AddEntry(new DictionaryEntry
         {
             Id = Guid.NewGuid().ToString(),
             EntryType = NewEntryType,
-            Original = NewOriginal.Trim(),
+            Original = original,
             Replacement = NewEntryType == DictionaryEntryType.Correction ? NewReplacement.Trim() : null,
-            CaseSensitive = NewCaseSensitive
+            CaseSensitive = NewCaseSensitive,
+            IsRegex = NewEntryType == DictionaryEntryType.Correction && NewIsRegex
         });
 
         NewOriginal = "";
         NewReplacement = "";
         NewCaseSensitive = false;
+        NewIsRegex = false;
     }
 
     [RelayCommand]
@@ -363,6 +416,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         NewOriginal = "";
         NewReplacement = replacement;
         NewCaseSensitive = false;
+        NewIsRegex = false;
     }
 
     [RelayCommand]
@@ -387,6 +441,8 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         EditOriginal = entry.Original;
         EditReplacement = entry.Replacement ?? "";
         EditCaseSensitive = entry.CaseSensitive;
+        EditIsRegex = entry.IsRegex;
+        EditRegexValidationError = "";
         IsEditing = true;
     }
 
@@ -395,15 +451,40 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     {
         if (EditEntry is null || string.IsNullOrWhiteSpace(EditOriginal)) return;
 
+        var original = EditOriginal.Trim();
+        if (EditEntry.EntryType == DictionaryEntryType.Correction &&
+            EditIsRegex &&
+            !TryValidateRegex(original, out var validationError))
+        {
+            EditRegexValidationError = validationError;
+            return;
+        }
+
         _dictionary.UpdateEntry(EditEntry with
         {
-            Original = EditOriginal.Trim(),
+            Original = original,
             Replacement = EditEntry.EntryType == DictionaryEntryType.Correction ? EditReplacement.Trim() : null,
-            CaseSensitive = EditCaseSensitive
+            CaseSensitive = EditCaseSensitive,
+            IsRegex = EditEntry.EntryType == DictionaryEntryType.Correction && EditIsRegex
         });
 
         IsEditing = false;
         EditEntry = null;
+    }
+
+    private static bool TryValidateRegex(string pattern, out string validationError)
+    {
+        try
+        {
+            _ = new Regex(pattern, RegexOptions.CultureInvariant);
+            validationError = "";
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            validationError = Loc.Instance.GetString("Dictionary.InvalidRegexFormat", ex.Message);
+            return false;
+        }
     }
 
     [RelayCommand]

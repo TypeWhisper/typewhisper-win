@@ -29,6 +29,10 @@ public sealed record DictionaryEntry
     /// </summary>
     public bool CaseSensitive { get; init; }
     /// <summary>
+    /// Gets or sets whether the original value is a regular expression.
+    /// </summary>
+    public bool IsRegex { get; init; }
+    /// <summary>
     /// Gets or sets the is enabled value.
     /// </summary>
     public bool IsEnabled { get; init; } = true;

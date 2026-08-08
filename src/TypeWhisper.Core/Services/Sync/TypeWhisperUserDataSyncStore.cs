@@ -97,7 +97,8 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 entry.IsEnabled,
                 entry.CreatedAt,
                 entry.UpdatedAt,
-                entry.Source))
+                entry.Source,
+                entry.IsRegex))
             .ToList();
 
     private IReadOnlyList<UserDataSyncSnippet> FallbackSnippetSnapshot() =>
@@ -146,6 +147,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
+                IsRegex = synced.IsRegex,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -160,6 +162,7 @@ public sealed class TypeWhisperUserDataSyncStore : IUserDataSyncStore
             Original = synced.Original,
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
+            IsRegex = synced.IsRegex,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
             CreatedAt = synced.CreatedAt,
