@@ -432,6 +432,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
             GermanOutputVariant = pipelineGermanOutputVariant,
             TranscriptionTask = transcribeRequest.Task,

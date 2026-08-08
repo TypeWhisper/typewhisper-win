@@ -35,6 +35,12 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultShortUtterancePunctuationEnabled_IsTrue()
+    {
+        Assert.True(AppSettings.Default.ShortUtterancePunctuationEnabled);
+    }
+
+    [Fact]
     public void DefaultGermanOutputVariant_PreservesTranscribedSpelling()
     {
         Assert.Equal(GermanOutputVariant.AsTranscribed, AppSettings.Default.GermanOutputVariant);

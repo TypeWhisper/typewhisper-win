@@ -15,6 +15,46 @@ public class PostProcessingPipelineTests
         Assert.Equal("hello world", result.Text);
     }
 
+    [Theory]
+    [InlineData("Guten Morgen.", "Guten Morgen")]
+    [InlineData("Guten Morgen!", "Guten Morgen")]
+    [InlineData("Hallo, Marco.", "Hallo Marco")]
+    [InlineData("Hallo Marco?", "Hallo Marco")]
+    [InlineData("Hallo, Marco ?", "Hallo Marco")]
+    public async Task ProcessAsync_ShortUtterancePunctuationDisabled_RemovesModelPunctuation(
+        string rawText,
+        string expected)
+    {
+        var result = await _sut.ProcessAsync(rawText, new PipelineOptions
+        {
+            ShortUtterancePunctuationEnabled = false
+        });
+
+        Assert.Equal(expected, result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ShortUtterancePunctuationDisabled_PreservesLongerSentence()
+    {
+        var result = await _sut.ProcessAsync("Heute besprechen wir die nächsten Schritte.", new PipelineOptions
+        {
+            ShortUtterancePunctuationEnabled = false
+        });
+
+        Assert.Equal("Heute besprechen wir die nächsten Schritte.", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ShortUtterancePunctuationEnabled_PreservesModelPunctuation()
+    {
+        var result = await _sut.ProcessAsync("Hallo, Marco.", new PipelineOptions
+        {
+            ShortUtterancePunctuationEnabled = true
+        });
+
+        Assert.Equal("Hallo, Marco.", result.Text);
+    }
+
     [Fact]
     public async Task ProcessAsync_DictionaryCorrections_Applied()
     {

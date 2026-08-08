@@ -27,6 +27,8 @@ public sealed class AudioSectionLanguageTests
         Assert.Contains("Settings.GermanOutputVariantOptions", xaml);
         Assert.Contains("Settings.HasSelectedGermanLanguage", xaml);
         Assert.Contains("GermanOutputVariant.Switzerland", viewModel);
+        Assert.Contains("DictationShortUtterancePunctuation", xaml);
+        Assert.Contains("Settings.ShortUtterancePunctuationEnabled", xaml);
     }
 
     [Fact]

@@ -297,6 +297,11 @@ public record AppSettings
     public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
     /// <summary>
+    /// Gets or sets whether model-supplied punctuation is preserved for one- or two-word utterances.
+    /// </summary>
+    public bool ShortUtterancePunctuationEnabled { get; init; } = true;
+
+    /// <summary>
     /// Gets or sets the regional variant used for written German output.
     /// </summary>
     public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;

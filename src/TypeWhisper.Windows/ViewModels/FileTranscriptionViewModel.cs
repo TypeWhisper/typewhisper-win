@@ -650,6 +650,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
             var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
             {
                 TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
+                ShortUtterancePunctuationEnabled = _settings.Current.ShortUtterancePunctuationEnabled,
                 GermanOutputVariant = _settings.Current.GermanOutputVariant,
                 TranscriptionTask = TranscriptionTask.Transcribe,
                 DetectedLanguage = result.DetectedLanguage,

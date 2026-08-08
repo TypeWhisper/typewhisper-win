@@ -657,6 +657,8 @@
   "Dictation.ShortQuietAggressiveHint": "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings.",
   "Dictation.NormalizeNumbers": "Normalize spoken numbers to digits",
   "Dictation.NormalizeNumbersHint": "Converts spoken numbers like twenty three or dreiundzwanzig into digits before insertion and export.",
+  "Dictation.ShortUtterancePunctuation": "Keep punctuation in short utterances",
+  "Dictation.ShortUtterancePunctuationHint": "When turned off, TypeWhisper removes model-added greeting commas and sentence-ending punctuation from one- or two-word utterances, such as \"Hello Marco\".",
   "Dictation.SystemAudio": "System audio",
   "Dictation.ReduceOtherAudio": "Reduce other audio while recording",
   "Dictation.DuckingLevel": "Ducking level",

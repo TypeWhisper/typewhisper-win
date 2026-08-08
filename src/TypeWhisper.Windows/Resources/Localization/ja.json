@@ -646,6 +646,8 @@
   "Dictation.ShortQuietAggressiveHint": "誤タップによる超短い録音は破棄しますが、非常に短いまたは静かな録音はより多く保持します。",
   "Dictation.NormalizeNumbers": "話した数字を数値に変換",
   "Dictation.NormalizeNumbersHint": "twenty three や dreiundzwanzig のような話し言葉の数字を、挿入やエクスポート前に数値へ変換します。",
+  "Dictation.ShortUtterancePunctuation": "短い発話の句読点を保持",
+  "Dictation.ShortUtterancePunctuationHint": "オフにすると、1語または2語の発話からモデルが追加した挨拶のカンマと文末の句読点を削除します。",
   "Dictation.SystemAudio": "システムオーディオ",
   "Dictation.ReduceOtherAudio": "録音中に他のオーディオを低減",
   "Dictation.DuckingLevel": "ダッキングレベル",

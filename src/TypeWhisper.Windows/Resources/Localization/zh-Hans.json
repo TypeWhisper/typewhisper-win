@@ -646,6 +646,8 @@
   "Dictation.ShortQuietAggressiveHint": "仍会丢弃意外的极短点击，但会保留更多非常短或音量较低的录音。",
   "Dictation.NormalizeNumbers": "将口述数字规范为数值",
   "Dictation.NormalizeNumbersHint": "插入和导出前，将 twenty three 或 dreiundzwanzig 等口述数字转换为数值。",
+  "Dictation.ShortUtterancePunctuation": "保留短语句中的标点符号",
+  "Dictation.ShortUtterancePunctuationHint": "关闭后，TypeWhisper 会从一到两个词的语句中删除模型添加的问候逗号和句末标点。",
   "Dictation.SystemAudio": "系统音频",
   "Dictation.ReduceOtherAudio": "录音时降低其他音频音量",
   "Dictation.DuckingLevel": "压低程度",

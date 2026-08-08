@@ -118,6 +118,7 @@ public sealed class FileTranscriptionProcessor(
         var pipelineResult = await pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
             GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = task,
             DetectedLanguage = result.DetectedLanguage,

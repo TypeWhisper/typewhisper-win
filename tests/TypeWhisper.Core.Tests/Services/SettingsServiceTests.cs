@@ -44,6 +44,7 @@ public class SettingsServiceTests : IDisposable
         var sut = new SettingsService(_filePath);
 
         Assert.Empty(sut.Current.SpokenFormattingProfiles);
+        Assert.True(sut.Current.ShortUtterancePunctuationEnabled);
     }
 
     [Fact]
@@ -72,6 +73,7 @@ public class SettingsServiceTests : IDisposable
             WorkflowPaletteHotkey = "Ctrl+Alt+W",
             TranscribeShortQuietClipsAggressively = true,
             TranscriptionNumberNormalizationEnabled = false,
+            ShortUtterancePunctuationEnabled = false,
             GermanOutputVariant = GermanOutputVariant.Switzerland,
             LastTranslationTargetLanguage = "fr",
             IndicatorStyle = IndicatorStyle.EdgeDock,
@@ -124,6 +126,7 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("Ctrl+Alt+W", sut2.Current.WorkflowPaletteHotkey);
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.False(sut2.Current.TranscriptionNumberNormalizationEnabled);
+        Assert.False(sut2.Current.ShortUtterancePunctuationEnabled);
         Assert.Equal(GermanOutputVariant.Switzerland, sut2.Current.GermanOutputVariant);
         Assert.Equal("fr", sut2.Current.LastTranslationTargetLanguage);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);

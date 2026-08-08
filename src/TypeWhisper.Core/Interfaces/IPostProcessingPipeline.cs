@@ -28,6 +28,9 @@ public sealed record PipelineOptions
     /// <summary>Global number normalization setting. Workflow/API overrides can supersede this.</summary>
     public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
+    /// <summary>Whether model-supplied punctuation is preserved for one- or two-word utterances.</summary>
+    public bool ShortUtterancePunctuationEnabled { get; init; } = true;
+
     /// <summary>Per-request or workflow override for spoken number normalization.</summary>
     public bool? NormalizeNumbersOverride { get; init; }
 

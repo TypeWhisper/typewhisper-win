@@ -61,6 +61,22 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void ShortUtterancePunctuation_LoadsAndPersistsSetting()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            ShortUtterancePunctuationEnabled = false
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.False(sut.ShortUtterancePunctuationEnabled);
+
+        sut.ShortUtterancePunctuationEnabled = true;
+
+        Assert.True(settings.Current.ShortUtterancePunctuationEnabled);
+    }
+
+    [Fact]
     public void GermanOutputVariantVisibility_IncludesGermanTranslationTarget()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

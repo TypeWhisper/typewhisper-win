@@ -62,6 +62,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
     [ObservableProperty] private bool _transcriptionNumberNormalizationEnabled = true;
+    [ObservableProperty] private bool _shortUtterancePunctuationEnabled = true;
     [ObservableProperty] private GermanOutputVariant _germanOutputVariant = GermanOutputVariant.AsTranscribed;
     [ObservableProperty] private IndicatorStyle _indicatorStyle = IndicatorStyle.StatusIsland;
     [ObservableProperty] private bool _liveTranscriptionEnabled = true;
@@ -807,6 +808,7 @@ public partial class SettingsViewModel : ObservableObject
             SoundFeedbackEnabled = SoundFeedbackEnabled,
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
             TranscriptionNumberNormalizationEnabled = TranscriptionNumberNormalizationEnabled,
+            ShortUtterancePunctuationEnabled = ShortUtterancePunctuationEnabled,
             GermanOutputVariant = GermanOutputVariant,
             IndicatorStyle = IndicatorStyle,
             LiveTranscriptionEnabled = LiveTranscriptionEnabled,
@@ -924,6 +926,7 @@ public partial class SettingsViewModel : ObservableObject
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
         TranscriptionNumberNormalizationEnabled = s.TranscriptionNumberNormalizationEnabled;
+        ShortUtterancePunctuationEnabled = s.ShortUtterancePunctuationEnabled;
         GermanOutputVariant = s.GermanOutputVariant;
         IndicatorStyle = s.IndicatorStyle;
         LiveTranscriptionEnabled = s.LiveTranscriptionEnabled;

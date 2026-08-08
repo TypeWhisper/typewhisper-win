@@ -646,6 +646,8 @@
   "Dictation.ShortQuietAggressiveHint": "По-прежнему отбрасывает случайные ультракороткие нажатия, но сохраняет больше очень коротких или тихих записей.",
   "Dictation.NormalizeNumbers": "Преобразовывать произнесенные числа в цифры",
   "Dictation.NormalizeNumbersHint": "Преобразует произнесенные числа вроде twenty three или dreiundzwanzig в цифры перед вставкой и экспортом.",
+  "Dictation.ShortUtterancePunctuation": "Сохранять пунктуацию в коротких фразах",
+  "Dictation.ShortUtterancePunctuationHint": "Если параметр отключен, TypeWhisper удаляет добавленные моделью запятые в приветствиях и знаки в конце фраз из одного или двух слов.",
   "Dictation.SystemAudio": "Системный звук",
   "Dictation.ReduceOtherAudio": "Снижать прочий звук во время записи",
   "Dictation.DuckingLevel": "Уровень приглушения",

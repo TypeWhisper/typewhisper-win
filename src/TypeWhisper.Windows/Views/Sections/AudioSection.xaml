@@ -487,6 +487,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -552,6 +554,25 @@
                                                  AutomationProperties.AutomationId="DictationNormalizeNumbers"
                                                  AutomationProperties.Name="{loc:Str Dictation.NormalizeNumbers}"
                                                  IsChecked="{Binding Settings.TranscriptionNumberNormalizationEnabled}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="9" Background="#18FFFFFF"/>
+                        <Border Grid.Row="10" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str Dictation.ShortUtterancePunctuation}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str Dictation.ShortUtterancePunctuationHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,4,18,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="DictationShortUtterancePunctuation"
+                                                 AutomationProperties.Name="{loc:Str Dictation.ShortUtterancePunctuation}"
+                                                 IsChecked="{Binding Settings.ShortUtterancePunctuationEnabled}"
                                                  OnContent=""
                                                  OffContent=""/>
                             </Grid>
