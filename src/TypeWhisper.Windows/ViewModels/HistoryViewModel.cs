@@ -358,13 +358,17 @@ public partial class HistoryEntryViewModel : ObservableObject
     public ObservableCollection<Workflow> RetryWorkflows { get; } = [];
 
     /// <summary>
+    /// Gets the timestamp converted from persisted UTC to local time for display.
+    /// </summary>
+    public DateTime LocalTimestamp => ConvertUtcToLocalTime(Record.Timestamp);
+    /// <summary>
     /// Performs compute date group.
     /// </summary>
-    public string DateGroup => ComputeDateGroup(Record.Timestamp);
+    public string DateGroup => ComputeDateGroup(LocalTimestamp);
     /// <summary>
     /// Performs time label.
     /// </summary>
-    public string TimeLabel => Record.Timestamp.ToString("HH:mm");
+    public string TimeLabel => LocalTimestamp.ToString("HH:mm");
     /// <summary>
     /// Gets the duration label.
     /// </summary>
@@ -511,6 +515,18 @@ public partial class HistoryEntryViewModel : ObservableObject
     {
         HasSuggestions = false;
         CorrectionSuggestions.Clear();
+    }
+
+    internal static DateTime ConvertUtcToLocalTime(DateTime timestamp, TimeZoneInfo? timeZone = null)
+    {
+        var utcTimestamp = timestamp.Kind switch
+        {
+            DateTimeKind.Utc => timestamp,
+            DateTimeKind.Local => timestamp.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+        };
+
+        return TimeZoneInfo.ConvertTimeFromUtc(utcTimestamp, timeZone ?? TimeZoneInfo.Local);
     }
 
     private static string ComputeDateGroup(DateTime timestamp)

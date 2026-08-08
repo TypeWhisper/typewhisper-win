@@ -27,7 +27,7 @@ public sealed record TranscriptionRecord
     /// </summary>
     public required string Id { get; init; }
     /// <summary>
-    /// Gets or sets the timestamp value.
+    /// Gets or sets the UTC timestamp when the transcription was recorded.
     /// </summary>
     public required DateTime Timestamp { get; init; }
     /// <summary>
