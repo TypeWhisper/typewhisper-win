@@ -35,6 +35,12 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultGermanOutputVariant_PreservesTranscribedSpelling()
+    {
+        Assert.Equal(GermanOutputVariant.AsTranscribed, AppSettings.Default.GermanOutputVariant);
+    }
+
+    [Fact]
     public void DefaultTargetAppCorrectionLearningEnabled_IsTrueForCommercialGate()
     {
         Assert.True(AppSettings.Default.TargetAppCorrectionLearningEnabled);

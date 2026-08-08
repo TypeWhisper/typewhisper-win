@@ -297,6 +297,11 @@ public record AppSettings
     public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
 
     /// <summary>
+    /// Gets or sets the regional variant used for written German output.
+    /// </summary>
+    public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;
+
+    /// <summary>
     /// Gets persisted spoken formatting overrides by engine, model, and language.
     /// </summary>
     public IReadOnlyList<DictationSpokenFormattingProfile> SpokenFormattingProfiles { get; init; } = [];

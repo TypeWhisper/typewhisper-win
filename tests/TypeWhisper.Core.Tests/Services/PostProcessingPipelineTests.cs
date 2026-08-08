@@ -1,4 +1,5 @@
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 
 namespace TypeWhisper.Core.Tests.Services;
@@ -279,6 +280,37 @@ public class PostProcessingPipelineTests
                 "Translation:23+FMT+SPK+LLM+SNP+BOOST+DICT"
             ],
             executionOrder);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SwissGermanOutput_RunsAfterDictionaryCorrections()
+    {
+        var options = new PipelineOptions
+        {
+            GermanOutputVariant = GermanOutputVariant.Switzerland,
+            DetectedLanguage = "de",
+            DictionaryCorrector = text => text + " Große Straße"
+        };
+
+        var result = await _sut.ProcessAsync("Eine", options);
+
+        Assert.Equal("Eine Grosse Strasse", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SwissGermanOutput_RunsAfterGermanTranslation()
+    {
+        var options = new PipelineOptions
+        {
+            GermanOutputVariant = GermanOutputVariant.Switzerland,
+            DetectedLanguage = "en",
+            TranslationHandler = (_, _, _, _) => Task.FromResult("Die Straße ist groß."),
+            TranslationTarget = "de"
+        };
+
+        var result = await _sut.ProcessAsync("The road is big.", options);
+
+        Assert.Equal("Die Strasse ist gross.", result.Text);
     }
 
     [Fact]

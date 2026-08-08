@@ -62,6 +62,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _pauseMediaDuringRecording;
     [ObservableProperty] private bool _transcribeShortQuietClipsAggressively;
     [ObservableProperty] private bool _transcriptionNumberNormalizationEnabled = true;
+    [ObservableProperty] private GermanOutputVariant _germanOutputVariant = GermanOutputVariant.AsTranscribed;
     [ObservableProperty] private IndicatorStyle _indicatorStyle = IndicatorStyle.StatusIsland;
     [ObservableProperty] private bool _liveTranscriptionEnabled = true;
     [ObservableProperty] private bool _onlineAsrBatchLiveTranscriptionEnabled;
@@ -100,6 +101,10 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<TranslationTargetOption> TranslationTargetOptions { get; } = [];
     /// <summary>
+    /// Gets the available regional variants for written German output.
+    /// </summary>
+    public ObservableCollection<GermanOutputVariantOption> GermanOutputVariantOptions { get; } = [];
+    /// <summary>
     /// Gets the history retention options.
     /// </summary>
     public ObservableCollection<HistoryRetentionOption> HistoryRetentionOptions { get; } = [];
@@ -135,6 +140,12 @@ public partial class SettingsViewModel : ObservableObject
     /// Gets whether unrestricted language auto-detection is enabled.
     /// </summary>
     public bool HasNoSelectedLanguageHints => !HasSelectedLanguageHints;
+    /// <summary>
+    /// Gets whether German is selected as a spoken language or translation target.
+    /// </summary>
+    public bool HasSelectedGermanLanguage =>
+        SelectedLanguageHints.Any(static option => IsGermanLanguageCode(option.Code))
+        || IsGermanLanguageCode(TranslationTargetLanguage);
 
     /// <summary>
     /// Gets the configured main dictation hotkeys.
@@ -334,6 +345,7 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnTranslationTargetLanguageChanged(string? value)
     {
+        OnPropertyChanged(nameof(HasSelectedGermanLanguage));
         if (_isLoading) return;
 
         SetQuickTranslationModeSilently(!string.IsNullOrWhiteSpace(value));
@@ -556,6 +568,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasSelectedLanguageHints));
         OnPropertyChanged(nameof(HasNoSelectedLanguageHints));
+        OnPropertyChanged(nameof(HasSelectedGermanLanguage));
         if (!_isLoading)
             Save();
     }
@@ -794,6 +807,7 @@ public partial class SettingsViewModel : ObservableObject
             SoundFeedbackEnabled = SoundFeedbackEnabled,
             TranscribeShortQuietClipsAggressively = TranscribeShortQuietClipsAggressively,
             TranscriptionNumberNormalizationEnabled = TranscriptionNumberNormalizationEnabled,
+            GermanOutputVariant = GermanOutputVariant,
             IndicatorStyle = IndicatorStyle,
             LiveTranscriptionEnabled = LiveTranscriptionEnabled,
             OnlineAsrBatchLiveTranscriptionEnabled = OnlineAsrBatchLiveTranscriptionEnabled,
@@ -903,12 +917,14 @@ public partial class SettingsViewModel : ObservableObject
                 ?? new LanguageHintOption(code, code)).ToList());
         OnPropertyChanged(nameof(HasSelectedLanguageHints));
         OnPropertyChanged(nameof(HasNoSelectedLanguageHints));
+        OnPropertyChanged(nameof(HasSelectedGermanLanguage));
         AutoPaste = s.AutoPaste;
         Mode = s.Mode;
         WhisperModeEnabled = s.WhisperModeEnabled;
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;
         TranscribeShortQuietClipsAggressively = s.TranscribeShortQuietClipsAggressively;
         TranscriptionNumberNormalizationEnabled = s.TranscriptionNumberNormalizationEnabled;
+        GermanOutputVariant = s.GermanOutputVariant;
         IndicatorStyle = s.IndicatorStyle;
         LiveTranscriptionEnabled = s.LiveTranscriptionEnabled;
         OnlineAsrBatchLiveTranscriptionEnabled = s.OnlineAsrBatchLiveTranscriptionEnabled;
@@ -1074,6 +1090,7 @@ public partial class SettingsViewModel : ObservableObject
             or nameof(SelectedLanguageHintToAdd)
             or nameof(HasSelectedLanguageHints)
             or nameof(HasNoSelectedLanguageHints)
+            or nameof(HasSelectedGermanLanguage)
             or nameof(ShortcutsError)
             or nameof(HasMicrophonePriorityItems);
 
@@ -1101,6 +1118,14 @@ public partial class SettingsViewModel : ObservableObject
         new("sv", "Svenska"),
         new("da", "Dansk"),
         new("fi", "Suomi")
+    ];
+
+    private static IReadOnlyList<GermanOutputVariantOption> BuildGermanOutputVariantOptions() =>
+    [
+        new(GermanOutputVariant.AsTranscribed, Loc.Instance["Dictation.GermanOutputVariantAsTranscribed"]),
+        new(GermanOutputVariant.Germany, Loc.Instance["Dictation.GermanOutputVariantGermany"]),
+        new(GermanOutputVariant.Austria, Loc.Instance["Dictation.GermanOutputVariantAustria"]),
+        new(GermanOutputVariant.Switzerland, Loc.Instance["Dictation.GermanOutputVariantSwitzerland"])
     ];
 
     private void OnSettingsChanged(AppSettings updatedSettings)
@@ -1177,6 +1202,7 @@ public partial class SettingsViewModel : ObservableObject
     private void RefreshLocalizedCollections(bool refreshMicrophones = true)
     {
         ReplaceCollection(TranslationTargetOptions, LocalizeTranslationOptions(TranslationModelInfo.GlobalTargetOptions));
+        ReplaceCollection(GermanOutputVariantOptions, BuildGermanOutputVariantOptions());
         ReplaceCollection(HistoryRetentionOptions, BuildHistoryRetentionOptions());
         ReplaceCollection(WidgetOptions, BuildWidgetOptions());
         if (refreshMicrophones)
@@ -1191,6 +1217,12 @@ public partial class SettingsViewModel : ObservableObject
 
     private static string? NormalizeTranslationTarget(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsGermanLanguageCode(string? value) =>
+        string.Equals(
+            value?.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(),
+            "de",
+            StringComparison.OrdinalIgnoreCase);
 
     private void SetQuickTranslationModeSilently(bool enabled)
     {
@@ -1502,3 +1534,10 @@ public sealed record CommandExample(string Key, string Command);
 /// Represents a selectable spoken-language hint.
 /// </summary>
 public sealed record LanguageHintOption(string Code, string DisplayName);
+
+/// <summary>
+/// Represents a regional German output variant option.
+/// </summary>
+/// <param name="Value">Persisted variant supplied to the member.</param>
+/// <param name="DisplayName">Localized display name supplied to the member.</param>
+public sealed record GermanOutputVariantOption(GermanOutputVariant Value, string DisplayName);
