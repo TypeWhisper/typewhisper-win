@@ -1,5 +1,8 @@
 using System.IO;
+using Moq;
 using TypeWhisper.Core.Services;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -84,6 +87,36 @@ public sealed class StatisticsViewModelTests : IDisposable
 
         Assert.InRange(viewModel.ChartData.Count, 1, 48);
         Assert.Equal(1200, viewModel.ChartData.Sum(point => point.WordCount));
+    }
+
+    [Fact]
+    public void Refresh_UsesProviderAndModelDisplayNamesForTechnicalStoredIds()
+    {
+        var now = DateTime.SpecifyKind(new DateTime(2026, 8, 8, 16, 0, 0), DateTimeKind.Local);
+        var service = CreateService();
+        Record(
+            service,
+            now.Date.AddHours(10),
+            90,
+            "code",
+            "com.typewhisper.sherpa-onnx",
+            "plugin:com.typewhisper.sherpa-onnx:parakeet-tdt-0.6b");
+
+        var plugin = new Mock<ITranscriptionEnginePlugin>();
+        plugin.SetupGet(candidate => candidate.PluginId).Returns("com.typewhisper.sherpa-onnx");
+        plugin.SetupGet(candidate => candidate.ProviderId).Returns("sherpa-onnx");
+        plugin.SetupGet(candidate => candidate.ProviderDisplayName).Returns("Local (sherpa-onnx)");
+        plugin.SetupGet(candidate => candidate.TranscriptionModels).Returns(
+            [new PluginModelInfo("parakeet-tdt-0.6b", "Parakeet TDT 0.6B")]);
+
+        var viewModel = new StatisticsViewModel(
+            service,
+            () => now,
+            () => [plugin.Object]);
+
+        var model = Assert.Single(viewModel.ModelUsageStats);
+        Assert.Equal("Local (sherpa-onnx) - Parakeet TDT 0.6B", model.Label);
+        Assert.DoesNotContain("plugin:", model.Tooltip, StringComparison.OrdinalIgnoreCase);
     }
 
     private UsageStatisticsService CreateService() =>

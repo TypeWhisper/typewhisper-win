@@ -6,7 +6,10 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.PluginSDK;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
+using TypeWhisper.Windows.Services.Plugins;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -125,6 +128,8 @@ public sealed partial class StatisticsViewModel : ObservableObject
 
     private readonly IUsageStatisticsService _statistics;
     private readonly Func<DateTime> _now;
+    private readonly Func<IReadOnlyList<ITranscriptionEnginePlugin>> _transcriptionEngines;
+    private readonly PluginManager? _pluginManager;
 
     [ObservableProperty] private StatisticsPeriod _selectedPeriod = StatisticsPeriod.AllTime;
     [ObservableProperty] private bool _hasAnyData;
@@ -179,15 +184,21 @@ public sealed partial class StatisticsViewModel : ObservableObject
     /// <summary>
     /// Initializes the statistics view model.
     /// </summary>
-    public StatisticsViewModel(IUsageStatisticsService statistics)
-        : this(statistics, () => DateTime.Now)
+    public StatisticsViewModel(IUsageStatisticsService statistics, PluginManager pluginManager)
+        : this(statistics, () => DateTime.Now, () => pluginManager.TranscriptionEngines)
     {
+        _pluginManager = pluginManager;
+        _pluginManager.PluginStateChanged += OnPluginStateChanged;
     }
 
-    internal StatisticsViewModel(IUsageStatisticsService statistics, Func<DateTime> now)
+    internal StatisticsViewModel(
+        IUsageStatisticsService statistics,
+        Func<DateTime> now,
+        Func<IReadOnlyList<ITranscriptionEnginePlugin>>? transcriptionEngines = null)
     {
         _statistics = statistics;
         _now = now;
+        _transcriptionEngines = transcriptionEngines ?? (() => []);
         _statistics.StatisticsChanged += OnStatisticsChanged;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
         Refresh();
@@ -563,19 +574,65 @@ public sealed partial class StatisticsViewModel : ObservableObject
         return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(normalized.ToLower(CultureInfo.CurrentCulture));
     }
 
-    private static string FormatModelLabel(string key)
+    private string FormatModelLabel(string key)
     {
-        var (engine, model) = UsageStatisticsService.ParseModelKey(key);
-        var engineLabel = engine.ToLowerInvariant() switch
+        var (storedEngine, storedModel) = UsageStatisticsService.ParseModelKey(key);
+        var normalizedModel = NormalizeStoredModel(storedModel);
+        var engine = _transcriptionEngines().FirstOrDefault(candidate =>
+            MatchesEngine(candidate, storedEngine)
+            || (normalizedModel.SelectionId is not null
+                && MatchesEngine(candidate, normalizedModel.SelectionId)));
+        var engineLabel = engine?.ProviderDisplayName ?? FormatEngineLabel(storedEngine);
+        var modelLabel = engine?.TranscriptionModels.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, normalizedModel.ModelId, StringComparison.OrdinalIgnoreCase))
+            ?.DisplayName
+            ?? FormatModelName(normalizedModel.ModelId);
+
+        return string.IsNullOrWhiteSpace(modelLabel)
+            || string.Equals(modelLabel, engineLabel, StringComparison.OrdinalIgnoreCase)
+                ? engineLabel
+                : string.Concat(engineLabel, " - ", modelLabel);
+    }
+
+    private static bool MatchesEngine(ITranscriptionEnginePlugin engine, string storedEngine) =>
+        string.Equals(engine.GetTranscriptionSelectionId(), storedEngine, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(engine.ProviderId, storedEngine, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(engine.PluginId, storedEngine, StringComparison.OrdinalIgnoreCase);
+
+    private static (string? SelectionId, string? ModelId) NormalizeStoredModel(string? storedModel)
+    {
+        if (string.IsNullOrWhiteSpace(storedModel))
+            return (null, null);
+
+        if (!ModelManagerService.IsPluginModel(storedModel))
+            return (null, storedModel);
+
+        try
+        {
+            var (selectionId, modelId) = ModelManagerService.ParsePluginModelId(storedModel);
+            return (selectionId, modelId);
+        }
+        catch (ArgumentException)
+        {
+            return (null, storedModel);
+        }
+    }
+
+    private static string FormatEngineLabel(string engine) => engine.ToLowerInvariant() switch
         {
             "whisper" => "Whisper",
             "parakeet" => "Parakeet",
             "unknown" => Loc.Instance.GetString("Statistics.Unknown"),
-            _ => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(engine.Replace('-', ' ').ToLower(CultureInfo.CurrentCulture))
+            _ => FormatModelName(engine)
         };
-        return string.IsNullOrWhiteSpace(model) || string.Equals(model, engineLabel, StringComparison.OrdinalIgnoreCase)
-            ? engineLabel
-            : string.Concat(engineLabel, " - ", model);
+
+    private static string FormatModelName(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return string.Empty;
+
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(
+            model.Replace('-', ' ').Replace('_', ' ').ToLower(CultureInfo.CurrentCulture));
     }
 
     private static string FormatTimeSaved(double minutes)
@@ -635,6 +692,8 @@ public sealed partial class StatisticsViewModel : ObservableObject
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) => Refresh();
+
+    private void OnPluginStateChanged(object? sender, EventArgs e) => OnStatisticsChanged();
 
     private sealed record StatisticsSummary(int Words, double DurationSeconds, int AppCount)
     {
