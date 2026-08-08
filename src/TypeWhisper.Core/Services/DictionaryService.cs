@@ -14,6 +14,7 @@ namespace TypeWhisper.Core.Services;
 public sealed class DictionaryService : IDictionaryService
 {
     private const string PackEntryPrefix = "pack:";
+    private static readonly TimeSpan CorrectionRegexTimeout = TimeSpan.FromMilliseconds(250);
 
     private readonly string _filePath;
     private List<DictionaryEntry> _cache = [];
@@ -120,17 +121,28 @@ public sealed class DictionaryService : IDictionaryService
 
         foreach (var entry in corrections)
         {
-            var pattern = BuildCorrectionPattern(entry.Original);
+            var pattern = entry.IsRegex ? entry.Original : BuildCorrectionPattern(entry.Original);
             var options = entry.CaseSensitive
                 ? RegexOptions.CultureInvariant
                 : RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
-            var regex = new Regex(pattern, options);
-            if (!regex.IsMatch(text))
-                continue;
+            try
+            {
+                var regex = new Regex(pattern, options, CorrectionRegexTimeout);
+                if (!regex.IsMatch(text))
+                    continue;
 
-            var replacement = ExpandReplacementEscapes(entry.Replacement!);
-            text = regex.Replace(text, _ => replacement);
-            IncrementUsageCount(entry.Id);
+                var replacement = ExpandReplacementEscapes(entry.Replacement!);
+                text = regex.Replace(text, _ => replacement);
+                IncrementUsageCount(entry.Id);
+            }
+            catch (ArgumentException) when (entry.IsRegex)
+            {
+                // Invalid persisted regex entries must not break post-processing.
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // A pathological regex must not block dictation post-processing.
+            }
         }
 
         return text;
@@ -604,7 +616,8 @@ public sealed class DictionaryService : IDictionaryService
                 entry.IsEnabled,
                 entry.CreatedAt,
                 entry.UpdatedAt,
-                entry.Source))
+                entry.Source,
+                entry.IsRegex))
             .ToList();
     }
 
@@ -657,6 +670,7 @@ public sealed class DictionaryService : IDictionaryService
                 Original = synced.Original,
                 Replacement = replacement,
                 CaseSensitive = synced.CaseSensitive,
+                IsRegex = synced.IsRegex,
                 IsEnabled = synced.IsEnabled,
                 Source = synced.Source,
                 UpdatedAt = synced.UpdatedAt
@@ -671,6 +685,7 @@ public sealed class DictionaryService : IDictionaryService
             Original = synced.Original,
             Replacement = replacement,
             CaseSensitive = synced.CaseSensitive,
+            IsRegex = synced.IsRegex,
             IsEnabled = synced.IsEnabled,
             Source = synced.Source,
             CreatedAt = synced.CreatedAt,

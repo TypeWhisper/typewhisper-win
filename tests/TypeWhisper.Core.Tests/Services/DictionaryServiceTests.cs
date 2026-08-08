@@ -158,6 +158,66 @@ public class DictionaryServiceTests : IDisposable
         Assert.Equal("Text Doppelpunkt Beispiel", result);
     }
 
+    [Theory]
+    [InlineData(@"\s+Doppelpunkt\b", ":", "Text  Doppelpunkt Beispiel", "Text: Beispiel")]
+    [InlineData(@"\s+Neue Zeile\s+", @"\n", "Erste Neue Zeile Zweite", "Erste\nZweite")]
+    [InlineData(@"\d{2,}", "#", "Code 123 Ende", "Code # Ende")]
+    public void ApplyCorrections_UsesRegexForOptInEntries(
+        string pattern,
+        string replacement,
+        string input,
+        string expected)
+    {
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "regex",
+            EntryType = DictionaryEntryType.Correction,
+            Original = pattern,
+            Replacement = replacement,
+            IsRegex = true
+        });
+
+        var result = _sut.ApplyCorrections(input);
+
+        Assert.Equal(expected, result);
+        Assert.Equal(1, Assert.Single(_sut.Entries).UsageCount);
+    }
+
+    [Fact]
+    public void ApplyCorrections_SkipsInvalidPersistedRegex()
+    {
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "invalid-regex",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "[",
+            Replacement = "replacement",
+            IsRegex = true
+        });
+
+        var result = _sut.ApplyCorrections("keep this text");
+
+        Assert.Equal("keep this text", result);
+        Assert.Equal(0, Assert.Single(_sut.Entries).UsageCount);
+    }
+
+    [Fact]
+    public void ApplyCorrections_TreatsReplacementTokensLiterallyInRegexMode()
+    {
+        _sut.AddEntry(new DictionaryEntry
+        {
+            Id = "regex",
+            EntryType = DictionaryEntryType.Correction,
+            Original = "(command)",
+            Replacement = "$1",
+            IsRegex = true
+        });
+
+        var result = _sut.ApplyCorrections("before command after");
+
+        Assert.Equal("before $1 after", result);
+    }
+
     [Fact]
     public void ApplyCorrections_OnlyIncrementsUsageForWholePatternMatch()
     {
@@ -526,6 +586,7 @@ public class DictionaryServiceTests : IDisposable
 
         Assert.Equal(2, entries.Count);
         Assert.All(entries, entry => Assert.Equal(DictionaryEntrySource.Manual, entry.Source));
+        Assert.All(entries, entry => Assert.False(entry.IsRegex));
     }
 
     [Fact]
