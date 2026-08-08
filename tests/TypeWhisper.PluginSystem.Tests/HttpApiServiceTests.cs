@@ -608,6 +608,42 @@ public class HttpApiServiceTests : IDisposable
         Assert.Single(json["segments"].EnumerateArray());
     }
 
+    [Fact]
+    public async Task TranscribeTranslation_NormalizesOnlyFinalGermanOutput()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "The surname is Groß." };
+        var translation = new Mock<ITranslationService>();
+        string? translatedSource = null;
+        translation
+            .Setup(service => service.TranslateAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((string text, string _, string _, CancellationToken _) => translatedSource = text)
+            .ReturnsAsync("Die Straße ist groß.");
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"),
+                SaveToHistoryEnabled = true,
+                GermanOutputVariant = GermanOutputVariant.Switzerland
+            },
+            translationService: translation.Object,
+            plugins: [plugin]);
+        var request = MultipartTranscribeRequest(
+            ("language", null, null, "en"u8.ToArray()),
+            ("target_language", null, null, "de"u8.ToArray()),
+            ("file", "audio.wav", "audio/wav", WavEncoder.Encode([0f, 0f, 0f, 0f])));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("The surname is Groß.", translatedSource);
+        Assert.Equal("Die Strasse ist gross.", json["text"].GetString());
+    }
+
     [Theory]
     [InlineData(true, "Explicit API context\nTypeWhisper, ElevenLabs")]
     [InlineData(false, "Explicit API context")]
@@ -1099,7 +1135,7 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, null, null, false, null, null, plugins).Service;
+        }, null, null, false, null, null, null, plugins).Service;
     }
 
     private HttpApiService CreateService(
@@ -1109,6 +1145,7 @@ public class HttpApiServiceTests : IDisposable
         bool automationEnabled = false,
         IDictationAutomationController? automationController = null,
         IDictationApiController? dictation = null,
+        ITranslationService? translationService = null,
         params ITranscriptionEnginePlugin[] plugins)
     {
         var selectedModel = plugins.Length > 0
@@ -1119,13 +1156,13 @@ public class HttpApiServiceTests : IDisposable
         {
             SelectedModelId = selectedModel,
             SaveToHistoryEnabled = true
-        }, apiTokenProvider, recorder, automationEnabled, automationController, dictation, plugins).Service;
+        }, apiTokenProvider, recorder, automationEnabled, automationController, dictation, translationService, plugins).Service;
     }
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
         params ITranscriptionEnginePlugin[] plugins)
-        => CreateServiceWithModelManager(settings, null, null, false, null, null, plugins);
+        => CreateServiceWithModelManager(settings, null, null, false, null, null, null, plugins);
 
     private (HttpApiService Service, ModelManagerService ModelManager) CreateServiceWithModelManager(
         AppSettings settings,
@@ -1134,6 +1171,7 @@ public class HttpApiServiceTests : IDisposable
         bool automationEnabled,
         IDictationAutomationController? automationController,
         IDictationApiController? dictation,
+        ITranslationService? translationService,
         params ITranscriptionEnginePlugin[] plugins)
     {
         _settings.Setup(s => s.Current).Returns(settings);
@@ -1151,8 +1189,8 @@ public class HttpApiServiceTests : IDisposable
         var dictionary = new DictionaryService(_dictionaryPath);
         var vocabulary = new Mock<IVocabularyBoostingService>();
         vocabulary.Setup(v => v.Apply(It.IsAny<string>())).Returns((string text) => text);
-        var translation = new Mock<ITranslationService>();
-        translation.Setup(t => t.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        var fallbackTranslation = new Mock<ITranslationService>();
+        fallbackTranslation.Setup(t => t.TranslateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string text, string _, string _, CancellationToken _) => text);
 
         var service = new HttpApiService(
@@ -1163,7 +1201,7 @@ public class HttpApiServiceTests : IDisposable
             dictionary,
             vocabulary.Object,
             new PostProcessingPipeline(),
-            translation.Object,
+            translationService ?? fallbackTranslation.Object,
             dictation ?? _dictation,
             _workflows.Object,
             apiTokenProvider ?? (() => "test-token"),

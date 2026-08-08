@@ -383,6 +383,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,
             ConfiguredLanguageCandidates = configuredLanguageHints,

@@ -31,6 +31,7 @@ public sealed class FileTranscriptionProcessorTests
         Assert.Equal("23 TYPEWHISPER", result.ProcessedText);
         Assert.Equal(["vocabulary:23 type whisper", "dictionary:23 TypeWhisper"], harness.PostProcessingCalls);
         Assert.Null(harness.Pipeline.LastOptions?.SpokenFormatter);
+        Assert.Equal(GermanOutputVariant.AsTranscribed, harness.Pipeline.LastOptions?.GermanOutputVariant);
         Assert.Equal("en", result.RawResult.DetectedLanguage);
         Assert.Equal(4.2, result.RawResult.Duration);
         var segment = Assert.Single(result.RawResult.Segments);

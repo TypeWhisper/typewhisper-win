@@ -181,6 +181,9 @@ public sealed class SettingsService : ISettingsService
         if (!Enum.IsDefined(settings.IndicatorStyle))
             settings = settings with { IndicatorStyle = AppSettings.Default.IndicatorStyle };
 
+        if (!Enum.IsDefined(settings.GermanOutputVariant))
+            settings = settings with { GermanOutputVariant = AppSettings.Default.GermanOutputVariant };
+
         var languageHints = AppSettings.NormalizeLanguageHints(settings.GetLanguageHints());
         settings = settings with
         {

@@ -44,6 +44,45 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void GermanOutputVariant_LoadsOptionsAndPersistsSelection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            GermanOutputVariant = GermanOutputVariant.Austria
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.Equal(GermanOutputVariant.Austria, sut.GermanOutputVariant);
+        Assert.Equal(4, sut.GermanOutputVariantOptions.Count);
+
+        sut.GermanOutputVariant = GermanOutputVariant.Switzerland;
+
+        Assert.Equal(GermanOutputVariant.Switzerland, settings.Current.GermanOutputVariant);
+    }
+
+    [Fact]
+    public void GermanOutputVariantVisibility_IncludesGermanTranslationTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            LanguageHints = ["en"],
+            TranslationTargetLanguage = "de-CH"
+        });
+        var sut = CreateSettingsViewModel(settings);
+        var changedProperties = new List<string?>();
+        sut.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+        var saveCountBeforeChange = settings.SaveCount;
+
+        Assert.True(sut.HasSelectedGermanLanguage);
+
+        sut.TranslationTargetLanguage = "fr";
+
+        Assert.False(sut.HasSelectedGermanLanguage);
+        Assert.Contains(nameof(SettingsViewModel.HasSelectedGermanLanguage), changedProperties);
+        Assert.Equal(saveCountBeforeChange + 1, settings.SaveCount);
+    }
+
+    [Fact]
     public void LoadsAndPersistsApiAuthenticationSetting()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

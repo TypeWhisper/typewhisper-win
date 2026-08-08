@@ -1,5 +1,6 @@
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Services.NumberNormalization;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.ViewModels;
@@ -117,6 +118,7 @@ public sealed class FileTranscriptionProcessor(
         var pipelineResult = await pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
+            GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = task,
             DetectedLanguage = result.DetectedLanguage,
             ConfiguredLanguage = language,
@@ -124,12 +126,17 @@ public sealed class FileTranscriptionProcessor(
             VocabularyBooster = currentSettings.VocabularyBoostingEnabled ? vocabularyBoosting.Apply : null,
             DictionaryCorrector = dictionary.ApplyCorrections
         }, cancellationToken);
-        var normalizedResult = TranscriptionNumberNormalizationService.NormalizeResult(
-            result,
+        var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
+            TranscriptionNumberNormalizationService.NormalizeResult(
+                result,
+                task,
+                language,
+                languageHints,
+                currentSettings.TranscriptionNumberNormalizationEnabled),
+            currentSettings.GermanOutputVariant,
             task,
             language,
-            languageHints,
-            currentSettings.TranscriptionNumberNormalizationEnabled);
+            languageHints);
 
         modelManager.ScheduleAutoUnload();
 

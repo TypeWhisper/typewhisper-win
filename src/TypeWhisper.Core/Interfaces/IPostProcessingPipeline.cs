@@ -1,3 +1,5 @@
+using TypeWhisper.Core.Models;
+
 namespace TypeWhisper.Core.Interfaces;
 
 /// <summary>
@@ -28,6 +30,9 @@ public sealed record PipelineOptions
 
     /// <summary>Per-request or workflow override for spoken number normalization.</summary>
     public bool? NormalizeNumbersOverride { get; init; }
+
+    /// <summary>Regional spelling variant applied to final written German output.</summary>
+    public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;
 
     /// <summary>Transcription task used to choose normalization languages.</summary>
     public TranscriptionTask TranscriptionTask { get; init; } = TranscriptionTask.Transcribe;
