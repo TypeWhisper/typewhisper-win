@@ -29,6 +29,8 @@ public sealed class StatisticsPageLayoutTests
         Assert.Contains("MaxHeight=\"285\"", xaml);
         Assert.Contains("ScrollViewer.VerticalScrollBarVisibility=\"Hidden\"", xaml);
         Assert.Contains("Width=\"72\"", xaml);
+        Assert.DoesNotContain("FocusVisualStyle=\"{x:Null}\"", xaml);
+        Assert.Equal(4, xaml.Split("<Trigger Property=\"IsKeyboardFocused\" Value=\"True\">").Length - 1);
     }
 
     [Fact]
@@ -63,5 +65,24 @@ public sealed class StatisticsPageLayoutTests
         var statistics = dictation.IndexOf("_usageStatistics?.RecordTranscription(", StringComparison.Ordinal);
         Assert.True(inserted >= 0);
         Assert.True(statistics > inserted);
+    }
+
+    [Fact]
+    public void Startup_BackfillsStatisticsBeforeHistoryRetentionRuns()
+    {
+        var app = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "App.xaml.cs");
+
+        var statistics = app.IndexOf(
+            "_serviceProvider.GetRequiredService<IUsageStatisticsService>();",
+            StringComparison.Ordinal);
+        var retention = app.IndexOf(
+            "_historyRetentionCoordinator = _serviceProvider.GetRequiredService<HistoryRetentionCoordinator>();",
+            StringComparison.Ordinal);
+
+        Assert.True(statistics >= 0);
+        Assert.True(retention > statistics);
     }
 }

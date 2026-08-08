@@ -27,7 +27,6 @@
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -62,6 +61,10 @@
                                         </Setter.Value>
                                     </Setter>
                                 </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Card" Property="BorderThickness" Value="2"/>
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
@@ -81,11 +84,21 @@
                 <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Padding" Value="2,0"/>
                 <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <ContentPresenter/>
+                            <Border x:Name="FocusBorder"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="FocusBorder" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="FocusBorder" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
@@ -99,7 +112,6 @@
                 <Setter Property="Margin" Value="0,0,0,2"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ListBoxItem">
@@ -126,6 +138,10 @@
                                     </MultiTrigger.Conditions>
                                     <Setter TargetName="Row" Property="Background" Value="#44507BAA"/>
                                 </MultiTrigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Row" Property="BorderThickness" Value="2"/>
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
@@ -138,7 +154,6 @@
                 <Setter Property="Margin" Value="1"/>
                 <Setter Property="Height" Value="19"/>
                 <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -160,6 +175,10 @@
                                     <Setter TargetName="Cell" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
                                     <Setter TargetName="Cell" Property="BorderThickness" Value="2"/>
                                 </DataTrigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Cell" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Cell" Property="BorderThickness" Value="2"/>
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>

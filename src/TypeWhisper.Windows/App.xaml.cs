@@ -214,6 +214,8 @@ public partial class App : Application
                     System.Diagnostics.Debug.WriteLine($"Plugin registry check failed: {t.Exception?.Message}");
             });
 
+        // Run the one-time history backfill before retention can remove source records.
+        _serviceProvider.GetRequiredService<IUsageStatisticsService>();
         _historyRetentionCoordinator = _serviceProvider.GetRequiredService<HistoryRetentionCoordinator>();
         _historyRetentionCoordinator.Initialize();
 
