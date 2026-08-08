@@ -94,6 +94,85 @@
             <TextBlock Text="{loc:Str Info.License}"
                        Foreground="{StaticResource HintBrush}"
                        HorizontalAlignment="Center" Margin="0,8,0,0"/>
+
+            <!-- Project information -->
+            <Border Width="620"
+                    Style="{StaticResource SettingsSectionFormStyle}"
+                    Margin="0,20,0,0">
+                <StackPanel Margin="16,14">
+                    <TextBlock Text="{loc:Str Info.ProjectInformation}"
+                               Style="{StaticResource SettingsGroupTitleStyle}"
+                               Margin="0,0,0,12"/>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str Info.Website}"
+                                   Style="{StaticResource LabelStyle}"
+                                   VerticalAlignment="Center"
+                                   Margin="0"/>
+                        <TextBlock Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap">
+                            <Hyperlink AutomationProperties.AutomationId="AboutWebsiteLink"
+                                       AutomationProperties.Name="{loc:Str Info.Website}"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       Focusable="True"
+                                       Command="{Binding OpenProjectLinkCommand}"
+                                       CommandParameter="{Binding ProjectWebsiteUrl}">
+                                <Run Text="{Binding ProjectWebsiteUrl, Mode=OneWay}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str Info.Repository}"
+                                   Style="{StaticResource LabelStyle}"
+                                   VerticalAlignment="Center"
+                                   Margin="0"/>
+                        <TextBlock Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap">
+                            <Hyperlink AutomationProperties.AutomationId="AboutRepositoryLink"
+                                       AutomationProperties.Name="{loc:Str Info.Repository}"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       Focusable="True"
+                                       Command="{Binding OpenProjectLinkCommand}"
+                                       CommandParameter="{Binding ProjectRepositoryUrl}">
+                                <Run Text="{Binding ProjectRepositoryUrl, Mode=OneWay}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str Info.InstallationLocation}"
+                                   Style="{StaticResource LabelStyle}"
+                                   VerticalAlignment="Center"
+                                   Margin="0"/>
+                        <TextBlock Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap">
+                            <Hyperlink AutomationProperties.AutomationId="AboutInstallationLink"
+                                       AutomationProperties.Name="{loc:Str Info.InstallationLocation}"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       Focusable="True"
+                                       Command="{Binding OpenInstallationFolderCommand}">
+                                <Run Text="{Binding InstallationPath, Mode=OneWay}"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- Error Log -->
