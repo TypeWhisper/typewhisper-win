@@ -74,6 +74,19 @@ public class TranscriptionNumberNormalizationServiceTests
     }
 
     [Fact]
+    public void NormalizeText_UnsupportedDetectedLanguage_UsesSupportedLanguageFallback()
+    {
+        var result = TranscriptionNumberNormalizationService.NormalizeText(
+            "Ein Tag hat vierundzwanzig Stunden.",
+            TranscriptionTask.Transcribe,
+            detectedLanguage: "xx",
+            configuredLanguage: null,
+            configuredLanguageCandidates: []);
+
+        Assert.Equal("Ein Tag hat 24 Stunden.", result);
+    }
+
+    [Fact]
     public void NormalizeText_AutoWithoutDetectedLanguage_GlobalOffPreservesNumberWords()
     {
         var result = TranscriptionNumberNormalizationService.NormalizeText(
