@@ -141,13 +141,11 @@ public partial class SettingsViewModel : ObservableObject
     /// </summary>
     public bool HasNoSelectedLanguageHints => !HasSelectedLanguageHints;
     /// <summary>
-    /// Gets whether German is explicitly included in the spoken language hints.
+    /// Gets whether German is selected as a spoken language or translation target.
     /// </summary>
-    public bool HasSelectedGermanLanguage => SelectedLanguageHints.Any(static option =>
-        string.Equals(
-            option.Code.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(),
-            "de",
-            StringComparison.OrdinalIgnoreCase));
+    public bool HasSelectedGermanLanguage =>
+        SelectedLanguageHints.Any(static option => IsGermanLanguageCode(option.Code))
+        || IsGermanLanguageCode(TranslationTargetLanguage);
 
     /// <summary>
     /// Gets the configured main dictation hotkeys.
@@ -347,6 +345,7 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnTranslationTargetLanguageChanged(string? value)
     {
+        OnPropertyChanged(nameof(HasSelectedGermanLanguage));
         if (_isLoading) return;
 
         SetQuickTranslationModeSilently(!string.IsNullOrWhiteSpace(value));
@@ -1217,6 +1216,12 @@ public partial class SettingsViewModel : ObservableObject
 
     private static string? NormalizeTranslationTarget(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsGermanLanguageCode(string? value) =>
+        string.Equals(
+            value?.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(),
+            "de",
+            StringComparison.OrdinalIgnoreCase);
 
     private void SetQuickTranslationModeSilently(bool enabled)
     {

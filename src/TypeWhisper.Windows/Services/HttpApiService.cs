@@ -426,11 +426,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
         var result = activeResult.Result;
         var currentSettings = _settings.Current;
+        var pipelineGermanOutputVariant = string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage)
+            ? currentSettings.GermanOutputVariant
+            : GermanOutputVariant.AsTranscribed;
         var pipelineResult = await _pipeline.ProcessAsync(result.Text, new PipelineOptions
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
-            GermanOutputVariant = currentSettings.GermanOutputVariant,
+            GermanOutputVariant = pipelineGermanOutputVariant,
             TranscriptionTask = transcribeRequest.Task,
             DetectedLanguage = result.DetectedLanguage,
             ConfiguredLanguage = languageHints.FirstOrDefault(),
@@ -447,7 +450,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 languageHints,
                 currentSettings.TranscriptionNumberNormalizationEnabled,
                 transcribeRequest.NormalizeNumbers),
-            currentSettings.GermanOutputVariant,
+            pipelineGermanOutputVariant,
             transcribeRequest.Task,
             languageHints.FirstOrDefault(),
             languageHints);

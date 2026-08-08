@@ -631,7 +631,7 @@
   "Dictation.AddLanguage": "Добавить",
   "Dictation.AutoDetectAllLanguages": "Автоматически определять все языки",
   "Dictation.LanguageHintsSupport": "Выбранные языки используются в указанном порядке, если активный движок поддерживает языковые подсказки. Другие движки используют первый язык.",
-  "Dictation.GermanOutputVariant": "Вариант написания немецкого",
+  "Dictation.GermanOutputVariant": "Вариант немецкого правописания",
   "Dictation.GermanOutputVariantHint": "Определяет правописание немецкого текста. Швейцарский вариант заменяет ß на ss.",
   "Dictation.GermanOutputVariantAsTranscribed": "Как распознано",
   "Dictation.GermanOutputVariantGermany": "Немецкий (Германия)",

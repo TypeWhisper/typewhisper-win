@@ -61,6 +61,26 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void GermanOutputVariantVisibility_IncludesGermanTranslationTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            LanguageHints = ["en"],
+            TranslationTargetLanguage = "de-CH"
+        });
+        var sut = CreateSettingsViewModel(settings);
+        var changedProperties = new List<string?>();
+        sut.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        Assert.True(sut.HasSelectedGermanLanguage);
+
+        sut.TranslationTargetLanguage = "fr";
+
+        Assert.False(sut.HasSelectedGermanLanguage);
+        Assert.Contains(nameof(SettingsViewModel.HasSelectedGermanLanguage), changedProperties);
+    }
+
+    [Fact]
     public void LoadsAndPersistsApiAuthenticationSetting()
     {
         var settings = new FakeSettingsService(AppSettings.Default with
