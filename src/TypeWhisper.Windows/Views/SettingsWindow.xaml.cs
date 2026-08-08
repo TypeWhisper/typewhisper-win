@@ -27,6 +27,7 @@ public partial class SettingsWindow : FluentWindow
         DataContext = viewModel;
 
         viewModel.RegisterSection(SettingsRoute.Dashboard, () => new DashboardSection { DataContext = viewModel });
+        viewModel.RegisterSection(SettingsRoute.Statistics, () => new StatisticsSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Dictation, () => new AudioSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.Shortcuts, () => new ShortcutsSection { DataContext = viewModel });
         viewModel.RegisterSection(SettingsRoute.FileTranscription, () => new FileTranscriptionSection { DataContext = viewModel });

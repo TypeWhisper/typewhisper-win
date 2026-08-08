@@ -133,6 +133,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private readonly IActiveWindowService _activeWindow;
     private readonly SoundService _sound;
     private readonly IHistoryService _history;
+    private readonly IUsageStatisticsService? _usageStatistics;
     private readonly IDictionaryService _dictionary;
     private readonly IWorkflowService _workflows;
     private readonly IAudioDuckingService _audioDucking;
@@ -266,7 +267,8 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         AutomaticTranscriptionFallbackService? transcriptionFallback = null,
         WorkflowPostProcessingService? workflowPostProcessing = null,
         SpokenFormattingService? spokenFormatting = null,
-        SpokenFormattingStrategyResolver? spokenFormattingStrategyResolver = null)
+        SpokenFormattingStrategyResolver? spokenFormattingStrategyResolver = null,
+        IUsageStatisticsService? usageStatistics = null)
     {
         _settings = settings;
         _modelManager = modelManager;
@@ -276,6 +278,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         _activeWindow = activeWindow;
         _sound = sound;
         _history = history;
+        _usageStatistics = usageStatistics;
         _dictionary = dictionary;
         _workflows = workflows;
         _audioDucking = audioDucking;
@@ -2148,6 +2151,15 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     _ => Loc.Instance["Status.Done"]
                 };
             });
+
+            _usageStatistics?.RecordTranscription(
+                timestamp,
+                wordsCount,
+                audioDuration,
+                job.CapturedProcessName,
+                job.CapturedWindowTitle,
+                engineUsed,
+                modelUsed);
 
             if (job.RecoveryLease is not null)
             {

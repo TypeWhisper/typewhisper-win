@@ -364,6 +364,35 @@ public sealed class BarHeightConverter : IMultiValueConverter
 }
 
 /// <summary>
+/// Converts a statistics word count and maximum into a chart height while preserving empty days.
+/// </summary>
+public sealed class StatisticsBarHeightConverter : IMultiValueConverter
+{
+    /// <summary>
+    /// Converts a source value for WPF binding.
+    /// </summary>
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        var wordCount = values.Length > 0 && values[0] is int words ? words : 0;
+        var maximum = values.Length > 1 && values[1] is int max ? max : 1;
+        var maximumHeight = parameter is string text
+            && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 150d;
+        if (wordCount <= 0 || maximum <= 0)
+            return 0d;
+
+        return Math.Max(4d, wordCount / (double)maximum * maximumHeight);
+    }
+
+    /// <summary>
+    /// Converts a WPF binding value back to the source representation.
+    /// </summary>
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
 /// DateTime → short day label like "7."
 /// </summary>
 public sealed class DayLabelConverter : IValueConverter

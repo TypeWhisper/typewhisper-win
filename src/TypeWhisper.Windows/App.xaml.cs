@@ -214,6 +214,8 @@ public partial class App : Application
                     System.Diagnostics.Debug.WriteLine($"Plugin registry check failed: {t.Exception?.Message}");
             });
 
+        // Run the one-time history backfill before retention can remove source records.
+        _serviceProvider.GetRequiredService<IUsageStatisticsService>();
         _historyRetentionCoordinator = _serviceProvider.GetRequiredService<HistoryRetentionCoordinator>();
         _historyRetentionCoordinator.Initialize();
 
@@ -497,6 +499,12 @@ public partial class App : Application
             new ErrorLogService(dataPath));
         services.AddSingleton<IHistoryService>(
             new HistoryService(Path.Combine(dataPath, "history.json"), TypeWhisperEnvironment.AudioPath));
+        services.AddSingleton<IUsageStatisticsService>(sp =>
+        {
+            var statistics = new UsageStatisticsService(Path.Combine(dataPath, "usage-statistics.json"));
+            statistics.BackfillFromHistoryIfNeeded(sp.GetRequiredService<IHistoryService>().Records);
+            return statistics;
+        });
         services.AddSingleton<RecentTranscriptionStore>();
         services.AddSingleton<IDictionaryService>(
             new DictionaryService(Path.Combine(dataPath, "dictionary.json")));
@@ -567,6 +575,7 @@ public partial class App : Application
         services.AddSingleton<SpokenFormattingViewModel>();
         services.AddSingleton<ModelManagerViewModel>();
         services.AddSingleton<HistoryViewModel>();
+        services.AddSingleton<StatisticsViewModel>();
         services.AddSingleton<DictionaryTrainingViewModel>();
         services.AddSingleton<DictionaryViewModel>();
         services.AddSingleton<SnippetsViewModel>();

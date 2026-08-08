@@ -323,6 +323,7 @@ public sealed class DevelopmentDataSeeder
     private readonly IDictionaryService _dictionary;
     private readonly ISnippetService _snippets;
     private readonly IWorkflowService _workflows;
+    private readonly IUsageStatisticsService? _usageStatistics;
     private readonly Func<bool> _isDevelopmentBuild;
 
     /// <summary>
@@ -333,6 +334,7 @@ public sealed class DevelopmentDataSeeder
     /// <param name="dictionary">The dictionary service to reset.</param>
     /// <param name="snippets">The snippet service to reset.</param>
     /// <param name="workflows">The workflow service to reset.</param>
+    /// <param name="usageStatistics">Optional usage statistics store to reseed.</param>
     /// <param name="isDevelopmentBuild">Optional build gate override.</param>
     public DevelopmentDataSeeder(
         ISettingsService settings,
@@ -340,6 +342,7 @@ public sealed class DevelopmentDataSeeder
         IDictionaryService dictionary,
         ISnippetService snippets,
         IWorkflowService workflows,
+        IUsageStatisticsService? usageStatistics = null,
         Func<bool>? isDevelopmentBuild = null)
     {
         _settings = settings;
@@ -347,6 +350,7 @@ public sealed class DevelopmentDataSeeder
         _dictionary = dictionary;
         _snippets = snippets;
         _workflows = workflows;
+        _usageStatistics = usageStatistics;
         _isDevelopmentBuild = isDevelopmentBuild ?? (() => TypeWhisperEnvironment.IsDevelopmentBuild);
     }
 
@@ -386,6 +390,8 @@ public sealed class DevelopmentDataSeeder
 
         foreach (var record in seed.HistoryRecords)
             _history.AddRecord(record);
+
+        _usageStatistics?.ReplaceWithHistoryRecords(seed.HistoryRecords);
 
         return DevelopmentDataSeedResult.Seeded;
     }
