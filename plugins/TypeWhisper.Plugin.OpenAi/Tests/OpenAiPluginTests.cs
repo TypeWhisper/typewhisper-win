@@ -66,6 +66,7 @@ public class OpenAiPluginTests
         Assert.Equal("gpt-transcribe", sut.SelectedModelId);
         Assert.Equal("gpt-transcribe", sut.TranscriptionModels.First().Id);
         Assert.True(sut.SupportsDictionaryTerms);
+        Assert.Equal(new DictionaryTermsBudget(MaxTotalChars: 600), sut.DictionaryTermsBudget);
         Assert.Contains(sut.TranscriptionModels, model => model.Id == OpenAiRealtimeStreamingSession.LiveModelId);
         Assert.Contains(sut.TranscriptionModels, model => model.Id == OpenAiRealtimeStreamingSession.LegacyModelId);
 

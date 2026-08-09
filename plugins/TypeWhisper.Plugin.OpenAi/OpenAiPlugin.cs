@@ -17,7 +17,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
-    private const string PluginVersionValue = "1.1.1";
+    private const string PluginVersionValue = "1.1.2";
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
     private const string SelectedVoiceSettingName = "selectedVoice";
@@ -41,6 +41,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private const string OAuthAccountIdSettingName = "oauthAccountID";
     private const string OAuthPlanTypeSettingName = "oauthPlanType";
     private const string OAuthExpiresAtSettingName = "oauthExpiresAt";
+    private static readonly DictionaryTermsBudget DictionaryBudget = new(MaxTotalChars: 600);
 
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _oauthRefreshLock = new(1, 1);
@@ -251,6 +252,11 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     public bool SupportsDictionaryTerms =>
         IsConfigured
         && SelectedModelEntry is { SupportsDictionaryTerms: true };
+
+    /// <summary>
+    /// Gets the safe conditioning-prompt budget used for active dictionary terms.
+    /// </summary>
+    public DictionaryTermsBudget DictionaryTermsBudget => DictionaryBudget;
 
     /// <summary>
     /// Selects the provider model used for subsequent requests.

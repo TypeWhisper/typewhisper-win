@@ -27,6 +27,7 @@ public class StreamingTranscriptionTests
         ITranscriptionEnginePlugin plugin = new DelayedStreamingPlugin();
 
         Assert.False(plugin.SupportsDictionaryTerms);
+        Assert.Equal(DictionaryTermsBudget.Default, plugin.DictionaryTermsBudget);
         Assert.True(plugin.SupportsStreamingForPrompt("TypeWhisper"));
     }
 

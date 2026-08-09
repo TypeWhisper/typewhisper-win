@@ -59,6 +59,11 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     bool SupportsDictionaryTerms => false;
 
     /// <summary>
+    /// Provider-specific limits applied by the host before dictionary terms are added to a prompt.
+    /// </summary>
+    DictionaryTermsBudget DictionaryTermsBudget => DictionaryTermsBudget.Default;
+
+    /// <summary>
     /// Whether this engine can use real-time streaming for the supplied prompt.
     /// Defaults to <see cref="SupportsStreaming"/> for backward compatibility.
     /// Plugins that opt into <see cref="SupportsDictionaryTerms"/> must override this when

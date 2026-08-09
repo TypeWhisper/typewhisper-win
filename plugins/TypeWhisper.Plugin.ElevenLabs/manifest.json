@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.elevenlabs",
   "name": "ElevenLabs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "TypeWhisper",
   "description": "Cloud transcription via ElevenLabs Scribe with real-time WebSocket streaming",
   "category": "transcription",

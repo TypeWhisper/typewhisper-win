@@ -629,8 +629,8 @@ public class ModelManagerServiceTests
             SupportsDictionaryTerms = supportsDictionaryTerms
         };
         var dictionary = new Mock<IDictionaryService>();
-        dictionary.Setup(service => service.GetTermsForPrompt())
-            .Returns("TypeWhisper, ElevenLabs");
+        dictionary.Setup(service => service.GetEnabledTerms())
+            .Returns(["TypeWhisper", "ElevenLabs"]);
         var pluginManager = CreatePluginManager(plugin);
         var sut = new ModelManagerService(pluginManager, _settings.Object, dictionary.Object);
 
@@ -638,6 +638,33 @@ public class ModelManagerServiceTests
         await sut.Engine.TranscribeAsync([0f, 0f], "en");
 
         Assert.Equal(expectedPrompt, plugin.LastPrompt);
+    }
+
+    [Fact]
+    public async Task Engine_ClipsDictionaryTermsToPluginBudget()
+    {
+        const string pluginId = "com.typewhisper.test";
+        const string modelId = "whisper";
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            modelIds: [modelId])
+        {
+            SupportsDictionaryTerms = true,
+            DictionaryTermsBudget = new(MaxTerms: 2, MaxCharsPerTerm: 5, MaxWordsPerTerm: 1)
+        };
+        var dictionary = new Mock<IDictionaryService>();
+        dictionary.Setup(service => service.GetEnabledTerms())
+            .Returns(["too many words", "Alpha", "Beta", "Gamma"]);
+        var pluginManager = CreatePluginManager(plugin);
+        var sut = new ModelManagerService(pluginManager, _settings.Object, dictionary.Object);
+
+        await sut.LoadModelAsync(ModelManagerService.GetPluginModelId(pluginId, modelId));
+        await sut.Engine.TranscribeAsync([0f, 0f], "en");
+
+        Assert.Equal("Alpha, Beta", plugin.LastPrompt);
     }
 
     private PluginManager CreatePluginManager(params ITranscriptionEnginePlugin[] transcriptionEngines)
@@ -707,6 +734,7 @@ public class ModelManagerServiceTests
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
         public bool SupportsDictionaryTerms { get; init; }
+        public DictionaryTermsBudget DictionaryTermsBudget { get; init; } = DictionaryTermsBudget.Default;
         public string? LastPrompt { get; private set; }
         public string? LastLoadedModelId { get; private set; }
         public int LoadCallCount { get; private set; }
