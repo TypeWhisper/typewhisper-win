@@ -1,7 +1,9 @@
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.CohereTranscribe;
@@ -9,15 +11,17 @@ namespace TypeWhisper.Plugin.CohereTranscribe;
 /// <summary>
 /// Provides fully local Cohere Transcribe inference on Windows through CrispASR.
 /// </summary>
-public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
+public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin, IModelDownloadRequirementsProvider
 {
     internal const string ModelId = CohereModelCatalog.DefaultModelId;
-    internal const string HuggingFaceTokenSecretName = "hugging-face-token";
+    internal const string HuggingFaceTokenSecretName = PluginHuggingFaceTokenHelper.StorageKey;
+    internal const string HuggingFaceTokenRequirementId = "hugging-face-token";
 
     private static readonly IReadOnlyList<string> Languages =
         ["en", "de", "fr", "it", "es", "pt", "el", "nl", "pl", "vi", "zh", "ar", "ja", "ko"];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly HttpClient? _huggingFaceTokenValidationClient;
     private ICohereLocalAssetManager? _assets;
     private ICrispAsrServer? _server;
     private IPluginHostServices? _host;
@@ -32,6 +36,9 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         "Not loaded",
         "The best available local runtime will be selected when the model loads.");
 
+    /// <summary>Raised when optional model download authentication changes.</summary>
+    public event EventHandler? ModelDownloadRequirementsChanged;
+
     /// <summary>
     /// Initializes a new instance of the Cohere Transcribe plugin.
     /// </summary>
@@ -41,10 +48,12 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
     internal CohereTranscribePlugin(
         ICohereLocalAssetManager assets,
-        ICrispAsrServer server)
+        ICrispAsrServer server,
+        HttpClient? huggingFaceTokenValidationClient = null)
     {
         _assets = assets;
         _server = server;
+        _huggingFaceTokenValidationClient = huggingFaceTokenValidationClient;
     }
 
     /// <summary>
@@ -114,6 +123,26 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     public bool SupportsModelRemoval => true;
 
     /// <summary>
+    /// Gets the optional Hugging Face authentication requirement for each model.
+    /// </summary>
+    public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements =>
+        TranscriptionModels
+            .Select(model => new PluginModelDownloadRequirement(
+                model.Id,
+                model.DisplayName,
+                HuggingFaceTokenRequirementId,
+                PluginModelDownloadRequirementKind.Credential,
+                Loc?.GetString("Settings.HuggingFaceToken") ?? "Hugging Face token (optional)",
+                Loc?.GetString("Settings.HuggingFaceTokenHint")
+                    ?? "Optional authentication for Hugging Face model downloads.",
+                IsRequired: false,
+                IsSatisfied: _huggingFaceToken is not null)
+            {
+                MoreInfoUri = new Uri("https://huggingface.co/settings/tokens")
+            })
+            .ToArray();
+
+    /// <summary>
     /// Gets the language codes supported by Cohere Transcribe.
     /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
@@ -155,7 +184,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         var storedToken = await host.LoadSecretAsync(HuggingFaceTokenSecretName);
         try
         {
-            _huggingFaceToken = NormalizeHuggingFaceToken(storedToken);
+            _huggingFaceToken = PluginHuggingFaceTokenHelper.NormalizeToken(storedToken);
         }
         catch (ArgumentException)
         {
@@ -199,7 +228,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Creates the optional Hugging Face authentication settings.
     /// </summary>
-    public UserControl? CreateSettingsView() => new CohereTranscribeSettingsView(this);
+    public UserControl? CreateSettingsView() => null;
 
     /// <summary>
     /// Selects a Cohere Transcribe quantization.
@@ -604,7 +633,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
     internal async Task SetHuggingFaceTokenAsync(string? token)
     {
-        var normalized = NormalizeHuggingFaceToken(token);
+        var normalized = PluginHuggingFaceTokenHelper.NormalizeToken(token);
         if (normalized is not null
             && string.Equals(_huggingFaceToken, normalized, StringComparison.Ordinal))
         {
@@ -613,10 +642,7 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
 
         if (_host is not null)
         {
-            if (normalized is null)
-                await _host.DeleteSecretAsync(HuggingFaceTokenSecretName);
-            else
-                await _host.StoreSecretAsync(HuggingFaceTokenSecretName, normalized);
+            normalized = await PluginHuggingFaceTokenHelper.SaveTokenAsync(_host, normalized);
         }
 
         _huggingFaceToken = normalized;
@@ -624,19 +650,56 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     }
 
     internal static string? NormalizeHuggingFaceToken(string? token)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return null;
+        => PluginHuggingFaceTokenHelper.NormalizeToken(token);
 
-        var normalized = token.Trim();
-        if (normalized.Any(char.IsWhiteSpace))
+    /// <summary>Validates and stores the optional Hugging Face token.</summary>
+    public async Task<PluginModelDownloadRequirementResult> SaveModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        string credential,
+        CancellationToken ct)
+    {
+        if (!CohereModelCatalog.Contains(modelId)
+            || !string.Equals(requirementId, HuggingFaceTokenRequirementId, StringComparison.Ordinal))
         {
-            throw new ArgumentException(
-                "Hugging Face tokens cannot contain whitespace.",
-                nameof(token));
+            return new PluginModelDownloadRequirementResult(false, "Unknown model download requirement.");
         }
 
-        return normalized;
+        var isValid = await PluginHuggingFaceTokenHelper.ValidateTokenAsync(
+            credential,
+            _huggingFaceTokenValidationClient,
+            ct);
+        if (!isValid)
+        {
+            return new PluginModelDownloadRequirementResult(
+                false,
+                Loc?.GetString("Settings.InvalidToken") ?? "The Hugging Face token is invalid.");
+        }
+
+        await SetHuggingFaceTokenAsync(credential);
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+        return new PluginModelDownloadRequirementResult(
+            true,
+            Loc?.GetString("Settings.Saved") ?? "Token saved securely.");
+    }
+
+    /// <summary>Clears the optional Hugging Face token.</summary>
+    public async Task ClearModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!CohereModelCatalog.Contains(modelId)
+            || !string.Equals(requirementId, HuggingFaceTokenRequirementId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Unknown model download requirement.");
+        }
+
+        await SetHuggingFaceTokenAsync(null);
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal static bool IsExpectedSecretStorageFailure(Exception exception) =>

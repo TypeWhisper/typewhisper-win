@@ -36,6 +36,7 @@ public class ModelManagerViewModelTests
             supportsTranslation: false,
             supportsDownload: true,
             supportsRemoval: true,
+            hasDownloadRequirements: false,
             isDownloaded: true,
             ModelStatus.Ready);
 

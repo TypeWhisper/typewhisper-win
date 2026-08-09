@@ -1,6 +1,8 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.SupertonicTts;
@@ -8,9 +10,17 @@ namespace TypeWhisper.Plugin.SupertonicTts;
 /// <summary>
 /// Provides supertonic tts plugin behavior.
 /// </summary>
-public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
+public sealed class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDownloadRequirementsProvider
 {
     internal const string LicenseAcceptedSettingName = "licenseAccepted";
+    internal const string AcceptedModelLicenseIdSettingName = "acceptedModelLicenseId";
+    internal const string AcceptedModelLicenseRevisionSettingName = "acceptedModelLicenseRevision";
+    internal const string AcceptedModelLicenseAtSettingName = "acceptedModelLicenseAt";
+    internal const string ModelId = "supertonic-3";
+    internal const string ModelLicenseRequirementId = "model-license";
+    internal const string HuggingFaceTokenRequirementId = "hugging-face-token";
+    internal const string ModelLicenseId = "Supertone/supertonic-3";
+    internal const string ModelLicenseRevision = "openrail-m-2022-08-18";
     internal const string SelectedVoiceSettingName = "selectedVoice";
     internal const string SpeedSettingName = "speed";
     internal const string DenoisingStepsSettingName = "denoisingSteps";
@@ -39,13 +49,19 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     private readonly ISupertonicAssetManager? _injectedAssetManager;
     private readonly Func<string, ISupertonicSynthesizer> _synthesizerFactory;
     private readonly Func<float[], int, ITtsPlaybackSession> _playbackFactory;
+    private readonly HttpClient? _huggingFaceTokenValidationClient;
     private readonly SemaphoreSlim _synthesisLock = new(1, 1);
     private ISupertonicAssetManager? _assetManager;
     private ISupertonicSynthesizer? _synthesizer;
     private IPluginHostServices? _host;
     private string _selectedVoiceId = DefaultVoiceId;
-    private bool _licenseAccepted;
+    private string? _acceptedModelLicenseId;
+    private string? _acceptedModelLicenseRevision;
+    private string? _huggingFaceToken;
     private bool _disposed;
+
+    /// <summary>Raised when model license or optional authentication state changes.</summary>
+    public event EventHandler? ModelDownloadRequirementsChanged;
 
     /// <summary>
     /// Initializes a new instance of the SupertonicTtsPlugin class.
@@ -55,6 +71,7 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
             assetManager: null,
             synthesizerFactory: assetRoot => new SupertonicOnnxSynthesizer(assetRoot),
             playbackFactory: (samples, sampleRate) => new SupertonicTtsPlaybackSession(samples, sampleRate),
+            huggingFaceTokenValidationClient: null,
             useNullableAssetManagerOverload: true)
     {
     }
@@ -62,8 +79,14 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     internal SupertonicTtsPlugin(
         ISupertonicAssetManager assetManager,
         Func<string, ISupertonicSynthesizer> synthesizerFactory,
-        Func<float[], int, ITtsPlaybackSession>? playbackFactory = null)
-        : this(assetManager, synthesizerFactory, playbackFactory, useNullableAssetManagerOverload: true)
+        Func<float[], int, ITtsPlaybackSession>? playbackFactory = null,
+        HttpClient? huggingFaceTokenValidationClient = null)
+        : this(
+            assetManager,
+            synthesizerFactory,
+            playbackFactory,
+            huggingFaceTokenValidationClient,
+            useNullableAssetManagerOverload: true)
     {
     }
 
@@ -71,12 +94,14 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         ISupertonicAssetManager? assetManager,
         Func<string, ISupertonicSynthesizer> synthesizerFactory,
         Func<float[], int, ITtsPlaybackSession>? playbackFactory,
+        HttpClient? huggingFaceTokenValidationClient,
         bool useNullableAssetManagerOverload)
     {
         _injectedAssetManager = assetManager;
         _assetManager = assetManager;
         _synthesizerFactory = synthesizerFactory;
         _playbackFactory = playbackFactory ?? ((samples, sampleRate) => new SupertonicTtsPlaybackSession(samples, sampleRate));
+        _huggingFaceTokenValidationClient = huggingFaceTokenValidationClient;
     }
 
     /// <summary>
@@ -113,9 +138,43 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     public string? SelectedVoiceId => _selectedVoiceId;
     internal double Speed { get; private set; } = DefaultSpeed;
     internal int DenoisingSteps { get; private set; } = DefaultDenoisingSteps;
-    internal bool HasAcceptedModelLicense => _licenseAccepted;
+    internal bool HasAcceptedModelLicense =>
+        string.Equals(_acceptedModelLicenseId, ModelLicenseId, StringComparison.Ordinal)
+        && string.Equals(_acceptedModelLicenseRevision, ModelLicenseRevision, StringComparison.Ordinal);
     internal bool AreAssetsReady => IsConfigured;
     internal IPluginLocalization? Loc => _host?.Localization;
+
+    /// <summary>Gets the host-renderable model license and optional token requirements.</summary>
+    public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements =>
+    [
+        new PluginModelDownloadRequirement(
+            ModelId,
+            "Supertonic 3",
+            ModelLicenseRequirementId,
+            PluginModelDownloadRequirementKind.License,
+            Loc?.GetString("Settings.LicenseTitle") ?? "Model license",
+            Loc?.GetString("Settings.LicenseDescription")
+                ?? "Review and accept the OpenRAIL-M model license before downloading.",
+            IsRequired: true,
+            IsSatisfied: HasAcceptedModelLicense)
+        {
+            MoreInfoUri = new Uri("https://huggingface.co/Supertone/supertonic-3/blob/main/LICENSE"),
+            Revision = ModelLicenseRevision
+        },
+        new PluginModelDownloadRequirement(
+            ModelId,
+            "Supertonic 3",
+            HuggingFaceTokenRequirementId,
+            PluginModelDownloadRequirementKind.Credential,
+            Loc?.GetString("Settings.HuggingFaceToken") ?? "Hugging Face token (optional)",
+            Loc?.GetString("Settings.HuggingFaceTokenHint")
+                ?? "Optional authentication for Hugging Face model downloads.",
+            IsRequired: false,
+            IsSatisfied: _huggingFaceToken is not null)
+        {
+            MoreInfoUri = new Uri("https://huggingface.co/settings/tokens")
+        }
+    ];
 
     /// <summary>
     /// Gets the user-facing summary of the current settings.
@@ -132,7 +191,7 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
-    public Task ActivateAsync(IPluginHostServices host)
+    public async Task ActivateAsync(IPluginHostServices host)
     {
         _host = host;
         var modelDirectoryName = Path.GetFileName(SupertonicPaths.ModelDirectoryName);
@@ -144,10 +203,29 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
         _selectedVoiceId = NormalizeVoiceId(host.GetSetting<string>(SelectedVoiceSettingName));
         Speed = NormalizeSpeed(host.GetSetting<double?>(SpeedSettingName) ?? DefaultSpeed);
         DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);
-        _licenseAccepted = host.GetSetting<bool?>(LicenseAcceptedSettingName).GetValueOrDefault();
+        _acceptedModelLicenseId = host.GetSetting<string>(AcceptedModelLicenseIdSettingName);
+        _acceptedModelLicenseRevision = host.GetSetting<string>(AcceptedModelLicenseRevisionSettingName);
+        if (!HasAcceptedModelLicense
+            && host.GetSetting<bool?>(LicenseAcceptedSettingName).GetValueOrDefault())
+        {
+            _acceptedModelLicenseId = ModelLicenseId;
+            _acceptedModelLicenseRevision = ModelLicenseRevision;
+            host.SetSetting(AcceptedModelLicenseIdSettingName, _acceptedModelLicenseId);
+            host.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
+            host.SetSetting(AcceptedModelLicenseAtSettingName, DateTimeOffset.UtcNow.ToString("O"));
+        }
+
+        try
+        {
+            _huggingFaceToken = await PluginHuggingFaceTokenHelper.LoadTokenAsync(host);
+        }
+        catch (ArgumentException)
+        {
+            _huggingFaceToken = null;
+            await PluginHuggingFaceTokenHelper.ClearTokenAsync(host);
+        }
         PersistSettings();
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -212,8 +290,16 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
 
     internal void SetLicenseAccepted(bool accepted)
     {
-        _licenseAccepted = accepted;
+        _acceptedModelLicenseId = accepted ? ModelLicenseId : null;
+        _acceptedModelLicenseRevision = accepted ? ModelLicenseRevision : null;
         _host?.SetSetting(LicenseAcceptedSettingName, accepted);
+        _host?.SetSetting(AcceptedModelLicenseIdSettingName, _acceptedModelLicenseId);
+        _host?.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
+        _host?.SetSetting(
+            AcceptedModelLicenseAtSettingName,
+            accepted ? DateTimeOffset.UtcNow.ToString("O") : null);
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal void SetSpeed(double speed)
@@ -230,16 +316,83 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin
 
     internal async Task DownloadAssetsAsync(IProgress<double>? progress, CancellationToken ct)
     {
-        if (!_licenseAccepted)
+        if (!HasAcceptedModelLicense)
             throw new InvalidOperationException("The Supertonic 3 OpenRAIL-M license must be accepted before downloading model assets.");
 
         if (_assetManager is null)
             throw new InvalidOperationException("Plugin is not activated.");
 
-        await _assetManager.DownloadMissingAssetsAsync(progress, ct);
+        await _assetManager.DownloadMissingAssetsAsync(progress, _huggingFaceToken, ct);
         _synthesizer?.Dispose();
         _synthesizer = null;
         _host?.NotifyCapabilitiesChanged();
+    }
+
+    /// <summary>Validates and stores the optional Hugging Face token.</summary>
+    public async Task<PluginModelDownloadRequirementResult> SaveModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        string credential,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, HuggingFaceTokenRequirementId);
+        var isValid = await PluginHuggingFaceTokenHelper.ValidateTokenAsync(
+            credential,
+            _huggingFaceTokenValidationClient,
+            ct);
+        if (!isValid)
+        {
+            return new PluginModelDownloadRequirementResult(
+                false,
+                Loc?.GetString("Settings.InvalidToken") ?? "The Hugging Face token is invalid.");
+        }
+
+        if (_host is null)
+            return new PluginModelDownloadRequirementResult(false, "Plugin is not activated.");
+
+        _huggingFaceToken = await PluginHuggingFaceTokenHelper.SaveTokenAsync(_host, credential);
+        _host.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+        return new PluginModelDownloadRequirementResult(
+            true,
+            Loc?.GetString("Settings.TokenSaved") ?? "Token saved securely.");
+    }
+
+    /// <summary>Clears the optional Hugging Face token.</summary>
+    public async Task ClearModelDownloadCredentialAsync(
+        string modelId,
+        string requirementId,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, HuggingFaceTokenRequirementId);
+        ct.ThrowIfCancellationRequested();
+        if (_host is not null)
+            await PluginHuggingFaceTokenHelper.ClearTokenAsync(_host);
+        _huggingFaceToken = null;
+        _host?.NotifyCapabilitiesChanged();
+        ModelDownloadRequirementsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Persists acceptance for the current model license revision.</summary>
+    public Task SetModelDownloadLicenseAcceptanceAsync(
+        string modelId,
+        string requirementId,
+        bool accepted,
+        CancellationToken ct)
+    {
+        ValidateRequirement(modelId, requirementId, ModelLicenseRequirementId);
+        ct.ThrowIfCancellationRequested();
+        SetLicenseAccepted(accepted);
+        return Task.CompletedTask;
+    }
+
+    private static void ValidateRequirement(string modelId, string requirementId, string expectedRequirementId)
+    {
+        if (!string.Equals(modelId, ModelId, StringComparison.Ordinal)
+            || !string.Equals(requirementId, expectedRequirementId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Unknown model download requirement.");
+        }
     }
 
     /// <summary>

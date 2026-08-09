@@ -198,6 +198,7 @@ public partial class ModelManagerViewModel : ObservableObject
                     engine.SupportsTranslation,
                     engine.SupportsModelDownload,
                     _modelManager.SupportsModelRemoval(fullId),
+                    _modelManager.GetModelDownloadRequirements(fullId).Count > 0,
                     _modelManager.IsDownloaded(fullId),
                     status));
 
@@ -586,6 +587,9 @@ public partial class ModelManagerViewModel : ObservableObject
                 plugin.AccelerationStatus.ActiveBackend);
     }
 
+    internal IModelDownloadRequirementsProvider? GetDownloadRequirementsProvider(string modelId) =>
+        _modelManager.GetModelDownloadRequirementsProvider(modelId);
+
     internal static bool ShouldShowAccelerationSection(ITranscriptionEnginePlugin? plugin)
     {
         if (plugin is null)
@@ -769,6 +773,10 @@ public partial class ModelItemViewModel : ObservableObject
     /// Gets whether downloaded files can be removed through the plugin capability.
     /// </summary>
     public bool SupportsRemoval { get; }
+    /// <summary>
+    /// Gets whether the model exposes host-renderable download requirements.
+    /// </summary>
+    public bool HasDownloadRequirements { get; }
 
     /// <summary>
     /// Gets whether the model can be downloaded or retried now.
@@ -800,7 +808,7 @@ public partial class ModelItemViewModel : ObservableObject
     /// </summary>
     public ModelItemViewModel(string fullId, PluginModelInfo model, bool isAvailable,
         bool isActive, bool supportsTranslation, bool supportsDownload,
-        bool supportsRemoval, bool isDownloaded, ModelStatus status)
+        bool supportsRemoval, bool hasDownloadRequirements, bool isDownloaded, ModelStatus status)
     {
         FullId = fullId;
         DisplayName = model.DisplayName;
@@ -810,6 +818,7 @@ public partial class ModelItemViewModel : ObservableObject
         SupportsTranslation = supportsTranslation;
         SupportsDownload = supportsDownload;
         SupportsRemoval = supportsRemoval;
+        HasDownloadRequirements = hasDownloadRequirements;
         _isAvailable = isAvailable;
         _isActive = isActive;
         _isDownloaded = isDownloaded;

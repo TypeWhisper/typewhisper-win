@@ -4,7 +4,10 @@ internal interface ISupertonicAssetManager
 {
     string AssetRoot { get; }
     bool AreAssetsReady { get; }
-    Task DownloadMissingAssetsAsync(IProgress<double>? progress, CancellationToken ct);
+    Task DownloadMissingAssetsAsync(
+        IProgress<double>? progress,
+        string? huggingFaceToken,
+        CancellationToken ct);
 }
 
 internal interface ISupertonicSynthesizer : IDisposable

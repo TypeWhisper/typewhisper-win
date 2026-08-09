@@ -696,6 +696,81 @@ public class ModelManagerServiceTests
         Assert.Equal(ModelStatusType.Ready, sut.GetStatus(fullModelId).Type);
     }
 
+    [Fact]
+    public async Task DownloadAndLoadModelAsync_BlocksUnsatisfiedRequiredDownloadRequirement()
+    {
+        const string pluginId = "com.typewhisper.licensed-local";
+        const string modelId = "licensed-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            ModelDownloaded = false,
+            ModelDownloadRequirements =
+            [
+                new PluginModelDownloadRequirement(
+                    modelId,
+                    "Licensed model",
+                    "license",
+                    PluginModelDownloadRequirementKind.License,
+                    "Model license",
+                    "Accept the model license.",
+                    IsRequired: true,
+                    IsSatisfied: false)
+            ]
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.DownloadAndLoadModelAsync(fullModelId));
+
+        Assert.Contains("Model license", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, plugin.DownloadCallCount);
+        Assert.Equal(0, plugin.LoadCallCount);
+        Assert.Same(plugin, sut.GetModelDownloadRequirementsProvider(fullModelId));
+        Assert.Single(sut.GetModelDownloadRequirements(fullModelId));
+    }
+
+    [Fact]
+    public async Task ModelOperations_RejectConcurrentOperationsForSamePlugin()
+    {
+        const string pluginId = "com.typewhisper.serial-local";
+        const string modelId = "serial-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var loadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            LoadGate = loadGate,
+            LoadStarted = loadStarted,
+            SupportsModelRemoval = true
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+        var firstOperation = sut.LoadModelAsync(fullModelId);
+        await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.RemoveModelAsync(fullModelId));
+
+        Assert.Contains(plugin.ProviderDisplayName, error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, plugin.RemoveCallCount);
+
+        loadGate.SetResult();
+        await firstOperation;
+        Assert.Equal(1, plugin.LoadCallCount);
+    }
+
     [Theory]
     [InlineData(true, "TypeWhisper, ElevenLabs")]
     [InlineData(false, null)]
@@ -786,7 +861,10 @@ public class ModelManagerServiceTests
         ((EventHandler?)eventField.GetValue(pluginManager))?.Invoke(pluginManager, EventArgs.Empty);
     }
 
-    private sealed class FakeTranscriptionPlugin : ITranscriptionEnginePlugin, ITranscriptionEngineSelectionIdentity
+    private sealed class FakeTranscriptionPlugin :
+        ITranscriptionEnginePlugin,
+        ITranscriptionEngineSelectionIdentity,
+        IModelDownloadRequirementsProvider
     {
         private readonly string? _selectionId;
 
@@ -841,6 +919,13 @@ public class ModelManagerServiceTests
         public TaskCompletionSource? LoadGate { get; init; }
         public Exception? DownloadStatusException { get; init; }
         public bool ModelDownloaded { get; set; } = true;
+        public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements { get; init; } = [];
+        public event EventHandler? ModelDownloadRequirementsChanged
+        {
+            add { }
+            remove { }
+        }
+        public TaskCompletionSource? LoadStarted { get; init; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -888,6 +973,7 @@ public class ModelManagerServiceTests
         public async Task LoadModelAsync(string modelId, CancellationToken ct)
         {
             LoadCallCount++;
+            LoadStarted?.TrySetResult();
             AccelerationPreferenceAtLoad = LastAccelerationPreference;
             AccelerationPreferencesAtLoad.Add(LastAccelerationPreference);
             if (LoadException is not null)

@@ -132,4 +132,20 @@ public sealed class PluginsSectionLayoutTests
         Assert.Contains("PropertyGroupDescription(groupProperty)", codeBehind);
         Assert.Contains("SourceGroupSortOrder", codeBehind);
     }
+
+    [Fact]
+    public void PluginsSection_ShowsInstalledPluginsBlockedByHostCompatibility()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "PluginsSection.xaml");
+
+        Assert.Contains("UnavailablePlugins", xaml);
+        Assert.Contains("DiagnosticMessage", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"IntegrationsUnavailablePlugins\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"IntegrationCompatibilityReason\"", xaml);
+    }
 }

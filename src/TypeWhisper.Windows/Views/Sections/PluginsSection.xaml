@@ -312,6 +312,52 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Plugins.UnavailablePlugins}"
+                                  AutomationProperties.AutomationId="IntegrationsUnavailablePlugins">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:PluginLoadIssueItemViewModel}">
+                                <Border Style="{StaticResource SettingsCollectionRowStyle}"
+                                        BorderBrush="{StaticResource WarningBrush}"
+                                        BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="&#x26A0;"
+                                                   FontSize="20"
+                                                   Foreground="{StaticResource WarningBrush}"
+                                                   Margin="0,0,12,0"
+                                                   VerticalAlignment="Top"/>
+                                        <StackPanel Grid.Column="1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="{StaticResource TextBrush}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Version, StringFormat='  v{0}'}"
+                                                           Foreground="{StaticResource HintBrush}"
+                                                           FontSize="12"
+                                                           Margin="4,0,0,0"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding DiagnosticMessage}"
+                                                       AutomationProperties.AutomationId="IntegrationCompatibilityReason"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding PluginDirectory}"
+                                                       Foreground="{StaticResource HintBrush}"
+                                                       FontSize="10"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
 

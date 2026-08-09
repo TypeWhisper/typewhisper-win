@@ -67,7 +67,94 @@ public class SupertonicTtsPluginTests
 
         Assert.True(sut.HasAcceptedModelLicense);
         Assert.Equal(1, assets.DownloadCount);
-        Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+        Assert.Equal(2, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task DownloadRequirements_MigrateLegacyLicenseAndRejectStaleRevision()
+    {
+        var migratedHost = new TestPluginHostServices();
+        migratedHost.SetSetting(SupertonicTtsPlugin.LicenseAcceptedSettingName, true);
+        var migrated = new SupertonicTtsPlugin(
+            new FakeSupertonicAssets(),
+            _ => new FakeSupertonicSynthesizer());
+
+        await migrated.ActivateAsync(migratedHost);
+
+        var migratedLicense = Assert.Single(
+            migrated.ModelDownloadRequirements,
+            requirement => requirement.Kind == PluginModelDownloadRequirementKind.License);
+        Assert.True(migratedLicense.IsRequired);
+        Assert.True(migratedLicense.IsSatisfied);
+        Assert.Equal(
+            SupertonicTtsPlugin.ModelLicenseId,
+            migratedHost.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseIdSettingName));
+        Assert.Equal(
+            SupertonicTtsPlugin.ModelLicenseRevision,
+            migratedHost.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseRevisionSettingName));
+        Assert.False(string.IsNullOrWhiteSpace(
+            migratedHost.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseAtSettingName)));
+
+        var staleHost = new TestPluginHostServices();
+        staleHost.SetSetting(
+            SupertonicTtsPlugin.AcceptedModelLicenseIdSettingName,
+            SupertonicTtsPlugin.ModelLicenseId);
+        staleHost.SetSetting(
+            SupertonicTtsPlugin.AcceptedModelLicenseRevisionSettingName,
+            "previous-revision");
+        var stale = new SupertonicTtsPlugin(
+            new FakeSupertonicAssets(),
+            _ => new FakeSupertonicSynthesizer());
+
+        await stale.ActivateAsync(staleHost);
+
+        Assert.False(Assert.Single(
+            stale.ModelDownloadRequirements,
+            requirement => requirement.Kind == PluginModelDownloadRequirementKind.License).IsSatisfied);
+    }
+
+    [Fact]
+    public async Task DownloadRequirements_PersistTokenAndPassItToAssetDownload()
+    {
+        var assets = new FakeSupertonicAssets();
+        var host = new TestPluginHostServices();
+        using var validationClient = new HttpClient(new CapturingHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"name\":\"typewhisper\"}", Encoding.UTF8, "application/json")
+            }));
+        var sut = new SupertonicTtsPlugin(
+            assets,
+            _ => new FakeSupertonicSynthesizer(),
+            huggingFaceTokenValidationClient: validationClient);
+        await sut.ActivateAsync(host);
+
+        var saved = await sut.SaveModelDownloadCredentialAsync(
+            SupertonicTtsPlugin.ModelId,
+            SupertonicTtsPlugin.HuggingFaceTokenRequirementId,
+            "  hf_valid  ",
+            CancellationToken.None);
+        await sut.SetModelDownloadLicenseAcceptanceAsync(
+            SupertonicTtsPlugin.ModelId,
+            SupertonicTtsPlugin.ModelLicenseRequirementId,
+            accepted: true,
+            CancellationToken.None);
+        await sut.DownloadAssetsAsync(null, CancellationToken.None);
+
+        Assert.True(saved.Succeeded);
+        Assert.Equal("hf_valid", host.Secrets["hugging-face-token"]);
+        Assert.Equal("hf_valid", assets.LastHuggingFaceToken);
+        Assert.All(sut.ModelDownloadRequirements, requirement => Assert.True(requirement.IsSatisfied));
+
+        await sut.ClearModelDownloadCredentialAsync(
+            SupertonicTtsPlugin.ModelId,
+            SupertonicTtsPlugin.HuggingFaceTokenRequirementId,
+            CancellationToken.None);
+
+        Assert.DoesNotContain("hugging-face-token", host.Secrets);
+        Assert.False(Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.Kind == PluginModelDownloadRequirementKind.Credential).IsSatisfied);
     }
 
     [Fact]
@@ -143,7 +230,10 @@ public class SupertonicTtsPluginTests
 
         try
         {
-            await sut.DownloadMissingAssetsAsync(new Progress<double>(p => progressValues.Add(p)), CancellationToken.None);
+            await sut.DownloadMissingAssetsAsync(
+                new Progress<double>(p => progressValues.Add(p)),
+                huggingFaceToken: null,
+                CancellationToken.None);
 
             Assert.True(sut.AreAssetsReady);
             Assert.Equal(3, calls.Count);
@@ -152,6 +242,55 @@ public class SupertonicTtsPluginTests
             Assert.False(File.Exists(Path.Combine(tempDir, "onnx", "a.onnx.tmp")));
             Assert.Contains("https://example.test/LICENSE", File.ReadAllText(Path.Combine(tempDir, "SOURCE.txt")));
             Assert.Equal(1.0, progressValues.Last(), precision: 3);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AssetManager_SendsTokenOnlyToHuggingFace()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var requests = new List<(string? Host, string? Authorization)>();
+        var handler = new CapturingHandler(request =>
+        {
+            requests.Add((request.RequestUri?.Host, request.Headers.Authorization?.Parameter));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.UTF8.GetBytes("payload"))
+            };
+        });
+        var files = new[]
+        {
+            new SupertonicAssetFile(
+                "onnx/hugging-face.onnx",
+                "https://huggingface.co/example/model.onnx",
+                1),
+            new SupertonicAssetFile(
+                "onnx/external.onnx",
+                "https://example.test/model.onnx",
+                1),
+        };
+        using var httpClient = new HttpClient(handler);
+        var sut = new SupertonicAssetManager(
+            tempDir,
+            httpClient,
+            files,
+            "https://huggingface.co/example/LICENSE");
+
+        try
+        {
+            await sut.DownloadMissingAssetsAsync(null, "hf_private", CancellationToken.None);
+
+            Assert.Contains(requests, request =>
+                request.Host == "huggingface.co" && request.Authorization == "hf_private");
+            Assert.Contains(requests, request =>
+                request.Host == "example.test" && request.Authorization is null);
+            Assert.DoesNotContain(requests, request =>
+                request.Host != "huggingface.co" && request.Authorization is not null);
         }
         finally
         {
@@ -179,12 +318,17 @@ public class SupertonicTtsPluginTests
         public string AssetRoot { get; set; } = Path.GetTempPath();
         public bool AreAssetsReadyValue { get; set; }
         public int DownloadCount { get; private set; }
+        public string? LastHuggingFaceToken { get; private set; }
         public bool AreAssetsReady => AreAssetsReadyValue;
 
-        public Task DownloadMissingAssetsAsync(IProgress<double>? progress, CancellationToken ct)
+        public Task DownloadMissingAssetsAsync(
+            IProgress<double>? progress,
+            string? huggingFaceToken,
+            CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             DownloadCount++;
+            LastHuggingFaceToken = huggingFaceToken;
             AreAssetsReadyValue = true;
             progress?.Report(1.0);
             return Task.CompletedTask;
@@ -223,11 +367,23 @@ public class SupertonicTtsPluginTests
         };
 
         private readonly Dictionary<string, JsonElement> _settings = [];
+        public Dictionary<string, string> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
 
-        public Task StoreSecretAsync(string key, string value) => Task.CompletedTask;
-        public Task<string?> LoadSecretAsync(string key) => Task.FromResult<string?>(null);
-        public Task DeleteSecretAsync(string key) => Task.CompletedTask;
+        public Task StoreSecretAsync(string key, string value)
+        {
+            Secrets[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> LoadSecretAsync(string key) =>
+            Task.FromResult(Secrets.GetValueOrDefault(key));
+
+        public Task DeleteSecretAsync(string key)
+        {
+            Secrets.Remove(key);
+            return Task.CompletedTask;
+        }
 
         public T? GetSetting<T>(string key) =>
             _settings.TryGetValue(key, out var value)

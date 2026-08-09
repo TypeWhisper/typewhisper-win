@@ -18,6 +18,24 @@ public sealed record LoadedPlugin(
     PluginAssemblyLoadContext LoadContext,
     string PluginDirectory);
 
+/// <summary>Identifies a plugin bundle that was discovered but could not be loaded.</summary>
+public enum PluginLoadIssueKind
+{
+    /// <summary>The declared minimum host version is malformed.</summary>
+    InvalidMinimumHostVersion,
+
+    /// <summary>The plugin requires a newer TypeWhisper host.</summary>
+    MinimumHostVersionNotMet
+}
+
+/// <summary>Describes a user-visible plugin compatibility failure.</summary>
+public sealed record PluginLoadIssue(
+    PluginManifest Manifest,
+    string PluginDirectory,
+    PluginLoadIssueKind Kind,
+    string? RequiredHostVersion,
+    string CurrentHostVersion);
+
 /// <summary>
 /// Isolated assembly load context for each plugin, enabling per-plugin dependency resolution.
 /// Collectible so plugins can be unloaded.
@@ -62,6 +80,25 @@ public sealed partial class PluginLoader
     {
         PropertyNameCaseInsensitive = true
     };
+    private readonly Version _hostVersion;
+    private readonly List<PluginLoadIssue> _loadIssues = [];
+    private readonly object _loadIssuesLock = new();
+
+    /// <summary>Initializes a loader for the current or supplied host version.</summary>
+    public PluginLoader(Version? hostVersion = null)
+    {
+        _hostVersion = hostVersion ?? PluginHostVersion.Current;
+    }
+
+    /// <summary>Gets compatibility failures from the latest discovery pass.</summary>
+    public IReadOnlyList<PluginLoadIssue> LoadIssues
+    {
+        get
+        {
+            lock (_loadIssuesLock)
+                return [.. _loadIssues];
+        }
+    }
 
     /// <summary>
     /// Scans the given directories for plugin subdirectories, loads their manifests,
@@ -69,6 +106,8 @@ public sealed partial class PluginLoader
     /// </summary>
     public List<LoadedPlugin> DiscoverAndLoad(IEnumerable<string> searchDirectories)
     {
+        lock (_loadIssuesLock)
+            _loadIssues.Clear();
         var loaded = new List<LoadedPlugin>();
 
         foreach (var searchDir in searchDirectories)
@@ -102,6 +141,14 @@ public sealed partial class PluginLoader
 
     internal LoadedPlugin? LoadPlugin(string pluginDir)
     {
+        lock (_loadIssuesLock)
+        {
+            _loadIssues.RemoveAll(issue => string.Equals(
+                issue.PluginDirectory,
+                pluginDir,
+                StringComparison.OrdinalIgnoreCase));
+        }
+
         var manifestPath = Path.Combine(pluginDir, "manifest.json");
         if (!File.Exists(manifestPath))
         {
@@ -116,6 +163,9 @@ public sealed partial class PluginLoader
             Debug.WriteLine($"[PluginLoader] Failed to deserialize manifest in {pluginDir}");
             return null;
         }
+
+        if (!TryValidateHostCompatibility(manifest, pluginDir))
+            return null;
 
         var assemblyPath = Path.Combine(pluginDir, manifest.AssemblyName);
         if (!File.Exists(assemblyPath))
@@ -154,6 +204,51 @@ public sealed partial class PluginLoader
         }
 
         return new LoadedPlugin(manifest, instance, loadContext, pluginDir);
+    }
+
+    private bool TryValidateHostCompatibility(PluginManifest manifest, string pluginDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(manifest.MinHostVersion))
+            return true;
+
+        if (!Version.TryParse(manifest.MinHostVersion, out var minimumVersion))
+        {
+            RecordLoadIssue(new PluginLoadIssue(
+                manifest,
+                pluginDirectory,
+                PluginLoadIssueKind.InvalidMinimumHostVersion,
+                manifest.MinHostVersion,
+                _hostVersion.ToString()));
+            Debug.WriteLine(
+                $"[PluginLoader] Skipping {manifest.Id}: invalid minHostVersion '{manifest.MinHostVersion}'");
+            return false;
+        }
+
+        if (_hostVersion >= minimumVersion)
+            return true;
+
+        RecordLoadIssue(new PluginLoadIssue(
+            manifest,
+            pluginDirectory,
+            PluginLoadIssueKind.MinimumHostVersionNotMet,
+            manifest.MinHostVersion,
+            _hostVersion.ToString()));
+        Debug.WriteLine(
+            $"[PluginLoader] Skipping {manifest.Id}: requires TypeWhisper {minimumVersion} or newer " +
+            $"(current: {_hostVersion})");
+        return false;
+    }
+
+    private void RecordLoadIssue(PluginLoadIssue issue)
+    {
+        lock (_loadIssuesLock)
+        {
+            _loadIssues.RemoveAll(existing => string.Equals(
+                existing.PluginDirectory,
+                issue.PluginDirectory,
+                StringComparison.OrdinalIgnoreCase));
+            _loadIssues.Add(issue);
+        }
     }
 
     /// <summary>

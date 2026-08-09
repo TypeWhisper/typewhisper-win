@@ -781,17 +781,80 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
-    public void SettingsView_LabelsTheOptionalTokenFieldForAssistiveTechnology()
+    public async Task DownloadRequirements_ExposeAndPersistOptionalHuggingFaceToken()
     {
-        var xaml = TestFile.ReadProjectFile(
-            "plugins",
-            "TypeWhisper.Plugin.CohereTranscribe",
-            "CohereTranscribeSettingsView.xaml");
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var validationClient = new HttpClient(new StaticResponseHandler(
+            HttpStatusCode.OK,
+            "{\"name\":\"typewhisper\"}"));
+        using var sut = new CohereTranscribePlugin(
+            assets,
+            new FakeCrispAsrServer(),
+            validationClient);
+        var host = new FakePluginHostServices(temp.Path);
+        var changeCount = 0;
+        sut.ModelDownloadRequirementsChanged += (_, _) => changeCount++;
+        await sut.ActivateAsync(host);
 
-        Assert.Contains(
-            "AutomationProperties.LabeledBy=\"{Binding ElementName=TokenLabel}\"",
-            xaml,
-            StringComparison.Ordinal);
+        var initial = Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId);
+        Assert.Equal(PluginModelDownloadRequirementKind.Credential, initial.Kind);
+        Assert.False(initial.IsRequired);
+        Assert.False(initial.IsSatisfied);
+        Assert.Null(sut.CreateSettingsView());
+
+        var result = await sut.SaveModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            "  hf_valid  ",
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("hf_valid", assets.HuggingFaceToken);
+        Assert.Equal("hf_valid", host.Secrets[CohereTranscribePlugin.HuggingFaceTokenSecretName]);
+        Assert.True(Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId).IsSatisfied);
+        Assert.Equal(1, changeCount);
+
+        await sut.ClearModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            CancellationToken.None);
+
+        Assert.False(Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId).IsSatisfied);
+        Assert.DoesNotContain(CohereTranscribePlugin.HuggingFaceTokenSecretName, host.Secrets);
+        Assert.Equal(2, changeCount);
+    }
+
+    [Fact]
+    public async Task SaveModelDownloadCredentialAsync_RejectsInvalidTokenWithoutPersistingIt()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var validationClient = new HttpClient(new StaticResponseHandler(
+            HttpStatusCode.Unauthorized,
+            "{\"error\":\"invalid token\"}"));
+        using var sut = new CohereTranscribePlugin(
+            assets,
+            new FakeCrispAsrServer(),
+            validationClient);
+        var host = new FakePluginHostServices(temp.Path);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.SaveModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            "hf_invalid",
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(assets.HuggingFaceToken);
+        Assert.Empty(host.Secrets);
     }
 
     [Fact]
@@ -1098,6 +1161,18 @@ public sealed class CohereTranscribePluginTests
         public void Log(PluginLogLevel level, string message) =>
             Logs.Add((level, message));
         public void NotifyCapabilitiesChanged() { }
+    }
+
+    private sealed class StaticResponseHandler(HttpStatusCode statusCode, string content)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(content, Encoding.UTF8, "application/json")
+            });
     }
 
     private sealed class NoOpPluginEventBus : IPluginEventBus

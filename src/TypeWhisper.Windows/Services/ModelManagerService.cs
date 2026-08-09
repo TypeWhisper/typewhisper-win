@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -46,6 +47,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly ISettingsService _settings;
     private readonly IDictionaryService? _dictionary;
     private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _pluginModelOperationGates =
+        new(StringComparer.OrdinalIgnoreCase);
     private string? _activeModelId;
     private ITranscriptionEnginePlugin? _activeTranscriptionPlugin;
     private TranscriptionAccelerationPreference? _activeModelAccelerationPreference;
@@ -238,6 +241,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
         var plugin = FindTranscriptionEngine(pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
+        await using var operation = await AcquirePluginModelOperationAsync(
+            pluginId,
+            plugin.ProviderDisplayName,
+            cancellationToken);
 
         bool needsDownload;
         try
@@ -252,6 +259,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         if (needsDownload)
         {
+            EnsureRequiredDownloadRequirementsAreSatisfied(plugin, pluginModelId);
             SetStatus(modelId, ModelStatus.DownloadingModel(0));
             try
             {
@@ -273,7 +281,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
             }
         }
 
-        await LoadModelAsync(modelId, cancellationToken);
+        await LoadModelCoreAsync(modelId, pluginId, pluginModelId, plugin, cancellationToken);
     }
 
     private void ReportDownloadProgress(string modelId, double progress)
@@ -296,6 +304,20 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
         var plugin = FindTranscriptionEngine(pluginId)
             ?? throw new ArgumentException($"Unknown plugin: {pluginId}");
+        await using var operation = await AcquirePluginModelOperationAsync(
+            pluginId,
+            plugin.ProviderDisplayName,
+            cancellationToken);
+        await LoadModelCoreAsync(modelId, pluginId, pluginModelId, plugin, cancellationToken);
+    }
+
+    private async Task LoadModelCoreAsync(
+        string modelId,
+        string pluginId,
+        string pluginModelId,
+        ITranscriptionEnginePlugin plugin,
+        CancellationToken cancellationToken)
+    {
 
         if (!plugin.IsConfigured && !plugin.SupportsModelDownload)
             throw new InvalidOperationException(Loc.Instance.GetString("Error.NoApiKeyFormat", plugin.ProviderDisplayName));
@@ -426,6 +448,47 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>Gets host-renderable download requirements for a plugin model.</summary>
+    public IReadOnlyList<PluginModelDownloadRequirement> GetModelDownloadRequirements(string modelId)
+    {
+        if (!IsPluginModel(modelId))
+            return [];
+
+        try
+        {
+            var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
+            return FindTranscriptionEngine(pluginId) is IModelDownloadRequirementsProvider provider
+                ? provider.ModelDownloadRequirements
+                    .Where(requirement => string.Equals(
+                        requirement.ModelId,
+                        pluginModelId,
+                        StringComparison.Ordinal))
+                    .ToArray()
+                : [];
+        }
+        catch (ArgumentException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Gets the requirement provider that owns a plugin model.</summary>
+    public IModelDownloadRequirementsProvider? GetModelDownloadRequirementsProvider(string modelId)
+    {
+        if (!IsPluginModel(modelId))
+            return null;
+
+        try
+        {
+            var (pluginId, _) = ParsePluginModelId(modelId);
+            return FindTranscriptionEngine(pluginId) as IModelDownloadRequirementsProvider;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Unloads a model when necessary and removes its downloaded files.
     /// </summary>
@@ -440,6 +503,11 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
         if (!plugin.SupportsModelRemoval)
             throw new NotSupportedException($"{plugin.ProviderDisplayName} does not support model removal.");
+
+        await using var operation = await AcquirePluginModelOperationAsync(
+            pluginId,
+            plugin.ProviderDisplayName,
+            cancellationToken);
 
         SetStatus(modelId, ModelStatus.RemovingModel);
         try
@@ -736,6 +804,39 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         _pluginManager.TranscriptionEngines.FirstOrDefault(engine =>
             string.Equals(engine.GetTranscriptionSelectionId(), selectionId, StringComparison.OrdinalIgnoreCase));
 
+    private static void EnsureRequiredDownloadRequirementsAreSatisfied(
+        ITranscriptionEnginePlugin plugin,
+        string pluginModelId)
+    {
+        if (plugin is not IModelDownloadRequirementsProvider provider)
+            return;
+
+        var missing = provider.ModelDownloadRequirements.FirstOrDefault(requirement =>
+            string.Equals(requirement.ModelId, pluginModelId, StringComparison.Ordinal)
+            && requirement.IsRequired
+            && !requirement.IsSatisfied);
+        if (missing is not null)
+        {
+            throw new InvalidOperationException(
+                Loc.Instance.GetString("Models.RequiredDownloadRequirementFormat", missing.Title));
+        }
+    }
+
+    private async Task<ModelOperationLease> AcquirePluginModelOperationAsync(
+        string pluginId,
+        string pluginDisplayName,
+        CancellationToken ct)
+    {
+        var gate = _pluginModelOperationGates.GetOrAdd(pluginId, static _ => new SemaphoreSlim(1, 1));
+        if (!await gate.WaitAsync(0, ct))
+        {
+            throw new InvalidOperationException(
+                Loc.Instance.GetString("Models.PluginOperationBusyFormat", pluginDisplayName));
+        }
+
+        return new ModelOperationLease(gate);
+    }
+
     private void OnPluginStateChanged(object? sender, EventArgs e)
     {
         if (ActiveModelId is null
@@ -859,11 +960,25 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             CancelAutoUnload();
             _pluginManager.PluginStateChanged -= OnPluginStateChanged;
+            foreach (var gate in _pluginModelOperationGates.Values)
+                gate.Dispose();
+            _pluginModelOperationGates.Clear();
             _disposed = true;
         }
     }
 
     private sealed record RequestModel(ITranscriptionEnginePlugin Plugin, string ModelId);
+
+    private sealed class ModelOperationLease(SemaphoreSlim gate) : IAsyncDisposable
+    {
+        private SemaphoreSlim? _gate = gate;
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Exchange(ref _gate, null)?.Release();
+            return ValueTask.CompletedTask;
+        }
+    }
 
     internal sealed class TranscriptionRequestModelScope : IAsyncDisposable
     {
