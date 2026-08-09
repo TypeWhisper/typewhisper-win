@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Moq;
@@ -75,6 +76,19 @@ public class PluginRegistryServiceTests : IDisposable
             {
                 Content = new ByteArrayContent(responseBytes)
             }));
+
+        return TrackDisposable(new HttpClient(handler.Object));
+    }
+
+    private HttpClient CreateRegistryHttpClient(Func<HttpRequestMessage, HttpResponseMessage> responseFactory)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+                TrackDisposable(responseFactory(request)));
 
         return TrackDisposable(new HttpClient(handler.Object));
     }
@@ -245,7 +259,7 @@ public class PluginRegistryServiceTests : IDisposable
         await service.FetchRegistryAsync();
         await service.FetchRegistryAsync();
 
-        Assert.Equal(1, callCount);
+        Assert.Equal(2, callCount);
     }
 
     [Fact]
@@ -278,6 +292,240 @@ public class PluginRegistryServiceTests : IDisposable
         var result = await service.FetchRegistryAsync();
 
         Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task FetchRegistryAsync_MergesDistinctFeedsWithOfficialPrecedenceAndSourceMetadata()
+    {
+        const string officialJson = """
+        [
+          {
+            "id": "com.test.official",
+            "name": "Official",
+            "version": "1.0.0",
+            "author": "TypeWhisper",
+            "description": "Official plugin",
+            "size": 10,
+            "downloadUrl": "https://example.com/official.zip",
+            "source": "community"
+          },
+          {
+            "id": "com.test.shared",
+            "name": "Official winner",
+            "version": "1.0.0",
+            "author": "TypeWhisper",
+            "description": "Official plugin",
+            "size": 10,
+            "downloadUrl": "https://example.com/shared.zip"
+          }
+        ]
+        """;
+        const string communityJson = """
+        {
+          "schemaVersion": 1,
+          "futureFeedMetadata": { "preserved": true },
+          "plugins": [
+            {
+              "id": "com.test.community",
+              "name": "Community",
+              "version": "1.0.0",
+              "author": "Community",
+              "description": "Community plugin",
+              "size": 10,
+              "downloadUrl": "https://example.com/community.zip",
+              "source": "official",
+              "futurePluginMetadata": "ignored"
+            },
+            {
+              "id": "com.test.shared",
+              "name": "Community duplicate",
+              "version": "9.0.0",
+              "author": "Community",
+              "description": "Must not replace official",
+              "size": 10,
+              "downloadUrl": "https://example.com/duplicate.zip"
+            },
+            {
+              "id": "../invalid",
+              "name": "Invalid path",
+              "version": "1.0.0",
+              "author": "Community",
+              "description": "Must be ignored",
+              "size": 10,
+              "downloadUrl": "https://example.com/invalid.zip"
+            }
+          ]
+        }
+        """;
+        var httpClient = CreateRegistryHttpClient(request =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    request.RequestUri!.AbsolutePath.EndsWith("plugins-community-v1.json", StringComparison.Ordinal)
+                        ? communityJson
+                        : officialJson)
+            });
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var result = await service.FetchRegistryAsync();
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal("official", result.Single(plugin => plugin.Id == "com.test.official").Source);
+        var communityPlugin = result.Single(plugin => plugin.Id == "com.test.community");
+        var communityItem = new RegistryPluginItemViewModel(communityPlugin, service);
+        Assert.Equal("community", communityPlugin.Source);
+        Assert.Equal(Loc.Instance["Plugins.SourceCommunity"], communityItem.SourceBadge);
+        Assert.Equal(Loc.Instance["Plugins.TrustUnverified"], communityItem.TrustBadge);
+        Assert.Equal("Official winner", result.Single(plugin => plugin.Id == "com.test.shared").Name);
+    }
+
+    [Fact]
+    public async Task FetchRegistryAsync_FiltersHostPlatformAndArchitectureIncompatibleEntries()
+    {
+        const string communityJson = """
+        {
+          "schemaVersion": 1,
+          "plugins": [
+            {
+              "id": "compatible",
+              "name": "Compatible",
+              "version": "1.0.0",
+              "minHostVersion": "1.0.0",
+              "platforms": "windows",
+              "supportedArchitectures": ["amd64"],
+              "author": "A",
+              "description": "D",
+              "size": 10,
+              "downloadUrl": "https://example.com/compatible.zip"
+            },
+            {
+              "id": "future-host",
+              "name": "Future host",
+              "version": "1.0.0",
+              "minHostVersion": "2.0.0",
+              "author": "A",
+              "description": "D",
+              "size": 10,
+              "downloadUrl": "https://example.com/future.zip"
+            },
+            {
+              "id": "wrong-platform",
+              "name": "Wrong platform",
+              "version": "1.0.0",
+              "platforms": ["macos"],
+              "author": "A",
+              "description": "D",
+              "size": 10,
+              "downloadUrl": "https://example.com/macos.zip"
+            },
+            {
+              "id": "wrong-architecture",
+              "name": "Wrong architecture",
+              "version": "1.0.0",
+              "supportedArchitectures": ["arm64"],
+              "author": "A",
+              "description": "D",
+              "size": 10,
+              "downloadUrl": "https://example.com/arm.zip"
+            }
+          ]
+        }
+        """;
+        var httpClient = CreateRegistryHttpClient(request =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    request.RequestUri!.AbsolutePath.EndsWith("plugins-community-v1.json", StringComparison.Ordinal)
+                        ? communityJson
+                        : "[]")
+            });
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            processArchitecture: Architecture.X64,
+            hostVersion: new Version(1, 5, 0));
+
+        var result = await service.FetchRegistryAsync();
+
+        var plugin = Assert.Single(result);
+        Assert.Equal("compatible", plugin.Id);
+        Assert.Equal(["windows"], plugin.Platforms);
+        Assert.Equal(["amd64"], plugin.SupportedArchitectures);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FetchRegistryAsync_OneFailedFeedDoesNotHideTheOtherFeed(bool failCommunity)
+    {
+        const string officialJson =
+            "[{\"id\":\"official\",\"name\":\"Official\",\"version\":\"1.0.0\",\"author\":\"A\",\"description\":\"D\",\"size\":10,\"downloadUrl\":\"u\"}]";
+        const string communityJson =
+            "[{\"id\":\"community\",\"name\":\"Community\",\"version\":\"1.0.0\",\"author\":\"A\",\"description\":\"D\",\"size\":10,\"downloadUrl\":\"u\"}]";
+        var httpClient = CreateRegistryHttpClient(request =>
+        {
+            var isCommunity = request.RequestUri!.AbsolutePath.EndsWith(
+                "plugins-community-v1.json",
+                StringComparison.Ordinal);
+            var shouldFail = failCommunity == isCommunity;
+            return new HttpResponseMessage(shouldFail ? HttpStatusCode.BadGateway : HttpStatusCode.OK)
+            {
+                Content = new StringContent(isCommunity ? communityJson : officialJson)
+            };
+        });
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var result = await service.FetchRegistryAsync();
+
+        var plugin = Assert.Single(result);
+        Assert.Equal(failCommunity ? "official" : "community", plugin.Id);
+        Assert.Equal(failCommunity ? "official" : "community", plugin.Source);
+    }
+
+    [Fact]
+    public async Task FetchRegistryAsync_UsesHostingMetadataWithoutRejectingFutureFields()
+    {
+        const string json = """
+        {
+          "schemaVersion": 1,
+          "plugins": [
+            {
+              "id": "com.test.hosting",
+              "name": "Hosted",
+              "version": "1.0.0",
+              "author": "A",
+              "description": "D",
+              "hosting": "cloud",
+              "requiresApiKey": false,
+              "futureHostingOptions": { "region": "auto" },
+              "size": 10,
+              "downloadUrl": "u"
+            }
+          ]
+        }
+        """;
+        var httpClient = CreateRegistryHttpClient(request =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    request.RequestUri!.AbsolutePath.EndsWith("plugins-community-v1.json", StringComparison.Ordinal)
+                        ? "[]"
+                        : json)
+            });
+        var manager = CreateManager();
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, httpClient);
+
+        var registryPlugin = Assert.Single(await service.FetchRegistryAsync());
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+        Assert.Equal("cloud", registryPlugin.Hosting);
+        Assert.True(registryPlugin.IsCloudHosted);
+        Assert.Equal(Loc.Instance["Plugins.Cloud"], item.LocationBadge);
     }
 
     [Fact]
@@ -1129,6 +1377,41 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal(Loc.Instance["Plugins.TrustUnverified"], item.TrustBadge);
         Assert.Equal(Loc.Instance["Plugins.SourceOfficial"], item.InstalledSourceBadge);
         Assert.Equal(Loc.Instance["Plugins.TrustVerifiedOfficial"], item.InstalledTrustBadge);
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_PersistsUnsignedCommunitySourceWithoutGrantingTrust()
+    {
+        var package = CreateLoadablePluginPackage(
+            "com.test.community-origin",
+            "1.0.0",
+            typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.community-origin", "1.0.0") with
+        {
+            Source = "community",
+            Size = package.Length,
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            pluginDataPath: Path.Combine(_pluginsRoot, ".plugin-data"));
+
+        var installResult = await service.InstallPluginAsync(registryPlugin);
+        var installedTrust = service.GetInstalledArtifactTrustStatus(
+            registryPlugin with { Source = "official" });
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+        Assert.Equal(PluginInstallResult.Installed, installResult);
+        Assert.Equal(RegistryArtifactSource.Community, installedTrust.Source);
+        Assert.Equal(RegistryArtifactTrustLevel.Unverified, installedTrust.TrustLevel);
+        Assert.Equal(RegistryArtifactValidationCode.MissingMetadata, installedTrust.Code);
+        Assert.Equal(Loc.Instance["Plugins.SourceCommunity"], item.InstalledSourceBadge);
+        Assert.Equal(Loc.Instance["Plugins.TrustUnverified"], item.InstalledTrustBadge);
     }
 
     [Fact]

@@ -213,11 +213,6 @@ public sealed class RegistryArtifactTrustValidator
     /// </summary>
     public const string TypeWhisperBuiltTrust = "typewhisper-built";
 
-    private static readonly RegistryArtifactValidationResult MissingMetadataResult = new(
-        RegistryArtifactValidationCode.MissingMetadata,
-        RegistryArtifactSource.Unknown,
-        RegistryArtifactTrustLevel.Unverified);
-
     private readonly IReadOnlyDictionary<string, RegistryArtifactTrustKey> _keys;
 
     /// <summary>
@@ -251,11 +246,19 @@ public sealed class RegistryArtifactTrustValidator
     public static bool HasAnyTrustMetadata(RegistryPlugin plugin)
     {
         ArgumentNullException.ThrowIfNull(plugin);
-        return !string.IsNullOrWhiteSpace(plugin.Source) ||
-               !string.IsNullOrWhiteSpace(plugin.Trust) ||
-               !string.IsNullOrWhiteSpace(plugin.SourceRepository) ||
+        return !string.IsNullOrWhiteSpace(plugin.Trust) ||
                plugin.Attestation is not null;
     }
+
+    /// <summary>
+    /// Classifies source metadata without granting artifact trust.
+    /// </summary>
+    public static RegistryArtifactSource ClassifySource(string? source) => source?.Trim().ToLowerInvariant() switch
+    {
+        "official" => RegistryArtifactSource.Official,
+        "community" => RegistryArtifactSource.Community,
+        _ => RegistryArtifactSource.Unknown
+    };
 
     /// <summary>
     /// Creates the canonical UTF-8 payload covered by the artifact signature.
@@ -298,7 +301,11 @@ public sealed class RegistryArtifactTrustValidator
     {
         ArgumentNullException.ThrowIfNull(plugin);
         if (!HasCompleteTrustMetadata(plugin))
-            return MissingMetadataResult;
+        {
+            return Failure(
+                RegistryArtifactValidationCode.MissingMetadata,
+                ClassifySource(plugin.Source));
+        }
 
         NormalizedRegistryArtifact normalized;
         try
@@ -307,7 +314,7 @@ public sealed class RegistryArtifactTrustValidator
         }
         catch (RegistryArtifactTrustException ex)
         {
-            return Failure(ex.ValidationCode, ParseSource(plugin.Source));
+            return Failure(ex.ValidationCode, ClassifySource(plugin.Source));
         }
 
         if (!_keys.TryGetValue(normalized.KeyId, out var key))
@@ -384,7 +391,7 @@ public sealed class RegistryArtifactTrustValidator
         if (!HasCompleteTrustMetadata(plugin))
             throw TrustFailure(RegistryArtifactValidationCode.MissingMetadata);
 
-        var source = ParseSource(plugin.Source);
+        var source = ClassifySource(plugin.Source);
         if (source == RegistryArtifactSource.Unknown)
             throw TrustFailure(RegistryArtifactValidationCode.UnsupportedSource);
         if (!string.Equals(plugin.Trust!.Trim(), TypeWhisperBuiltTrust, StringComparison.OrdinalIgnoreCase))
@@ -428,13 +435,6 @@ public sealed class RegistryArtifactTrustValidator
             sha256,
             plugin.Size);
     }
-
-    private static RegistryArtifactSource ParseSource(string? source) => source?.Trim().ToLowerInvariant() switch
-    {
-        "official" => RegistryArtifactSource.Official,
-        "community" => RegistryArtifactSource.Community,
-        _ => RegistryArtifactSource.Unknown
-    };
 
     private static string NormalizeRepository(string repository, RegistryArtifactSource source)
     {

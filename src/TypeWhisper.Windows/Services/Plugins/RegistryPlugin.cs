@@ -39,8 +39,18 @@ public sealed record RegistryPlugin
     /// <summary>
     /// Gets or sets the categories value.
     /// </summary>
-    [JsonConverter(typeof(RegistryCategoriesJsonConverter))]
+    [JsonConverter(typeof(RegistryStringListJsonConverter))]
     public IReadOnlyList<string>? Categories { get; init; }
+    /// <summary>
+    /// Gets or sets the supported host platforms. A missing value preserves legacy Windows compatibility.
+    /// </summary>
+    [JsonConverter(typeof(RegistryStringListJsonConverter))]
+    public IReadOnlyList<string>? Platforms { get; init; }
+    /// <summary>
+    /// Gets or sets the supported Windows process architectures.
+    /// </summary>
+    [JsonConverter(typeof(RegistryStringListJsonConverter))]
+    public IReadOnlyList<string>? SupportedArchitectures { get; init; }
     /// <summary>
     /// Gets or sets the size value.
     /// </summary>
@@ -81,9 +91,23 @@ public sealed record RegistryPlugin
     /// Gets or sets the descriptions value.
     /// </summary>
     public Dictionary<string, string>? Descriptions { get; init; }
+    /// <summary>
+    /// Gets or sets the hosting classification. Unknown future values remain parseable.
+    /// </summary>
+    public string? Hosting { get; init; }
+    /// <summary>
+    /// Gets whether the plugin is classified as cloud-hosted.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsCloudHosted => Hosting?.Trim().ToLowerInvariant() switch
+    {
+        "cloud" => true,
+        "local" => false,
+        _ => RequiresApiKey
+    };
 }
 
-internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyList<string>?>
+internal sealed class RegistryStringListJsonConverter : JsonConverter<IReadOnlyList<string>?>
 {
     /// <summary>
     /// Reads.
@@ -100,7 +124,7 @@ internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyL
             return [reader.GetString() ?? string.Empty];
 
         if (reader.TokenType != JsonTokenType.StartArray)
-            throw new JsonException("Registry plugin categories must be a string or an array of strings.");
+            throw new JsonException("Registry string lists must be a string or an array of strings.");
 
         var categories = new List<string>();
         while (reader.Read())
@@ -109,12 +133,12 @@ internal sealed class RegistryCategoriesJsonConverter : JsonConverter<IReadOnlyL
                 return categories;
 
             if (reader.TokenType != JsonTokenType.String)
-                throw new JsonException("Registry plugin categories must only contain strings.");
+                throw new JsonException("Registry string lists must only contain strings.");
 
             categories.Add(reader.GetString() ?? string.Empty);
         }
 
-        throw new JsonException("Registry plugin categories array was not closed.");
+        throw new JsonException("Registry string list array was not closed.");
     }
 
     /// <summary>

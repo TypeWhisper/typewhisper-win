@@ -50,6 +50,10 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// </summary>
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
     /// <summary>
+    /// Gets the forward-compatible hosting metadata value.
+    /// </summary>
+    public string? Hosting => _registryPlugin.Hosting;
+    /// <summary>
     /// Performs format size.
     /// </summary>
     public string SizeDisplay => FormatSize(_registryPlugin.Size);
@@ -97,7 +101,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// <summary>
     /// Gets the location badge.
     /// </summary>
-    public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
+    public string LocationBadge => _registryPlugin.IsCloudHosted
+        ? Loc.Instance["Plugins.Cloud"]
+        : Loc.Instance["Plugins.Local"];
     /// <summary>
     /// Gets the verified source label for the current registry artifact.
     /// </summary>

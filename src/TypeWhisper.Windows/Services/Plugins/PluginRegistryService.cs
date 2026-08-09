@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TypeWhisper.Core;
@@ -19,6 +20,7 @@ namespace TypeWhisper.Windows.Services.Plugins;
 public sealed class PluginRegistryService
 {
     private const string RegistryUrl = "https://typewhisper.github.io/typewhisper-win/plugins.json";
+    private const string CommunityRegistryUrl = "https://typewhisper.github.io/typewhisper-win/plugins-community-v1.json";
     private const string PendingUpdatesDirectoryName = ".pending-updates";
     private const string PendingUninstallsDirectoryName = ".pending-uninstalls";
     private const string StagingDirectoryName = ".staging";
@@ -50,9 +52,14 @@ public sealed class PluginRegistryService
     private readonly bool _usesCustomDirectoryReplacement;
     private readonly RegistryArtifactTrustValidator _artifactTrustValidator;
     private readonly bool _requireArtifactAttestation;
+    private readonly string _officialRegistryUrl;
+    private readonly string _communityRegistryUrl;
+    private readonly Architecture _processArchitecture;
+    private readonly Version _hostVersion;
+    private readonly SemaphoreSlim _registryFetchLock = new(1, 1);
 
-    private List<RegistryPlugin>? _cachedRegistry;
-    private DateTime _cacheTimestamp;
+    private readonly RegistryFeedCache _officialFeedCache = new();
+    private readonly RegistryFeedCache _communityFeedCache = new();
     private DateTime _lastUpdateCheck;
 
     /// <summary>
@@ -71,7 +78,11 @@ public sealed class PluginRegistryService
         TimeSpan? downloadInactivityTimeout = null,
         string? pluginDataPath = null,
         RegistryArtifactTrustValidator? artifactTrustValidator = null,
-        bool requireArtifactAttestation = false)
+        bool requireArtifactAttestation = false,
+        string officialRegistryUrl = RegistryUrl,
+        string communityRegistryUrl = CommunityRegistryUrl,
+        Architecture? processArchitecture = null,
+        Version? hostVersion = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
@@ -90,36 +101,113 @@ public sealed class PluginRegistryService
         _deleteActiveDirectoryAsync = deleteActiveDirectoryAsync ?? DeleteActiveDirectoryAsync;
         _artifactTrustValidator = artifactTrustValidator ?? RegistryArtifactTrustValidator.Empty;
         _requireArtifactAttestation = requireArtifactAttestation;
+        _officialRegistryUrl = officialRegistryUrl;
+        _communityRegistryUrl = communityRegistryUrl;
+        _processArchitecture = processArchitecture ?? RuntimeInformation.ProcessArchitecture;
+        _hostVersion = hostVersion ?? GetHostVersion();
     }
 
     /// <summary>
-    /// Fetches the plugin registry from the remote URL. Results are cached for 5 minutes.
-    /// Filters out plugins whose MinHostVersion exceeds the current host version.
+    /// Fetches official and community plugin feeds. Results and failures are cached for 5 minutes.
+    /// Official entries take precedence over community entries with the same plugin ID.
     /// </summary>
     public async Task<IReadOnlyList<RegistryPlugin>> FetchRegistryAsync(CancellationToken ct = default)
     {
-        if (_cachedRegistry is not null && DateTime.UtcNow - _cacheTimestamp < CacheDuration)
-            return _cachedRegistry;
+        await _registryFetchLock.WaitAsync(ct);
 
         try
         {
-            var json = await _httpClient.GetStringAsync(RegistryUrl, ct);
-            var allPlugins = JsonSerializer.Deserialize<List<RegistryPlugin>>(json, JsonOptions) ?? [];
+            var now = DateTime.UtcNow;
+            var officialTask = FetchRegistryFeedAsync(
+                _officialRegistryUrl,
+                RegistryArtifactSource.Official,
+                _officialFeedCache,
+                now,
+                ct);
+            var communityTask = FetchRegistryFeedAsync(
+                _communityRegistryUrl,
+                RegistryArtifactSource.Community,
+                _communityFeedCache,
+                now,
+                ct);
+            await Task.WhenAll(officialTask, communityTask);
+            var official = await officialTask;
+            var community = await communityTask;
+            var merged = MergeRegistryFeeds(official, community);
+            Debug.WriteLine(
+                $"[PluginRegistry] Resolved {merged.Count} compatible plugin(s) " +
+                $"({official.Count} official, {community.Count} community)");
+            return merged;
+        }
+        finally
+        {
+            _registryFetchLock.Release();
+        }
+    }
 
-            var hostVersion = GetHostVersion();
-            _cachedRegistry = allPlugins
-                .Where(p => IsCompatible(p.MinHostVersion, hostVersion))
+    private async Task<IReadOnlyList<RegistryPlugin>> FetchRegistryFeedAsync(
+        string registryUrl,
+        RegistryArtifactSource source,
+        RegistryFeedCache cache,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(registryUrl))
+            return [];
+        if (cache.HasAttempted && now - cache.LastAttempt < CacheDuration)
+            return cache.Plugins;
+
+        try
+        {
+            var json = await _httpClient.GetStringAsync(registryUrl, ct);
+            var sourceName = source == RegistryArtifactSource.Official ? "official" : "community";
+            cache.Plugins = DeserializeRegistryFeed(json)
+                .Select(plugin => plugin with { Source = sourceName })
+                .Where(plugin => IsValidPluginId(plugin.Id))
+                .Where(plugin => IsCompatible(plugin, _hostVersion, _processArchitecture))
                 .ToList();
-            _cacheTimestamp = DateTime.UtcNow;
-
-            Debug.WriteLine($"[PluginRegistry] Fetched {_cachedRegistry.Count} compatible plugin(s) from registry");
-            return _cachedRegistry;
+            cache.HasAttempted = true;
+            cache.LastAttempt = now;
+            return cache.Plugins;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[PluginRegistry] Failed to fetch registry: {ex.Message}");
-            return _cachedRegistry ?? [];
+            cache.HasAttempted = true;
+            cache.LastAttempt = now;
+            Debug.WriteLine($"[PluginRegistry] Failed to fetch {source} registry: {ex.Message}");
+            return cache.Plugins;
         }
+    }
+
+    private static IReadOnlyList<RegistryPlugin> DeserializeRegistryFeed(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.ValueKind switch
+        {
+            JsonValueKind.Array => JsonSerializer.Deserialize<List<RegistryPlugin>>(json, JsonOptions) ?? [],
+            JsonValueKind.Object =>
+                JsonSerializer.Deserialize<RegistryFeedEnvelope>(json, JsonOptions)?.Plugins ?? [],
+            _ => throw new JsonException("Plugin registry feed must be an array or an object containing plugins.")
+        };
+    }
+
+    private static IReadOnlyList<RegistryPlugin> MergeRegistryFeeds(
+        IReadOnlyList<RegistryPlugin> official,
+        IReadOnlyList<RegistryPlugin> community)
+    {
+        var merged = new List<RegistryPlugin>(official.Count + community.Count);
+        var pluginIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var plugin in official.Concat(community))
+        {
+            if (pluginIds.Add(plugin.Id))
+                merged.Add(plugin);
+        }
+
+        return merged;
     }
 
     /// <summary>
@@ -322,7 +410,7 @@ public sealed class PluginRegistryService
         {
             return new RegistryArtifactValidationResult(
                 RegistryArtifactValidationCode.MissingMetadata,
-                RegistryArtifactSource.Unknown,
+                RegistryArtifactTrustValidator.ClassifySource(receipt?.RegistrySource),
                 RegistryArtifactTrustLevel.Unverified);
         }
 
@@ -711,13 +799,53 @@ public sealed class PluginRegistryService
         return asm?.GetName().Version ?? new Version(1, 0);
     }
 
-    private static bool IsCompatible(string? minHostVersion, Version hostVersion)
+    private static bool IsCompatible(
+        RegistryPlugin plugin,
+        Version hostVersion,
+        Architecture processArchitecture)
     {
-        if (string.IsNullOrEmpty(minHostVersion))
-            return true;
+        if (!string.IsNullOrWhiteSpace(plugin.MinHostVersion) &&
+            (!Version.TryParse(plugin.MinHostVersion, out var minVersion) || hostVersion < minVersion))
+        {
+            return false;
+        }
 
-        return !Version.TryParse(minHostVersion, out var minVer) || hostVersion >= minVer;
+        if (plugin.Platforms is not null &&
+            (plugin.Platforms.Count == 0 ||
+             !plugin.Platforms.Any(platform => IsCurrentWindowsPlatform(platform, processArchitecture))))
+        {
+            return false;
+        }
+
+        if (plugin.SupportedArchitectures is not null &&
+            (plugin.SupportedArchitectures.Count == 0 ||
+             !plugin.SupportedArchitectures.Any(architecture =>
+                 IsCurrentArchitecture(architecture, processArchitecture))))
+        {
+            return false;
+        }
+
+        return true;
     }
+
+    private static bool IsCurrentWindowsPlatform(string platform, Architecture processArchitecture) =>
+        platform.Trim().ToLowerInvariant() switch
+        {
+            "windows" or "win" or "win32" => true,
+            "windows-x64" or "win-x64" => processArchitecture == Architecture.X64,
+            "windows-arm64" or "win-arm64" => processArchitecture == Architecture.Arm64,
+            "windows-x86" or "win-x86" => processArchitecture == Architecture.X86,
+            _ => false
+        };
+
+    private static bool IsCurrentArchitecture(string architecture, Architecture processArchitecture) =>
+        architecture.Trim().ToLowerInvariant() switch
+        {
+            "x64" or "amd64" or "win-x64" => processArchitecture == Architecture.X64,
+            "arm64" or "aarch64" or "win-arm64" => processArchitecture == Architecture.Arm64,
+            "x86" or "i386" or "win-x86" => processArchitecture == Architecture.X86,
+            _ => false
+        };
 
     private static void ValidateStagedPlugin(RegistryPlugin registryPlugin, string stagingDir)
     {
@@ -926,6 +1054,12 @@ public sealed class PluginRegistryService
                 registryPlugin.Size,
                 registryPlugin.Attestation!)
             : null;
+        var registrySource = RegistryArtifactTrustValidator.ClassifySource(registryPlugin.Source) switch
+        {
+            RegistryArtifactSource.Official => "official",
+            RegistryArtifactSource.Community => "community",
+            _ => null
+        };
 
         return new PluginInstallReceipt(
             InstallReceiptSchemaVersion,
@@ -934,6 +1068,7 @@ public sealed class PluginRegistryService
             registryPlugin.DownloadUrl,
             ComputeFileSha256(packagePath),
             files,
+            registrySource,
             artifactTrustReceipt);
     }
 
@@ -1083,6 +1218,7 @@ public sealed class PluginRegistryService
                     file.Length >= 0 &&
                     !string.IsNullOrWhiteSpace(file.Sha256) &&
                     string.Equals(NormalizeSha256(file.Sha256), file.Sha256, StringComparison.OrdinalIgnoreCase)) &&
+                IsValidRegistrySource(receipt.RegistrySource) &&
                 IsValidArtifactTrustReceiptStructure(receipt.ArtifactTrust);
         }
         catch (InvalidOperationException)
@@ -1090,6 +1226,10 @@ public sealed class PluginRegistryService
             return false;
         }
     }
+
+    private static bool IsValidRegistrySource(string? registrySource) =>
+        registrySource is null ||
+        RegistryArtifactTrustValidator.ClassifySource(registrySource) != RegistryArtifactSource.Unknown;
 
     private static bool IsValidArtifactTrustReceiptStructure(PluginArtifactTrustReceipt? artifactTrust)
     {
@@ -1563,6 +1703,15 @@ public sealed class PluginRegistryService
 
     private const string EmbeddedInstallReceiptFileName = ".typewhisper-install.json";
 
+    private sealed class RegistryFeedCache
+    {
+        public bool HasAttempted { get; set; }
+        public DateTime LastAttempt { get; set; }
+        public IReadOnlyList<RegistryPlugin> Plugins { get; set; } = [];
+    }
+
+    private sealed record RegistryFeedEnvelope(IReadOnlyList<RegistryPlugin>? Plugins);
+
     private sealed record PluginInstallReceipt(
         int SchemaVersion,
         string PluginId,
@@ -1570,6 +1719,7 @@ public sealed class PluginRegistryService
         string DownloadUrl,
         string PackageSha256,
         IReadOnlyList<PluginInstallFile> Files,
+        string? RegistrySource = null,
         PluginArtifactTrustReceipt? ArtifactTrust = null);
 
     private sealed record PluginArtifactTrustReceipt(

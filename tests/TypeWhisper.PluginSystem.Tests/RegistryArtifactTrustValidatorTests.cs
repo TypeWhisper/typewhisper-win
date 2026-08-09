@@ -93,7 +93,7 @@ public sealed class RegistryArtifactTrustValidatorTests
         var result = RegistryArtifactTrustValidator.Empty.Validate(plugin);
 
         Assert.Equal(RegistryArtifactValidationCode.MissingMetadata, result.Code);
-        Assert.Equal(RegistryArtifactSource.Unknown, result.Source);
+        Assert.Equal(RegistryArtifactSource.Official, result.Source);
         Assert.Equal(RegistryArtifactTrustLevel.Unverified, result.TrustLevel);
     }
 
