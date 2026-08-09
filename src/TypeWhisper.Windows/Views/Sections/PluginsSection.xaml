@@ -87,10 +87,10 @@
                             AutomationProperties.Name="{loc:Str Plugins.Installed}">
                         <TextBlock><Run Text="&#x1F9E9;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Installed], Mode=OneWay}"/></TextBlock>
                     </Button>
-                    <Button x:Name="TabMarketplace" Style="{StaticResource TabButtonStyle}" Click="OnMarketplaceTabClick"
-                            AutomationProperties.AutomationId="IntegrationsTabMarketplace"
-                            AutomationProperties.Name="{loc:Str Plugins.Marketplace}">
-                        <TextBlock><Run Text="&#x1F6D2;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Marketplace], Mode=OneWay}"/></TextBlock>
+                    <Button x:Name="TabDiscover" Style="{StaticResource TabButtonStyle}" Click="OnDiscoverTabClick"
+                            AutomationProperties.AutomationId="IntegrationsTabDiscover"
+                            AutomationProperties.Name="{loc:Str Plugins.Discover}">
+                        <TextBlock><Run Text="&#x2728;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Discover], Mode=OneWay}"/></TextBlock>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -109,6 +109,43 @@
                                        Margin="0,4,0,0"
                                        Visibility="{Binding Plugins.HasAvailablePluginUpdates, Converter={StaticResource BoolToVis}}"/>
                         </StackPanel>
+                    </Border>
+
+                    <Border AutomationProperties.AutomationId="IntegrationsManualGuidance"
+                            Style="{StaticResource SettingsGroupPanelStyle}"
+                            Padding="14"
+                            Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Plugins.ManualTitle}"
+                                           Foreground="{StaticResource TextBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="{loc:Str Plugins.ManualDescription}"
+                                           Style="{StaticResource HintStyle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding Plugins.ManualPluginFolderPath}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Plugins.ManualPluginFolderPath}"
+                                           Margin="0,6,0,0"/>
+                            </StackPanel>
+                            <ui:Button Grid.Column="1"
+                                       AutomationProperties.AutomationId="IntegrationsOpenManualFolder"
+                                       AutomationProperties.Name="{loc:Str Plugins.OpenManualFolder}"
+                                       Appearance="Secondary"
+                                       Content="{loc:Str Plugins.OpenManualFolder}"
+                                       Command="{Binding Plugins.OpenManualPluginFolderCommand}"
+                                       Icon="{ui:SymbolIcon FolderOpen24}"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
 
                     <Border x:Name="EmptyState"
@@ -278,10 +315,10 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="MarketplacePanel"
+            <ScrollViewer x:Name="DiscoverPanel"
                           VerticalScrollBarVisibility="Auto"
                           Visibility="Collapsed"
-                          PreviewMouseWheel="OnMarketplacePanelPreviewMouseWheel">
+                          PreviewMouseWheel="OnDiscoverPanelPreviewMouseWheel">
                 <StackPanel>
                     <Border Style="{StaticResource SettingsFilterRowStyle}">
                         <Grid>
@@ -291,7 +328,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Text="{Binding Plugins.MarketplaceCategorySummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{loc:Str Plugins.MarketplaceDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
+                                <TextBlock Text="{loc:Str Plugins.DiscoverDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
                                 <WrapPanel Margin="0,10,0,0">
                                     <ui:Button Appearance="Secondary"
                                                AutomationProperties.AutomationId="IntegrationsClearFilters"
@@ -326,9 +363,9 @@
                                 </WrapPanel>
                             </StackPanel>
                             <ui:Button Grid.Column="1"
-                                       AutomationProperties.AutomationId="IntegrationsRefreshMarketplace"
+                                       AutomationProperties.AutomationId="IntegrationsRefreshDiscover"
                                        Appearance="Secondary"
-                                       Content="{loc:Str Plugins.MarketplaceRefresh}"
+                                       Content="{loc:Str Plugins.DiscoverRefresh}"
                                        Command="{Binding Plugins.RefreshRegistryCommand}"
                                        Icon="{ui:SymbolIcon ArrowSync24}"
                                        VerticalAlignment="Center"/>
@@ -339,13 +376,22 @@
                             Style="{StaticResource SettingsSummaryBarStyle}">
                         <StackPanel HorizontalAlignment="Center">
                             <ui:ProgressRing IsIndeterminate="True" Width="32" Height="32" Margin="0,0,0,8"/>
-                            <TextBlock Text="{loc:Str Plugins.MarketplaceLoading}" Foreground="{StaticResource HintBrush}" FontSize="13" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str Plugins.DiscoverLoading}" Foreground="{StaticResource HintBrush}" FontSize="13" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource SettingsGroupPanelStyle}"
                             Visibility="{Binding Plugins.IsLoadingRegistry, Converter={StaticResource InverseBoolToVis}}">
                         <ItemsControl ItemsSource="{Binding Plugins.FilteredMarketplacePlugins}">
+                            <ItemsControl.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource SettingsGroupTitleStyle}" Margin="0,6,0,8"/>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ItemsControl.GroupStyle>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:RegistryPluginItemViewModel}">
                                     <Border Style="{StaticResource SettingsCollectionRowStyle}">

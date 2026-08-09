@@ -106,4 +106,30 @@ public sealed class PluginsSectionLayoutTests
         Assert.DoesNotContain("<ui:CardExpander", xaml);
         Assert.DoesNotContain("IsExpanded=\"{Binding IsExpanded", xaml);
     }
+
+    [Fact]
+    public void PluginsSection_UsesInstalledAndDiscoverCatalogWithManualGuidance()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "PluginsSection.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "PluginsSection.xaml.cs");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"IntegrationsTabInstalled\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"IntegrationsTabDiscover\"", xaml);
+        Assert.Contains("Plugins.Discover", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"IntegrationsManualGuidance\"", xaml);
+        Assert.Contains("Plugins.ManualPluginFolderPath", xaml);
+        Assert.Contains("Plugins.OpenManualPluginFolderCommand", xaml);
+        Assert.Contains("PropertyGroupDescription(groupProperty)", codeBehind);
+        Assert.Contains("SourceGroupSortOrder", codeBehind);
+    }
 }

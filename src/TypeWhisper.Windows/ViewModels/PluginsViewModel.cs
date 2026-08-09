@@ -1,11 +1,14 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -96,6 +99,10 @@ public partial class PluginsViewModel : ObservableObject
     /// Gets whether has active marketplace capability filters.
     /// </summary>
     public bool HasActiveMarketplaceCapabilityFilters => _selectedMarketplaceCapabilityKeys.Count > 0;
+    /// <summary>
+    /// Gets the folder where manually installed plugins are discovered.
+    /// </summary>
+    public string ManualPluginFolderPath => _registryService.PluginsPath;
 
     [ObservableProperty] private bool _isLoadingRegistry;
     [ObservableProperty] private bool _isMarketplaceSelected;
@@ -206,6 +213,28 @@ public partial class PluginsViewModel : ObservableObject
         _selectedMarketplaceCapabilityKeys.Clear();
         RebuildMarketplaceFilters();
         NotifyStateChanged();
+    }
+
+    [RelayCommand]
+    private void OpenManualPluginFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(ManualPluginFolderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ManualPluginFolderPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            MessageBox.Show(
+                Loc.Instance.GetString("App.ErrorFormat", ex.Message),
+                Loc.Instance["App.ErrorTitle"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private void NotifyStateChanged()
@@ -528,6 +557,22 @@ public partial class PluginItemViewModel : ObservableObject
             ? Loc.Instance["Plugins.TrustTooltipBundled"]
             : Loc.Instance["Plugins.TrustTooltipUnverified"]);
     /// <summary>
+    /// Gets the localized source group used by the installed catalog.
+    /// </summary>
+    public string SourceGroupLabel => ArtifactSourceBadge;
+    /// <summary>
+    /// Gets the stable source group order used by the installed catalog.
+    /// </summary>
+    public int SourceGroupSortOrder => _registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+        ? 0
+        : RegistryPlugin?.InstalledArtifactSource switch
+        {
+            RegistryArtifactSource.Official => 1,
+            RegistryArtifactSource.Community => 2,
+            _ when RegistryPlugin is null => 3,
+            _ => 4
+        };
+    /// <summary>
     /// Gets the matching marketplace registry plugin.
     /// </summary>
     public RegistryPluginItemViewModel? RegistryPlugin
@@ -671,6 +716,8 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(ArtifactSourceBadge));
         OnPropertyChanged(nameof(ArtifactTrustBadge));
         OnPropertyChanged(nameof(ArtifactTrustTooltip));
+        OnPropertyChanged(nameof(SourceGroupLabel));
+        OnPropertyChanged(nameof(SourceGroupSortOrder));
         UpdateRegistryPluginCommand.NotifyCanExecuteChanged();
         RepairRegistryPluginCommand.NotifyCanExecuteChanged();
     }

@@ -63,6 +63,11 @@ public sealed class PluginRegistryService
     private DateTime _lastUpdateCheck;
 
     /// <summary>
+    /// Gets the user-writable plugin directory used for manual and registry installs.
+    /// </summary>
+    public string PluginsPath => _pluginsPath;
+
+    /// <summary>
     /// Initializes a new instance of the PluginRegistryService class.
     /// </summary>
     public PluginRegistryService(

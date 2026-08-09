@@ -109,6 +109,23 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// </summary>
     public string SourceBadge => GetSourceBadge(_artifactTrust, installed: false);
     /// <summary>
+    /// Gets the stable source classification for Discover grouping.
+    /// </summary>
+    public RegistryArtifactSource ArtifactSource => _artifactTrust.Source;
+    /// <summary>
+    /// Gets the localized source group used by Discover.
+    /// </summary>
+    public string SourceGroupLabel => SourceBadge;
+    /// <summary>
+    /// Gets the stable source group order used by Discover.
+    /// </summary>
+    public int SourceGroupSortOrder => ArtifactSource switch
+    {
+        RegistryArtifactSource.Official => 0,
+        RegistryArtifactSource.Community => 1,
+        _ => 2
+    };
+    /// <summary>
     /// Gets the build trust label for the current registry artifact.
     /// </summary>
     public string TrustBadge => GetTrustBadge(_artifactTrust);
@@ -122,6 +139,12 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     public string InstalledSourceBadge => InstallState == PluginInstallState.Bundled
         ? Loc.Instance["Plugins.SourceBundled"]
         : GetSourceBadge(_installedArtifactTrust, installed: true);
+    /// <summary>
+    /// Gets the persisted source classification for an installed copy of this plugin.
+    /// </summary>
+    public RegistryArtifactSource InstalledArtifactSource => InstallState == PluginInstallState.Bundled
+        ? RegistryArtifactSource.Official
+        : _installedArtifactTrust.Source;
     /// <summary>
     /// Gets the persisted build trust label for an installed copy of this plugin.
     /// </summary>
@@ -339,9 +362,13 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     private void NotifyTrustStateChanged()
     {
         OnPropertyChanged(nameof(SourceBadge));
+        OnPropertyChanged(nameof(ArtifactSource));
+        OnPropertyChanged(nameof(SourceGroupLabel));
+        OnPropertyChanged(nameof(SourceGroupSortOrder));
         OnPropertyChanged(nameof(TrustBadge));
         OnPropertyChanged(nameof(TrustTooltip));
         OnPropertyChanged(nameof(InstalledSourceBadge));
+        OnPropertyChanged(nameof(InstalledArtifactSource));
         OnPropertyChanged(nameof(InstalledTrustBadge));
         OnPropertyChanged(nameof(InstalledTrustTooltip));
     }
