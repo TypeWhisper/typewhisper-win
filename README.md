@@ -8,6 +8,8 @@ Speech-to-text and AI text processing for Windows. Dictate anywhere, transcribe 
 
 TypeWhisper for Windows includes system-wide dictation, file transcription, workflows, history, dictionary, snippets, local and cloud transcription engines, and bundled integrations. Advanced surfaces like the HTTP API, CLI, plugin SDK, marketplace, and action plugins remain available for power users and automation.
 
+See [Platform parity and exclusions](docs/PLATFORM_PARITY.md) for the Windows support matrix, Windows-native replacements, and Apple-only non-goals.
+
 ## Screenshots
 
 The full 1.0 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
