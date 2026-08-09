@@ -507,6 +507,27 @@ public partial class PluginItemViewModel : ObservableObject
     /// </summary>
     public string LocationBadge => IsLocal ? Loc.Instance["Plugins.Local"] : Loc.Instance["Plugins.Cloud"];
     /// <summary>
+    /// Gets the persisted source label for the installed plugin.
+    /// </summary>
+    public string ArtifactSourceBadge => RegistryPlugin?.InstalledSourceBadge ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.SourceBundled"]
+            : Loc.Instance["Plugins.SourceManual"]);
+    /// <summary>
+    /// Gets the persisted trust label for the installed plugin.
+    /// </summary>
+    public string ArtifactTrustBadge => RegistryPlugin?.InstalledTrustBadge ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.TrustVerifiedOfficial"]
+            : Loc.Instance["Plugins.TrustUnverified"]);
+    /// <summary>
+    /// Gets the persisted trust explanation for the installed plugin.
+    /// </summary>
+    public string ArtifactTrustTooltip => RegistryPlugin?.InstalledTrustTooltip ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.TrustTooltipBundled"]
+            : Loc.Instance["Plugins.TrustTooltipUnverified"]);
+    /// <summary>
     /// Gets the matching marketplace registry plugin.
     /// </summary>
     public RegistryPluginItemViewModel? RegistryPlugin
@@ -647,6 +668,9 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(NeedsRepair));
         OnPropertyChanged(nameof(RepairDiagnosticMessage));
         OnPropertyChanged(nameof(AvailableUpdateVersion));
+        OnPropertyChanged(nameof(ArtifactSourceBadge));
+        OnPropertyChanged(nameof(ArtifactTrustBadge));
+        OnPropertyChanged(nameof(ArtifactTrustTooltip));
         UpdateRegistryPluginCommand.NotifyCanExecuteChanged();
         RepairRegistryPluginCommand.NotifyCanExecuteChanged();
     }

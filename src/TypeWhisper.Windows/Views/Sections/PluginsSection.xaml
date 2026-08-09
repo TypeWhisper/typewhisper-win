@@ -197,6 +197,20 @@
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsSource.{0}}"
+                                                            AutomationProperties.Name="{Binding ArtifactSourceBadge}"
+                                                            ToolTip="{Binding ArtifactTrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding ArtifactSourceBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsTrust.{0}}"
+                                                            AutomationProperties.Name="{Binding ArtifactTrustBadge}"
+                                                            ToolTip="{Binding ArtifactTrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding ArtifactTrustBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding StatusLabel}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
@@ -389,6 +403,20 @@
                                                     </ItemsControl>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsMarketplaceSource.{0}}"
+                                                            AutomationProperties.Name="{Binding SourceBadge}"
+                                                            ToolTip="{Binding TrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding SourceBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsMarketplaceTrust.{0}}"
+                                                            AutomationProperties.Name="{Binding TrustBadge}"
+                                                            ToolTip="{Binding TrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding TrustBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding SizeDisplay}" Foreground="#D6DEE9" FontSize="10"/>

@@ -48,6 +48,8 @@ public sealed class PluginRegistryService
     private readonly AppDistributionKind _distributionKind;
     private readonly TimeSpan _downloadInactivityTimeout;
     private readonly bool _usesCustomDirectoryReplacement;
+    private readonly RegistryArtifactTrustValidator _artifactTrustValidator;
+    private readonly bool _requireArtifactAttestation;
 
     private List<RegistryPlugin>? _cachedRegistry;
     private DateTime _cacheTimestamp;
@@ -67,7 +69,9 @@ public sealed class PluginRegistryService
         string? bundledPluginsPath = null,
         AppDistributionKind? distributionKind = null,
         TimeSpan? downloadInactivityTimeout = null,
-        string? pluginDataPath = null)
+        string? pluginDataPath = null,
+        RegistryArtifactTrustValidator? artifactTrustValidator = null,
+        bool requireArtifactAttestation = false)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
@@ -84,6 +88,8 @@ public sealed class PluginRegistryService
         _usesCustomDirectoryReplacement = replaceActiveDirectoryAsync is not null;
         _replaceActiveDirectoryAsync = replaceActiveDirectoryAsync ?? ReplaceActiveDirectoryAsync;
         _deleteActiveDirectoryAsync = deleteActiveDirectoryAsync ?? DeleteActiveDirectoryAsync;
+        _artifactTrustValidator = artifactTrustValidator ?? RegistryArtifactTrustValidator.Empty;
+        _requireArtifactAttestation = requireArtifactAttestation;
     }
 
     /// <summary>
@@ -293,6 +299,49 @@ public sealed class PluginRegistryService
     }
 
     /// <summary>
+    /// Validates the source and build attestation claimed by a registry entry.
+    /// </summary>
+    public RegistryArtifactValidationResult GetArtifactTrustStatus(RegistryPlugin registryPlugin) =>
+        _artifactTrustValidator.Validate(registryPlugin);
+
+    /// <summary>
+    /// Gets whether a loaded plugin directory is part of the application-bundled plugin root.
+    /// </summary>
+    public bool IsBundledPluginPath(string pluginDirectory) =>
+        !string.IsNullOrWhiteSpace(pluginDirectory) && IsWithinDirectory(pluginDirectory, _bundledPluginsPath);
+
+    /// <summary>
+    /// Validates the build provenance persisted with an installed registry plugin.
+    /// A matching current registry entry alone never upgrades an installation's trust.
+    /// </summary>
+    public RegistryArtifactValidationResult GetInstalledArtifactTrustStatus(RegistryPlugin registryPlugin)
+    {
+        ValidatePluginId(registryPlugin.Id);
+        var receipt = ReadInstallReceipt(registryPlugin.Id).Receipt;
+        if (receipt?.ArtifactTrust is null)
+        {
+            return new RegistryArtifactValidationResult(
+                RegistryArtifactValidationCode.MissingMetadata,
+                RegistryArtifactSource.Unknown,
+                RegistryArtifactTrustLevel.Unverified);
+        }
+
+        var artifactTrust = receipt.ArtifactTrust;
+        return _artifactTrustValidator.Validate(new RegistryPlugin
+        {
+            Id = receipt.PluginId,
+            Version = receipt.Version,
+            DownloadUrl = receipt.DownloadUrl,
+            Size = artifactTrust.PackageSize,
+            Sha256 = receipt.PackageSha256,
+            Source = artifactTrust.Source,
+            Trust = artifactTrust.Trust,
+            SourceRepository = artifactTrust.SourceRepository,
+            Attestation = artifactTrust.Attestation
+        });
+    }
+
+    /// <summary>
     /// Downloads and installs a plugin from the registry.
     /// </summary>
     public async Task<PluginInstallResult> InstallPluginAsync(
@@ -327,12 +376,15 @@ public sealed class PluginRegistryService
         bool requirePackageHash,
         CancellationToken ct)
     {
+        ValidatePluginId(registryPlugin.Id);
+        var artifactTrust = ValidateArtifactTrustForInstall(registryPlugin);
+        requirePackageHash |= artifactTrust.IsVerified;
+
         Directory.CreateDirectory(_pluginsPath);
         Directory.CreateDirectory(_pendingUpdatesPath);
         Directory.CreateDirectory(_pendingUninstallsPath);
         Directory.CreateDirectory(_installMetadataPath);
 
-        ValidatePluginId(registryPlugin.Id);
         var pluginDir = GetValidatedPluginDirectory(registryPlugin.Id);
         var stagingRoot = GetValidatedChildDirectory(_pluginsPath, StagingDirectoryName, "plugin staging directory");
         var stagingDir = GetValidatedChildDirectory(stagingRoot, $"{registryPlugin.Id}-{Guid.NewGuid():N}", "plugin staging instance directory");
@@ -352,7 +404,11 @@ public sealed class PluginRegistryService
                     downloadCts.Token);
                 response.EnsureSuccessStatusCode();
 
-                var totalBytes = response.Content.Headers.ContentLength ?? registryPlugin.Size;
+                var contentLength = response.Content.Headers.ContentLength;
+                if (artifactTrust.IsVerified && contentLength is not null && contentLength != registryPlugin.Size)
+                    throw CreateArtifactTrustException(RegistryArtifactValidationCode.InvalidPackageSize);
+
+                var totalBytes = contentLength ?? registryPlugin.Size;
                 await using var contentStream = await response.Content.ReadAsStreamAsync(downloadCts.Token);
                 await using var fileStream = File.Create(tempZip);
 
@@ -366,10 +422,16 @@ public sealed class PluginRegistryService
                     if (read == 0)
                         break;
 
+                    if (artifactTrust.IsVerified && bytesRead + read > registryPlugin.Size)
+                        throw CreateArtifactTrustException(RegistryArtifactValidationCode.InvalidPackageSize);
+
                     await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
                     bytesRead += read;
                     progress?.Report(totalBytes > 0 ? (double)bytesRead / totalBytes : 0);
                 }
+
+                if (artifactTrust.IsVerified && bytesRead != registryPlugin.Size)
+                    throw CreateArtifactTrustException(RegistryArtifactValidationCode.InvalidPackageSize);
             }
             catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && downloadCts.IsCancellationRequested)
             {
@@ -384,7 +446,7 @@ public sealed class PluginRegistryService
             // Unblock downloaded files
             PluginLoader.UnblockDirectory(stagingDir);
             ValidateStagedPlugin(registryPlugin, stagingDir);
-            var installReceipt = CreateInstallReceipt(registryPlugin, stagingDir, tempZip);
+            var installReceipt = CreateInstallReceipt(registryPlugin, stagingDir, tempZip, artifactTrust);
             WriteEmbeddedInstallReceipt(stagingDir, installReceipt);
 
             var shouldEnable = !_settings.Current.PluginEnabledState.TryGetValue(registryPlugin.Id, out var enabled) || enabled;
@@ -758,6 +820,24 @@ public sealed class PluginRegistryService
         await Task.CompletedTask;
     }
 
+    private RegistryArtifactValidationResult ValidateArtifactTrustForInstall(RegistryPlugin registryPlugin)
+    {
+        var result = _artifactTrustValidator.Validate(registryPlugin);
+        if (result.IsVerified)
+            return result;
+
+        if (!_requireArtifactAttestation && !RegistryArtifactTrustValidator.HasAnyTrustMetadata(registryPlugin))
+            return result;
+
+        throw CreateArtifactTrustException(result.Code);
+    }
+
+    private static RegistryArtifactTrustException CreateArtifactTrustException(
+        RegistryArtifactValidationCode validationCode) =>
+        new(
+            validationCode,
+            Loc.Instance.GetString("Plugins.ArtifactTrustValidationFailedFormat", validationCode));
+
     private async Task<string?> ReplacePluginDirectoryForInstallAsync(
         string sourceDirectory,
         string targetDirectory,
@@ -827,7 +907,8 @@ public sealed class PluginRegistryService
     private PluginInstallReceipt CreateInstallReceipt(
         RegistryPlugin registryPlugin,
         string pluginDirectory,
-        string packagePath)
+        string packagePath,
+        RegistryArtifactValidationResult artifactTrust)
     {
         var files = EnumeratePluginFiles(pluginDirectory)
             .Select(path => new PluginInstallFile(
@@ -837,13 +918,23 @@ public sealed class PluginRegistryService
             .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
             .ToArray();
 
+        var artifactTrustReceipt = artifactTrust.IsVerified
+            ? new PluginArtifactTrustReceipt(
+                registryPlugin.Source!,
+                registryPlugin.Trust!,
+                registryPlugin.SourceRepository!,
+                registryPlugin.Size,
+                registryPlugin.Attestation!)
+            : null;
+
         return new PluginInstallReceipt(
             InstallReceiptSchemaVersion,
             registryPlugin.Id,
             registryPlugin.Version,
             registryPlugin.DownloadUrl,
             ComputeFileSha256(packagePath),
-            files);
+            files,
+            artifactTrustReceipt);
     }
 
     private static IEnumerable<string> EnumeratePluginFiles(string pluginDirectory)
@@ -991,12 +1082,31 @@ public sealed class PluginRegistryService
                     !string.IsNullOrWhiteSpace(file.RelativePath) &&
                     file.Length >= 0 &&
                     !string.IsNullOrWhiteSpace(file.Sha256) &&
-                    string.Equals(NormalizeSha256(file.Sha256), file.Sha256, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(NormalizeSha256(file.Sha256), file.Sha256, StringComparison.OrdinalIgnoreCase)) &&
+                IsValidArtifactTrustReceiptStructure(receipt.ArtifactTrust);
         }
         catch (InvalidOperationException)
         {
             return false;
         }
+    }
+
+    private static bool IsValidArtifactTrustReceiptStructure(PluginArtifactTrustReceipt? artifactTrust)
+    {
+        if (artifactTrust is null)
+            return true;
+
+        return !string.IsNullOrWhiteSpace(artifactTrust.Source) &&
+               !string.IsNullOrWhiteSpace(artifactTrust.Trust) &&
+               !string.IsNullOrWhiteSpace(artifactTrust.SourceRepository) &&
+               artifactTrust.PackageSize > 0 &&
+               artifactTrust.Attestation is
+               {
+                   Algorithm: not null,
+                   KeyId: not null,
+                   SourceCommit: not null,
+                   Signature: not null
+               };
     }
 
     private bool HasValidInstallReceipt(string pluginId)
@@ -1459,7 +1569,15 @@ public sealed class PluginRegistryService
         string Version,
         string DownloadUrl,
         string PackageSha256,
-        IReadOnlyList<PluginInstallFile> Files);
+        IReadOnlyList<PluginInstallFile> Files,
+        PluginArtifactTrustReceipt? ArtifactTrust = null);
+
+    private sealed record PluginArtifactTrustReceipt(
+        string Source,
+        string Trust,
+        string SourceRepository,
+        long PackageSize,
+        RegistryArtifactAttestation Attestation);
 
     private sealed record PluginInstallFile(string RelativePath, long Length, string Sha256);
 

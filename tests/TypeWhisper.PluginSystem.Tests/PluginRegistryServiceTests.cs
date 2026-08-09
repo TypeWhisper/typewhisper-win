@@ -93,6 +93,18 @@ public class PluginRegistryServiceTests : IDisposable
                 Description = "A test plugin",
                 Size = 1024L,
                 DownloadUrl = "https://example.com/plugin.zip",
+                Sha256 = new string('A', 64),
+                Source = "official",
+                Trust = RegistryArtifactTrustValidator.TypeWhisperBuiltTrust,
+                SourceRepository = "https://github.com/TypeWhisper/typewhisper-win",
+                Attestation = new
+                {
+                    SchemaVersion = RegistryArtifactTrustValidator.SupportedSchemaVersion,
+                    Algorithm = RegistryArtifactTrustValidator.SupportedAlgorithm,
+                    KeyId = "future-production-key",
+                    SourceCommit = new string('a', 40),
+                    Signature = Convert.ToBase64String(new byte[64])
+                },
                 RequiresApiKey = false
             }
         };
@@ -108,6 +120,9 @@ public class PluginRegistryServiceTests : IDisposable
         Assert.Equal("com.test.plugin", result[0].Id);
         Assert.Equal("Test Plugin", result[0].Name);
         Assert.Equal("1.0.0", result[0].Version);
+        Assert.Equal("official", result[0].Source);
+        Assert.Equal(RegistryArtifactTrustValidator.TypeWhisperBuiltTrust, result[0].Trust);
+        Assert.Equal("future-production-key", result[0].Attestation?.KeyId);
     }
 
     [Fact]
@@ -962,6 +977,158 @@ public class PluginRegistryServiceTests : IDisposable
 
         Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_ClaimedTrustWithInvalidSignatureFailsBeforeHttpRequest()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var signed = RegistryArtifactTrustValidatorTests.CreateSignedPlugin(key);
+        var registryPlugin = signed with
+        {
+            Attestation = signed.Attestation! with
+            {
+                Signature = Convert.ToBase64String(new byte[64])
+            }
+        };
+        var handler = new Mock<HttpMessageHandler>();
+        var httpClient = TrackDisposable(new HttpClient(handler.Object));
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            _pluginsRoot,
+            artifactTrustValidator: RegistryArtifactTrustValidatorTests.CreateValidator(key));
+
+        var ex = await Assert.ThrowsAsync<RegistryArtifactTrustException>(
+            () => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Equal(RegistryArtifactValidationCode.InvalidSignature, ex.ValidationCode);
+        handler.Protected().Verify(
+            "SendAsync",
+            Times.Never(),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>());
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_StrictModeRejectsLegacyEntryBeforeHttpRequest()
+    {
+        var registryPlugin = CreateRegistryPlugin("com.test.strict-trust", "1.0.2");
+        var handler = new Mock<HttpMessageHandler>();
+        var httpClient = TrackDisposable(new HttpClient(handler.Object));
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            httpClient,
+            _pluginsRoot,
+            requireArtifactAttestation: true);
+
+        var ex = await Assert.ThrowsAsync<RegistryArtifactTrustException>(
+            () => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Equal(RegistryArtifactValidationCode.MissingMetadata, ex.ValidationCode);
+        handler.Protected().Verify(
+            "SendAsync",
+            Times.Never(),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_VerifiedEntryAlwaysEnforcesSignedPackageHash()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var package = CreatePluginPackage("com.typewhisper.example", "1.2.3");
+        var registryPlugin = RegistryArtifactTrustValidatorTests.CreateSignedPlugin(
+            key,
+            packageSha256: Convert.ToHexString(SHA256.HashData([9, 8, 7, 6])),
+            packageSize: package.Length);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            artifactTrustValidator: RegistryArtifactTrustValidatorTests.CreateValidator(key));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Contains("SHA-256", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_VerifiedEntryRejectsMismatchedContentLength()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var package = CreatePluginPackage("com.typewhisper.example", "1.2.3");
+        var registryPlugin = RegistryArtifactTrustValidatorTests.CreateSignedPlugin(
+            key,
+            packageSha256: Convert.ToHexString(SHA256.HashData(package)),
+            packageSize: package.Length + 1);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            artifactTrustValidator: RegistryArtifactTrustValidatorTests.CreateValidator(key));
+
+        var ex = await Assert.ThrowsAsync<RegistryArtifactTrustException>(
+            () => service.InstallPluginAsync(registryPlugin));
+
+        Assert.Equal(RegistryArtifactValidationCode.InvalidPackageSize, ex.ValidationCode);
+        Assert.False(Directory.Exists(Path.Join(_pluginsRoot, registryPlugin.Id)));
+    }
+
+    [Fact]
+    public async Task InstallPluginAsync_PersistsVerifiedOriginInsteadOfTrustingCurrentRegistryMetadata()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var package = CreateLoadablePluginPackage(
+            "com.typewhisper.example",
+            "1.2.3",
+            typeof(RegistryRepairTestPlugin));
+        var registryPlugin = RegistryArtifactTrustValidatorTests.CreateSignedPlugin(
+            key,
+            packageSha256: Convert.ToHexString(SHA256.HashData(package)),
+            packageSize: package.Length);
+        var validator = RegistryArtifactTrustValidatorTests.CreateValidator(key);
+        var manager = CreateManager();
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot,
+            pluginDataPath: Path.Combine(_pluginsRoot, ".plugin-data"),
+            artifactTrustValidator: validator);
+
+        var installResult = await service.InstallPluginAsync(registryPlugin);
+        var unsignedCurrentEntry = CreateRegistryPlugin(registryPlugin.Id, registryPlugin.Version) with
+        {
+            Name = "Spoofed display metadata"
+        };
+        var installedTrust = service.GetInstalledArtifactTrustStatus(unsignedCurrentEntry);
+
+        Assert.Equal(PluginInstallResult.Installed, installResult);
+        Assert.True(installedTrust.IsVerified);
+        Assert.Equal(RegistryArtifactSource.Official, installedTrust.Source);
+
+        var item = new RegistryPluginItemViewModel(unsignedCurrentEntry, service);
+        Assert.Equal(Loc.Instance["Plugins.SourceUnknown"], item.SourceBadge);
+        Assert.Equal(Loc.Instance["Plugins.TrustUnverified"], item.TrustBadge);
+        Assert.Equal(Loc.Instance["Plugins.SourceOfficial"], item.InstalledSourceBadge);
+        Assert.Equal(Loc.Instance["Plugins.TrustVerifiedOfficial"], item.InstalledTrustBadge);
     }
 
     [Fact]

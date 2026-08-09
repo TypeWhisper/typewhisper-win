@@ -14,6 +14,8 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     private readonly RegistryPlugin _registryPlugin;
     private readonly PluginRegistryService _registryService;
     private PluginInstallDiagnosis _diagnosis;
+    private RegistryArtifactValidationResult _artifactTrust;
+    private RegistryArtifactValidationResult _installedArtifactTrust;
 
     /// <summary>
     /// Gets the id.
@@ -96,6 +98,36 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// Gets the location badge.
     /// </summary>
     public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
+    /// <summary>
+    /// Gets the verified source label for the current registry artifact.
+    /// </summary>
+    public string SourceBadge => GetSourceBadge(_artifactTrust, installed: false);
+    /// <summary>
+    /// Gets the build trust label for the current registry artifact.
+    /// </summary>
+    public string TrustBadge => GetTrustBadge(_artifactTrust);
+    /// <summary>
+    /// Gets the explanation for the current registry artifact trust label.
+    /// </summary>
+    public string TrustTooltip => GetTrustTooltip(_artifactTrust);
+    /// <summary>
+    /// Gets the persisted source label for an installed copy of this plugin.
+    /// </summary>
+    public string InstalledSourceBadge => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.SourceBundled"]
+        : GetSourceBadge(_installedArtifactTrust, installed: true);
+    /// <summary>
+    /// Gets the persisted build trust label for an installed copy of this plugin.
+    /// </summary>
+    public string InstalledTrustBadge => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.TrustVerifiedOfficial"]
+        : GetTrustBadge(_installedArtifactTrust);
+    /// <summary>
+    /// Gets the explanation for the persisted installed artifact trust label.
+    /// </summary>
+    public string InstalledTrustTooltip => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.TrustTooltipBundled"]
+        : GetTrustTooltip(_installedArtifactTrust);
 
     [ObservableProperty] private PluginInstallState _installState;
     [ObservableProperty] private double _progress;
@@ -141,12 +173,17 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         _registryPlugin = registryPlugin;
         _registryService = registryService;
         _diagnosis = registryService.GetInstallDiagnosis(registryPlugin);
+        _artifactTrust = registryService.GetArtifactTrustStatus(registryPlugin);
+        _installedArtifactTrust = registryService.GetInstalledArtifactTrustStatus(registryPlugin);
         _installState = _diagnosis.State;
     }
 
     internal void RefreshInstallState()
     {
+        _artifactTrust = _registryService.GetArtifactTrustStatus(_registryPlugin);
+        _installedArtifactTrust = _registryService.GetInstalledArtifactTrustStatus(_registryPlugin);
         ApplyDiagnosis(_registryService.GetInstallDiagnosis(_registryPlugin));
+        NotifyTrustStateChanged();
         if (InstallState == PluginInstallState.Installed)
             InstallErrorMessage = "";
     }
@@ -293,6 +330,44 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         RepairCommand.NotifyCanExecuteChanged();
     }
 
+    private void NotifyTrustStateChanged()
+    {
+        OnPropertyChanged(nameof(SourceBadge));
+        OnPropertyChanged(nameof(TrustBadge));
+        OnPropertyChanged(nameof(TrustTooltip));
+        OnPropertyChanged(nameof(InstalledSourceBadge));
+        OnPropertyChanged(nameof(InstalledTrustBadge));
+        OnPropertyChanged(nameof(InstalledTrustTooltip));
+    }
+
+    private static string GetSourceBadge(RegistryArtifactValidationResult validation, bool installed) =>
+        validation.Source switch
+        {
+            RegistryArtifactSource.Official => Loc.Instance["Plugins.SourceOfficial"],
+            RegistryArtifactSource.Community => Loc.Instance["Plugins.SourceCommunity"],
+            _ when installed => Loc.Instance["Plugins.SourceLegacy"],
+            _ => Loc.Instance["Plugins.SourceUnknown"]
+        };
+
+    private static string GetTrustBadge(RegistryArtifactValidationResult validation) => validation switch
+    {
+        { IsVerified: true, Source: RegistryArtifactSource.Community } =>
+            Loc.Instance["Plugins.TrustVerifiedCommunity"],
+        { IsVerified: true } => Loc.Instance["Plugins.TrustVerifiedOfficial"],
+        { Code: RegistryArtifactValidationCode.MissingMetadata } => Loc.Instance["Plugins.TrustUnverified"],
+        _ => Loc.Instance["Plugins.TrustVerificationFailed"]
+    };
+
+    private static string GetTrustTooltip(RegistryArtifactValidationResult validation) => validation switch
+    {
+        { IsVerified: true, Source: RegistryArtifactSource.Community } =>
+            Loc.Instance["Plugins.TrustTooltipVerifiedCommunity"],
+        { IsVerified: true } => Loc.Instance["Plugins.TrustTooltipVerifiedOfficial"],
+        { Code: RegistryArtifactValidationCode.MissingMetadata } =>
+            Loc.Instance["Plugins.TrustTooltipUnverified"],
+        _ => Loc.Instance.GetString("Plugins.TrustTooltipFailedFormat", validation.Code)
+    };
+
     partial void OnInstallErrorMessageChanged(string value)
     {
         OnPropertyChanged(nameof(HasInstallError));
@@ -323,6 +398,7 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(CategoryLabel));
         OnPropertyChanged(nameof(LocationBadge));
         OnPropertyChanged(nameof(DiagnosticMessage));
+        NotifyTrustStateChanged();
     }
 }
 

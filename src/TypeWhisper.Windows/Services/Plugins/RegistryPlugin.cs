@@ -54,6 +54,22 @@ public sealed record RegistryPlugin
     /// </summary>
     public string? Sha256 { get; init; }
     /// <summary>
+    /// Gets or sets the publisher source classification covered by the artifact attestation.
+    /// </summary>
+    public string? Source { get; init; }
+    /// <summary>
+    /// Gets or sets the build trust classification covered by the artifact attestation.
+    /// </summary>
+    public string? Trust { get; init; }
+    /// <summary>
+    /// Gets or sets the canonical source repository covered by the artifact attestation.
+    /// </summary>
+    public string? SourceRepository { get; init; }
+    /// <summary>
+    /// Gets or sets the cryptographic build attestation.
+    /// </summary>
+    public RegistryArtifactAttestation? Attestation { get; init; }
+    /// <summary>
     /// Gets or sets the icon system name value.
     /// </summary>
     public string? IconSystemName { get; init; }
