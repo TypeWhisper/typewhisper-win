@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using Moq;
 using TypeWhisper.Core.Interfaces;
@@ -610,6 +611,91 @@ public class ModelManagerServiceTests
         Assert.Equal(1, statusChangedCount);
     }
 
+    [Fact]
+    public async Task RemoveModelAsync_UnloadsDeletesAndClearsSelectedModel()
+    {
+        const string pluginId = "com.typewhisper.local";
+        const string modelId = "local-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        var settings = new AppSettings { SelectedModelId = fullModelId };
+        _settings.Setup(service => service.Current).Returns(settings);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            SupportsModelRemoval = true,
+            ModelDownloaded = true
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+        await sut.LoadModelAsync(fullModelId);
+
+        await sut.RemoveModelAsync(fullModelId);
+
+        Assert.Null(sut.ActiveModelId);
+        Assert.Equal(1, plugin.UnloadCallCount);
+        Assert.Equal(1, plugin.RemoveCallCount);
+        Assert.False(plugin.ModelDownloaded);
+        Assert.Equal(ModelStatusType.NotDownloaded, sut.GetStatus(fullModelId).Type);
+        _settings.Verify(service => service.Save(
+            It.Is<AppSettings>(value => value.SelectedModelId == null)), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemoveModelAsync_RejectsPluginsWithoutRemovalCapability()
+    {
+        const string pluginId = "com.typewhisper.legacy-local";
+        const string modelId = "legacy-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId]);
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        Assert.False(sut.SupportsModelRemoval(fullModelId));
+        await Assert.ThrowsAsync<NotSupportedException>(() => sut.RemoveModelAsync(fullModelId));
+        Assert.Equal(0, plugin.RemoveCallCount);
+    }
+
+    [Fact]
+    public async Task DownloadAndLoadModelAsync_FailedDownloadPublishesRetryableErrorState()
+    {
+        const string pluginId = "com.typewhisper.retry-local";
+        const string modelId = "retry-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            ModelDownloaded = false,
+            DownloadException = new IOException("download interrupted")
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        await Assert.ThrowsAsync<IOException>(() => sut.DownloadAndLoadModelAsync(fullModelId));
+
+        var failed = sut.GetStatus(fullModelId);
+        Assert.Equal(ModelStatusType.Error, failed.Type);
+        Assert.Equal("download interrupted", failed.ErrorMessage);
+        Assert.Equal(1, plugin.DownloadCallCount);
+
+        plugin.DownloadException = null;
+        await sut.DownloadAndLoadModelAsync(fullModelId);
+
+        Assert.Equal(2, plugin.DownloadCallCount);
+        Assert.Equal(ModelStatusType.Ready, sut.GetStatus(fullModelId).Type);
+    }
+
     [Theory]
     [InlineData(true, "TypeWhisper, ElevenLabs")]
     [InlineData(false, null)]
@@ -730,6 +816,7 @@ public class ModelManagerServiceTests
         public string ProviderDisplayName => PluginId;
         public bool IsConfigured { get; }
         public bool SupportsModelDownload { get; }
+        public bool SupportsModelRemoval { get; init; }
         public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
@@ -739,6 +826,8 @@ public class ModelManagerServiceTests
         public string? LastLoadedModelId { get; private set; }
         public int LoadCallCount { get; private set; }
         public int DownloadCallCount { get; private set; }
+        public int RemoveCallCount { get; private set; }
+        public int UnloadCallCount { get; private set; }
         public List<TranscriptionAccelerationPreference> AccelerationPreferencesAtLoad { get; } = [];
         public TranscriptionAccelerationPreference LastAccelerationPreference { get; private set; } =
             TranscriptionAccelerationPreference.Auto;
@@ -748,9 +837,10 @@ public class ModelManagerServiceTests
         public TranscriptionAccelerationStatus AccelerationStatus => AccelerationStatusOverride
             ?? new TranscriptionAccelerationStatus(TranscriptionAccelerationBackend.Cpu, "Using CPU");
         public Exception? LoadException { get; init; }
+        public Exception? DownloadException { get; set; }
         public TaskCompletionSource? LoadGate { get; init; }
         public Exception? DownloadStatusException { get; init; }
-        public bool ModelDownloaded { get; init; } = true;
+        public bool ModelDownloaded { get; set; } = true;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -774,6 +864,24 @@ public class ModelManagerServiceTests
             DownloadCallCount++;
             AccelerationPreferenceAtDownload = LastAccelerationPreference;
             progress?.Report(1);
+            if (DownloadException is not null)
+                throw DownloadException;
+
+            ModelDownloaded = true;
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveModelAsync(string modelId, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            RemoveCallCount++;
+            ModelDownloaded = false;
+            return Task.CompletedTask;
+        }
+
+        public Task UnloadModelAsync()
+        {
+            UnloadCallCount++;
             return Task.CompletedTask;
         }
 

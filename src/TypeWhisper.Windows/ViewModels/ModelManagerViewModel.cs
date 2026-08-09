@@ -49,6 +49,9 @@ public partial class ModelManagerViewModel : ObservableObject
     private ModelStorageStatusKind _modelStorageStatusKind = ModelStorageStatusKind.Current;
     private string? _modelStorageErrorDetail;
 
+    internal Func<string, string, bool> ConfirmModelRemoval { get; set; } = static (message, title) =>
+        MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
     [ObservableProperty] private string? _activeModelId;
     [ObservableProperty] private string? _selectedModelOptionId;
     private string _selectedAccelerationOptionValue = AppSettings.LocalModelAccelerationAuto;
@@ -194,6 +197,7 @@ public partial class ModelManagerViewModel : ObservableObject
                     _modelManager.ActiveModelId == fullId,
                     engine.SupportsTranslation,
                     engine.SupportsModelDownload,
+                    _modelManager.SupportsModelRemoval(fullId),
                     _modelManager.IsDownloaded(fullId),
                     status));
 
@@ -242,6 +246,7 @@ public partial class ModelManagerViewModel : ObservableObject
                 var status = _modelManager.GetStatus(m.FullId);
                 m.IsReady = status.Type == ModelStatusType.Ready;
                 m.IsBusy = IsBusyStatus(status);
+                m.HasError = status.Type == ModelStatusType.Error;
                 m.StatusText = FormatStatus(status, m.IsDownloaded, m.IsAvailable, m.SupportsDownload);
             }
 
@@ -357,6 +362,7 @@ public partial class ModelManagerViewModel : ObservableObject
         bool supportsDownload) => status.Type switch
         {
             ModelStatusType.Downloading => Loc.Instance.GetString("Models.DownloadProgressFormat", status.Progress),
+            ModelStatusType.Removing => Loc.Instance["Models.StatusRemoving"],
             ModelStatusType.Loading => Loc.Instance["Models.StatusLoading"],
             ModelStatusType.Ready => Loc.Instance["Models.StatusReady"],
             ModelStatusType.Error => Loc.Instance.GetString("Models.StatusErrorFormat", status.ErrorMessage ?? ""),
@@ -365,7 +371,7 @@ public partial class ModelManagerViewModel : ObservableObject
         };
 
     internal static bool IsBusyStatus(ModelStatus status) =>
-        status.Type is ModelStatusType.Downloading or ModelStatusType.Loading;
+        status.Type is ModelStatusType.Downloading or ModelStatusType.Removing or ModelStatusType.Loading;
 
     [RelayCommand]
     private async Task ActivateModel(string fullModelId)
@@ -591,9 +597,30 @@ public partial class ModelManagerViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void DeleteModel(string modelId)
+    private async Task RemoveModel(string modelId)
     {
-        _modelManager.DeleteModel(modelId);
+        var model = Providers
+            .SelectMany(static provider => provider.Models)
+            .FirstOrDefault(item => string.Equals(item.FullId, modelId, StringComparison.Ordinal));
+        if (model is null || !model.CanRemove)
+            return;
+
+        var message = Loc.Instance.GetString("Models.RemoveConfirmFormat", model.DisplayName);
+        if (!ConfirmModelRemoval(message, Loc.Instance["Models.RemoveTitle"]))
+            return;
+
+        try
+        {
+            await _modelManager.RemoveModelAsync(modelId);
+        }
+        catch (Exception)
+        {
+            // The service publishes the model-specific error state for the UI.
+        }
+        finally
+        {
+            RefreshAllModels();
+        }
     }
 
     [RelayCommand]
@@ -738,12 +765,34 @@ public partial class ModelItemViewModel : ObservableObject
     /// Gets whether supports download.
     /// </summary>
     public bool SupportsDownload { get; }
+    /// <summary>
+    /// Gets whether downloaded files can be removed through the plugin capability.
+    /// </summary>
+    public bool SupportsRemoval { get; }
+
+    /// <summary>
+    /// Gets whether the model can be downloaded or retried now.
+    /// </summary>
+    public bool CanDownload => SupportsDownload && (!IsDownloaded || HasError) && !IsBusy;
+
+    /// <summary>
+    /// Gets whether the downloaded model can be removed now.
+    /// </summary>
+    public bool CanRemove => SupportsRemoval && IsDownloaded && !IsBusy;
+
+    /// <summary>
+    /// Gets the localized download or retry action label.
+    /// </summary>
+    public string DownloadActionText => HasError
+        ? Loc.Instance["Models.Retry"]
+        : Loc.Instance["Models.Download"];
 
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private bool _isAvailable;
     [ObservableProperty] private bool _isDownloaded;
     [ObservableProperty] private bool _isReady;
     [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _statusText = "";
 
     /// <summary>
@@ -751,7 +800,7 @@ public partial class ModelItemViewModel : ObservableObject
     /// </summary>
     public ModelItemViewModel(string fullId, PluginModelInfo model, bool isAvailable,
         bool isActive, bool supportsTranslation, bool supportsDownload,
-        bool isDownloaded, ModelStatus status)
+        bool supportsRemoval, bool isDownloaded, ModelStatus status)
     {
         FullId = fullId;
         DisplayName = model.DisplayName;
@@ -760,12 +809,32 @@ public partial class ModelItemViewModel : ObservableObject
         LanguageCount = model.LanguageCount;
         SupportsTranslation = supportsTranslation;
         SupportsDownload = supportsDownload;
+        SupportsRemoval = supportsRemoval;
         _isAvailable = isAvailable;
         _isActive = isActive;
         _isDownloaded = isDownloaded;
         _isReady = status.Type == ModelStatusType.Ready;
         _isBusy = ModelManagerViewModel.IsBusyStatus(status);
+        _hasError = status.Type == ModelStatusType.Error;
         _statusText = ModelManagerViewModel.FormatStatus(status, isDownloaded, isAvailable, supportsDownload);
+    }
+
+    partial void OnIsDownloadedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanDownload));
+        OnPropertyChanged(nameof(CanRemove));
+    }
+
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanDownload));
+        OnPropertyChanged(nameof(CanRemove));
+    }
+
+    partial void OnHasErrorChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanDownload));
+        OnPropertyChanged(nameof(DownloadActionText));
     }
 }
 

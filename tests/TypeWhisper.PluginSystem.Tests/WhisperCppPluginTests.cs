@@ -442,6 +442,26 @@ public class WhisperCppPluginTests
     }
 
     [Fact]
+    public async Task RemoveModelAsync_DeletesOnlyTheRequestedModelFile()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new WhisperCppPlugin();
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        var modelsDirectory = Path.Join(temp.Path, "Models");
+        Directory.CreateDirectory(modelsDirectory);
+        var requestedModel = Path.Join(modelsDirectory, "ggml-tiny.bin");
+        var otherModel = Path.Join(modelsDirectory, "ggml-base.bin");
+        await File.WriteAllTextAsync(requestedModel, "tiny");
+        await File.WriteAllTextAsync(otherModel, "base");
+
+        await sut.RemoveModelAsync("tiny", CancellationToken.None);
+
+        Assert.True(sut.SupportsModelRemoval);
+        Assert.False(File.Exists(requestedModel));
+        Assert.True(File.Exists(otherModel));
+    }
+
+    [Fact]
     public async Task LoadModelAsync_ExplicitCudaRuntimeInstallFailureShowsDownloadReason()
     {
         using var temp = new TempDirectory();

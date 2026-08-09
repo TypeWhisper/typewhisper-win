@@ -253,14 +253,36 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         if (needsDownload)
         {
             SetStatus(modelId, ModelStatus.DownloadingModel(0));
-
-            plugin.SetAccelerationPreference(
-                GetAccelerationPreference(_settings.Current.LocalModelAcceleration));
-            var progress = new Progress<double>(p => SetStatus(modelId, ModelStatus.DownloadingModel(p)));
-            await plugin.DownloadModelAsync(pluginModelId, progress, cancellationToken);
+            try
+            {
+                plugin.SetAccelerationPreference(
+                    GetAccelerationPreference(_settings.Current.LocalModelAcceleration));
+                var progress = new Progress<double>(p =>
+                    ReportDownloadProgress(modelId, p));
+                await plugin.DownloadModelAsync(pluginModelId, progress, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                SetStatus(modelId, ModelStatus.NotDownloaded);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                SetStatus(modelId, ModelStatus.Failed(ex.Message));
+                throw;
+            }
         }
 
         await LoadModelAsync(modelId, cancellationToken);
+    }
+
+    private void ReportDownloadProgress(string modelId, double progress)
+    {
+        if (_modelStatuses.TryGetValue(modelId, out var current)
+            && current.Type == ModelStatusType.Downloading)
+        {
+            SetStatus(modelId, ModelStatus.DownloadingModel(Math.Clamp(progress, 0, 1)));
+        }
     }
 
     /// <summary>
@@ -386,14 +408,79 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Deletes model.
+    /// Returns whether the plugin can remove downloaded files for the model.
     /// </summary>
-    public void DeleteModel(string modelId)
+    public bool SupportsModelRemoval(string modelId)
     {
-        if (ActiveModelId == modelId)
-            UnloadModel();
+        if (!IsPluginModel(modelId))
+            return false;
 
-        SetStatus(modelId, ModelStatus.NotDownloaded);
+        try
+        {
+            var (pluginId, _) = ParsePluginModelId(modelId);
+            return FindTranscriptionEngine(pluginId)?.SupportsModelRemoval == true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Unloads a model when necessary and removes its downloaded files.
+    /// </summary>
+    public async Task RemoveModelAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        if (!IsPluginModel(modelId))
+            throw new ArgumentException($"Unknown model: {modelId}", nameof(modelId));
+
+        var (pluginId, pluginModelId) = ParsePluginModelId(modelId);
+        var plugin = FindTranscriptionEngine(pluginId)
+            ?? throw new ArgumentException($"Unknown plugin: {pluginId}", nameof(modelId));
+
+        if (!plugin.SupportsModelRemoval)
+            throw new NotSupportedException($"{plugin.ProviderDisplayName} does not support model removal.");
+
+        SetStatus(modelId, ModelStatus.RemovingModel);
+        try
+        {
+            if (ActiveModelId == modelId)
+            {
+                CancelAutoUnload();
+                await plugin.UnloadModelAsync();
+                _activeTranscriptionPlugin = null;
+                ActiveModelId = null;
+                _activeModelAccelerationPreference = null;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+                throw new InvalidOperationException("The transcription plugin changed while the model was being removed.");
+
+            await plugin.RemoveModelAsync(pluginModelId, cancellationToken);
+
+            if (!ReferenceEquals(FindTranscriptionEngine(pluginId), plugin))
+                throw new InvalidOperationException("The transcription plugin changed while the model was being removed.");
+
+            if (IsDownloadedCore(plugin, pluginModelId))
+                throw new IOException("The model plugin reported that downloaded files remain after removal.");
+
+            SetStatus(modelId, ModelStatus.NotDownloaded);
+            if (string.Equals(_settings.Current.SelectedModelId, modelId, StringComparison.Ordinal))
+                _settings.Save(_settings.Current with { SelectedModelId = null });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            SetStatus(
+                modelId,
+                IsDownloadedCore(plugin, pluginModelId) ? ModelStatus.Ready : ModelStatus.NotDownloaded);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            SetStatus(modelId, ModelStatus.Failed(ex.Message));
+            throw;
+        }
     }
 
     /// <summary>

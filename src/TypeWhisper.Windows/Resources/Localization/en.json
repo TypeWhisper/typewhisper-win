@@ -314,6 +314,11 @@
   "Models.NoProvider": "None",
   "Models.NoModelSelected": "No model selected",
   "Models.DownloadProgressFormat": "Downloading... {0:P0}",
+  "Models.Download": "Download",
+  "Models.Retry": "Retry",
+  "Models.Remove": "Remove",
+  "Models.RemoveTitle": "Remove downloaded model",
+  "Models.RemoveConfirmFormat": "Remove the downloaded files for {0}? You can download the model again later.",
 
   "Profiles.Title": "Profiles",
   "Profiles.SummaryFormat": "{0} profiles, {1} enabled",
@@ -1157,6 +1162,7 @@
   "History.CsvHeader": "Timestamp,App,Text,Duration (s),Words,Language",
 
   "Models.StatusLoading": "Loading...",
+  "Models.StatusRemoving": "Removing...",
   "Models.StatusReady": "Ready",
   "Models.StatusErrorFormat": "Error: {0}",
   "Models.StatusDownloaded": "Downloaded",

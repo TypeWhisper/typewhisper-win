@@ -554,6 +554,29 @@ public sealed class CohereTranscribePluginTests
         Assert.False(File.Exists(escapedPath));
     }
 
+    [Fact]
+    public async Task RemoveModelAsync_DeletesModelArtifactsAndKeepsSharedAssets()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereLocalAssetManager(temp.Path);
+        var paths = sut.GetModelPaths(CohereModelCatalog.DefaultModelId);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.ModelPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.VadModelPath)!);
+        await File.WriteAllTextAsync(paths.ModelPath, "model");
+        await File.WriteAllTextAsync(paths.ModelPath + ".sha256", "hash");
+        await File.WriteAllTextAsync(paths.ModelPath + ".download", "partial");
+        await File.WriteAllTextAsync(paths.VadModelPath, "vad");
+        await File.WriteAllTextAsync(paths.LanguageIdModelPath, "language-id");
+
+        await sut.RemoveModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        Assert.False(File.Exists(paths.ModelPath));
+        Assert.False(File.Exists(paths.ModelPath + ".sha256"));
+        Assert.False(File.Exists(paths.ModelPath + ".download"));
+        Assert.True(File.Exists(paths.VadModelPath));
+        Assert.True(File.Exists(paths.LanguageIdModelPath));
+    }
+
     [Theory]
     [InlineData(CohereModelCatalog.Q4KModelId)]
     [InlineData(CohereModelCatalog.DefaultModelId)]
@@ -605,6 +628,29 @@ public sealed class CohereTranscribePluginTests
 
         await sut.UnloadModelAsync();
         Assert.False(server.IsRunning);
+    }
+
+    [Fact]
+    public async Task PluginRemoveModelAsync_StopsActiveSidecarAndRemovesSelectedQuantization()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        await sut.RemoveModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        Assert.True(sut.SupportsModelRemoval);
+        Assert.False(server.IsRunning);
+        Assert.False(assets.IsModelInstalled(CohereModelCatalog.DefaultModelId));
+        Assert.Contains(CrispAsrBackend.Cpu, assets.EnsuredRuntimes);
     }
 
     [Fact]
@@ -846,6 +892,13 @@ public sealed class CohereTranscribePluginTests
             LastEnsuredModelId = modelId;
             _installedModelIds.Add(modelId);
             progress?.Report(new ArtifactTransferProgress(100, 100));
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveModelAsync(string modelId, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _installedModelIds.Remove(modelId);
             return Task.CompletedTask;
         }
 

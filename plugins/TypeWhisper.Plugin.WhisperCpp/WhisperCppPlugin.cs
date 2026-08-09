@@ -119,6 +119,10 @@ public sealed class WhisperCppPlugin :
     /// </summary>
     public bool SupportsModelDownload => true;
     /// <summary>
+    /// Gets whether downloaded model files can be removed.
+    /// </summary>
+    public bool SupportsModelRemoval => true;
+    /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
     public IReadOnlyList<string> SupportedLanguages => [];
@@ -291,6 +295,32 @@ public sealed class WhisperCppPlugin :
                 TryDeleteFile(tempPath);
                 throw;
             }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Removes the downloaded GGML file for the requested model.
+    /// </summary>
+    public async Task RemoveModelAsync(string modelId, CancellationToken ct)
+    {
+        var modelPath = GetModelPath(modelId);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
+            {
+                DisposeFactoryUnsafe();
+                _loadedModelId = null;
+                _selectedModelId = null;
+            }
+
+            ct.ThrowIfCancellationRequested();
+            if (File.Exists(modelPath))
+                File.Delete(modelPath);
         }
         finally
         {

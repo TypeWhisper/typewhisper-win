@@ -109,6 +109,11 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
     public bool SupportsModelDownload => true;
 
     /// <summary>
+    /// Gets whether individual Cohere model quantizations can be removed.
+    /// </summary>
+    public bool SupportsModelRemoval => true;
+
+    /// <summary>
     /// Gets the language codes supported by Cohere Transcribe.
     /// </summary>
     public IReadOnlyList<string> SupportedLanguages => Languages;
@@ -287,6 +292,28 @@ public sealed class CohereTranscribePlugin : ITranscriptionEnginePlugin
         {
             _accelerationStatus = CreateUnavailableStatus(_accelerationPreference, exception.Message);
             throw;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Stops the active sidecar when necessary and removes one model quantization.
+    /// Shared VAD, language-ID, and runtime assets are retained.
+    /// </summary>
+    public async Task RemoveModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        ValidateModelId(modelId);
+        if (string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
+            await UnloadModelAsync();
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await GetAssets().RemoveModelAsync(modelId, cancellationToken);
+            _accelerationStatus = CreatePendingStatus(_accelerationPreference);
         }
         finally
         {

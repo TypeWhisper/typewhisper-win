@@ -314,6 +314,11 @@
   "Models.NoProvider": "Keiner",
   "Models.NoModelSelected": "Kein Modell ausgewählt",
   "Models.DownloadProgressFormat": "Wird heruntergeladen... {0:P0}",
+  "Models.Download": "Herunterladen",
+  "Models.Retry": "Erneut versuchen",
+  "Models.Remove": "Entfernen",
+  "Models.RemoveTitle": "Heruntergeladenes Modell entfernen",
+  "Models.RemoveConfirmFormat": "Die heruntergeladenen Dateien für {0} entfernen? Du kannst das Modell später erneut herunterladen.",
 
   "Profiles.Title": "Profile",
   "Profiles.SummaryFormat": "{0} Profile, {1} aktiv",
@@ -1157,6 +1162,7 @@
   "History.CsvHeader": "Zeitstempel,App,Text,Dauer (s),W\u00f6rter,Sprache",
 
   "Models.StatusLoading": "Laden...",
+  "Models.StatusRemoving": "Wird entfernt...",
   "Models.StatusReady": "Bereit",
   "Models.StatusErrorFormat": "Fehler: {0}",
   "Models.StatusDownloaded": "Heruntergeladen",

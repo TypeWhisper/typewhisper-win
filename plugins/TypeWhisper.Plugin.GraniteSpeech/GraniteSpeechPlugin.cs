@@ -74,6 +74,10 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
     /// </summary>
     public bool SupportsModelDownload => true;
     /// <summary>
+    /// Gets whether the local Python and model assets can be removed.
+    /// </summary>
+    public bool SupportsModelRemoval => true;
+    /// <summary>
     /// Gets the language codes accepted by the provider.
     /// </summary>
     public IReadOnlyList<string> SupportedLanguages => GraniteSupportedLanguages;
@@ -275,6 +279,31 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
 
         Log(PluginLogLevel.Info, "Setup complete");
         progress?.Report(1.0);
+    }
+
+    /// <summary>
+    /// Stops the sidecar and removes all downloaded Granite Speech assets.
+    /// </summary>
+    public async Task RemoveModelAsync(string modelId, CancellationToken ct)
+    {
+        if (!string.Equals(modelId, ModelId, StringComparison.Ordinal))
+            throw new ArgumentException($"Unknown model: {modelId}", nameof(modelId));
+
+        await _sidecarLock.WaitAsync(ct);
+        try
+        {
+            StopSidecar();
+            _loadedModelId = null;
+            ct.ThrowIfCancellationRequested();
+
+            var dataDirectory = GetDataDirectory();
+            if (Directory.Exists(dataDirectory))
+                Directory.Delete(dataDirectory, recursive: true);
+        }
+        finally
+        {
+            _sidecarLock.Release();
+        }
     }
 
     /// <summary>

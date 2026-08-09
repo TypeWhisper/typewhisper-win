@@ -239,6 +239,21 @@
                                                     </StackPanel>
                                                     <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource HintBrush}" FontSize="11"/>
                                                 </StackPanel>
+                                                <WrapPanel Grid.Column="1"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0">
+                                                    <ui:Button Content="{Binding DownloadActionText}"
+                                                               Command="{Binding DataContext.ModelManager.ActivateModelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                               CommandParameter="{Binding FullId}"
+                                                               Appearance="Secondary"
+                                                               Margin="0,0,6,0"
+                                                               Visibility="{Binding CanDownload, Converter={StaticResource BoolToVis}}"/>
+                                                    <ui:Button Content="{loc:Str Models.Remove}"
+                                                               Command="{Binding DataContext.ModelManager.RemoveModelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                               CommandParameter="{Binding FullId}"
+                                                               Appearance="Secondary"
+                                                               Visibility="{Binding CanRemove, Converter={StaticResource BoolToVis}}"/>
+                                                </WrapPanel>
                                                 <!-- Active indicator -->
                                                 <TextBlock Grid.Column="2" VerticalAlignment="Center"
                                                            FontSize="11" Margin="8,0,0,0">
