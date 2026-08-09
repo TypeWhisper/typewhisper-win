@@ -134,6 +134,8 @@ Local models are provided by bundled plugins and can be installed from the built
 
 For backend compatibility and troubleshooting on AMD GPUs, see [AMD acceleration on Windows](docs/AMD_ACCELERATION.md).
 
+The current Windows evaluation of NVIDIA's streaming Parakeet EOU model is documented in [Parakeet Realtime EOU on Windows](docs/PARAKEET_REALTIME_EOU_WINDOWS.md).
+
 ## Build
 
 1. Clone the repository:
