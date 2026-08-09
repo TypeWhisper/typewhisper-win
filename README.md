@@ -132,6 +132,8 @@ TypeWhisper for Windows release artifacts are built from this repository by GitH
 
 Local models are provided by bundled plugins and can be installed from the built-in marketplace.
 
+For backend compatibility and troubleshooting on AMD GPUs, see [AMD acceleration on Windows](docs/AMD_ACCELERATION.md).
+
 ## Build
 
 1. Clone the repository:

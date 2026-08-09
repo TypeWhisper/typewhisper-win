@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
@@ -35,7 +36,7 @@ public class WhisperCppPluginTests
         var sut = new WhisperCppPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.0.2", manifest.Version);
+        Assert.Equal("1.0.3", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -343,6 +344,48 @@ public class WhisperCppPluginTests
 
         Assert.Contains(Path.Join(pluginDirectory, "runtimes", "win-x64"), message);
         Assert.DoesNotContain(Path.Join(pluginDirectory, "runtimes", "unexpected"), message);
+    }
+
+    [Fact]
+    public void IsNativeLoadFailure_RecognizesExternalComponentFailure()
+    {
+        Assert.True(WhisperCppPlugin.IsNativeLoadFailure(
+            new SEHException("External component has thrown an exception.")));
+    }
+
+    [Fact]
+    public void BuildAccelerationDiagnosticMessage_ContainsRuntimeAndNativeFailure()
+    {
+        var diagnostics = new TranscriptionAccelerationDiagnostics(
+            "whisper-cpp",
+            "Local (whisper.cpp)",
+            TranscriptionAccelerationPreference.AmdVulkan,
+            TranscriptionAccelerationBackend.Cpu,
+            @"C:\TypeWhisper\runtimes\vulkan\win-x64\whisper.dll",
+            "External component has thrown an exception.");
+
+        var message = WhisperCppPlugin.BuildAccelerationDiagnosticMessage(diagnostics);
+
+        Assert.Contains("engine=whisper-cpp", message);
+        Assert.Contains("selected=AmdVulkan", message);
+        Assert.Contains("active=Cpu", message);
+        Assert.Contains(diagnostics.RuntimePath!, message);
+        Assert.Contains(diagnostics.LastNativeError!, message);
+    }
+
+    [Fact]
+    public void BuildAccelerationDiagnosticMessage_DoesNotClaimNativeCudaForTranslationLayers()
+    {
+        var diagnostics = new TranscriptionAccelerationDiagnostics(
+            "whisper-cpp",
+            "Local (whisper.cpp)",
+            TranscriptionAccelerationPreference.NvidiaCuda,
+            TranscriptionAccelerationBackend.NvidiaCuda);
+
+        var message = WhisperCppPlugin.BuildAccelerationDiagnosticMessage(diagnostics);
+
+        Assert.Contains("cuda-origin=unknown", message);
+        Assert.Contains("ZLUDA", message);
     }
 
     [Fact]

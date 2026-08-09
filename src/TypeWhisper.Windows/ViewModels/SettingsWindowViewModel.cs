@@ -13,6 +13,7 @@ using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
@@ -523,7 +524,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         {
             var json = AddRecoveryDiagnostics(
                 AddTargetAppCorrectionLearningDiagnostics(
-                    _errorLog.ExportDiagnostics(),
+                    AddTranscriptionAccelerationDiagnostics(
+                        _errorLog.ExportDiagnostics(),
+                        ModelManager.GetAccelerationDiagnostics()),
                     _targetAppCorrectionLearning.LastOutcome),
                 _settingsService.Current,
                 Recovery.Recordings.Count);
@@ -543,6 +546,29 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
             ["outcome"] = outcome?.Code,
             ["recorded_at_utc"] = outcome?.RecordedAtUtc.ToString("o")
         };
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    internal static string AddTranscriptionAccelerationDiagnostics(
+        string diagnosticsJson,
+        TranscriptionAccelerationDiagnostics? diagnostics)
+    {
+        if (JsonNode.Parse(diagnosticsJson) is not JsonObject root)
+            throw new JsonException("Diagnostics root must be a JSON object.");
+
+        root["transcription_acceleration"] = diagnostics is null
+            ? null
+            : new JsonObject
+            {
+                ["engine_id"] = diagnostics.EngineId,
+                ["engine_name"] = diagnostics.EngineName,
+                ["selected_preference"] = JsonNamingPolicy.SnakeCaseLower.ConvertName(
+                    diagnostics.SelectedPreference.ToString()),
+                ["active_backend"] = JsonNamingPolicy.SnakeCaseLower.ConvertName(
+                    diagnostics.ActiveBackend.ToString()),
+                ["runtime_path"] = diagnostics.RuntimePath,
+                ["last_native_error"] = diagnostics.LastNativeError,
+            };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
