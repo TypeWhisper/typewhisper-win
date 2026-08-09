@@ -38,7 +38,14 @@ public class PluginRegistryServiceTests : IDisposable
 
     private PluginManager CreateManager()
     {
-        _manager = new PluginManager(_loader, _eventBus, _activeWindow.Object, _workflows.Object, _settings.Object);
+        _manager = new PluginManager(
+            _loader,
+            _eventBus,
+            _activeWindow.Object,
+            _workflows.Object,
+            _settings.Object,
+            [_pluginsRoot],
+            Path.Combine(_pluginsRoot, ".plugin-data"));
         return _manager;
     }
 
@@ -266,8 +273,13 @@ public class PluginRegistryServiceTests : IDisposable
 
         var registryPlugin = new RegistryPlugin
         {
-            Id = "com.unknown", Name = "Unknown", Version = "1.0.0",
-            Author = "A", Description = "D", Size = 100, DownloadUrl = "u"
+            Id = "com.unknown",
+            Name = "Unknown",
+            Version = "1.0.0",
+            Author = "A",
+            Description = "D",
+            Size = 100,
+            DownloadUrl = "u"
         };
 
         Assert.Equal(PluginInstallState.NotInstalled, service.GetInstallState(registryPlugin));
@@ -336,6 +348,300 @@ public class PluginRegistryServiceTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_pluginsRoot, ".pending-uninstalls", registryPlugin.Id));
 
         Assert.Equal(PluginInstallState.PendingRestart, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public void GetInstallState_Bundled_WhenOnlyBundledPluginIsLoaded()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.bundled", "1.0.0");
+        var bundledRoot = Path.Combine(_pluginsRoot, "bundled");
+        var bundledDirectory = Path.Combine(bundledRoot, registryPlugin.Id);
+        WritePluginManifest(bundledDirectory, registryPlugin.Id, registryPlugin.Version);
+        TestPluginManagerFactory.SetPrivateField(
+            manager,
+            "_allPlugins",
+            new List<LoadedPlugin>
+            {
+                CreateLoadedPlugin(registryPlugin.Id, registryPlugin.Version, bundledDirectory)
+            });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            pluginsPath: _pluginsRoot,
+            bundledPluginsPath: bundledRoot);
+
+        Assert.Equal(PluginInstallState.Bundled, service.GetInstallState(registryPlugin));
+    }
+
+    [Fact]
+    public void GetInstallDiagnosis_MissingManifest_IsDeterministicallyBroken()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.missing-manifest", "1.0.0");
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "orphan.txt"), "orphan");
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var first = service.GetInstallDiagnosis(registryPlugin);
+        var second = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(first, second);
+        Assert.Equal(PluginInstallState.Broken, first.State);
+        Assert.Equal(PluginDiagnosticCode.MissingFiles, first.DiagnosticCode);
+        Assert.False(first.IsRegistryManaged);
+    }
+
+    [Fact]
+    public void GetInstallDiagnosis_InvalidManifest_IsBroken()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.invalid-manifest", "1.0.0");
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallState.Broken, diagnosis.State);
+        Assert.Equal(PluginDiagnosticCode.InvalidManifest, diagnosis.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task GetInstallDiagnosis_InitializedManagerWithoutLoadedPlugin_IsLoadFailure()
+    {
+        var manager = CreateManager();
+        await manager.InitializeLoadedPluginsAsync([], CancellationToken.None);
+        var registryPlugin = CreateRegistryPlugin("com.test.load-failure", "1.0.0");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, registryPlugin.Version);
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallState.Broken, diagnosis.State);
+        Assert.Equal(PluginDiagnosticCode.LoadFailure, diagnosis.DiagnosticCode);
+    }
+
+    [Fact]
+    public void GetInstallDiagnosis_StaleStagingDirectory_IsInterruptedInstallation()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.interrupted", "1.0.0");
+        WritePluginManifest(Path.Combine(_pluginsRoot, registryPlugin.Id), registryPlugin.Id, registryPlugin.Version);
+        Directory.CreateDirectory(Path.Combine(_pluginsRoot, ".staging", registryPlugin.Id + "-abandoned"));
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallState.Broken, diagnosis.State);
+        Assert.Equal(PluginDiagnosticCode.InterruptedInstallation, diagnosis.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task GetInstallDiagnosis_ReceiptFileSetMismatch_IsIntegrityMismatch()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.integrity", "1.0.0", typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.integrity", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+        await service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true);
+        File.WriteAllText(Path.Combine(pluginDirectory, "unexpected.txt"), "tampered");
+
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallState.Broken, diagnosis.State);
+        Assert.Equal(PluginDiagnosticCode.IntegrityMismatch, diagnosis.DiagnosticCode);
+        Assert.True(diagnosis.IsRegistryManaged);
+    }
+
+    [Fact]
+    public async Task GetInstallDiagnosis_LockedReceipt_IsPermissionDenied()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.permission", "1.0.0", typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.permission", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+        await service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true);
+        var receiptPath = Path.Combine(_pluginsRoot, ".install-metadata", registryPlugin.Id + ".json");
+
+        using var receiptLock = new FileStream(receiptPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallState.Broken, diagnosis.State);
+        Assert.Equal(PluginDiagnosticCode.PermissionDenied, diagnosis.DiagnosticCode);
+    }
+
+    [Fact]
+    public async Task RepairPluginAsync_UnknownSourceRequiresExplicitAdoption()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.adoption", "1.0.0", typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.adoption", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RepairPluginAsync(registryPlugin, allowSourceAdoption: false));
+
+        Assert.Equal("{ invalid", File.ReadAllText(Path.Combine(pluginDirectory, "manifest.json")));
+        Assert.False(Directory.Exists(Path.Combine(_pluginsRoot, ".install-metadata")));
+    }
+
+    [Fact]
+    public async Task RepairPluginAsync_PackageHashMismatchLeavesExistingFilesUntouched()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.repair-hash", "1.0.0", typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.repair-hash", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData([9, 8, 7, 6]))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        File.WriteAllText(Path.Combine(pluginDirectory, "old.txt"), "old");
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true));
+
+        Assert.Equal("{ invalid", File.ReadAllText(Path.Combine(pluginDirectory, "manifest.json")));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(pluginDirectory, "old.txt")));
+        Assert.False(File.Exists(Path.Combine(_pluginsRoot, ".install-metadata", registryPlugin.Id + ".json")));
+    }
+
+    [Fact]
+    public async Task RepairPluginAsync_AtomicallyReinstallsAndPreservesSettings()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.repair-success", "1.0.0", typeof(RegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.repair-success", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        File.WriteAllText(Path.Combine(pluginDirectory, "old.txt"), "old");
+        var settingsPath = Path.Combine(_pluginsRoot, ".plugin-data", registryPlugin.Id, "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var expectedSettings = JsonSerializer.SerializeToUtf8Bytes(new { keep = "original" });
+        File.WriteAllBytes(settingsPath, expectedSettings);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+
+        var result = await service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true);
+        var diagnosis = service.GetInstallDiagnosis(registryPlugin);
+
+        Assert.Equal(PluginInstallResult.Installed, result);
+        Assert.Equal(PluginInstallState.Installed, diagnosis.State);
+        Assert.True(diagnosis.IsRegistryManaged);
+        Assert.NotNull(manager.GetPlugin(registryPlugin.Id));
+        Assert.True(manager.IsEnabled(registryPlugin.Id));
+        Assert.Equal(expectedSettings, File.ReadAllBytes(settingsPath));
+        Assert.False(File.Exists(Path.Combine(pluginDirectory, ".typewhisper-install.json")));
+        Assert.True(File.Exists(Path.Combine(_pluginsRoot, ".install-metadata", registryPlugin.Id + ".json")));
+        Assert.Empty(Directory.EnumerateDirectories(_pluginsRoot, registryPlugin.Id + ".repair-backup-*"));
+    }
+
+    [Fact]
+    public async Task RepairPluginAsync_LoadFailureRestoresFilesAndSettings()
+    {
+        var manager = CreateManager();
+        var package = CreateLoadablePluginPackage("com.test.repair-rollback", "1.0.0", typeof(FailingRegistryRepairTestPlugin));
+        var registryPlugin = CreateRegistryPlugin("com.test.repair-rollback", "1.0.0") with
+        {
+            Sha256 = Convert.ToHexString(SHA256.HashData(package))
+        };
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        var originalManifest = "{ invalid";
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), originalManifest);
+        File.WriteAllText(Path.Combine(pluginDirectory, "old.txt"), "old");
+        var settingsPath = Path.Combine(_pluginsRoot, ".plugin-data", registryPlugin.Id, "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var expectedSettings = JsonSerializer.SerializeToUtf8Bytes(new { keep = "original" });
+        File.WriteAllBytes(settingsPath, expectedSettings);
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateMockHttpClient(package),
+            _pluginsRoot);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true));
+
+        Assert.Equal(originalManifest, File.ReadAllText(Path.Combine(pluginDirectory, "manifest.json")));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(pluginDirectory, "old.txt")));
+        Assert.Equal(expectedSettings, File.ReadAllBytes(settingsPath));
+        Assert.Null(manager.GetPlugin(registryPlugin.Id));
+        Assert.False(File.Exists(Path.Combine(_pluginsRoot, ".install-metadata", registryPlugin.Id + ".json")));
+        Assert.Empty(Directory.EnumerateDirectories(_pluginsRoot, registryPlugin.Id + ".repair-backup-*"));
+        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(_pluginsRoot, ".staging")));
+    }
+
+    [Fact]
+    public void RegistryPluginItem_BrokenDiagnosisExposesRepairState()
+    {
+        var manager = CreateManager();
+        var registryPlugin = CreateRegistryPlugin("com.test.repair-view-model", "1.0.0");
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        Directory.CreateDirectory(pluginDirectory);
+        File.WriteAllText(Path.Combine(pluginDirectory, "manifest.json"), "{ invalid");
+        var service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
+
+        var item = new RegistryPluginItemViewModel(registryPlugin, service);
+
+        Assert.Equal(PluginInstallState.Broken, item.InstallState);
+        Assert.True(item.NeedsRepair);
+        Assert.True(item.RepairRequiresSourceAdoption);
+        Assert.False(string.IsNullOrWhiteSpace(item.DiagnosticMessage));
+        Assert.True(item.RepairCommand.CanExecute(null));
     }
 
     [Theory]
@@ -960,13 +1266,17 @@ public class PluginRegistryServiceTests : IDisposable
             PluginClass = "TestPlugin"
         };
         var loadContext = new PluginAssemblyLoadContext(typeof(PluginRegistryServiceTests).Assembly.Location);
-        var loadedPlugin = new LoadedPlugin(manifest, plugin.Object, loadContext, AppContext.BaseDirectory);
+        var pluginDirectory = Path.Combine(_pluginsRoot, registryPlugin.Id);
+        WritePluginManifest(pluginDirectory, registryPlugin.Id, registryPlugin.Version);
+        var loadedPlugin = new LoadedPlugin(manifest, plugin.Object, loadContext, pluginDirectory);
         TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { loadedPlugin });
 
+        service = new PluginRegistryService(manager, _loader, _settings.Object, pluginsPath: _pluginsRoot);
         var item = new RegistryPluginItemViewModel(registryPlugin, service);
         Assert.Equal(PluginInstallState.Installed, item.InstallState);
 
         await manager.UnloadPluginAsync(registryPlugin.Id);
+        Directory.Delete(pluginDirectory, recursive: true);
         item.RefreshInstallState();
 
         Assert.Equal(PluginInstallState.NotInstalled, item.InstallState);
@@ -1215,6 +1525,7 @@ public class PluginRegistryServiceTests : IDisposable
             PluginClass = "TestPlugin"
         };
         File.WriteAllText(Path.Combine(pluginDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+        File.WriteAllBytes(Path.Combine(pluginDir, manifest.AssemblyName), [1, 2, 3, 4]);
     }
 
     private static LoadedPlugin CreateLoadedPlugin(string id, string version, string pluginDirectory)
@@ -1275,6 +1586,35 @@ public class PluginRegistryServiceTests : IDisposable
         return stream.ToArray();
     }
 
+    private static byte[] CreateLoadablePluginPackage(string id, string version, Type pluginType)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var assemblyPath = pluginType.Assembly.Location;
+            var assemblyName = Path.GetFileName(assemblyPath);
+            var manifest = archive.CreateEntry("manifest.json");
+            using (var writer = new StreamWriter(manifest.Open()))
+            {
+                writer.Write(JsonSerializer.Serialize(new PluginManifest
+                {
+                    Id = id,
+                    Name = "Repair Test Plugin",
+                    Version = version,
+                    AssemblyName = assemblyName,
+                    PluginClass = pluginType.FullName!
+                }));
+            }
+
+            var assembly = archive.CreateEntry(assemblyName);
+            using var assemblyStream = assembly.Open();
+            using var source = File.OpenRead(assemblyPath);
+            source.CopyTo(assemblyStream);
+        }
+
+        return stream.ToArray();
+    }
+
     private sealed class StalledHttpMessageHandler : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -1285,4 +1625,32 @@ public class PluginRegistryServiceTests : IDisposable
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
+}
+
+public sealed class RegistryRepairTestPlugin : ITypeWhisperPlugin
+{
+    public string PluginId => "com.test.repair";
+    public string PluginName => "Repair Test Plugin";
+    public string PluginVersion => "1.0.0";
+    public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+    public Task DeactivateAsync() => Task.CompletedTask;
+    public System.Windows.Controls.UserControl? CreateSettingsView() => null;
+    public void Dispose() { }
+}
+
+public sealed class FailingRegistryRepairTestPlugin : ITypeWhisperPlugin
+{
+    public string PluginId => "com.test.repair-failing";
+    public string PluginName => "Failing Repair Test Plugin";
+    public string PluginVersion => "1.0.0";
+
+    public Task ActivateAsync(IPluginHostServices host)
+    {
+        host.SetSetting("candidate", "changed");
+        throw new InvalidOperationException("Activation failed for rollback test.");
+    }
+
+    public Task DeactivateAsync() => Task.CompletedTask;
+    public System.Windows.Controls.UserControl? CreateSettingsView() => null;
+    public void Dispose() { }
 }

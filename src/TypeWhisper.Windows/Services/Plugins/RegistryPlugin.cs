@@ -147,8 +147,60 @@ public enum PluginInstallState
     /// <summary>
     /// Represents the bundled option.
     /// </summary>
-    Bundled
+    Bundled,
+    /// <summary>
+    /// Represents an installed plugin that needs repair.
+    /// </summary>
+    Broken
 }
+
+/// <summary>
+/// Describes the primary reason why an installed plugin needs attention.
+/// </summary>
+public enum PluginDiagnosticCode
+{
+    /// <summary>
+    /// No diagnostic issue was detected.
+    /// </summary>
+    None,
+    /// <summary>
+    /// One or more required plugin files are missing.
+    /// </summary>
+    MissingFiles,
+    /// <summary>
+    /// The plugin manifest cannot be read or does not match the expected identity.
+    /// </summary>
+    InvalidManifest,
+    /// <summary>
+    /// Installed files no longer match the recorded registry package.
+    /// </summary>
+    IntegrityMismatch,
+    /// <summary>
+    /// The plugin could not be loaded or activated.
+    /// </summary>
+    LoadFailure,
+    /// <summary>
+    /// The plugin directory cannot be inspected because access was denied.
+    /// </summary>
+    PermissionDenied,
+    /// <summary>
+    /// A previous install or update did not finish cleanly.
+    /// </summary>
+    InterruptedInstallation
+}
+
+/// <summary>
+/// Provides the deterministic install diagnosis for a registry plugin.
+/// </summary>
+/// <param name="State">The effective install state.</param>
+/// <param name="DiagnosticCode">The primary diagnostic code.</param>
+/// <param name="IsRegistryManaged">Whether a structurally valid registry install receipt exists.</param>
+/// <param name="Details">A support-oriented diagnostic detail without user data.</param>
+public sealed record PluginInstallDiagnosis(
+    PluginInstallState State,
+    PluginDiagnosticCode DiagnosticCode,
+    bool IsRegistryManaged,
+    string? Details = null);
 
 /// <summary>
 /// Lists the supported plugin install result values.

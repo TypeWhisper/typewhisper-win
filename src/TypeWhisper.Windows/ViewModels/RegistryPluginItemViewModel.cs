@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -12,6 +13,7 @@ public partial class RegistryPluginItemViewModel : ObservableObject
 {
     private readonly RegistryPlugin _registryPlugin;
     private readonly PluginRegistryService _registryService;
+    private PluginInstallDiagnosis _diagnosis;
 
     /// <summary>
     /// Gets the id.
@@ -109,6 +111,27 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// </summary>
     public bool IsInstalledOrUpdateAvailable =>
         InstallState is PluginInstallState.Installed or PluginInstallState.UpdateAvailable;
+    /// <summary>
+    /// Gets whether the plugin needs repair.
+    /// </summary>
+    public bool NeedsRepair => InstallState == PluginInstallState.Broken;
+    /// <summary>
+    /// Gets whether repair requires confirmation to adopt the registry source.
+    /// </summary>
+    public bool RepairRequiresSourceAdoption => NeedsRepair && !_diagnosis.IsRegistryManaged;
+    /// <summary>
+    /// Gets the localized primary diagnostic message.
+    /// </summary>
+    public string DiagnosticMessage => _diagnosis.DiagnosticCode switch
+    {
+        PluginDiagnosticCode.MissingFiles => Loc.Instance["Plugins.DiagnosticMissingFiles"],
+        PluginDiagnosticCode.InvalidManifest => Loc.Instance["Plugins.DiagnosticInvalidManifest"],
+        PluginDiagnosticCode.IntegrityMismatch => Loc.Instance["Plugins.DiagnosticIntegrityMismatch"],
+        PluginDiagnosticCode.LoadFailure => Loc.Instance["Plugins.DiagnosticLoadFailure"],
+        PluginDiagnosticCode.PermissionDenied => Loc.Instance["Plugins.DiagnosticPermissionDenied"],
+        PluginDiagnosticCode.InterruptedInstallation => Loc.Instance["Plugins.DiagnosticInterruptedInstallation"],
+        _ => ""
+    };
 
     /// <summary>
     /// Initializes a new instance of the RegistryPluginItemViewModel class.
@@ -117,12 +140,13 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     {
         _registryPlugin = registryPlugin;
         _registryService = registryService;
-        _installState = registryService.GetInstallState(registryPlugin);
+        _diagnosis = registryService.GetInstallDiagnosis(registryPlugin);
+        _installState = _diagnosis.State;
     }
 
     internal void RefreshInstallState()
     {
-        InstallState = _registryService.GetInstallState(_registryPlugin);
+        ApplyDiagnosis(_registryService.GetInstallDiagnosis(_registryPlugin));
         if (InstallState == PluginInstallState.Installed)
             InstallErrorMessage = "";
     }
@@ -140,14 +164,14 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = result == PluginInstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.Installed;
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
             Progress = 1;
         }
         catch (Exception ex)
         {
-            InstallState = PluginInstallState.NotInstalled;
+            RefreshInstallState();
             InstallErrorMessage = Loc.Instance.GetString("Plugins.InstallFailedFormat", ex.Message);
         }
         finally
@@ -167,9 +191,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         try
         {
             var result = await _registryService.UninstallPluginAsync(_registryPlugin.Id);
-            InstallState = result == PluginUninstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.NotInstalled;
+            RefreshInstallState();
+            if (result == PluginUninstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
         }
         catch (Exception ex)
         {
@@ -195,20 +219,78 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = result == PluginInstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.Installed;
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
             Progress = 1;
         }
         catch (Exception ex)
         {
-            InstallState = PluginInstallState.UpdateAvailable;
+            RefreshInstallState();
             InstallErrorMessage = Loc.Instance.GetString("Plugins.UpdateFailedFormat", ex.Message);
         }
         finally
         {
             IsWorking = false;
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRepair))]
+    private async Task RepairAsync()
+    {
+        if (IsWorking)
+            return;
+
+        var allowSourceAdoption = !RepairRequiresSourceAdoption;
+        if (!allowSourceAdoption)
+        {
+            allowSourceAdoption = MessageBox.Show(
+                Loc.Instance.GetString("Plugins.AdoptRegistryConfirm", Name),
+                Loc.Instance["Plugins.AdoptRegistryTitle"],
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        }
+
+        if (!allowSourceAdoption)
+            return;
+
+        IsWorking = true;
+        Progress = 0;
+        InstallErrorMessage = "";
+
+        try
+        {
+            var progressReporter = new Progress<double>(p => Progress = p);
+            var result = await _registryService.RepairPluginAsync(
+                _registryPlugin,
+                allowSourceAdoption,
+                progressReporter);
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
+            Progress = 1;
+        }
+        catch (Exception ex)
+        {
+            RefreshInstallState();
+            InstallErrorMessage = Loc.Instance.GetString("Plugins.RepairFailedFormat", ex.Message);
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    private bool CanRepair() => NeedsRepair && !IsWorking;
+
+    private void ApplyDiagnosis(PluginInstallDiagnosis diagnosis)
+    {
+        _diagnosis = diagnosis;
+        InstallState = diagnosis.State;
+        OnPropertyChanged(nameof(NeedsRepair));
+        OnPropertyChanged(nameof(RepairRequiresSourceAdoption));
+        OnPropertyChanged(nameof(DiagnosticMessage));
+        RepairCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnInstallErrorMessageChanged(string value)
@@ -219,6 +301,13 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     partial void OnInstallStateChanged(PluginInstallState value)
     {
         OnPropertyChanged(nameof(IsInstalledOrUpdateAvailable));
+        OnPropertyChanged(nameof(NeedsRepair));
+        RepairCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsWorkingChanged(bool value)
+    {
+        RepairCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatSize(long bytes) => bytes switch
@@ -233,6 +322,7 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(CategoryLabel));
         OnPropertyChanged(nameof(LocationBadge));
+        OnPropertyChanged(nameof(DiagnosticMessage));
     }
 }
 

@@ -48,6 +48,25 @@ public sealed class PluginsSectionLayoutTests
     }
 
     [Fact]
+    public void PluginsSection_ExposesRepairDiagnosisAndActionsInBothPluginLists()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "PluginsSection.xaml");
+
+        Assert.Contains("RepairDiagnosticMessage", xaml);
+        Assert.Contains("DiagnosticMessage", xaml);
+        Assert.Contains("Plugins.BrokenBadge", xaml);
+        Assert.Contains("Command=\"{Binding RepairRegistryPluginCommand}\"", xaml);
+        Assert.Contains("Command=\"{Binding RepairCommand}\"", xaml);
+        Assert.Contains("StringFormat=IntegrationsRepair.{0}", xaml);
+        Assert.Contains("StringFormat=IntegrationsRepairMarketplace.{0}", xaml);
+    }
+
+    [Fact]
     public void PluginsSection_OpensPluginSettingsInModalInsteadOfInline()
     {
         var xaml = TestFile.ReadProjectFile(

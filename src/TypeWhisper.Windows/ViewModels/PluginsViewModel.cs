@@ -537,6 +537,14 @@ public partial class PluginItemViewModel : ObservableObject
     /// </summary>
     public bool IsUpdatePendingRestart => RegistryPlugin?.InstallState == PluginInstallState.PendingRestart;
     /// <summary>
+    /// Gets whether the matching registry plugin needs repair.
+    /// </summary>
+    public bool NeedsRepair => RegistryPlugin?.NeedsRepair == true;
+    /// <summary>
+    /// Gets the localized primary repair diagnostic.
+    /// </summary>
+    public string? RepairDiagnosticMessage => NeedsRepair ? RegistryPlugin?.DiagnosticMessage : null;
+    /// <summary>
     /// Gets the available update version.
     /// </summary>
     public string? AvailableUpdateVersion => HasUpdateAvailable ? RegistryPlugin?.Version : null;
@@ -606,10 +614,25 @@ public partial class PluginItemViewModel : ObservableObject
     private bool CanUpdateRegistryPlugin() =>
         HasUpdateAvailable && RegistryPlugin?.UpdateCommand.CanExecute(null) == true;
 
+    [RelayCommand(CanExecute = nameof(CanRepairRegistryPlugin))]
+    private async Task RepairRegistryPluginAsync()
+    {
+        if (RegistryPlugin is null)
+            return;
+
+        await RegistryPlugin.RepairCommand.ExecuteAsync(null);
+        NotifyUpdateStateChanged();
+    }
+
+    private bool CanRepairRegistryPlugin() =>
+        NeedsRepair && RegistryPlugin?.RepairCommand.CanExecute(null) == true;
+
     private void OnRegistryPluginPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(RegistryPluginItemViewModel.InstallState)
             or nameof(RegistryPluginItemViewModel.IsWorking)
+            or nameof(RegistryPluginItemViewModel.NeedsRepair)
+            or nameof(RegistryPluginItemViewModel.DiagnosticMessage)
             or nameof(RegistryPluginItemViewModel.Version))
         {
             NotifyUpdateStateChanged();
@@ -621,8 +644,11 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(RegistryPlugin));
         OnPropertyChanged(nameof(HasUpdateAvailable));
         OnPropertyChanged(nameof(IsUpdatePendingRestart));
+        OnPropertyChanged(nameof(NeedsRepair));
+        OnPropertyChanged(nameof(RepairDiagnosticMessage));
         OnPropertyChanged(nameof(AvailableUpdateVersion));
         UpdateRegistryPluginCommand.NotifyCanExecuteChanged();
+        RepairRegistryPluginCommand.NotifyCanExecuteChanged();
     }
 
     private IEnumerable<string> ResolveDeclaredAndDetectedCategories()

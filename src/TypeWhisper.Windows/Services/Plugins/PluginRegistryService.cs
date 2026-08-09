@@ -22,6 +22,8 @@ public sealed class PluginRegistryService
     private const string PendingUpdatesDirectoryName = ".pending-updates";
     private const string PendingUninstallsDirectoryName = ".pending-uninstalls";
     private const string StagingDirectoryName = ".staging";
+    private const string InstallMetadataDirectoryName = ".install-metadata";
+    private const int InstallReceiptSchemaVersion = 1;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(24);
     private static readonly TimeSpan DefaultDownloadInactivityTimeout = TimeSpan.FromSeconds(30);
@@ -39,10 +41,13 @@ public sealed class PluginRegistryService
     private readonly string _bundledPluginsPath;
     private readonly string _pendingUpdatesPath;
     private readonly string _pendingUninstallsPath;
+    private readonly string _installMetadataPath;
+    private readonly string _pluginDataPath;
     private readonly Func<string, string, CancellationToken, Task> _replaceActiveDirectoryAsync;
     private readonly Func<string, CancellationToken, Task> _deleteActiveDirectoryAsync;
     private readonly AppDistributionKind _distributionKind;
     private readonly TimeSpan _downloadInactivityTimeout;
+    private readonly bool _usesCustomDirectoryReplacement;
 
     private List<RegistryPlugin>? _cachedRegistry;
     private DateTime _cacheTimestamp;
@@ -61,7 +66,8 @@ public sealed class PluginRegistryService
         Func<string, CancellationToken, Task>? deleteActiveDirectoryAsync = null,
         string? bundledPluginsPath = null,
         AppDistributionKind? distributionKind = null,
-        TimeSpan? downloadInactivityTimeout = null)
+        TimeSpan? downloadInactivityTimeout = null,
+        string? pluginDataPath = null)
     {
         _pluginManager = pluginManager;
         _pluginLoader = pluginLoader;
@@ -71,8 +77,11 @@ public sealed class PluginRegistryService
         _downloadInactivityTimeout = downloadInactivityTimeout ?? DefaultDownloadInactivityTimeout;
         _pluginsPath = Path.GetFullPath(pluginsPath ?? TypeWhisperEnvironment.PluginsPath);
         _bundledPluginsPath = Path.GetFullPath(bundledPluginsPath ?? Path.Join(AppContext.BaseDirectory, "Plugins"));
+        _pluginDataPath = Path.GetFullPath(pluginDataPath ?? pluginManager.PluginDataRoot);
         _pendingUpdatesPath = GetValidatedChildDirectory(_pluginsPath, PendingUpdatesDirectoryName, "pending updates directory");
         _pendingUninstallsPath = GetValidatedChildDirectory(_pluginsPath, PendingUninstallsDirectoryName, "pending uninstalls directory");
+        _installMetadataPath = GetValidatedChildDirectory(_pluginsPath, InstallMetadataDirectoryName, "plugin install metadata directory");
+        _usesCustomDirectoryReplacement = replaceActiveDirectoryAsync is not null;
         _replaceActiveDirectoryAsync = replaceActiveDirectoryAsync ?? ReplaceActiveDirectoryAsync;
         _deleteActiveDirectoryAsync = deleteActiveDirectoryAsync ?? DeleteActiveDirectoryAsync;
     }
@@ -108,39 +117,179 @@ public sealed class PluginRegistryService
     }
 
     /// <summary>
-    /// Determines the install state of a registry plugin by comparing it with locally loaded plugins.
+    /// Determines the install state of a registry plugin.
     /// </summary>
-    public PluginInstallState GetInstallState(RegistryPlugin registryPlugin)
+    public PluginInstallState GetInstallState(RegistryPlugin registryPlugin) =>
+        GetInstallDiagnosis(registryPlugin).State;
+
+    /// <summary>
+    /// Diagnoses a registry plugin using pending operations, disk contents, the registry install receipt,
+    /// and the runtime load state. The checks are ordered so the same disk state always returns the same result.
+    /// </summary>
+    public PluginInstallDiagnosis GetInstallDiagnosis(RegistryPlugin registryPlugin)
     {
+        ValidatePluginId(registryPlugin.Id);
         var pendingUninstallDir = GetValidatedPendingUninstallDirectory(registryPlugin.Id);
         var pendingDir = GetValidatedPendingDirectory(registryPlugin.Id);
         var pluginDir = GetValidatedPluginDirectory(registryPlugin.Id);
 
-        if (Directory.Exists(pendingUninstallDir))
-            return PluginInstallState.PendingRestart;
-
-        var pendingManifest = ReadManifest(pendingDir);
-        if (ManifestMatchesRegistry(pendingManifest, registryPlugin))
-            return PluginInstallState.PendingRestart;
-
-        var local = _pluginManager.GetPlugin(registryPlugin.Id);
-        var localVersion = local?.Manifest.Version;
-        var diskManifest = ReadManifest(pluginDir);
-        if (ManifestIdMatches(diskManifest, registryPlugin.Id))
-            localVersion = SelectNewestVersion(localVersion, diskManifest!.Version);
-
-        if (localVersion is null)
-            return PluginInstallState.NotInstalled;
-
-        // Compare versions
-        if (Version.TryParse(registryPlugin.Version, out var remoteVer) &&
-            Version.TryParse(localVersion, out var localVer) &&
-            remoteVer > localVer)
+        try
         {
-            return PluginInstallState.UpdateAvailable;
-        }
+            var receiptResult = ReadInstallReceipt(registryPlugin.Id);
+            var isRegistryManaged = receiptResult.Receipt is not null;
 
-        return PluginInstallState.Installed;
+            if (receiptResult.Exists && receiptResult.Receipt is null)
+            {
+                return Broken(
+                    PluginDiagnosticCode.InterruptedInstallation,
+                    isRegistryManaged: false,
+                    "The registry install receipt is invalid.");
+            }
+
+            if (Directory.Exists(pendingUninstallDir))
+                return Healthy(PluginInstallState.PendingRestart, isRegistryManaged);
+
+            if (Directory.Exists(pendingDir))
+            {
+                var pendingManifestResult = ReadManifestForDiagnosis(pendingDir);
+                if (pendingManifestResult.Manifest is not null &&
+                    ManifestMatchesRegistry(pendingManifestResult.Manifest, registryPlugin))
+                {
+                    return Healthy(PluginInstallState.PendingRestart, isRegistryManaged);
+                }
+
+                return Broken(
+                    PluginDiagnosticCode.InterruptedInstallation,
+                    isRegistryManaged,
+                    "The pending plugin update is incomplete or does not match the registry version.");
+            }
+
+            if (HasInterruptedInstallArtifacts(registryPlugin.Id, isRegistryManaged))
+            {
+                return Broken(
+                    PluginDiagnosticCode.InterruptedInstallation,
+                    isRegistryManaged,
+                    "A previous plugin installation left staging or replacement files behind.");
+            }
+
+            var local = _pluginManager.GetPlugin(registryPlugin.Id);
+            if (!Directory.Exists(pluginDir))
+            {
+                if (receiptResult.Receipt is not null)
+                {
+                    return Broken(
+                        PluginDiagnosticCode.MissingFiles,
+                        isRegistryManaged: true,
+                        "The managed plugin directory is missing.");
+                }
+
+                if (local is not null && IsWithinDirectory(local.PluginDirectory, _bundledPluginsPath))
+                    return Healthy(PluginInstallState.Bundled, isRegistryManaged: false);
+
+                return Healthy(PluginInstallState.NotInstalled, isRegistryManaged: false);
+            }
+
+            EnsureDirectoryReadable(pluginDir);
+            var diskManifestResult = ReadManifestForDiagnosis(pluginDir);
+            if (!diskManifestResult.Exists)
+            {
+                return Broken(
+                    PluginDiagnosticCode.MissingFiles,
+                    isRegistryManaged,
+                    "manifest.json is missing from the plugin directory.");
+            }
+
+            if (diskManifestResult.Manifest is null)
+            {
+                return Broken(
+                    PluginDiagnosticCode.InvalidManifest,
+                    isRegistryManaged,
+                    "manifest.json could not be parsed.");
+            }
+
+            var diskManifest = diskManifestResult.Manifest;
+            if (!ManifestIdMatches(diskManifest, registryPlugin.Id) ||
+                string.IsNullOrWhiteSpace(diskManifest.Version) ||
+                string.IsNullOrWhiteSpace(diskManifest.AssemblyName) ||
+                string.IsNullOrWhiteSpace(diskManifest.PluginClass))
+            {
+                return Broken(
+                    PluginDiagnosticCode.InvalidManifest,
+                    isRegistryManaged,
+                    "The plugin manifest identity or required fields are invalid.");
+            }
+
+            string assemblyPath;
+            try
+            {
+                assemblyPath = GetValidatedPluginFilePath(pluginDir, diskManifest.AssemblyName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Broken(PluginDiagnosticCode.InvalidManifest, isRegistryManaged, ex.Message);
+            }
+
+            if (!File.Exists(assemblyPath))
+            {
+                return Broken(
+                    PluginDiagnosticCode.MissingFiles,
+                    isRegistryManaged,
+                    $"The plugin assembly '{diskManifest.AssemblyName}' is missing.");
+            }
+
+            if (receiptResult.Receipt is not null)
+            {
+                var integrityFailure = VerifyInstalledFiles(pluginDir, diskManifest, receiptResult.Receipt);
+                if (integrityFailure is not null)
+                    return integrityFailure;
+            }
+
+            if (_pluginManager.IsInitialized)
+            {
+                if (local is null)
+                {
+                    return Broken(
+                        PluginDiagnosticCode.LoadFailure,
+                        isRegistryManaged,
+                        "The plugin files are present but the host could not load the plugin.");
+                }
+
+                var shouldBeEnabled = !_settings.Current.PluginEnabledState.TryGetValue(registryPlugin.Id, out var enabled) || enabled;
+                if (shouldBeEnabled && !_pluginManager.IsEnabled(registryPlugin.Id))
+                {
+                    return Broken(
+                        PluginDiagnosticCode.LoadFailure,
+                        isRegistryManaged,
+                        "The plugin was loaded but could not be activated.");
+                }
+            }
+
+            var localVersion = SelectNewestVersion(local?.Manifest.Version, diskManifest.Version);
+            if (Version.TryParse(registryPlugin.Version, out var remoteVer) &&
+                Version.TryParse(localVersion, out var localVer) &&
+                remoteVer > localVer)
+            {
+                return Healthy(PluginInstallState.UpdateAvailable, isRegistryManaged);
+            }
+
+            return Healthy(PluginInstallState.Installed, isRegistryManaged);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Broken(PluginDiagnosticCode.PermissionDenied, HasValidInstallReceipt(registryPlugin.Id), ex.Message);
+        }
+        catch (IOException ex) when (IsAccessDenied(ex))
+        {
+            return Broken(PluginDiagnosticCode.PermissionDenied, HasValidInstallReceipt(registryPlugin.Id), ex.Message);
+        }
+        catch (IOException ex)
+        {
+            return Broken(PluginDiagnosticCode.MissingFiles, HasValidInstallReceipt(registryPlugin.Id), ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Broken(PluginDiagnosticCode.InvalidManifest, HasValidInstallReceipt(registryPlugin.Id), ex.Message);
+        }
     }
 
     /// <summary>
@@ -149,11 +298,39 @@ public sealed class PluginRegistryService
     public async Task<PluginInstallResult> InstallPluginAsync(
         RegistryPlugin registryPlugin,
         IProgress<double>? progress = null,
+        CancellationToken ct = default) =>
+        await InstallPluginCoreAsync(registryPlugin, progress, requirePackageHash: false, ct);
+
+    /// <summary>
+    /// Repairs a broken registry-managed plugin by reinstalling it from the current registry artifact.
+    /// Unknown or manual installs require an explicit adoption decision from the caller.
+    /// </summary>
+    public async Task<PluginInstallResult> RepairPluginAsync(
+        RegistryPlugin registryPlugin,
+        bool allowSourceAdoption,
+        IProgress<double>? progress = null,
         CancellationToken ct = default)
+    {
+        var diagnosis = GetInstallDiagnosis(registryPlugin);
+        if (diagnosis.State != PluginInstallState.Broken)
+            throw new InvalidOperationException(Loc.Instance["Plugins.RepairNotRequired"]);
+
+        if (!diagnosis.IsRegistryManaged && !allowSourceAdoption)
+            throw new InvalidOperationException(Loc.Instance["Plugins.RepairSourceUnknown"]);
+
+        return await InstallPluginCoreAsync(registryPlugin, progress, requirePackageHash: true, ct);
+    }
+
+    private async Task<PluginInstallResult> InstallPluginCoreAsync(
+        RegistryPlugin registryPlugin,
+        IProgress<double>? progress,
+        bool requirePackageHash,
+        CancellationToken ct)
     {
         Directory.CreateDirectory(_pluginsPath);
         Directory.CreateDirectory(_pendingUpdatesPath);
         Directory.CreateDirectory(_pendingUninstallsPath);
+        Directory.CreateDirectory(_installMetadataPath);
 
         ValidatePluginId(registryPlugin.Id);
         var pluginDir = GetValidatedPluginDirectory(registryPlugin.Id);
@@ -201,12 +378,18 @@ public sealed class PluginRegistryService
                     ex);
             }
 
-            VerifyDownloadedPackage(registryPlugin, tempZip);
+            VerifyDownloadedPackage(registryPlugin, tempZip, requirePackageHash);
             ZipFile.ExtractToDirectory(tempZip, stagingDir, overwriteFiles: true);
 
             // Unblock downloaded files
             PluginLoader.UnblockDirectory(stagingDir);
             ValidateStagedPlugin(registryPlugin, stagingDir);
+            var installReceipt = CreateInstallReceipt(registryPlugin, stagingDir, tempZip);
+            WriteEmbeddedInstallReceipt(stagingDir, installReceipt);
+
+            var shouldEnable = !_settings.Current.PluginEnabledState.TryGetValue(registryPlugin.Id, out var enabled) || enabled;
+            var settingsSnapshot = CapturePluginSettings(registryPlugin.Id);
+            var previousPluginDirectoryExisted = Directory.Exists(pluginDir);
 
             // Unload existing version if present
             if (_pluginManager.GetPlugin(registryPlugin.Id) is not null)
@@ -217,22 +400,48 @@ public sealed class PluginRegistryService
 
             await ClearPendingUninstallAsync(registryPlugin.Id, ct);
 
+            string? backupDirectory = null;
             try
             {
-                await _replaceActiveDirectoryAsync(stagingDir, pluginDir, ct);
+                backupDirectory = await ReplacePluginDirectoryForInstallAsync(stagingDir, pluginDir, ct);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 await QueuePendingUpdateAsync(registryPlugin.Id, stagingDir, ct);
+                await TryReloadPreviousPluginAsync(pluginDir, shouldEnable);
                 Debug.WriteLine($"[PluginRegistry] Queued plugin update pending restart: {registryPlugin.Id} ({ex.Message})");
                 return PluginInstallResult.PendingRestart;
             }
 
             DeleteDirectoryIfExists(GetValidatedPendingDirectory(registryPlugin.Id));
 
-            await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: true);
-            if (_pluginManager.GetPlugin(registryPlugin.Id) is null)
-                return PluginInstallResult.PendingRestart;
+            try
+            {
+                await _pluginManager.LoadPluginFromDirectoryAsync(pluginDir, activate: shouldEnable);
+                if (_pluginManager.GetPlugin(registryPlugin.Id) is null ||
+                    (shouldEnable && !_pluginManager.IsEnabled(registryPlugin.Id)))
+                {
+                    throw new InvalidOperationException(Loc.Instance["Plugins.RepairLoadValidationFailed"]);
+                }
+
+                WriteInstallReceipt(registryPlugin.Id, installReceipt);
+                DeleteEmbeddedInstallReceipt(pluginDir);
+                DeleteDirectoryIfExists(backupDirectory);
+                CleanupInterruptedInstallArtifacts(registryPlugin.Id);
+            }
+            catch (Exception ex)
+            {
+                await RollBackPluginInstallAsync(
+                    registryPlugin.Id,
+                    pluginDir,
+                    backupDirectory,
+                    previousPluginDirectoryExisted,
+                    shouldEnable,
+                    settingsSnapshot);
+                throw new InvalidOperationException(
+                    Loc.Instance.GetString("Plugins.RepairRolledBackFormat", ex.Message),
+                    ex);
+            }
 
             Debug.WriteLine($"[PluginRegistry] Installed plugin: {registryPlugin.Id} v{registryPlugin.Version}");
             return PluginInstallResult.Installed;
@@ -274,6 +483,7 @@ public sealed class PluginRegistryService
         try
         {
             await DeleteInstalledPluginDirectoriesAsync(pluginId, ct);
+            DeleteInstallReceipt(pluginId);
             Debug.WriteLine($"[PluginRegistry] Uninstalled plugin: {pluginId}");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -323,6 +533,7 @@ public sealed class PluginRegistryService
             try
             {
                 await _replaceActiveDirectoryAsync(pendingDir, pluginDir, ct);
+                PromoteEmbeddedInstallReceipt(pluginId, pluginDir);
                 Debug.WriteLine($"[PluginRegistry] Applied pending plugin update: {pluginId} v{manifest!.Version}");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -350,6 +561,7 @@ public sealed class PluginRegistryService
             {
                 await DeletePendingUpdateDirectoryAsync(pluginId, ct);
                 await DeleteInstalledPluginDirectoriesAsync(pluginId, ct);
+                DeleteInstallReceipt(pluginId);
 
                 await ClearPendingUninstallAsync(pluginId, ct);
                 Debug.WriteLine($"[PluginRegistry] Applied pending plugin uninstall: {pluginId}");
@@ -403,13 +615,18 @@ public sealed class PluginRegistryService
         return Task.CompletedTask;
     }
 
-    private void VerifyDownloadedPackage(RegistryPlugin registryPlugin, string packagePath)
+    private void VerifyDownloadedPackage(
+        RegistryPlugin registryPlugin,
+        string packagePath,
+        bool requirePackageHash)
     {
-        if (_distributionKind != AppDistributionKind.Store)
-            return;
-
         if (string.IsNullOrWhiteSpace(registryPlugin.Sha256))
-            throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashMissing"]);
+        {
+            if (_distributionKind == AppDistributionKind.Store || requirePackageHash)
+                throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashMissing"]);
+
+            return;
+        }
 
         var expectedHash = NormalizeSha256(registryPlugin.Sha256);
         var actualHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packagePath)));
@@ -450,6 +667,13 @@ public sealed class PluginRegistryService
 
         if (!string.Equals(manifest.Version, registryPlugin.Version, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(Loc.Instance["Plugins.PackageVersionMismatch"]);
+
+        if (string.IsNullOrWhiteSpace(manifest.AssemblyName) ||
+            string.IsNullOrWhiteSpace(manifest.PluginClass) ||
+            !File.Exists(GetValidatedPluginFilePath(stagingDir, manifest.AssemblyName)))
+        {
+            throw new InvalidOperationException(Loc.Instance["Plugins.PackageManifestInvalid"]);
+        }
     }
 
     private async Task QueuePendingUpdateAsync(string pluginId, string stagingDir, CancellationToken ct)
@@ -533,6 +757,554 @@ public sealed class PluginRegistryService
 
         await Task.CompletedTask;
     }
+
+    private async Task<string?> ReplacePluginDirectoryForInstallAsync(
+        string sourceDirectory,
+        string targetDirectory,
+        CancellationToken ct)
+    {
+        if (_usesCustomDirectoryReplacement)
+        {
+            var customBackupDirectory = Directory.Exists(targetDirectory)
+                ? targetDirectory + ".repair-backup-" + Guid.NewGuid().ToString("N")
+                : null;
+            if (customBackupDirectory is not null)
+                CopyPluginDirectory(targetDirectory, customBackupDirectory);
+
+            try
+            {
+                await _replaceActiveDirectoryAsync(sourceDirectory, targetDirectory, ct);
+                return customBackupDirectory;
+            }
+            catch
+            {
+                if (Directory.Exists(targetDirectory))
+                    Directory.Delete(targetDirectory, recursive: true);
+
+                if (customBackupDirectory is not null)
+                    Directory.Move(customBackupDirectory, targetDirectory);
+
+                throw;
+            }
+        }
+
+        var backupDirectory = Directory.Exists(targetDirectory)
+            ? targetDirectory + ".repair-backup-" + Guid.NewGuid().ToString("N")
+            : null;
+
+        if (backupDirectory is not null)
+            Directory.Move(targetDirectory, backupDirectory);
+
+        try
+        {
+            await _replaceActiveDirectoryAsync(sourceDirectory, targetDirectory, ct);
+            return backupDirectory;
+        }
+        catch
+        {
+            if (Directory.Exists(targetDirectory))
+                Directory.Delete(targetDirectory, recursive: true);
+
+            if (backupDirectory is not null && Directory.Exists(backupDirectory))
+                Directory.Move(backupDirectory, targetDirectory);
+
+            throw;
+        }
+    }
+
+    private static void CopyPluginDirectory(string sourceDirectory, string targetDirectory)
+    {
+        Directory.CreateDirectory(targetDirectory);
+        foreach (var sourcePath in EnumeratePluginFiles(sourceDirectory))
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, sourcePath);
+            var targetPath = Path.Combine(targetDirectory, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.Copy(sourcePath, targetPath);
+        }
+    }
+
+    private PluginInstallReceipt CreateInstallReceipt(
+        RegistryPlugin registryPlugin,
+        string pluginDirectory,
+        string packagePath)
+    {
+        var files = EnumeratePluginFiles(pluginDirectory)
+            .Select(path => new PluginInstallFile(
+                Path.GetRelativePath(pluginDirectory, path).Replace(Path.DirectorySeparatorChar, '/'),
+                new FileInfo(path).Length,
+                ComputeFileSha256(path)))
+            .OrderBy(file => file.RelativePath, StringComparer.Ordinal)
+            .ToArray();
+
+        return new PluginInstallReceipt(
+            InstallReceiptSchemaVersion,
+            registryPlugin.Id,
+            registryPlugin.Version,
+            registryPlugin.DownloadUrl,
+            ComputeFileSha256(packagePath),
+            files);
+    }
+
+    private static IEnumerable<string> EnumeratePluginFiles(string pluginDirectory)
+    {
+        var pendingDirectories = new Stack<string>();
+        pendingDirectories.Push(pluginDirectory);
+
+        while (pendingDirectories.Count > 0)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(pendingDirectories.Pop()))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException(Loc.Instance["Plugins.PackageManifestInvalid"]);
+
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    pendingDirectories.Push(entry);
+                }
+                else if (!string.Equals(Path.GetFileName(entry), EmbeddedInstallReceiptFileName, StringComparison.Ordinal))
+                {
+                    yield return entry;
+                }
+            }
+        }
+    }
+
+    private PluginInstallDiagnosis? VerifyInstalledFiles(
+        string pluginDirectory,
+        PluginManifest manifest,
+        PluginInstallReceipt receipt)
+    {
+        if (!string.Equals(receipt.PluginId, manifest.Id, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(receipt.Version, manifest.Version, StringComparison.OrdinalIgnoreCase))
+        {
+            return Broken(
+                PluginDiagnosticCode.IntegrityMismatch,
+                isRegistryManaged: true,
+                "The installed manifest does not match the registry install receipt.");
+        }
+
+        IReadOnlyList<string> actualFiles;
+        try
+        {
+            actualFiles = EnumeratePluginFiles(pluginDirectory).ToArray();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Broken(PluginDiagnosticCode.IntegrityMismatch, isRegistryManaged: true, ex.Message);
+        }
+
+        if (actualFiles.Count != receipt.Files.Count)
+        {
+            return Broken(
+                PluginDiagnosticCode.IntegrityMismatch,
+                isRegistryManaged: true,
+                "The installed plugin file set does not match the registry install receipt.");
+        }
+
+        foreach (var expectedFile in receipt.Files)
+        {
+            string filePath;
+            try
+            {
+                filePath = GetValidatedPluginFilePath(pluginDirectory, expectedFile.RelativePath);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Broken(PluginDiagnosticCode.IntegrityMismatch, isRegistryManaged: true, ex.Message);
+            }
+
+            if (!File.Exists(filePath))
+            {
+                return Broken(
+                    PluginDiagnosticCode.MissingFiles,
+                    isRegistryManaged: true,
+                    $"The recorded plugin file '{expectedFile.RelativePath}' is missing.");
+            }
+
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.Length != expectedFile.Length ||
+                !string.Equals(ComputeFileSha256(filePath), expectedFile.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return Broken(
+                    PluginDiagnosticCode.IntegrityMismatch,
+                    isRegistryManaged: true,
+                    $"The installed plugin file '{expectedFile.RelativePath}' failed integrity validation.");
+            }
+        }
+
+        return null;
+    }
+
+    private InstallReceiptReadResult ReadInstallReceipt(string pluginId)
+    {
+        var receiptPath = GetValidatedInstallReceiptPath(pluginId);
+        if (!File.Exists(receiptPath))
+            return new InstallReceiptReadResult(false, null);
+
+        try
+        {
+            var receipt = JsonSerializer.Deserialize<PluginInstallReceipt>(File.ReadAllText(receiptPath), JsonOptions);
+            return IsValidInstallReceipt(pluginId, receipt)
+                ? new InstallReceiptReadResult(true, receipt)
+                : new InstallReceiptReadResult(true, null);
+        }
+        catch (JsonException)
+        {
+            return new InstallReceiptReadResult(true, null);
+        }
+        catch (NotSupportedException)
+        {
+            return new InstallReceiptReadResult(true, null);
+        }
+    }
+
+    private static bool IsValidInstallReceipt(string pluginId, PluginInstallReceipt? receipt)
+    {
+        if (receipt is null ||
+            receipt.SchemaVersion != InstallReceiptSchemaVersion ||
+            !string.Equals(receipt.PluginId, pluginId, StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(receipt.Version) ||
+            string.IsNullOrWhiteSpace(receipt.DownloadUrl) ||
+            receipt.Files is null ||
+            receipt.Files.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(receipt.PackageSha256))
+                return false;
+
+            _ = NormalizeSha256(receipt.PackageSha256);
+            if (receipt.Files.Any(file => file is null))
+                return false;
+
+            return receipt.Files
+                .Select(file => file.RelativePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() == receipt.Files.Count &&
+                receipt.Files.All(file =>
+                    file is not null &&
+                    !string.IsNullOrWhiteSpace(file.RelativePath) &&
+                    file.Length >= 0 &&
+                    !string.IsNullOrWhiteSpace(file.Sha256) &&
+                    string.Equals(NormalizeSha256(file.Sha256), file.Sha256, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private bool HasValidInstallReceipt(string pluginId)
+    {
+        try
+        {
+            return ReadInstallReceipt(pluginId).Receipt is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void WriteInstallReceipt(string pluginId, PluginInstallReceipt receipt)
+    {
+        Directory.CreateDirectory(_installMetadataPath);
+        WriteJsonAtomically(GetValidatedInstallReceiptPath(pluginId), receipt);
+    }
+
+    private static void WriteEmbeddedInstallReceipt(string pluginDirectory, PluginInstallReceipt receipt) =>
+        WriteJsonAtomically(Path.Combine(pluginDirectory, EmbeddedInstallReceiptFileName), receipt);
+
+    private static void WriteJsonAtomically<T>(string targetPath, T value)
+    {
+        var parentDirectory = Path.GetDirectoryName(targetPath)
+            ?? throw new InvalidOperationException(Loc.Instance["Plugins.InvalidPath"]);
+        Directory.CreateDirectory(parentDirectory);
+        var tempPath = Path.Combine(parentDirectory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            File.WriteAllText(tempPath, JsonSerializer.Serialize(value, JsonOptions));
+            File.Move(tempPath, targetPath, overwrite: true);
+        }
+        finally
+        {
+            DeleteFileIfExists(tempPath);
+        }
+    }
+
+    private void PromoteEmbeddedInstallReceipt(string pluginId, string pluginDirectory)
+    {
+        var embeddedPath = Path.Combine(pluginDirectory, EmbeddedInstallReceiptFileName);
+        if (!File.Exists(embeddedPath))
+            return;
+
+        PluginInstallReceipt? receipt;
+        try
+        {
+            receipt = JsonSerializer.Deserialize<PluginInstallReceipt>(File.ReadAllText(embeddedPath), JsonOptions);
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            Debug.WriteLine($"[PluginRegistry] Invalid embedded install receipt for {pluginId}: {ex.Message}");
+            return;
+        }
+
+        if (!IsValidInstallReceipt(pluginId, receipt))
+        {
+            Debug.WriteLine($"[PluginRegistry] Invalid embedded install receipt for {pluginId}");
+            return;
+        }
+
+        WriteInstallReceipt(pluginId, receipt!);
+        DeleteEmbeddedInstallReceipt(pluginDirectory);
+    }
+
+    private static void DeleteEmbeddedInstallReceipt(string pluginDirectory) =>
+        DeleteFileIfExists(Path.Combine(pluginDirectory, EmbeddedInstallReceiptFileName));
+
+    private void DeleteInstallReceipt(string pluginId)
+    {
+        var receiptPath = GetValidatedInstallReceiptPath(pluginId);
+        if (File.Exists(receiptPath))
+            File.Delete(receiptPath);
+    }
+
+    private async Task RollBackPluginInstallAsync(
+        string pluginId,
+        string pluginDirectory,
+        string? backupDirectory,
+        bool previousPluginDirectoryExisted,
+        bool shouldEnable,
+        PluginSettingsSnapshot settingsSnapshot)
+    {
+        if (_pluginManager.GetPlugin(pluginId) is not null)
+        {
+            await _pluginManager.UnloadPluginAsync(pluginId);
+            CollectUnloadedPluginContexts();
+        }
+
+        RestorePluginSettings(pluginId, settingsSnapshot);
+
+        if (Directory.Exists(pluginDirectory))
+            await DeletePluginDirectoryForRollbackAsync(pluginDirectory);
+
+        if (backupDirectory is not null && Directory.Exists(backupDirectory))
+        {
+            Directory.Move(backupDirectory, pluginDirectory);
+        }
+        else if (previousPluginDirectoryExisted)
+        {
+            throw new IOException("The previous plugin directory could not be restored.");
+        }
+
+        await TryReloadPreviousPluginAsync(pluginDirectory, shouldEnable);
+    }
+
+    private static async Task DeletePluginDirectoryForRollbackAsync(string pluginDirectory)
+    {
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 8; attempt++)
+        {
+            try
+            {
+                Directory.Delete(pluginDirectory, recursive: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                lastError = ex;
+                CollectUnloadedPluginContexts();
+                await Task.Delay(50);
+            }
+        }
+
+        throw new IOException("The failed plugin candidate could not be removed during rollback.", lastError);
+    }
+
+    private async Task TryReloadPreviousPluginAsync(string pluginDirectory, bool shouldEnable)
+    {
+        if (!Directory.Exists(pluginDirectory) || ReadManifest(pluginDirectory) is null)
+            return;
+
+        try
+        {
+            await _pluginManager.LoadPluginFromDirectoryAsync(pluginDirectory, activate: shouldEnable);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PluginRegistry] Failed to reload previous plugin at {pluginDirectory}: {ex.Message}");
+        }
+    }
+
+    private PluginSettingsSnapshot CapturePluginSettings(string pluginId)
+    {
+        var settingsPath = GetValidatedPluginSettingsPath(pluginId);
+        return File.Exists(settingsPath)
+            ? new PluginSettingsSnapshot(true, File.ReadAllBytes(settingsPath))
+            : new PluginSettingsSnapshot(false, null);
+    }
+
+    private void RestorePluginSettings(string pluginId, PluginSettingsSnapshot snapshot)
+    {
+        var settingsPath = GetValidatedPluginSettingsPath(pluginId);
+        if (!snapshot.Exists)
+        {
+            DeleteFileIfExists(settingsPath);
+            return;
+        }
+
+        var pluginDataDirectory = Path.GetDirectoryName(settingsPath)
+            ?? throw new InvalidOperationException(Loc.Instance["Plugins.InvalidPath"]);
+        Directory.CreateDirectory(pluginDataDirectory);
+        var tempPath = Path.Combine(pluginDataDirectory, $".settings.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            File.WriteAllBytes(tempPath, snapshot.Contents ?? []);
+            File.Move(tempPath, settingsPath, overwrite: true);
+        }
+        finally
+        {
+            DeleteFileIfExists(tempPath);
+        }
+    }
+
+    private bool HasInterruptedInstallArtifacts(string pluginId, bool hasValidInstallReceipt)
+    {
+        var pluginDirectory = GetValidatedPluginDirectory(pluginId);
+        if (!hasValidInstallReceipt &&
+            File.Exists(Path.Combine(pluginDirectory, EmbeddedInstallReceiptFileName)))
+        {
+            return true;
+        }
+
+        var stagingRoot = GetValidatedChildDirectory(_pluginsPath, StagingDirectoryName, "plugin staging directory");
+        if (Directory.Exists(stagingRoot) && Directory.EnumerateDirectories(stagingRoot)
+            .Any(path => Path.GetFileName(path).StartsWith(pluginId + "-", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return Directory.Exists(_pluginsPath) && Directory.EnumerateDirectories(_pluginsPath)
+            .Select(Path.GetFileName)
+            .Any(name => name is not null &&
+                (name.StartsWith(pluginId + ".replacing-", StringComparison.OrdinalIgnoreCase) ||
+                 (!hasValidInstallReceipt &&
+                  name.StartsWith(pluginId + ".repair-backup-", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private void CleanupInterruptedInstallArtifacts(string pluginId)
+    {
+        var stagingRoot = GetValidatedChildDirectory(_pluginsPath, StagingDirectoryName, "plugin staging directory");
+        if (Directory.Exists(stagingRoot))
+        {
+            foreach (var path in Directory.EnumerateDirectories(stagingRoot)
+                .Where(path => Path.GetFileName(path).StartsWith(pluginId + "-", StringComparison.OrdinalIgnoreCase)))
+            {
+                DeleteDirectoryIfExists(path);
+            }
+        }
+
+        if (!Directory.Exists(_pluginsPath))
+            return;
+
+        foreach (var path in Directory.EnumerateDirectories(_pluginsPath).Where(path =>
+            Path.GetFileName(path).StartsWith(pluginId + ".replacing-", StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileName(path).StartsWith(pluginId + ".repair-backup-", StringComparison.OrdinalIgnoreCase)))
+        {
+            DeleteDirectoryIfExists(path);
+        }
+    }
+
+    private static ManifestReadResult ReadManifestForDiagnosis(string pluginDirectory)
+    {
+        var manifestPath = Path.Combine(pluginDirectory, "manifest.json");
+        if (!File.Exists(manifestPath))
+            return new ManifestReadResult(false, null);
+
+        try
+        {
+            return new ManifestReadResult(
+                true,
+                JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(manifestPath), JsonOptions));
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            return new ManifestReadResult(true, null);
+        }
+    }
+
+    private static void EnsureDirectoryReadable(string pluginDirectory)
+    {
+        _ = EnumeratePluginFiles(pluginDirectory).ToArray();
+    }
+
+    private static string GetValidatedPluginFilePath(string pluginDirectory, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) ||
+            Path.IsPathRooted(relativePath) ||
+            relativePath.Contains(':') ||
+            relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(segment => segment == ".."))
+        {
+            throw new InvalidOperationException(Loc.Instance["Plugins.PathOutsideRoot"]);
+        }
+
+        var fullRoot = EnsureTrailingSeparator(Path.GetFullPath(pluginDirectory));
+        var fullPath = Path.GetFullPath(Path.Combine(pluginDirectory, relativePath));
+        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(Loc.Instance["Plugins.PathOutsideRoot"]);
+
+        return fullPath;
+    }
+
+    private string GetValidatedInstallReceiptPath(string pluginId)
+    {
+        ValidatePluginId(pluginId);
+        return GetValidatedChildDirectory(_installMetadataPath, pluginId + ".json", "plugin install receipt");
+    }
+
+    private string GetValidatedPluginSettingsPath(string pluginId)
+    {
+        ValidatePluginId(pluginId);
+        var pluginDataDirectory = GetValidatedChildDirectory(_pluginDataPath, pluginId, "plugin data directory");
+        return Path.Combine(pluginDataDirectory, "settings.json");
+    }
+
+    private static bool IsWithinDirectory(string path, string rootDirectory)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullRoot = Path.GetFullPath(rootDirectory);
+        return PathsEqual(fullPath, fullRoot) ||
+               fullPath.StartsWith(EnsureTrailingSeparator(fullRoot), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ComputeFileSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static bool IsAccessDenied(IOException exception)
+    {
+        var nativeError = exception.HResult & 0xFFFF;
+        return nativeError is 5 or 32 or 33;
+    }
+
+    private static PluginInstallDiagnosis Healthy(PluginInstallState state, bool isRegistryManaged) =>
+        new(state, PluginDiagnosticCode.None, isRegistryManaged);
+
+    private static PluginInstallDiagnosis Broken(
+        PluginDiagnosticCode code,
+        bool isRegistryManaged,
+        string? details = null) =>
+        new(PluginInstallState.Broken, code, isRegistryManaged, details);
 
     private static PluginManifest? ReadManifest(string pluginDir)
     {
@@ -661,7 +1433,7 @@ public sealed class PluginRegistryService
     private static bool PathsEqual(string first, string second) =>
         string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
 
-    private static void DeleteDirectoryIfExists(string path)
+    private static void DeleteDirectoryIfExists(string? path)
     {
         if (!Directory.Exists(path))
             return;
@@ -678,4 +1450,22 @@ public sealed class PluginRegistryService
         try { File.Delete(path); }
         catch { /* best effort */ }
     }
+
+    private const string EmbeddedInstallReceiptFileName = ".typewhisper-install.json";
+
+    private sealed record PluginInstallReceipt(
+        int SchemaVersion,
+        string PluginId,
+        string Version,
+        string DownloadUrl,
+        string PackageSha256,
+        IReadOnlyList<PluginInstallFile> Files);
+
+    private sealed record PluginInstallFile(string RelativePath, long Length, string Sha256);
+
+    private sealed record InstallReceiptReadResult(bool Exists, PluginInstallReceipt? Receipt);
+
+    private sealed record ManifestReadResult(bool Exists, PluginManifest? Manifest);
+
+    private sealed record PluginSettingsSnapshot(bool Exists, byte[]? Contents);
 }

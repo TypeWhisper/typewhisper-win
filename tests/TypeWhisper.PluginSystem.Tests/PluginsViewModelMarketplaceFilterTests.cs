@@ -212,7 +212,14 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
 
     private PluginManager CreateManager()
     {
-        _manager = new PluginManager(_loader, _eventBus, _activeWindow.Object, _workflows.Object, _settings.Object);
+        _manager = new PluginManager(
+            _loader,
+            _eventBus,
+            _activeWindow.Object,
+            _workflows.Object,
+            _settings.Object,
+            [_pluginsRoot],
+            Path.Combine(_pluginsRoot, ".plugin-data"));
         return _manager;
     }
 
@@ -258,9 +265,10 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
             PluginClass = "TestPlugin"
         };
         File.WriteAllText(Path.Combine(pluginDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+        File.WriteAllBytes(Path.Combine(pluginDir, manifest.AssemblyName), [1, 2, 3, 4]);
     }
 
-    private static LoadedPlugin CreateLoadedPlugin(string id, string name, string version)
+    private LoadedPlugin CreateLoadedPlugin(string id, string name, string version)
     {
         var plugin = new Mock<ITypeWhisperPlugin>();
         plugin.Setup(p => p.PluginId).Returns(id);
@@ -276,10 +284,12 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
             PluginClass = "TestPlugin"
         };
 
+        var pluginDirectory = Path.Combine(_pluginsRoot, id);
+        WritePluginManifest(pluginDirectory, id, version);
         return new LoadedPlugin(
             manifest,
             plugin.Object,
             new PluginAssemblyLoadContext(typeof(PluginsViewModelMarketplaceFilterTests).Assembly.Location),
-            AppContext.BaseDirectory);
+            pluginDirectory);
     }
 }

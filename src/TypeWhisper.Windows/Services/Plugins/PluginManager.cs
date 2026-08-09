@@ -19,6 +19,7 @@ public sealed class PluginManager : IDisposable
     private readonly IWorkflowService _workflows;
     private readonly ISettingsService _settings;
     private readonly string[] _searchDirectories;
+    private readonly string _pluginDataRoot;
 
     private readonly List<LoadedPlugin> _allPlugins = [];
     private readonly Dictionary<string, PluginHostServices> _hostServices = [];
@@ -46,7 +47,8 @@ public sealed class PluginManager : IDisposable
             activeWindow,
             workflows,
             settings,
-            BuildDefaultSearchDirectories(AppContext.BaseDirectory, TypeWhisperEnvironment.PluginsPath))
+            BuildDefaultSearchDirectories(AppContext.BaseDirectory, TypeWhisperEnvironment.PluginsPath),
+            TypeWhisperEnvironment.PluginDataPath)
     {
     }
 
@@ -56,7 +58,8 @@ public sealed class PluginManager : IDisposable
         IActiveWindowService activeWindow,
         IWorkflowService workflows,
         ISettingsService settings,
-        IEnumerable<string> searchDirectories)
+        IEnumerable<string> searchDirectories,
+        string? pluginDataRoot = null)
     {
         _loader = loader;
         _eventBus = eventBus;
@@ -64,6 +67,7 @@ public sealed class PluginManager : IDisposable
         _workflows = workflows;
         _settings = settings;
         _searchDirectories = searchDirectories.ToArray();
+        _pluginDataRoot = Path.GetFullPath(pluginDataRoot ?? TypeWhisperEnvironment.PluginDataPath);
     }
 
     /// <summary>All discovered plugins (enabled and disabled).</summary>
@@ -115,8 +119,13 @@ public sealed class PluginManager : IDisposable
     /// <summary>Raised when plugin capabilities change (plugins enabled/disabled, capabilities updated).</summary>
     public event EventHandler? PluginStateChanged;
 
+    /// <summary>Gets whether the initial discovery and activation pass completed.</summary>
+    public bool IsInitialized { get; private set; }
+
     /// <summary>The shared event bus for plugin communication.</summary>
     public PluginEventBus EventBus => _eventBus;
+
+    internal string PluginDataRoot => _pluginDataRoot;
 
     internal static string[] BuildDefaultSearchDirectories(string appBaseDirectory, string userPluginsPath) =>
     [
@@ -291,6 +300,7 @@ public sealed class PluginManager : IDisposable
 
         RebuildCapabilityIndices();
         MigrateApiKeys();
+        IsInitialized = true;
     }
 
     /// <summary>Enables and activates a plugin by ID, persisting the state.</summary>
@@ -369,7 +379,8 @@ public sealed class PluginManager : IDisposable
                     RebuildCapabilityIndices();
                     PluginStateChanged?.Invoke(this, EventArgs.Empty);
                 },
-                settings: _settings);
+                settings: _settings,
+                pluginDataRoot: _pluginDataRoot);
 
             await plugin.Instance.ActivateAsync(hostServices);
 

@@ -173,6 +173,12 @@
                                                     <TextBlock Text="{Binding Version, StringFormat='  v{0}'}" Foreground="{StaticResource HintBrush}" FontSize="12" Margin="4,0,0,0"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding RepairDiagnosticMessage}"
+                                                           Foreground="{StaticResource DangerBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,4,0,0"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <WrapPanel Margin="0,7,0,0">
                                                     <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
                                                         <ItemsControl.ItemsPanel>
@@ -209,10 +215,21 @@
                                                             <Run Text="&#x21BB; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.RestartRequiredBadge], Mode=OneWay}"/>
                                                         </TextBlock>
                                                     </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{loc:Str Plugins.BrokenBadge}" Foreground="{StaticResource DangerBrush}" FontSize="10"/>
+                                                    </Border>
                                                 </WrapPanel>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsRepair.{0}}"
+                                                           Content="{loc:Str Plugins.Repair}"
+                                                           Command="{Binding RepairRegistryPluginCommand}"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                           Margin="0,0,8,0"/>
                                                 <ui:Button Appearance="Secondary"
                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsUpdate.{0}}"
                                                            Content="{loc:Str Plugins.Update}"
@@ -349,6 +366,12 @@
                                                     <TextBlock Text="{Binding Version, StringFormat='  v{0}'}" Foreground="{StaticResource HintBrush}" FontSize="12" Margin="4,0,0,0"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding DiagnosticMessage}"
+                                                           Foreground="{StaticResource DangerBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,4,0,0"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <WrapPanel Margin="0,7,0,0">
                                                     <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
                                                         <ItemsControl.ItemsPanel>
@@ -369,6 +392,11 @@
                                                     </Border>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding SizeDisplay}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{loc:Str Plugins.BrokenBadge}" Foreground="{StaticResource DangerBrush}" FontSize="10"/>
                                                     </Border>
                                                 </WrapPanel>
                                                 <ProgressBar Value="{Binding Progress}" Maximum="1" Height="3" Margin="0,8,0,0" Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
@@ -393,6 +421,12 @@
                                                            Command="{Binding UpdateCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=UpdateAvailable}"/>
+                                                <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsRepairMarketplace.{0}}"
+                                                           Content="{loc:Str Plugins.Repair}"
+                                                           Command="{Binding RepairCommand}"
+                                                           IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <TextBlock Foreground="{StaticResource ActiveIndicatorBrush}"
                                                            FontSize="12"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}">

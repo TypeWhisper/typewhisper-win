@@ -48,7 +48,8 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         IPluginEventBus eventBus,
         IWorkflowService workflows,
         Action? onCapabilitiesChanged = null,
-        ISettingsService? settings = null)
+        ISettingsService? settings = null,
+        string? pluginDataRoot = null)
     {
         _pluginId = pluginId;
         _activeWindow = activeWindow;
@@ -57,7 +58,7 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _settings = settings;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
-        _pluginDataDirectory = Path.Combine(Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
+        _pluginDataDirectory = Path.Combine(pluginDataRoot ?? Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
     }
 
