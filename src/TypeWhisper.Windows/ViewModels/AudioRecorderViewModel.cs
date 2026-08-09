@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Core;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
@@ -58,10 +59,22 @@ public sealed record RecordingItem(
 }
 
 /// <summary>
+/// Describes a selectable transcription engine for Recorder sessions.
+/// </summary>
+public sealed record RecorderTranscriptionEngineOption(string Id, string DisplayName);
+
+/// <summary>
+/// Describes a selectable transcription model for Recorder sessions.
+/// </summary>
+public sealed record RecorderTranscriptionModelOption(string Id, string DisplayName);
+
+/// <summary>
 /// Provides audio recorder view model behavior.
 /// </summary>
 public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiController, IDisposable
 {
+    private const string RecorderDefaultSelectionId = "__default__";
+
     private readonly RecorderCaptureService _capture;
     private readonly ModelManagerService _modelManager;
     private readonly ISettingsService _settings;
@@ -98,6 +111,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     [ObservableProperty] private string? _translationTargetLanguage;
     [ObservableProperty] private string? _transcriptionEngineOverride;
     [ObservableProperty] private string? _transcriptionModelOverride;
+    [ObservableProperty] private string _transcriptionEngineSelection = RecorderDefaultSelectionId;
+    [ObservableProperty] private string _transcriptionModelSelection = RecorderDefaultSelectionId;
     [ObservableProperty] private string _partialText = "";
     [ObservableProperty] private string? _systemAudioWarningMessage;
 
@@ -110,6 +125,14 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     /// </summary>
     public ObservableCollection<SystemAudioOutputDevice> SystemAudioDevices { get; } = [];
     /// <summary>
+    /// Gets available transcription engines for Recorder sessions.
+    /// </summary>
+    public ObservableCollection<RecorderTranscriptionEngineOption> TranscriptionEngineOptions { get; } = [];
+    /// <summary>
+    /// Gets available transcription models for the selected Recorder engine.
+    /// </summary>
+    public ObservableCollection<RecorderTranscriptionModelOption> TranscriptionModelOptions { get; } = [];
+    /// <summary>
     /// Gets whether has recordings.
     /// </summary>
     public bool HasRecordings => Recordings.Count > 0;
@@ -117,6 +140,10 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     /// Gets whether the system audio warning is visible.
     /// </summary>
     public bool HasSystemAudioWarning => !string.IsNullOrWhiteSpace(SystemAudioWarningMessage);
+    /// <summary>
+    /// Gets whether a Recorder-specific model can be selected.
+    /// </summary>
+    public bool CanChooseTranscriptionModel => !string.IsNullOrWhiteSpace(TranscriptionEngineOverride);
     /// <summary>
     /// Gets output format choices.
     /// </summary>
@@ -165,6 +192,46 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         _isLoadingSettings = true;
         TranslationModeEnabled = enabled;
         _isLoadingSettings = wasLoading;
+    }
+
+    partial void OnTranscriptionEngineOverrideChanged(string? value)
+    {
+        var selection = SettingToSelection(value);
+        if (TranscriptionEngineSelection != selection)
+            TranscriptionEngineSelection = selection;
+
+        RebuildTranscriptionModels();
+        if (!_isLoadingSettings
+            && !string.IsNullOrWhiteSpace(TranscriptionModelOverride)
+            && !TranscriptionModelOptions.Any(option => option.Id.Equals(
+                TranscriptionModelOverride,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            TranscriptionModelOverride = null;
+        }
+
+        OnPropertyChanged(nameof(CanChooseTranscriptionModel));
+    }
+
+    partial void OnTranscriptionModelOverrideChanged(string? value)
+    {
+        var selection = SettingToSelection(value);
+        if (TranscriptionModelSelection != selection)
+            TranscriptionModelSelection = selection;
+    }
+
+    partial void OnTranscriptionEngineSelectionChanged(string value)
+    {
+        var setting = SelectionToSetting(value);
+        if (TranscriptionEngineOverride != setting)
+            TranscriptionEngineOverride = setting;
+    }
+
+    partial void OnTranscriptionModelSelectionChanged(string value)
+    {
+        var setting = SelectionToSetting(value);
+        if (TranscriptionModelOverride != setting)
+            TranscriptionModelOverride = setting;
     }
 
     /// <summary>
@@ -227,8 +294,6 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             });
         _statusKey = "Status.Ready";
         Loc.Instance.LanguageChanged += OnLanguageChanged;
-        LoadRecorderSettings(_settings.Current);
-        _settings.SettingsChanged += OnSettingsChanged;
         PropertyChanged += (_, args) =>
         {
             if (_isLoadingSettings)
@@ -237,6 +302,10 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             if (IsRecorderSettingProperty(args.PropertyName))
                 SaveRecorderSettings();
         };
+        LoadRecorderSettings(_settings.Current);
+        RefreshTranscriptionEnginesAndModels(_modelManager.PluginManager.IsInitialized);
+        _settings.SettingsChanged += OnSettingsChanged;
+        _modelManager.PluginManager.PluginStateChanged += OnPluginStateChanged;
         LoadExistingRecordings();
     }
 
@@ -774,8 +843,12 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
                 return;
 
             LoadRecorderSettings(settings);
+            RefreshTranscriptionEnginesAndModels(_modelManager.PluginManager.IsInitialized);
         });
     }
+
+    private void OnPluginStateChanged(object? sender, EventArgs e) =>
+        DispatchToUi(() => RefreshTranscriptionEnginesAndModels(validateSelections: true));
 
     private bool RecorderSettingsMatch(AppSettings settings) =>
         MicEnabled == settings.RecorderMicEnabled
@@ -835,6 +908,96 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         SelectedSystemAudioDevice = selected ?? defaultDevice;
     }
 
+    private void RefreshTranscriptionEnginesAndModels(bool validateSelections)
+    {
+        var options = new List<RecorderTranscriptionEngineOption>
+        {
+            new(RecorderDefaultSelectionId, Loc.Instance["Recorder.DefaultEngine"])
+        };
+        options.AddRange(_modelManager.PluginManager.TranscriptionEngines
+            .DistinctBy(engine => engine.GetTranscriptionSelectionId(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(engine => engine.ProviderDisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .Select(engine => new RecorderTranscriptionEngineOption(
+                engine.GetTranscriptionSelectionId(),
+                engine.IsConfigured
+                    ? engine.ProviderDisplayName
+                    : Loc.Instance.GetString("Recorder.EngineNotReadyFormat", engine.ProviderDisplayName))));
+        ReplaceCollection(TranscriptionEngineOptions, options);
+
+        if (!validateSelections)
+        {
+            RebuildTranscriptionModels();
+            return;
+        }
+
+        var selectedEngine = FindTranscriptionEngine(TranscriptionEngineOverride);
+        if (!string.IsNullOrWhiteSpace(TranscriptionEngineOverride) && selectedEngine is null)
+        {
+            TranscriptionEngineOverride = null;
+        }
+        else if (selectedEngine is not null)
+        {
+            var canonicalSelectionId = selectedEngine.GetTranscriptionSelectionId();
+            if (!canonicalSelectionId.Equals(TranscriptionEngineOverride, StringComparison.Ordinal))
+                TranscriptionEngineOverride = canonicalSelectionId;
+        }
+
+        RebuildTranscriptionModels();
+        var selectedModel = string.IsNullOrWhiteSpace(TranscriptionModelOverride)
+            ? null
+            : TranscriptionModelOptions.FirstOrDefault(option =>
+                option.Id.Equals(TranscriptionModelOverride, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(TranscriptionModelOverride) && selectedModel is null)
+        {
+            TranscriptionModelOverride = null;
+        }
+        else if (selectedModel is not null
+            && !selectedModel.Id.Equals(TranscriptionModelOverride, StringComparison.Ordinal))
+        {
+            TranscriptionModelOverride = selectedModel.Id;
+        }
+    }
+
+    private void RebuildTranscriptionModels()
+    {
+        var options = new List<RecorderTranscriptionModelOption>
+        {
+            new(RecorderDefaultSelectionId, Loc.Instance["Recorder.DefaultModel"])
+        };
+        var engine = FindTranscriptionEngine(TranscriptionEngineOverride);
+        if (engine is not null)
+        {
+            options.AddRange(engine.TranscriptionModels
+                .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(model => new RecorderTranscriptionModelOption(model.Id, model.DisplayName)));
+        }
+
+        ReplaceCollection(TranscriptionModelOptions, options);
+    }
+
+    private ITranscriptionEnginePlugin? FindTranscriptionEngine(string? selectionId)
+    {
+        if (string.IsNullOrWhiteSpace(selectionId))
+            return null;
+
+        return _modelManager.PluginManager.TranscriptionEngines
+            .DistinctBy(candidate => candidate.GetTranscriptionSelectionId(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(candidate =>
+                candidate.GetTranscriptionSelectionId().Equals(selectionId, StringComparison.OrdinalIgnoreCase)
+                || candidate.ProviderId.Equals(selectionId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void ReplaceCollection<T>(ObservableCollection<T> target, IEnumerable<T> items)
+    {
+        var snapshot = items.ToList();
+        if (target.SequenceEqual(snapshot))
+            return;
+
+        target.Clear();
+        foreach (var item in snapshot)
+            target.Add(item);
+    }
+
     private void StoreApiSession(RecorderApiSessionSnapshot session)
     {
         lock (_apiSessionLock)
@@ -891,6 +1054,12 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string SettingToSelection(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? RecorderDefaultSelectionId : value;
+
+    private static string? SelectionToSetting(string? value) =>
+        string.IsNullOrWhiteSpace(value) || value == RecorderDefaultSelectionId ? null : value;
 
     private TranscriptionTask CurrentRecorderTask =>
         TranslationModeEnabled ? TranscriptionTask.Translate : TranscriptionTask.Transcribe;
@@ -953,12 +1122,11 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(_statusKey))
-            return;
-
         DispatchToUi(() =>
         {
-            StatusText = Loc.Instance[_statusKey];
+            RefreshTranscriptionEnginesAndModels(_modelManager.PluginManager.IsInitialized);
+            if (!string.IsNullOrWhiteSpace(_statusKey))
+                StatusText = Loc.Instance[_statusKey];
         });
     }
 
@@ -984,6 +1152,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
         Loc.Instance.LanguageChanged -= OnLanguageChanged;
         _settings.SettingsChanged -= OnSettingsChanged;
+        _modelManager.PluginManager.PluginStateChanged -= OnPluginStateChanged;
         _streamingHandler.Dispose();
         _timer?.Dispose();
         _capture.Dispose();

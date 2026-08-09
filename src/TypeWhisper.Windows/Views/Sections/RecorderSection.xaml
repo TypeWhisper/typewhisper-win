@@ -281,6 +281,43 @@
                                              VerticalAlignment="Top"/>
                         </Grid>
 
+                        <Grid Margin="0,0,0,8"
+                              IsEnabled="{Binding Recorder.TranscriptionEnabled}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="{loc:Str Recorder.TranscriptionEngine}"
+                                           Style="{StaticResource LabelStyle}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Recorder.TranscriptionEngineOptions}"
+                                          AutomationProperties.AutomationId="RecorderTranscriptionEngine"
+                                          AutomationProperties.Name="{loc:Str Recorder.TranscriptionEngine}"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding Recorder.TranscriptionEngineSelection, Mode=TwoWay}"
+                                          MinWidth="220"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        IsEnabled="{Binding Recorder.CanChooseTranscriptionModel}">
+                                <TextBlock Text="{loc:Str Recorder.TranscriptionModel}"
+                                           Style="{StaticResource LabelStyle}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Recorder.TranscriptionModelOptions}"
+                                          AutomationProperties.AutomationId="RecorderTranscriptionModel"
+                                          AutomationProperties.Name="{loc:Str Recorder.TranscriptionModel}"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding Recorder.TranscriptionModelSelection, Mode=TwoWay}"
+                                          MinWidth="220"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="{loc:Str Recorder.ModelOverrideHint}"
+                                   Style="{StaticResource HintStyle}"
+                                   Margin="0,0,0,16"/>
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

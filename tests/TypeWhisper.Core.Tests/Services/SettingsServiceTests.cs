@@ -58,6 +58,8 @@ public class SettingsServiceTests : IDisposable
             VocabularyBoostingEnabled = true,
             FileTranscriptionEngineOverride = "groq",
             FileTranscriptionModelOverride = "whisper-large-v3",
+            RecorderTranscriptionEngineOverride = "com.typewhisper.openai",
+            RecorderTranscriptionModelOverride = "gpt-4o-transcribe",
             LocalModelAcceleration = AppSettings.LocalModelAccelerationAmdRocm,
             LocalModelStoragePath = @"D:\TypeWhisperModels",
             WatchFolderPath = @"C:\Watch",
@@ -111,6 +113,8 @@ public class SettingsServiceTests : IDisposable
         Assert.True(sut2.Current.VocabularyBoostingEnabled);
         Assert.Equal("groq", sut2.Current.FileTranscriptionEngineOverride);
         Assert.Equal("whisper-large-v3", sut2.Current.FileTranscriptionModelOverride);
+        Assert.Equal("com.typewhisper.openai", sut2.Current.RecorderTranscriptionEngineOverride);
+        Assert.Equal("gpt-4o-transcribe", sut2.Current.RecorderTranscriptionModelOverride);
         Assert.Equal(AppSettings.LocalModelAccelerationAmdRocm, sut2.Current.LocalModelAcceleration);
         Assert.Equal(@"D:\TypeWhisperModels", sut2.Current.LocalModelStoragePath);
         Assert.Equal(@"C:\Watch", sut2.Current.WatchFolderPath);

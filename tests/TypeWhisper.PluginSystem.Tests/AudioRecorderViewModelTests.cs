@@ -10,6 +10,7 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
+using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -52,6 +53,161 @@ public sealed class AudioRecorderViewModelTests
         Assert.Equal("de", settings.Current.LastTranslationTargetLanguage);
         Assert.Equal("transcribe", settings.Current.RecorderTranscriptionTask);
         Assert.Null(settings.Current.RecorderTranslationTargetLanguage);
+    }
+
+    [Fact]
+    public void RecorderTranscriptionSelection_PersistsAndClearsUnavailableOverrides()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var global = CreateRecorderPlugin(
+            "com.typewhisper.global-test",
+            "global-test",
+            "Global Test",
+            [new("global", "Global")],
+            "global transcript");
+        var longForm = CreateRecorderPlugin(
+            "com.typewhisper.long-form-test",
+            "long-form-test",
+            "Long-form Test",
+            [new("accurate", "Accurate"), new("fast", "Fast")],
+            "long-form transcript");
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedModelId = ModelManagerService.GetPluginModelId(global.PluginId, "global"),
+            RecorderTranscriptionEngineOverride = longForm.ProviderId,
+            RecorderTranscriptionModelOverride = "accurate"
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { global, longForm });
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        using var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        Assert.Equal(longForm.ProviderId, settings.Current.RecorderTranscriptionEngineOverride);
+        RaisePluginStateChanged(pluginManager);
+
+        Assert.Equal(longForm.PluginId, sut.TranscriptionEngineSelection);
+        Assert.Equal(longForm.PluginId, settings.Current.RecorderTranscriptionEngineOverride);
+        Assert.Equal("accurate", sut.TranscriptionModelSelection);
+        Assert.Equal(
+            ["__default__", global.PluginId, longForm.PluginId],
+            sut.TranscriptionEngineOptions.Select(option => option.Id).ToArray());
+        Assert.Equal(
+            ["__default__", "accurate", "fast"],
+            sut.TranscriptionModelOptions.Select(option => option.Id).ToArray());
+        Assert.True(sut.CanChooseTranscriptionModel);
+
+        sut.TranscriptionModelSelection = "fast";
+
+        Assert.Equal("fast", settings.Current.RecorderTranscriptionModelOverride);
+
+        var longFormWithoutFast = CreateRecorderPlugin(
+            longForm.PluginId,
+            longForm.ProviderId,
+            longForm.ProviderDisplayName,
+            [new("accurate", "Accurate")],
+            "long-form transcript");
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { global, longFormWithoutFast });
+        RaisePluginStateChanged(pluginManager);
+
+        Assert.Null(sut.TranscriptionModelOverride);
+        Assert.Null(settings.Current.RecorderTranscriptionModelOverride);
+
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { global });
+        RaisePluginStateChanged(pluginManager);
+
+        Assert.Null(sut.TranscriptionEngineOverride);
+        Assert.Null(settings.Current.RecorderTranscriptionEngineOverride);
+        Assert.False(sut.CanChooseTranscriptionModel);
+    }
+
+    [Fact]
+    public async Task RecorderApiSession_UsesRecorderEngineAndModelOverride()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+        TypeWhisperEnvironment.EnsureDirectories();
+
+        var existingRecordings = Directory
+            .EnumerateFiles(TypeWhisperEnvironment.AudioPath, "recording-*.wav")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var global = CreateRecorderPlugin(
+            "com.typewhisper.global-test",
+            "global-test",
+            "Global Test",
+            [new("global", "Global")],
+            "global transcript");
+        var longForm = CreateRecorderPlugin(
+            "com.typewhisper.long-form-test",
+            "long-form-test",
+            "Long-form Test",
+            [new("accurate", "Accurate"), new("fast", "Fast")],
+            "recorder override transcript");
+        var globalModelId = ModelManagerService.GetPluginModelId(global.PluginId, "global");
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            SelectedModelId = globalModelId,
+            RecorderTranscriptionEngineOverride = longForm.PluginId,
+            RecorderTranscriptionModelOverride = "accurate"
+        });
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { global, longForm });
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", globalModelId);
+        using var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+
+        try
+        {
+            var sessionId = await sut.StartRecordingForApiAsync(true, false, CancellationToken.None);
+            captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
+
+            var stoppedSessionId = await sut.StopRecordingForApiAsync(CancellationToken.None);
+
+            Assert.Equal(sessionId, stoppedSessionId);
+            var session = Assert.IsType<RecorderApiSessionSnapshot>(sut.GetRecorderApiSession(sessionId));
+            Assert.Equal(RecorderSessionStatus.Completed, session.Status);
+            Assert.Equal("recorder override transcript", session.Text);
+            Assert.Empty(global.Calls);
+            Assert.Single(longForm.Calls);
+            Assert.Equal("accurate", longForm.SelectedModelId);
+        }
+        finally
+        {
+            TryDeleteNewRecordings(existingRecordings);
+        }
     }
 
     [Fact]
@@ -657,6 +813,29 @@ public sealed class AudioRecorderViewModelTests
         }
     }
 
+    private static FakeRecorderTranscriptionPlugin CreateRecorderPlugin(
+        string pluginId,
+        string providerId,
+        string displayName,
+        IReadOnlyList<PluginModelInfo> models,
+        string transcript) =>
+        new(
+            (_, _, _, _, _) => Task.FromResult(new PluginTranscriptionResult(transcript, "en", 1)),
+            pluginId,
+            providerId,
+            displayName,
+            models);
+
+    private static void RaisePluginStateChanged(PluginManager pluginManager)
+    {
+        var handler = (EventHandler?)typeof(PluginManager)
+            .GetField(
+                "PluginStateChanged",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(pluginManager);
+        handler?.Invoke(pluginManager, EventArgs.Empty);
+    }
+
     private sealed class FakeRecorderTranscriptionPlugin : ITranscriptionEnginePlugin
     {
         public const string PluginIdValue = "com.typewhisper.recorder-test";
@@ -671,21 +850,31 @@ public sealed class AudioRecorderViewModelTests
         }
 
         public FakeRecorderTranscriptionPlugin(
-            Func<byte[], string?, bool, string?, CancellationToken, Task<PluginTranscriptionResult>> transcribeAsync)
+            Func<byte[], string?, bool, string?, CancellationToken, Task<PluginTranscriptionResult>> transcribeAsync,
+            string pluginId = PluginIdValue,
+            string providerId = "recorder-test",
+            string displayName = "Recorder Test",
+            IReadOnlyList<PluginModelInfo>? models = null)
         {
             _transcribeAsync = transcribeAsync;
+            PluginId = pluginId;
+            PluginName = displayName;
+            ProviderId = providerId;
+            ProviderDisplayName = displayName;
+            TranscriptionModels = models ?? [new("tiny", "Tiny")];
+            SelectedModelId = TranscriptionModels.FirstOrDefault()?.Id;
         }
 
         public List<RecorderTranscriptionCall> Calls { get; } = [];
 
-        public string PluginId => PluginIdValue;
-        public string PluginName => "Recorder Test";
+        public string PluginId { get; }
+        public string PluginName { get; }
         public string PluginVersion => "1.0.0";
-        public string ProviderId => "recorder-test";
-        public string ProviderDisplayName => "Recorder Test";
+        public string ProviderId { get; }
+        public string ProviderDisplayName { get; }
         public bool IsConfigured => true;
-        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = [new("tiny", "Tiny")];
-        public string? SelectedModelId { get; private set; } = "tiny";
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; }
+        public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => true;
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
