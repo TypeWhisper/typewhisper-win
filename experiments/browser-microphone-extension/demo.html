@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TypeWhisper browser microphone research</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 40px; background: #17151e; color: #f7f3ff; }
+    main { width: min(720px, 100%); margin: 0 auto; }
+    h1 { font-size: 28px; }
+    p { color: #c8bfd8; line-height: 1.5; }
+    label { display: grid; gap: 8px; margin: 24px 0; font-weight: 650; }
+    input, textarea, [contenteditable] {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 46px;
+      padding: 12px 46px 12px 14px;
+      border: 1px solid #5b526d;
+      border-radius: 10px;
+      background: #24212f;
+      color: #ffffff;
+      font: 16px/1.4 system-ui, sans-serif;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    [contenteditable] { min-height: 100px; }
+    :focus { outline: 2px solid #9d82ff; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Browser microphone proof of concept</h1>
+    <p>Focus a field, select text if desired, and use the circular microphone control. The demo uses a local mock instead of the TypeWhisper API.</p>
+
+    <label>
+      Normal input
+      <input id="normal-input" value="Replace this selection" aria-label="Normal input">
+    </label>
+
+    <label>
+      Text area
+      <textarea id="normal-textarea" aria-label="Text area">Existing text stays around the selected range.</textarea>
+    </label>
+
+    <label>
+      Content editable
+      <div id="editable" contenteditable="true" role="textbox" aria-label="Content editable">Rich text <strong>selection</strong> target.</div>
+    </label>
+  </main>
+
+  <script src="demo-shim.js"></script>
+  <script src="field-target.js"></script>
+  <script src="content.js"></script>
+</body>
+</html>

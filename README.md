@@ -228,6 +228,8 @@ curl -X POST http://localhost:8978/v1/dictation/stop
 curl "http://localhost:8978/v1/dictation/transcription?id=<session-id>"
 ```
 
+The browser microphone integration research, security boundary, proof of concept, and test plan are documented in [`docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md`](docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md).
+
 ## CLI Tool
 
 The optional `typewhisper` CLI talks to the local HTTP API and is intended for scripts, terminals, Raycast commands, and batch workflows. It reads `%LOCALAPPDATA%\TypeWhisper\api-discovery.json` before the legacy `api-port` file. Tokens can also be supplied with `TYPEWHISPER_API_TOKEN` or `--api-token`.
