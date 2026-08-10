@@ -33,6 +33,34 @@ public class SherpaOnnxPluginTests
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
+    [Fact]
+    public async Task RemoveModelAsync_DeletesOnlyTheRequestedModelDirectory()
+    {
+        var tempDirectory = Path.Join(Path.GetTempPath(), $"tw-sherpa-remove-{Guid.NewGuid():N}");
+        try
+        {
+            var sut = new SherpaOnnxPlugin();
+            await sut.ActivateAsync(new FakePluginHostServices(tempDirectory));
+            var requestedDirectory = Path.Join(tempDirectory, "Models", "parakeet-tdt-0.6b");
+            var otherDirectory = Path.Join(tempDirectory, "Models", "canary-180m-flash");
+            Directory.CreateDirectory(requestedDirectory);
+            Directory.CreateDirectory(otherDirectory);
+            await File.WriteAllTextAsync(Path.Join(requestedDirectory, "partial.tmp"), "partial");
+            await File.WriteAllTextAsync(Path.Join(otherDirectory, "keep.txt"), "keep");
+
+            await sut.RemoveModelAsync("parakeet-tdt-0.6b", CancellationToken.None);
+
+            Assert.True(sut.SupportsModelRemoval);
+            Assert.False(Directory.Exists(requestedDirectory));
+            Assert.True(Directory.Exists(otherDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+                Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(TranscriptionAccelerationPreference.Auto, false, "cpu")]
     [InlineData(TranscriptionAccelerationPreference.Auto, true, "cuda")]

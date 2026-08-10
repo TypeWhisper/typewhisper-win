@@ -25,19 +25,19 @@ public partial class SupertonicSettingsView : UserControl
         _plugin = plugin;
         InitializeComponent();
         ApplyLocalization();
-        LicenseCheckBox.IsChecked = _plugin.HasAcceptedModelLicense;
         SpeedSlider.Value = _plugin.Speed;
         StepsSlider.Value = _plugin.DenoisingSteps;
         _isInitializing = false;
         UpdateSliderText();
         UpdateStatus();
+        _plugin.ModelDownloadRequirementsChanged += OnModelDownloadRequirementsChanged;
+        Unloaded += OnUnloaded;
     }
 
     private void ApplyLocalization()
     {
         TitleText.Text = L("Settings.Title");
         DescriptionText.Text = L("Settings.Description");
-        LicenseCheckBox.Content = L("Settings.AcceptLicense");
         DownloadButton.Content = L("Settings.Download");
         SpeedLabel.Text = L("Settings.Speed");
         StepsLabel.Text = L("Settings.Quality");
@@ -45,13 +45,15 @@ public partial class SupertonicSettingsView : UserControl
         LicenseText.Text = L("Settings.License");
     }
 
-    private void OnLicenseChanged(object sender, RoutedEventArgs e)
+    private void OnModelDownloadRequirementsChanged(object? sender, EventArgs e)
     {
-        if (_isInitializing)
-            return;
+        _ = Dispatcher.InvokeAsync(UpdateStatus);
+    }
 
-        _plugin.SetLicenseAccepted(LicenseCheckBox.IsChecked.GetValueOrDefault());
-        UpdateStatus();
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _plugin.ModelDownloadRequirementsChanged -= OnModelDownloadRequirementsChanged;
+        Unloaded -= OnUnloaded;
     }
 
     private async void OnDownloadClick(object sender, RoutedEventArgs e)

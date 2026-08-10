@@ -12,5 +12,11 @@
   "Settings.Speed": "Sprechgeschwindigkeit",
   "Settings.Quality": "Qualitaetsstufen",
   "Settings.Source": "Quelle: https://huggingface.co/Supertone/supertonic-3",
-  "Settings.License": "Lizenz: OpenRAIL-M"
+  "Settings.License": "Lizenz: OpenRAIL-M",
+  "Settings.LicenseTitle": "Modelllizenz: OpenRAIL-M",
+  "Settings.LicenseDescription": "Die Supertonic-3-Modellassets stehen unter OpenRAIL-M und enthalten Nutzungsbeschränkungen. Lies vor dem Download die vollständige Lizenz.",
+  "Settings.HuggingFaceToken": "Hugging-Face-Token (optional)",
+  "Settings.HuggingFaceTokenHint": "Wird sicher mit Windows DPAPI gespeichert und nur für Modelldownloads an huggingface.co gesendet. Öffentliche Downloads funktionieren auch ohne Token.",
+  "Settings.InvalidToken": "Der Hugging-Face-Token ist ungültig.",
+  "Settings.TokenSaved": "Token sicher gespeichert."
 }

@@ -5,6 +5,6 @@
   "Settings.Remove": "Remove",
   "Settings.Saved": "Token saved securely.",
   "Settings.Removed": "Token removed.",
-  "Settings.InvalidToken": "The token must not contain spaces or line breaks.",
+  "Settings.InvalidToken": "The Hugging Face token is invalid.",
   "Settings.SaveFailed": "The token could not be stored securely. Please try again."
 }

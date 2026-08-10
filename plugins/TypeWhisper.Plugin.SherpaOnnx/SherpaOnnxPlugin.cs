@@ -126,6 +126,10 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// </summary>
     public bool SupportsModelDownload => true;
     /// <summary>
+    /// Gets whether downloaded model directories can be removed.
+    /// </summary>
+    public bool SupportsModelRemoval => true;
+    /// <summary>
     /// Gets the supported acceleration backends.
     /// </summary>
     public IReadOnlyList<TranscriptionAccelerationBackend> SupportedAccelerationBackends { get; } =
@@ -278,6 +282,37 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         }
 
         progress?.Report(1.0);
+    }
+
+    /// <summary>
+    /// Removes the downloaded files for the requested model.
+    /// </summary>
+    public Task RemoveModelAsync(string modelId, CancellationToken ct)
+    {
+        _ = GetModelDefinition(modelId);
+        var directory = GetModelDirectory(modelId);
+        ct.ThrowIfCancellationRequested();
+
+        lock (_sync)
+        {
+            if (string.Equals(_loadedModelId, modelId, StringComparison.Ordinal))
+                UnloadRecognizerUnsafe();
+
+            ct.ThrowIfCancellationRequested();
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Releases the active recognizer without disabling the plugin.
+    /// </summary>
+    public Task UnloadModelAsync()
+    {
+        UnloadRecognizer();
+        return Task.CompletedTask;
     }
 
     /// <summary>

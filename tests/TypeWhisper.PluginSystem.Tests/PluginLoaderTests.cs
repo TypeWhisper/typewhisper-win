@@ -121,6 +121,75 @@ public class PluginLoaderTests : IDisposable
         Assert.Empty(result);
     }
 
+    [Fact]
+    public void DiscoverAndLoad_NewerMinimumHostVersion_IsSkippedWithDiagnostic()
+    {
+        var pluginDir = Path.Combine(_tempDir, "com.test.future");
+        Directory.CreateDirectory(pluginDir);
+        WriteManifest(pluginDir, "com.test.future", "Future plugin", "2.0.0");
+        var loader = new PluginLoader(new Version(1, 5, 0));
+
+        var result = loader.DiscoverAndLoad([_tempDir]);
+
+        Assert.Empty(result);
+        var issue = Assert.Single(loader.LoadIssues);
+        Assert.Equal(PluginLoadIssueKind.MinimumHostVersionNotMet, issue.Kind);
+        Assert.Equal("com.test.future", issue.Manifest.Id);
+        Assert.Equal("2.0.0", issue.RequiredHostVersion);
+        Assert.Equal("1.5.0", issue.CurrentHostVersion);
+        Assert.Equal(pluginDir, issue.PluginDirectory);
+    }
+
+    [Fact]
+    public void DiscoverAndLoad_InvalidMinimumHostVersion_IsSkippedWithDiagnostic()
+    {
+        var pluginDir = Path.Combine(_tempDir, "com.test.invalid-version");
+        Directory.CreateDirectory(pluginDir);
+        WriteManifest(pluginDir, "com.test.invalid-version", "Invalid version", "latest");
+        var loader = new PluginLoader(new Version(1, 5, 0));
+
+        var result = loader.DiscoverAndLoad([_tempDir]);
+
+        Assert.Empty(result);
+        var issue = Assert.Single(loader.LoadIssues);
+        Assert.Equal(PluginLoadIssueKind.InvalidMinimumHostVersion, issue.Kind);
+        Assert.Equal("latest", issue.RequiredHostVersion);
+    }
+
+    [Fact]
+    public void DiscoverAndLoad_CompatibleMinimumHostVersion_ContinuesToAssemblyResolution()
+    {
+        var pluginDir = Path.Combine(_tempDir, "com.test.compatible");
+        Directory.CreateDirectory(pluginDir);
+        WriteManifest(pluginDir, "com.test.compatible", "Compatible plugin", "1.5.0");
+        var loader = new PluginLoader(new Version(1, 5, 0));
+
+        var result = loader.DiscoverAndLoad([_tempDir]);
+
+        Assert.Empty(result);
+        Assert.Empty(loader.LoadIssues);
+    }
+
+    private static void WriteManifest(
+        string pluginDirectory,
+        string pluginId,
+        string pluginName,
+        string minimumHostVersion)
+    {
+        var manifest = new PluginManifest
+        {
+            Id = pluginId,
+            Name = pluginName,
+            Version = "1.0.0",
+            MinHostVersion = minimumHostVersion,
+            AssemblyName = "Missing.dll",
+            PluginClass = "Missing.Plugin"
+        };
+        File.WriteAllText(
+            Path.Combine(pluginDirectory, "manifest.json"),
+            JsonSerializer.Serialize(manifest));
+    }
+
     public void Dispose()
     {
         try

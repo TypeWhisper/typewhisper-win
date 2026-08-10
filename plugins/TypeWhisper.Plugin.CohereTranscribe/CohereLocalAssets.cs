@@ -141,6 +141,8 @@ internal interface ICohereLocalAssetManager
         IProgress<ArtifactTransferProgress>? progress,
         CancellationToken cancellationToken);
 
+    Task RemoveModelAsync(string modelId, CancellationToken cancellationToken);
+
     Task EnsureRuntimeAsync(
         CrispAsrBackend backend,
         IProgress<ArtifactTransferProgress>? progress,
@@ -340,6 +342,41 @@ internal sealed class CohereLocalAssetManager : ICohereLocalAssetManager, IDispo
 
                 completed += target.Artifact.SizeBytes;
                 progress?.Report(new ArtifactTransferProgress(completed, transferSize));
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task RemoveModelAsync(string modelId, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var paths = GetModelPaths(modelId);
+            var modelPath = paths.ModelPath;
+            var markerPath = GetArtifactMarkerPath(modelPath);
+            var partialPath = modelPath + ".download";
+            EnsurePathWithinAssetRoot(modelPath);
+            EnsurePathWithinAssetRoot(markerPath);
+            EnsurePathWithinAssetRoot(partialPath);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (File.Exists(modelPath))
+                File.Delete(modelPath);
+            if (File.Exists(markerPath))
+                File.Delete(markerPath);
+            if (File.Exists(partialPath))
+                File.Delete(partialPath);
+
+            var modelDirectory = Path.GetDirectoryName(modelPath);
+            if (modelDirectory is not null
+                && Directory.Exists(modelDirectory)
+                && !Directory.EnumerateFileSystemEntries(modelDirectory).Any())
+            {
+                Directory.Delete(modelDirectory);
             }
         }
         finally

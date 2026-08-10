@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -109,7 +108,7 @@ public sealed class PluginRegistryService
         _officialRegistryUrl = officialRegistryUrl;
         _communityRegistryUrl = communityRegistryUrl;
         _processArchitecture = processArchitecture ?? RuntimeInformation.ProcessArchitecture;
-        _hostVersion = hostVersion ?? GetHostVersion();
+        _hostVersion = hostVersion ?? PluginHostVersion.Current;
     }
 
     /// <summary>
@@ -801,12 +800,6 @@ public sealed class PluginRegistryService
             throw new InvalidOperationException(Loc.Instance["Plugins.PackageHashInvalid"]);
 
         return normalized;
-    }
-
-    private static Version GetHostVersion()
-    {
-        var asm = Assembly.GetEntryAssembly();
-        return asm?.GetName().Version ?? new Version(1, 0);
     }
 
     private static bool IsCompatible(

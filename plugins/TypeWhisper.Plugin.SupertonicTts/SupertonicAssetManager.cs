@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
+using TypeWhisper.PluginSDK.Helpers;
 
 namespace TypeWhisper.Plugin.SupertonicTts;
 
@@ -64,8 +66,12 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
     /// <summary>
     /// Downloads missing assets asynchronously.
     /// </summary>
-    public async Task DownloadMissingAssetsAsync(IProgress<double>? progress, CancellationToken ct)
+    public async Task DownloadMissingAssetsAsync(
+        IProgress<double>? progress,
+        string? huggingFaceToken,
+        CancellationToken ct)
     {
+        var normalizedToken = PluginHuggingFaceTokenHelper.NormalizeToken(huggingFaceToken);
         Directory.CreateDirectory(AssetRoot);
         var work = _files.Where(file => !File.Exists(GetPath(file.RelativePath))).ToList();
         var totalBytes = Math.Max(1, work.Sum(file => Math.Max(1, file.EstimatedSizeBytes)));
@@ -81,6 +87,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, file.DownloadUrl);
+                ApplyHuggingFaceAuthorization(request, normalizedToken);
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 response.EnsureSuccessStatusCode();
 
@@ -119,7 +126,7 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             }
         }
 
-        await WriteLicenseMetadataAsync(ct);
+        await WriteLicenseMetadataAsync(normalizedToken, ct);
         progress?.Report(1.0);
     }
 
@@ -132,14 +139,18 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
             _httpClient.Dispose();
     }
 
-    private async Task WriteLicenseMetadataAsync(CancellationToken ct)
+    private async Task WriteLicenseMetadataAsync(string? huggingFaceToken, CancellationToken ct)
     {
         var licensePath = GetPath(SupertonicPaths.LicenseFileName);
         if (!File.Exists(licensePath))
         {
             try
             {
-                var text = await _httpClient.GetStringAsync(_licenseUrl, ct);
+                using var request = new HttpRequestMessage(HttpMethod.Get, _licenseUrl);
+                ApplyHuggingFaceAuthorization(request, huggingFaceToken);
+                using var response = await _httpClient.SendAsync(request, ct);
+                response.EnsureSuccessStatusCode();
+                var text = await response.Content.ReadAsStringAsync(ct);
                 await File.WriteAllTextAsync(licensePath, text, Encoding.UTF8, ct);
             }
             catch (HttpRequestException)
@@ -181,6 +192,17 @@ internal sealed class SupertonicAssetManager : ISupertonicAssetManager, IDisposa
 
     private static double ClampProgress(double value) =>
         Math.Max(0.0, Math.Min(1.0, value));
+
+    private static void ApplyHuggingFaceAuthorization(
+        HttpRequestMessage request,
+        string? huggingFaceToken)
+    {
+        if (huggingFaceToken is not null
+            && string.Equals(request.RequestUri?.Host, "huggingface.co", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", huggingFaceToken);
+        }
+    }
 
     private static void TryDelete(string path)
     {

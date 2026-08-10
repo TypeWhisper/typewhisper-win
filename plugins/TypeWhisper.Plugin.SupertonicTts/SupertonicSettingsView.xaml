@@ -26,11 +26,6 @@
                    TextWrapping="Wrap"
                    Margin="0,0,0,8"/>
 
-        <CheckBox x:Name="LicenseCheckBox"
-                  Checked="OnLicenseChanged"
-                  Unchecked="OnLicenseChanged"
-                  Margin="0,0,0,8"/>
-
         <ProgressBar x:Name="DownloadProgress"
                      Height="4"
                      Minimum="0"

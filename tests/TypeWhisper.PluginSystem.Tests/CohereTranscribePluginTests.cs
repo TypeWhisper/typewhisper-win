@@ -554,6 +554,29 @@ public sealed class CohereTranscribePluginTests
         Assert.False(File.Exists(escapedPath));
     }
 
+    [Fact]
+    public async Task RemoveModelAsync_DeletesModelArtifactsAndKeepsSharedAssets()
+    {
+        using var temp = new TempDirectory();
+        using var sut = new CohereLocalAssetManager(temp.Path);
+        var paths = sut.GetModelPaths(CohereModelCatalog.DefaultModelId);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.ModelPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.VadModelPath)!);
+        await File.WriteAllTextAsync(paths.ModelPath, "model");
+        await File.WriteAllTextAsync(paths.ModelPath + ".sha256", "hash");
+        await File.WriteAllTextAsync(paths.ModelPath + ".download", "partial");
+        await File.WriteAllTextAsync(paths.VadModelPath, "vad");
+        await File.WriteAllTextAsync(paths.LanguageIdModelPath, "language-id");
+
+        await sut.RemoveModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        Assert.False(File.Exists(paths.ModelPath));
+        Assert.False(File.Exists(paths.ModelPath + ".sha256"));
+        Assert.False(File.Exists(paths.ModelPath + ".download"));
+        Assert.True(File.Exists(paths.VadModelPath));
+        Assert.True(File.Exists(paths.LanguageIdModelPath));
+    }
+
     [Theory]
     [InlineData(CohereModelCatalog.Q4KModelId)]
     [InlineData(CohereModelCatalog.DefaultModelId)]
@@ -605,6 +628,29 @@ public sealed class CohereTranscribePluginTests
 
         await sut.UnloadModelAsync();
         Assert.False(server.IsRunning);
+    }
+
+    [Fact]
+    public async Task PluginRemoveModelAsync_StopsActiveSidecarAndRemovesSelectedQuantization()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        var server = new FakeCrispAsrServer();
+        using var sut = new CohereTranscribePlugin(assets, server);
+        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
+        await sut.DownloadModelAsync(
+            CohereModelCatalog.DefaultModelId,
+            progress: null,
+            CancellationToken.None);
+        await sut.LoadModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        await sut.RemoveModelAsync(CohereModelCatalog.DefaultModelId, CancellationToken.None);
+
+        Assert.True(sut.SupportsModelRemoval);
+        Assert.False(server.IsRunning);
+        Assert.False(assets.IsModelInstalled(CohereModelCatalog.DefaultModelId));
+        Assert.Contains(CrispAsrBackend.Cpu, assets.EnsuredRuntimes);
     }
 
     [Fact]
@@ -735,17 +781,80 @@ public sealed class CohereTranscribePluginTests
     }
 
     [Fact]
-    public void SettingsView_LabelsTheOptionalTokenFieldForAssistiveTechnology()
+    public async Task DownloadRequirements_ExposeAndPersistOptionalHuggingFaceToken()
     {
-        var xaml = TestFile.ReadProjectFile(
-            "plugins",
-            "TypeWhisper.Plugin.CohereTranscribe",
-            "CohereTranscribeSettingsView.xaml");
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var validationClient = new HttpClient(new StaticResponseHandler(
+            HttpStatusCode.OK,
+            "{\"name\":\"typewhisper\"}"));
+        using var sut = new CohereTranscribePlugin(
+            assets,
+            new FakeCrispAsrServer(),
+            validationClient);
+        var host = new FakePluginHostServices(temp.Path);
+        var changeCount = 0;
+        sut.ModelDownloadRequirementsChanged += (_, _) => changeCount++;
+        await sut.ActivateAsync(host);
 
-        Assert.Contains(
-            "AutomationProperties.LabeledBy=\"{Binding ElementName=TokenLabel}\"",
-            xaml,
-            StringComparison.Ordinal);
+        var initial = Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId);
+        Assert.Equal(PluginModelDownloadRequirementKind.Credential, initial.Kind);
+        Assert.False(initial.IsRequired);
+        Assert.False(initial.IsSatisfied);
+        Assert.Null(sut.CreateSettingsView());
+
+        var result = await sut.SaveModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            "  hf_valid  ",
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("hf_valid", assets.HuggingFaceToken);
+        Assert.Equal("hf_valid", host.Secrets[CohereTranscribePlugin.HuggingFaceTokenSecretName]);
+        Assert.True(Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId).IsSatisfied);
+        Assert.Equal(1, changeCount);
+
+        await sut.ClearModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            CancellationToken.None);
+
+        Assert.False(Assert.Single(
+            sut.ModelDownloadRequirements,
+            requirement => requirement.ModelId == CohereModelCatalog.DefaultModelId).IsSatisfied);
+        Assert.DoesNotContain(CohereTranscribePlugin.HuggingFaceTokenSecretName, host.Secrets);
+        Assert.Equal(2, changeCount);
+    }
+
+    [Fact]
+    public async Task SaveModelDownloadCredentialAsync_RejectsInvalidTokenWithoutPersistingIt()
+    {
+        using var temp = new TempDirectory();
+        var assets = new FakeAssetManager();
+        using var validationClient = new HttpClient(new StaticResponseHandler(
+            HttpStatusCode.Unauthorized,
+            "{\"error\":\"invalid token\"}"));
+        using var sut = new CohereTranscribePlugin(
+            assets,
+            new FakeCrispAsrServer(),
+            validationClient);
+        var host = new FakePluginHostServices(temp.Path);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.SaveModelDownloadCredentialAsync(
+            CohereModelCatalog.DefaultModelId,
+            CohereTranscribePlugin.HuggingFaceTokenRequirementId,
+            "hf_invalid",
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Null(assets.HuggingFaceToken);
+        Assert.Empty(host.Secrets);
     }
 
     [Fact]
@@ -846,6 +955,13 @@ public sealed class CohereTranscribePluginTests
             LastEnsuredModelId = modelId;
             _installedModelIds.Add(modelId);
             progress?.Report(new ArtifactTransferProgress(100, 100));
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveModelAsync(string modelId, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _installedModelIds.Remove(modelId);
             return Task.CompletedTask;
         }
 
@@ -1045,6 +1161,18 @@ public sealed class CohereTranscribePluginTests
         public void Log(PluginLogLevel level, string message) =>
             Logs.Add((level, message));
         public void NotifyCapabilitiesChanged() { }
+    }
+
+    private sealed class StaticResponseHandler(HttpStatusCode statusCode, string content)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(content, Encoding.UTF8, "application/json")
+            });
     }
 
     private sealed class NoOpPluginEventBus : IPluginEventBus

@@ -14,6 +14,10 @@ public enum ModelStatusType
     /// </summary>
     Downloading,
     /// <summary>
+    /// Represents the removing option.
+    /// </summary>
+    Removing,
+    /// <summary>
     /// Represents the loading option.
     /// </summary>
     Loading,
@@ -67,6 +71,11 @@ public sealed record ModelStatus
     /// </summary>
     public static ModelStatus DownloadingModel(double progress, double? bytesPerSecond = null) =>
         new() { Type = ModelStatusType.Downloading, Progress = progress, BytesPerSecond = bytesPerSecond };
+
+    /// <summary>
+    /// Creates a model-removal status.
+    /// </summary>
+    public static ModelStatus RemovingModel => new() { Type = ModelStatusType.Removing };
 
     /// <summary>
     /// Creates a failed status.

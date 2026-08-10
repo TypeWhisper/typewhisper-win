@@ -58,4 +58,27 @@ public sealed class ModelAccelerationLayoutTests
 
         Assert.Contains("ModelManager.IsActiveModelBusy", audioXaml);
     }
+
+    [Fact]
+    public void ModelsSection_OpensHostRenderedDownloadRequirements()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "ModelsSection.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "ModelsSection.xaml.cs");
+
+        Assert.Contains("HasDownloadRequirements", xaml);
+        Assert.Contains("Click=\"Requirements_Click\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"ModelDownloadRequirements\"", xaml);
+        Assert.Contains("ModelDownloadRequirementsControl", codeBehind);
+        Assert.Contains("GetDownloadRequirementsProvider", codeBehind);
+    }
 }
