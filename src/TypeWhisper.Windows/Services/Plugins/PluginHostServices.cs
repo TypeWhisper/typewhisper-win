@@ -58,7 +58,9 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _settings = settings;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
+        var windowsNormalizedPluginId = pluginId?.TrimEnd(' ', '.');
         if (string.IsNullOrWhiteSpace(pluginId)
+            || !string.Equals(pluginId, windowsNormalizedPluginId, StringComparison.Ordinal)
             || Path.IsPathRooted(pluginId)
             || pluginId.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0
             || pluginId is "." or "..")
