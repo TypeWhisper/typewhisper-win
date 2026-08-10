@@ -289,6 +289,8 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
         if (!string.Equals(modelId, ModelId, StringComparison.Ordinal))
             throw new ArgumentException($"Unknown model: {modelId}", nameof(modelId));
 
+        var host = _host ?? throw new InvalidOperationException("Plugin is not activated.");
+
         await _sidecarLock.WaitAsync(ct);
         try
         {
@@ -296,7 +298,7 @@ public sealed class GraniteSpeechPlugin : ITypeWhisperPlugin, ITranscriptionEngi
             _loadedModelId = null;
             ct.ThrowIfCancellationRequested();
 
-            var dataDirectory = GetDataDirectory();
+            var dataDirectory = host.PluginAssetDirectory;
             if (Directory.Exists(dataDirectory))
                 Directory.Delete(dataDirectory, recursive: true);
         }

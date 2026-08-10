@@ -134,7 +134,6 @@ public partial class PluginsViewModel : ObservableObject
     private void RefreshPlugins()
     {
         Plugins.Clear();
-        UnavailablePlugins.Clear();
         foreach (var plugin in _pluginManager.AllPlugins)
         {
             var isEnabled = _pluginManager.IsEnabled(plugin.Manifest.Id);
@@ -143,14 +142,19 @@ public partial class PluginsViewModel : ObservableObject
             Plugins.Add(vm);
         }
 
+        RefreshUnavailablePlugins();
+        SyncInstalledPluginRegistryItems();
+        NotifyStateChanged();
+    }
+
+    private void RefreshUnavailablePlugins()
+    {
+        UnavailablePlugins.Clear();
         foreach (var issue in _pluginManager.LoadIssues
                      .OrderBy(issue => issue.Manifest.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             UnavailablePlugins.Add(new PluginLoadIssueItemViewModel(issue));
         }
-
-        SyncInstalledPluginRegistryItems();
-        NotifyStateChanged();
     }
 
     private void RefreshMarketplaceInstallStates()
@@ -295,6 +299,7 @@ public partial class PluginsViewModel : ObservableObject
             foreach (var plugin in RegistryPlugins)
                 plugin.NotifyLocalizationChanged();
 
+            RefreshUnavailablePlugins();
             RebuildMarketplaceFilters();
             SyncInstalledPluginRegistryItems();
             NotifyStateChanged();

@@ -315,12 +315,17 @@ public sealed class WhisperCppPlugin :
             {
                 DisposeFactoryUnsafe();
                 _loadedModelId = null;
-                _selectedModelId = null;
             }
 
             ct.ThrowIfCancellationRequested();
             if (File.Exists(modelPath))
                 File.Delete(modelPath);
+
+            if (string.Equals(_selectedModelId, modelId, StringComparison.Ordinal))
+            {
+                _selectedModelId = null;
+                _host?.SetSetting<string?>("selectedModel", null);
+            }
         }
         finally
         {

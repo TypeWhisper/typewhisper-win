@@ -142,10 +142,17 @@ public sealed class PluginsSectionLayoutTests
             "Views",
             "Sections",
             "PluginsSection.xaml");
+        var codeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "Sections",
+            "PluginsSection.xaml.cs");
 
         Assert.Contains("UnavailablePlugins", xaml);
         Assert.Contains("DiagnosticMessage", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"IntegrationsUnavailablePlugins\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"IntegrationCompatibilityReason\"", xaml);
+        Assert.Contains("InstalledPluginCount", codeBehind);
     }
 }

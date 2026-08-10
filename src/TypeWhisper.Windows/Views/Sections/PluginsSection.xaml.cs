@@ -39,7 +39,7 @@ public partial class PluginsSection : UserControl
             }
 
             ApplyTabSelection(vm.IsMarketplaceSelected);
-            EmptyState.Visibility = vm.Plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdateEmptyState();
 
             ConfigureSourceGrouping(
                 CollectionViewSource.GetDefaultView(vm.Plugins),
@@ -65,7 +65,14 @@ public partial class PluginsSection : UserControl
     {
         if (e.PropertyName == nameof(PluginsViewModel.IsMarketplaceSelected))
             ApplyTabSelection(_pluginsViewModel?.IsMarketplaceSelected ?? false);
+        else if (e.PropertyName == nameof(PluginsViewModel.InstalledPluginCount))
+            UpdateEmptyState();
     }
+
+    private void UpdateEmptyState() =>
+        EmptyState.Visibility = _pluginsViewModel?.InstalledPluginCount == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void OnInstalledTabClick(object sender, RoutedEventArgs e)
     {

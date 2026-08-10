@@ -771,6 +771,68 @@ public class ModelManagerServiceTests
         Assert.Equal(1, plugin.LoadCallCount);
     }
 
+    [Fact]
+    public async Task Dispose_DoesNotBreakInFlightModelOperationLease()
+    {
+        const string pluginId = "com.typewhisper.disposing-local";
+        const string modelId = "disposing-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        var loadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            LoadGate = loadGate,
+            LoadStarted = loadStarted
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+        var loadTask = sut.LoadModelAsync(fullModelId);
+        await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        sut.Dispose();
+        loadGate.SetResult();
+
+        await loadTask;
+        Assert.Equal(fullModelId, sut.ActiveModelId);
+    }
+
+    [Fact]
+    public async Task RemoveModelAsync_PreservesCancellationWhenStatusCheckFails()
+    {
+        const string pluginId = "com.typewhisper.cancelling-local";
+        const string modelId = "cancelling-model";
+        var fullModelId = ModelManagerService.GetPluginModelId(pluginId, modelId);
+        _settings.Setup(service => service.Current).Returns(new AppSettings());
+        using var cancellation = new CancellationTokenSource();
+        var plugin = new FakeTranscriptionPlugin(
+            pluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [modelId])
+        {
+            SupportsModelRemoval = true,
+            ModelDownloaded = true,
+            DownloadStatusException = new MissingMethodException("status failed"),
+            RemoveAction = ct =>
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException(ct);
+            }
+        };
+        var sut = new ModelManagerService(CreatePluginManager(plugin), _settings.Object);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sut.RemoveModelAsync(fullModelId, cancellation.Token));
+
+        Assert.Equal(ModelStatusType.NotDownloaded, sut.GetStatus(fullModelId).Type);
+    }
+
     [Theory]
     [InlineData(true, "TypeWhisper, ElevenLabs")]
     [InlineData(false, null)]
@@ -926,6 +988,7 @@ public class ModelManagerServiceTests
             remove { }
         }
         public TaskCompletionSource? LoadStarted { get; init; }
+        public Action<CancellationToken>? RemoveAction { get; init; }
 
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
@@ -960,6 +1023,7 @@ public class ModelManagerServiceTests
         {
             ct.ThrowIfCancellationRequested();
             RemoveCallCount++;
+            RemoveAction?.Invoke(ct);
             ModelDownloaded = false;
             return Task.CompletedTask;
         }

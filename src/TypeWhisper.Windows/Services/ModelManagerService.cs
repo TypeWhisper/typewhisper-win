@@ -46,7 +46,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     private readonly PluginManager _pluginManager;
     private readonly ISettingsService _settings;
     private readonly IDictionaryService? _dictionary;
-    private readonly Dictionary<string, ModelStatus> _modelStatuses = new();
+    private readonly ConcurrentDictionary<string, ModelStatus> _modelStatuses =
+        new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _pluginModelOperationGates =
         new(StringComparer.OrdinalIgnoreCase);
     private string? _activeModelId;
@@ -286,10 +287,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
 
     private void ReportDownloadProgress(string modelId, double progress)
     {
-        if (_modelStatuses.TryGetValue(modelId, out var current)
-            && current.Type == ModelStatusType.Downloading)
+        while (_modelStatuses.TryGetValue(modelId, out var current)
+               && current.Type == ModelStatusType.Downloading)
         {
-            SetStatus(modelId, ModelStatus.DownloadingModel(Math.Clamp(progress, 0, 1)));
+            var updated = ModelStatus.DownloadingModel(Math.Clamp(progress, 0, 1));
+            if (current == updated)
+                return;
+
+            if (_modelStatuses.TryUpdate(modelId, updated, current))
+            {
+                OnPropertyChanged(nameof(GetStatus));
+                return;
+            }
         }
     }
 
@@ -539,9 +548,20 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            var isDownloaded = false;
+            try
+            {
+                isDownloaded = IsDownloadedCore(plugin, pluginModelId);
+            }
+            catch (Exception statusException) when (NonFatalExceptionFilter.IsNonFatal(statusException))
+            {
+                Debug.WriteLine(
+                    $"Plugin '{plugin.PluginId}' failed while checking model status after cancellation: " +
+                    statusException.Message);
+            }
             SetStatus(
                 modelId,
-                IsDownloadedCore(plugin, pluginModelId) ? ModelStatus.Ready : ModelStatus.NotDownloaded);
+                isDownloaded ? ModelStatus.Ready : ModelStatus.NotDownloaded);
             throw;
         }
         catch (Exception ex)
@@ -827,11 +847,18 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         string pluginDisplayName,
         CancellationToken ct)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var gate = _pluginModelOperationGates.GetOrAdd(pluginId, static _ => new SemaphoreSlim(1, 1));
         if (!await gate.WaitAsync(0, ct))
         {
             throw new InvalidOperationException(
                 Loc.Instance.GetString("Models.PluginOperationBusyFormat", pluginDisplayName));
+        }
+
+        if (_disposed)
+        {
+            gate.Release();
+            throw new ObjectDisposedException(nameof(ModelManagerService));
         }
 
         return new ModelOperationLease(gate);
@@ -859,7 +886,7 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         CancelAutoUnload();
         _activeTranscriptionPlugin = null;
         _activeModelAccelerationPreference = null;
-        _modelStatuses.Remove(modelId);
+        _modelStatuses.TryRemove(modelId, out _);
         ActiveModelId = null;
         OnPropertyChanged(nameof(GetStatus));
     }
@@ -958,12 +985,10 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
     {
         if (!_disposed)
         {
+            _disposed = true;
             CancelAutoUnload();
             _pluginManager.PluginStateChanged -= OnPluginStateChanged;
-            foreach (var gate in _pluginModelOperationGates.Values)
-                gate.Dispose();
             _pluginModelOperationGates.Clear();
-            _disposed = true;
         }
     }
 

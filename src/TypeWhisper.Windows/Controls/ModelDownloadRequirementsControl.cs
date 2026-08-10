@@ -69,6 +69,7 @@ public sealed class ModelDownloadRequirementsControl : UserControl
                 || string.Equals(requirement.ModelId, _modelId, StringComparison.Ordinal))
             .GroupBy(requirement => new
             {
+                requirement.ModelId,
                 requirement.Id,
                 requirement.Kind,
                 requirement.Revision

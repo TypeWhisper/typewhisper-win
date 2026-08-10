@@ -205,8 +205,9 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDownloadRequ
         DenoisingSteps = NormalizeDenoisingSteps(host.GetSetting<int?>(DenoisingStepsSettingName) ?? DefaultDenoisingSteps);
         _acceptedModelLicenseId = host.GetSetting<string>(AcceptedModelLicenseIdSettingName);
         _acceptedModelLicenseRevision = host.GetSetting<string>(AcceptedModelLicenseRevisionSettingName);
+        var legacyLicenseAccepted = host.GetSetting<bool?>(LicenseAcceptedSettingName);
         if (!HasAcceptedModelLicense
-            && host.GetSetting<bool?>(LicenseAcceptedSettingName).GetValueOrDefault())
+            && legacyLicenseAccepted.GetValueOrDefault())
         {
             _acceptedModelLicenseId = ModelLicenseId;
             _acceptedModelLicenseRevision = ModelLicenseRevision;
@@ -214,6 +215,8 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDownloadRequ
             host.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
             host.SetSetting(AcceptedModelLicenseAtSettingName, DateTimeOffset.UtcNow.ToString("O"));
         }
+        if (legacyLicenseAccepted is not null)
+            host.SetSetting<bool?>(LicenseAcceptedSettingName, null);
 
         try
         {
@@ -292,7 +295,6 @@ public sealed class SupertonicTtsPlugin : ITtsProviderPlugin, IModelDownloadRequ
     {
         _acceptedModelLicenseId = accepted ? ModelLicenseId : null;
         _acceptedModelLicenseRevision = accepted ? ModelLicenseRevision : null;
-        _host?.SetSetting(LicenseAcceptedSettingName, accepted);
         _host?.SetSetting(AcceptedModelLicenseIdSettingName, _acceptedModelLicenseId);
         _host?.SetSetting(AcceptedModelLicenseRevisionSettingName, _acceptedModelLicenseRevision);
         _host?.SetSetting(

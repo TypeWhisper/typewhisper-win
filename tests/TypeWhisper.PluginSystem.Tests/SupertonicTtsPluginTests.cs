@@ -94,6 +94,17 @@ public class SupertonicTtsPluginTests
             migratedHost.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseRevisionSettingName));
         Assert.False(string.IsNullOrWhiteSpace(
             migratedHost.GetSetting<string>(SupertonicTtsPlugin.AcceptedModelLicenseAtSettingName)));
+        Assert.Null(migratedHost.GetSetting<bool?>(SupertonicTtsPlugin.LicenseAcceptedSettingName));
+
+        migratedHost.SetSetting(
+            SupertonicTtsPlugin.AcceptedModelLicenseRevisionSettingName,
+            "previous-revision");
+        var remigrated = new SupertonicTtsPlugin(
+            new FakeSupertonicAssets(),
+            _ => new FakeSupertonicSynthesizer());
+        await remigrated.ActivateAsync(migratedHost);
+
+        Assert.False(remigrated.HasAcceptedModelLicense);
 
         var staleHost = new TestPluginHostServices();
         staleHost.SetSetting(

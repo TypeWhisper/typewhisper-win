@@ -53,6 +53,17 @@ public sealed class GraniteSpeechPluginTests
         }
     }
 
+    [Fact]
+    public async Task RemoveModelAsync_RequiresActivatedHostBeforeRecursiveDelete()
+    {
+        using var sut = new GraniteSpeechPlugin();
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.RemoveModelAsync("granite-4.0-1b-speech", CancellationToken.None));
+
+        Assert.Equal("Plugin is not activated.", error.Message);
+    }
+
     private static PluginManifest? ReadManifest() =>
         JsonSerializer.Deserialize<PluginManifest>(
             TestFile.ReadProjectFile("plugins", "TypeWhisper.Plugin.GraniteSpeech", "manifest.json"),

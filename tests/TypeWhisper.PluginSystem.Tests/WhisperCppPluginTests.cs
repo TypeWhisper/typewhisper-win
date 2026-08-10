@@ -446,19 +446,23 @@ public class WhisperCppPluginTests
     {
         using var temp = new TempDirectory();
         using var sut = new WhisperCppPlugin();
-        await sut.ActivateAsync(new FakePluginHostServices(temp.Path));
+        var host = new FakePluginHostServices(temp.Path);
+        await sut.ActivateAsync(host);
         var modelsDirectory = Path.Join(temp.Path, "Models");
         Directory.CreateDirectory(modelsDirectory);
         var requestedModel = Path.Join(modelsDirectory, "ggml-tiny.bin");
         var otherModel = Path.Join(modelsDirectory, "ggml-base.bin");
         await File.WriteAllTextAsync(requestedModel, "tiny");
         await File.WriteAllTextAsync(otherModel, "base");
+        sut.SelectModel("tiny");
 
         await sut.RemoveModelAsync("tiny", CancellationToken.None);
 
         Assert.True(sut.SupportsModelRemoval);
         Assert.False(File.Exists(requestedModel));
         Assert.True(File.Exists(otherModel));
+        Assert.Null(sut.SelectedModelId);
+        Assert.Null(host.GetSetting<string>("selectedModel"));
     }
 
     [Fact]
@@ -615,6 +619,8 @@ public class WhisperCppPluginTests
 
     private sealed class FakePluginHostServices(string pluginDataDirectory) : IPluginHostServices
     {
+        private readonly Dictionary<string, JsonElement> _settings = [];
+
         public string PluginDataDirectory { get; } = pluginDataDirectory;
         public string? ActiveAppProcessName => null;
         public string? ActiveAppName => null;
@@ -625,8 +631,10 @@ public class WhisperCppPluginTests
         public Task StoreSecretAsync(string key, string value) => Task.CompletedTask;
         public Task<string?> LoadSecretAsync(string key) => Task.FromResult<string?>(null);
         public Task DeleteSecretAsync(string key) => Task.CompletedTask;
-        public T? GetSetting<T>(string key) => default;
-        public void SetSetting<T>(string key, T value) { }
+        public T? GetSetting<T>(string key) =>
+            _settings.TryGetValue(key, out var value) ? value.Deserialize<T>() : default;
+        public void SetSetting<T>(string key, T value) =>
+            _settings[key] = JsonSerializer.SerializeToElement(value);
         public void Log(PluginLogLevel level, string message) { }
         public void NotifyCapabilitiesChanged() { }
     }
