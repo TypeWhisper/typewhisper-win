@@ -22,6 +22,7 @@ public sealed class PluginManager : IDisposable
     private readonly string _pluginDataRoot;
 
     private readonly List<LoadedPlugin> _allPlugins = [];
+    private readonly List<PluginLoadIssue> _loadIssues = [];
     private readonly Dictionary<string, PluginHostServices> _hostServices = [];
     private readonly HashSet<string> _activatedPlugins = [];
     private readonly object _lock = new();
@@ -74,6 +75,12 @@ public sealed class PluginManager : IDisposable
     public IReadOnlyList<LoadedPlugin> AllPlugins
     {
         get { lock (_lock) return [.. _allPlugins]; }
+    }
+
+    /// <summary>Gets discovered plugin bundles blocked by host compatibility.</summary>
+    public IReadOnlyList<PluginLoadIssue> LoadIssues
+    {
+        get { lock (_lock) return [.. _loadIssues]; }
     }
 
     /// <summary>Active LLM provider plugins.</summary>
@@ -245,6 +252,11 @@ public sealed class PluginManager : IDisposable
     {
         ct.ThrowIfCancellationRequested();
         var loadedPlugins = _loader.DiscoverAndLoad(_searchDirectories);
+        lock (_lock)
+        {
+            _loadIssues.Clear();
+            _loadIssues.AddRange(_loader.LoadIssues);
+        }
         await InitializeLoadedPluginsAsync(loadedPlugins, ct);
     }
 
@@ -548,7 +560,19 @@ public sealed class PluginManager : IDisposable
         var plugin = _loader.LoadPlugin(pluginDirectory);
         if (plugin is null)
         {
+            lock (_lock)
+            {
+                _loadIssues.RemoveAll(issue => string.Equals(
+                    issue.PluginDirectory,
+                    pluginDirectory,
+                    StringComparison.OrdinalIgnoreCase));
+                _loadIssues.AddRange(_loader.LoadIssues.Where(issue => string.Equals(
+                    issue.PluginDirectory,
+                    pluginDirectory,
+                    StringComparison.OrdinalIgnoreCase)));
+            }
             Debug.WriteLine($"[PluginManager] Failed to load plugin from {pluginDirectory}");
+            PluginStateChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -557,6 +581,10 @@ public sealed class PluginManager : IDisposable
             // Remove existing plugin with same ID if present
             _allPlugins.RemoveAll(p => p.Manifest.Id == plugin.Manifest.Id);
             _allPlugins.Add(plugin);
+            _loadIssues.RemoveAll(issue => string.Equals(
+                issue.PluginDirectory,
+                pluginDirectory,
+                StringComparison.OrdinalIgnoreCase));
         }
 
         if (activate)
@@ -668,6 +696,7 @@ public sealed class PluginManager : IDisposable
         lock (_lock)
         {
             _allPlugins.Clear();
+            _loadIssues.Clear();
             _hostServices.Clear();
             _activatedPlugins.Clear();
             _llmProviders.Clear();

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using TypeWhisper.Windows.Controls;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -25,6 +26,8 @@ public partial class PluginsViewModel : ObservableObject
     /// Gets the loaded plugin view models.
     /// </summary>
     public ObservableCollection<PluginItemViewModel> Plugins { get; } = [];
+    /// <summary>Gets installed plugin bundles blocked by host compatibility.</summary>
+    public ObservableCollection<PluginLoadIssueItemViewModel> UnavailablePlugins { get; } = [];
     /// <summary>
     /// Gets the registry plugins.
     /// </summary>
@@ -44,7 +47,7 @@ public partial class PluginsViewModel : ObservableObject
     /// <summary>
     /// Gets the installed plugin count.
     /// </summary>
-    public int InstalledPluginCount => Plugins.Count;
+    public int InstalledPluginCount => Plugins.Count + UnavailablePlugins.Count;
     /// <summary>
     /// Performs enabled plugin count.
     /// </summary>
@@ -139,8 +142,19 @@ public partial class PluginsViewModel : ObservableObject
             Plugins.Add(vm);
         }
 
+        RefreshUnavailablePlugins();
         SyncInstalledPluginRegistryItems();
         NotifyStateChanged();
+    }
+
+    private void RefreshUnavailablePlugins()
+    {
+        UnavailablePlugins.Clear();
+        foreach (var issue in _pluginManager.LoadIssues
+                     .OrderBy(issue => issue.Manifest.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            UnavailablePlugins.Add(new PluginLoadIssueItemViewModel(issue));
+        }
     }
 
     private void RefreshMarketplaceInstallStates()
@@ -285,6 +299,7 @@ public partial class PluginsViewModel : ObservableObject
             foreach (var plugin in RegistryPlugins)
                 plugin.NotifyLocalizationChanged();
 
+            RefreshUnavailablePlugins();
             RebuildMarketplaceFilters();
             SyncInstalledPluginRegistryItems();
             NotifyStateChanged();
@@ -355,6 +370,36 @@ public partial class PluginsViewModel : ObservableObject
         foreach (var plugin in plugins)
             FilteredMarketplacePlugins.Add(plugin);
     }
+}
+
+/// <summary>Provides display data for an installed plugin blocked by compatibility.</summary>
+public sealed class PluginLoadIssueItemViewModel
+{
+    private readonly PluginLoadIssue _issue;
+
+    /// <summary>Initializes a compatibility issue view model.</summary>
+    public PluginLoadIssueItemViewModel(PluginLoadIssue issue) => _issue = issue;
+
+    /// <summary>Gets the plugin name.</summary>
+    public string Name => _issue.Manifest.Name;
+
+    /// <summary>Gets the plugin version.</summary>
+    public string Version => _issue.Manifest.Version;
+
+    /// <summary>Gets the plugin bundle location.</summary>
+    public string PluginDirectory => _issue.PluginDirectory;
+
+    /// <summary>Gets the localized compatibility explanation.</summary>
+    public string DiagnosticMessage => _issue.Kind switch
+    {
+        PluginLoadIssueKind.MinimumHostVersionNotMet => Loc.Instance.GetString(
+            "Plugins.RequiresNewerHostFormat",
+            _issue.RequiredHostVersion ?? "?",
+            _issue.CurrentHostVersion),
+        _ => Loc.Instance.GetString(
+            "Plugins.InvalidMinimumHostVersionFormat",
+            _issue.RequiredHostVersion ?? "")
+    };
 }
 
 /// <summary>
@@ -629,7 +674,7 @@ public partial class PluginItemViewModel : ObservableObject
         _isEnabled = isEnabled;
 
         if (isEnabled)
-            _settingsView = plugin.Instance.CreateSettingsView();
+            _settingsView = PluginSettingsViewComposer.Create(plugin.Instance);
     }
 
     async partial void OnIsEnabledChanged(bool value)
@@ -637,7 +682,7 @@ public partial class PluginItemViewModel : ObservableObject
         if (value)
         {
             await _pluginManager.EnablePluginAsync(Id);
-            SettingsView = _plugin.Instance.CreateSettingsView();
+            SettingsView = PluginSettingsViewComposer.Create(_plugin.Instance);
         }
         else
         {

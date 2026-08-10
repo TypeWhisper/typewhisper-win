@@ -5,6 +5,6 @@
   "Settings.Remove": "Entfernen",
   "Settings.Saved": "Token sicher gespeichert.",
   "Settings.Removed": "Token entfernt.",
-  "Settings.InvalidToken": "Der Token darf keine Leerzeichen oder Zeilenumbrüche enthalten.",
+  "Settings.InvalidToken": "Der Hugging-Face-Token ist ungültig.",
   "Settings.SaveFailed": "Der Token konnte nicht sicher gespeichert werden. Bitte erneut versuchen."
 }

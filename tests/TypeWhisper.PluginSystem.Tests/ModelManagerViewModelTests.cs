@@ -26,6 +26,39 @@ public class ModelManagerViewModelTests
     }
 
     [Fact]
+    public void ModelItem_ActionsTrackDownloadBusyAndErrorStates()
+    {
+        var sut = new ModelItemViewModel(
+            "plugin:local:model",
+            new PluginModelInfo("model", "Local Model"),
+            isAvailable: true,
+            isActive: false,
+            supportsTranslation: false,
+            supportsDownload: true,
+            supportsRemoval: true,
+            hasDownloadRequirements: false,
+            isDownloaded: true,
+            ModelStatus.Ready);
+
+        Assert.True(sut.CanRemove);
+        Assert.False(sut.CanDownload);
+
+        sut.IsBusy = true;
+        Assert.False(sut.CanRemove);
+
+        sut.IsBusy = false;
+        sut.HasError = true;
+
+        Assert.True(sut.CanDownload);
+        Assert.True(sut.CanRemove);
+        Assert.Equal(Loc.Instance["Models.Retry"], sut.DownloadActionText);
+
+        sut.IsDownloaded = false;
+        Assert.True(sut.CanDownload);
+        Assert.False(sut.CanRemove);
+    }
+
+    [Fact]
     public void Constructor_UsesSavedSelection_WhenNoModelIsActive()
     {
         const string pluginId = "com.typewhisper.groq";

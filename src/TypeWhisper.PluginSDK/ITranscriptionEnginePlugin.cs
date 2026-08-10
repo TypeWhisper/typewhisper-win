@@ -47,6 +47,13 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
         => Task.CompletedTask;
 
+    /// <summary>Whether this engine can remove downloaded files for an individual model.</summary>
+    bool SupportsModelRemoval => false;
+
+    /// <summary>Removes downloaded files for the given model ID.</summary>
+    Task RemoveModelAsync(string modelId, CancellationToken ct) =>
+        throw new NotSupportedException("This transcription engine does not support model removal.");
+
     /// <summary>Loads a downloaded model into memory, preparing it for transcription.</summary>
     Task LoadModelAsync(string modelId, CancellationToken ct) => Task.CompletedTask;
 

@@ -1,9 +1,14 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using TypeWhisper.Windows.Services.Localization;
+using TypeWhisper.Windows.Services;
+using TypeWhisper.Windows.Controls;
 using TypeWhisper.Windows.ViewModels;
+using TypeWhisper.Windows.Views;
 
 namespace TypeWhisper.Windows.Views.Sections;
 
@@ -39,13 +44,51 @@ public partial class ModelsSection : UserControl
 
     private void Model_Click(object sender, MouseButtonEventArgs e)
     {
+        if (IsInsideButton(e.OriginalSource as DependencyObject)) return;
         if (sender is not FrameworkElement fe) return;
         if (fe.DataContext is not ModelItemViewModel model) return;
+        if (model.IsBusy) return;
 
         var window = Window.GetWindow(this);
         if (window?.DataContext is not SettingsWindowViewModel vm) return;
 
         if (vm.ModelManager.ActivateModelCommand.CanExecute(model.FullId))
             vm.ModelManager.ActivateModelCommand.Execute(model.FullId);
+    }
+
+    private void Requirements_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ModelItemViewModel model })
+            return;
+
+        var owner = Window.GetWindow(this);
+        if (owner?.DataContext is not SettingsWindowViewModel vm)
+            return;
+
+        var provider = vm.ModelManager.GetDownloadRequirementsProvider(model.FullId);
+        if (provider is null)
+            return;
+
+        var (_, pluginModelId) = ModelManagerService.ParsePluginModelId(model.FullId);
+        var dialog = new PluginSettingsWindow(
+            model.DisplayName,
+            new ModelDownloadRequirementsControl(provider, pluginModelId))
+        {
+            Owner = owner
+        };
+        dialog.ShowDialog();
+    }
+
+    private static bool IsInsideButton(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ButtonBase)
+                return true;
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 }
