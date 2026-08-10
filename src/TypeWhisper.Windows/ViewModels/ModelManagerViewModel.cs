@@ -617,7 +617,7 @@ public partial class ModelManagerViewModel : ObservableObject
         {
             await _modelManager.RemoveModelAsync(modelId);
         }
-        catch (Exception)
+        catch (Exception exception) when (NonFatalExceptionFilter.IsNonFatal(exception))
         {
             // The service publishes the model-specific error state for the UI.
         }

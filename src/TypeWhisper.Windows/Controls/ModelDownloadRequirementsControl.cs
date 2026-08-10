@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 
 namespace TypeWhisper.Windows.Controls;
@@ -256,7 +257,7 @@ public sealed class ModelDownloadRequirementsControl : UserControl
             else
                 input.Focus();
         }
-        catch (Exception exception)
+        catch (Exception exception) when (NonFatalExceptionFilter.IsNonFatal(exception))
         {
             SetStatus(
                 Loc.Instance.GetString("Models.RequirementUpdateFailedFormat", exception.Message),
@@ -289,7 +290,7 @@ public sealed class ModelDownloadRequirementsControl : UserControl
             SetStatus(Loc.Instance["Models.RequirementRemoved"], succeeded: true);
             Rebuild();
         }
-        catch (Exception exception)
+        catch (Exception exception) when (NonFatalExceptionFilter.IsNonFatal(exception))
         {
             SetStatus(
                 Loc.Instance.GetString("Models.RequirementUpdateFailedFormat", exception.Message),
@@ -326,7 +327,7 @@ public sealed class ModelDownloadRequirementsControl : UserControl
                 succeeded: true);
             Rebuild();
         }
-        catch (Exception exception)
+        catch (Exception exception) when (NonFatalExceptionFilter.IsNonFatal(exception))
         {
             acceptance.IsChecked = requirement.IsSatisfied;
             SetStatus(
