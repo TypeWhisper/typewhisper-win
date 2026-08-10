@@ -86,6 +86,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     private readonly Dictionary<Guid, RecorderApiSessionSnapshot> _apiSessions = new();
     private readonly object _apiSessionLock = new();
     private readonly object _streamingModelScopeLock = new();
+    private readonly SemaphoreSlim _recordingLifecycleGate = new(1, 1);
     private System.Timers.Timer? _timer;
     private CancellationTokenSource? _streamingModelPreparationCts;
     private Task<StreamingModelPreparation>? _streamingModelPreparationTask;
@@ -330,6 +331,22 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         bool systemAudioEnabled,
         CancellationToken ct)
     {
+        await _recordingLifecycleGate.WaitAsync(ct);
+        try
+        {
+            return await StartRecordingCoreWhileLockedAsync(micEnabled, systemAudioEnabled, ct);
+        }
+        finally
+        {
+            _recordingLifecycleGate.Release();
+        }
+    }
+
+    private async Task<bool> StartRecordingCoreWhileLockedAsync(
+        bool micEnabled,
+        bool systemAudioEnabled,
+        CancellationToken ct)
+    {
         if (IsRecording)
         {
             SetLocalizedStatus("Recorder.AlreadyRecording");
@@ -410,29 +427,46 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     private async void StopRecording() =>
         await StopRecordingCoreAsync(CancellationToken.None);
 
-    private async Task<RecordingItem?> StopRecordingCoreAsync(CancellationToken ct)
+    private async Task<(RecordingItem? Recording, Guid? ApiSessionId)> StopRecordingCoreAsync(
+        CancellationToken ct)
     {
-        _timer?.Stop();
-        _timer?.Dispose();
-        _timer = null;
-        SetLocalizedStatus("Recorder.Finalizing");
-        MarkActiveApiSession(RecorderSessionStatus.Finalizing);
-        var liveTranscript = _streamingHandler.Stop();
-        await ReleaseStreamingModelAsync();
+        RecorderCaptureResult? capture;
+        string liveTranscript;
+        Guid? apiSessionId;
 
-        var capture = await _capture.StopAsync(ct);
-        IsRecording = false;
-        RecordingSeconds = 0;
-        MicLevel = 0;
-        SystemLevel = 0;
-        AudioLevel = 0;
-        SystemAudioWarningMessage = null;
+        await _recordingLifecycleGate.WaitAsync(ct);
+        try
+        {
+            apiSessionId = _activeApiSessionId;
+            MarkApiSession(apiSessionId, RecorderSessionStatus.Finalizing);
+
+            _timer?.Stop();
+            _timer?.Dispose();
+            _timer = null;
+            SetLocalizedStatus("Recorder.Finalizing");
+            liveTranscript = _streamingHandler.Stop();
+            await ReleaseStreamingModelAsync();
+
+            capture = await _capture.StopAsync(ct);
+            IsRecording = false;
+            RecordingSeconds = 0;
+            MicLevel = 0;
+            SystemLevel = 0;
+            AudioLevel = 0;
+            SystemAudioWarningMessage = null;
+            if (_activeApiSessionId == apiSessionId)
+                _activeApiSessionId = null;
+        }
+        finally
+        {
+            _recordingLifecycleGate.Release();
+        }
 
         if (capture is null || capture.TranscriptionSamples.Length == 0)
         {
             SetLocalizedStatus("Recorder.NoAudioCaptured");
-            FailActiveApiSession(StatusText);
-            return null;
+            FailApiSession(apiSessionId, StatusText);
+            return (null, apiSessionId);
         }
 
         var item = new RecordingItem(
@@ -452,9 +486,9 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         if (!TranscriptionEnabled)
         {
             SetLocalizedStatus("Status.Done");
-            CompleteActiveApiSession(null, capture.FilePath);
+            CompleteApiSession(apiSessionId, null, capture.FilePath);
             DurationText = "0:00";
-            return item;
+            return (item, apiSessionId);
         }
 
         var transcript = await TranscribeRecordingAsync(
@@ -462,9 +496,9 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             _ => Task.FromResult(capture.TranscriptionSamples),
             ct,
             liveTranscript);
-        CompleteActiveApiSession(transcript, capture.FilePath);
+        CompleteApiSession(apiSessionId, transcript, capture.FilePath);
         DurationText = "0:00";
-        return item;
+        return (item, apiSessionId);
     }
 
     private async Task<StreamingModelPreparation> PrepareStreamingModelAsync(
@@ -803,23 +837,43 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         bool systemAudioEnabled,
         CancellationToken ct)
     {
-        if (IsRecording)
-            throw new InvalidOperationException(Loc.Instance["Recorder.AlreadyRecording"]);
+        await _recordingLifecycleGate.WaitAsync(ct);
+        try
+        {
+            if (IsRecording)
+                throw new InvalidOperationException(Loc.Instance["Recorder.AlreadyRecording"]);
 
-        var id = Guid.NewGuid();
-        _activeApiSessionId = id;
-        StoreApiSession(new RecorderApiSessionSnapshot(
-            id,
-            RecorderSessionStatus.Recording,
-            null,
-            null,
-            null));
+            var id = Guid.NewGuid();
+            _activeApiSessionId = id;
+            StoreApiSession(new RecorderApiSessionSnapshot(
+                id,
+                RecorderSessionStatus.Recording,
+                null,
+                null,
+                null));
 
-        var started = await StartRecordingCoreAsync(micEnabled, systemAudioEnabled, ct);
-        if (!started)
-            FailActiveApiSession(StatusText);
+            try
+            {
+                var started = await StartRecordingCoreWhileLockedAsync(micEnabled, systemAudioEnabled, ct);
+                if (!started)
+                {
+                    FailApiSession(id, StatusText);
+                    _activeApiSessionId = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                FailApiSession(id, ex.Message);
+                _activeApiSessionId = null;
+                throw;
+            }
 
-        return id;
+            return id;
+        }
+        finally
+        {
+            _recordingLifecycleGate.Release();
+        }
     }
 
     /// <summary>
@@ -827,12 +881,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     /// </summary>
     public async Task<Guid?> StopRecordingForApiAsync(CancellationToken ct)
     {
-        var id = _activeApiSessionId;
-        if (id is not null)
-            MarkActiveApiSession(RecorderSessionStatus.Finalizing);
-
-        await StopRecordingCoreAsync(ct);
-        return id;
+        var (_, apiSessionId) = await StopRecordingCoreAsync(ct);
+        return apiSessionId;
     }
 
     /// <summary>
@@ -1122,9 +1172,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         }
     }
 
-    private void MarkActiveApiSession(RecorderSessionStatus status)
+    private void MarkApiSession(Guid? id, RecorderSessionStatus status)
     {
-        var id = _activeApiSessionId;
         if (id is null)
             return;
 
@@ -1135,9 +1184,8 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         }
     }
 
-    private void CompleteActiveApiSession(string? text, string outputFile)
+    private void CompleteApiSession(Guid? id, string? text, string outputFile)
     {
-        var id = _activeApiSessionId;
         if (id is null)
             return;
 
@@ -1147,12 +1195,10 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             text,
             outputFile,
             null));
-        _activeApiSessionId = null;
     }
 
-    private void FailActiveApiSession(string error)
+    private void FailApiSession(Guid? id, string error)
     {
-        var id = _activeApiSessionId;
         if (id is null)
             return;
 
@@ -1162,7 +1208,6 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             null,
             null,
             error));
-        _activeApiSessionId = null;
     }
 
     private static string? FirstNonBlank(params string?[] values) =>
