@@ -218,13 +218,18 @@ public sealed class PluginRegistryService
     /// Determines the install state of a registry plugin.
     /// </summary>
     public PluginInstallState GetInstallState(RegistryPlugin registryPlugin) =>
-        GetInstallDiagnosis(registryPlugin).State;
+        GetInstallDiagnosis(registryPlugin, verifyFileHashes: false).State;
 
     /// <summary>
     /// Diagnoses a registry plugin using pending operations, disk contents, the registry install receipt,
     /// and the runtime load state. The checks are ordered so the same disk state always returns the same result.
     /// </summary>
-    public PluginInstallDiagnosis GetInstallDiagnosis(RegistryPlugin registryPlugin)
+    public PluginInstallDiagnosis GetInstallDiagnosis(RegistryPlugin registryPlugin) =>
+        GetInstallDiagnosis(registryPlugin, verifyFileHashes: true);
+
+    private PluginInstallDiagnosis GetInstallDiagnosis(
+        RegistryPlugin registryPlugin,
+        bool verifyFileHashes)
     {
         ValidatePluginId(registryPlugin.Id);
         var pendingUninstallDir = GetValidatedPendingUninstallDirectory(registryPlugin.Id);
@@ -335,7 +340,7 @@ public sealed class PluginRegistryService
                     $"The plugin assembly '{diskManifest.AssemblyName}' is missing.");
             }
 
-            if (receiptResult.Receipt is not null)
+            if (verifyFileHashes && receiptResult.Receipt is not null)
             {
                 var integrityFailure = VerifyInstalledFiles(pluginDir, diskManifest, receiptResult.Receipt);
                 if (integrityFailure is not null)

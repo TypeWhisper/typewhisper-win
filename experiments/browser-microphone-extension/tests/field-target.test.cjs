@@ -15,6 +15,11 @@ class FakeTextControl extends EventTarget {
     this.isConnected = true;
     this.disabled = false;
     this.readOnly = false;
+    this.matchesDisabled = false;
+  }
+
+  matches(selector) {
+    return selector === ":disabled" && this.matchesDisabled;
   }
 
   setRangeText(text, start, end) {
@@ -60,6 +65,10 @@ test("password and disconnected fields are rejected", () => {
     ok: false,
     reason: "target-unavailable"
   });
+
+  const fieldsetDisabledInput = new FakeTextControl("INPUT", "disabled by ancestor");
+  fieldsetDisabledInput.matchesDisabled = true;
+  assert.equal(isSupportedTarget(fieldsetDisabledInput), false);
 });
 
 test("contenteditable replaces its captured range and restores the caret", () => {
@@ -68,11 +77,26 @@ test("contenteditable replaces its captured range and restores the caret", () =>
   editable.tagName = "DIV";
   editable.isContentEditable = true;
   editable.isConnected = true;
+  editable.innerHTML = "selected";
   editable.contains = () => true;
+
+  const startContainer = { isConnected: true };
+  const endContainer = { isConnected: true };
 
   const range = {
     commonAncestorContainer: { isConnected: true },
-    cloneRange() { return this; },
+    startContainer,
+    startOffset: 0,
+    endContainer,
+    endOffset: 8,
+    setStart(node, offset) {
+      assert.equal(node, startContainer);
+      assert.equal(offset, 0);
+    },
+    setEnd(node, offset) {
+      assert.equal(node, endContainer);
+      assert.equal(offset, 8);
+    },
     deleteContents() { inserted.push("deleted"); },
     insertNode(node) { inserted.push(node.text); },
     setStartAfter() { inserted.push("caret"); },
@@ -86,7 +110,8 @@ test("contenteditable replaces its captured range and restores the caret", () =>
   };
   const documentRef = {
     ...fakeDocument,
-    defaultView: { Event, getSelection: () => selection }
+    defaultView: { Event, getSelection: () => selection },
+    createRange: () => range
   };
   let inputEvents = 0;
   editable.addEventListener("input", () => inputEvents++);
@@ -103,4 +128,35 @@ test("contenteditable replaces its captured range and restores the caret", () =>
     "selection-restored"
   ]);
   assert.equal(inputEvents, 1);
+});
+
+test("contenteditable rejects a stale captured selection", () => {
+  const editable = new EventTarget();
+  editable.tagName = "DIV";
+  editable.isContentEditable = true;
+  editable.isConnected = true;
+  editable.innerHTML = "before";
+  editable.contains = () => true;
+
+  const boundary = { isConnected: true };
+  const capturedRange = {
+    commonAncestorContainer: boundary,
+    startContainer: boundary,
+    startOffset: 0,
+    endContainer: boundary,
+    endOffset: 6
+  };
+  const snapshot = captureTarget(editable, {
+    rangeCount: 1,
+    getRangeAt: () => capturedRange
+  });
+
+  editable.innerHTML = "after";
+  assert.deepEqual(insertText(snapshot, "dictated", {
+    ...fakeDocument,
+    createRange: () => { throw new Error("must not create a range"); }
+  }), {
+    ok: false,
+    reason: "selection-unavailable"
+  });
 });

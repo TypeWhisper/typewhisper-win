@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using TypeWhisper.Windows.Controls;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Windows.Services.Localization;
@@ -304,6 +305,8 @@ public partial class PluginsViewModel : ObservableObject
     {
         foreach (var plugin in Plugins)
             plugin.RegistryPlugin = FindRegistryPlugin(plugin.Id);
+
+        CollectionViewSource.GetDefaultView(Plugins)?.Refresh();
     }
 
     private RegistryPluginItemViewModel? FindRegistryPlugin(string pluginId) =>

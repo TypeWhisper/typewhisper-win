@@ -818,7 +818,7 @@ public class ModelManagerServiceTests
         };
         var dictionary = new Mock<IDictionaryService>();
         dictionary.Setup(service => service.GetEnabledTerms())
-            .Returns(["too many words", "Alpha", "Beta", "Gamma"]);
+            .Returns(["a b", "Alpha", "Beta", "Gamma"]);
         var pluginManager = CreatePluginManager(plugin);
         var sut = new ModelManagerService(pluginManager, _settings.Object, dictionary.Object);
 

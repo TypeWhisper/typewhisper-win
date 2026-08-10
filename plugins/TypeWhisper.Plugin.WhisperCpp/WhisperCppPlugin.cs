@@ -792,7 +792,7 @@ public sealed class WhisperCppPlugin :
             _ => Path.Join(_pluginDirectory, "runtimes", runtimeIdentifier),
         };
         var runtimePath = Path.Join(runtimeDirectory, "whisper.dll");
-        return File.Exists(runtimePath) ? Path.GetFullPath(runtimePath) : null;
+        return Path.GetFullPath(runtimePath);
     }
 
     private static string GetRootCauseMessage(Exception error)

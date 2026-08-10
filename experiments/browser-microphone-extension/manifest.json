@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "description": "Research-only browser microphone control for TypeWhisper.",
   "permissions": [
-    "nativeMessaging"
+    "nativeMessaging",
+    "storage"
   ],
   "background": {
     "service_worker": "background.js"

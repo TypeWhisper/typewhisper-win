@@ -141,8 +141,11 @@ public sealed class AudioRecorderViewModelTests
         Assert.False(sut.CanChooseTranscriptionModel);
     }
 
-    [Fact]
-    public async Task RecorderApiSession_UsesRecorderEngineAndModelOverride()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RecorderApiSession_UsesRecorderEngineAndModelOverrideForLiveAndFinalTranscription(
+        bool hasGlobalModel)
     {
         Loc.Instance.Initialize();
         Loc.Instance.CurrentLanguage = "en";
@@ -169,7 +172,7 @@ public sealed class AudioRecorderViewModelTests
         var globalModelId = ModelManagerService.GetPluginModelId(global.PluginId, "global");
         var settings = new FakeSettingsService(AppSettings.Default with
         {
-            SelectedModelId = globalModelId,
+            SelectedModelId = hasGlobalModel ? globalModelId : null,
             RecorderTranscriptionEngineOverride = longForm.PluginId,
             RecorderTranscriptionModelOverride = "accurate"
         });
@@ -179,7 +182,8 @@ public sealed class AudioRecorderViewModelTests
             "_transcriptionEngines",
             new List<ITranscriptionEnginePlugin> { global, longForm });
         var modelManager = new ModelManagerService(pluginManager, settings);
-        TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", globalModelId);
+        if (hasGlobalModel)
+            TestPluginManagerFactory.SetPrivateField(modelManager, "_activeModelId", globalModelId);
         using var sut = new AudioRecorderViewModel(
             audio,
             modelManager,
@@ -192,6 +196,8 @@ public sealed class AudioRecorderViewModelTests
         try
         {
             var sessionId = await sut.StartRecordingForApiAsync(true, false, CancellationToken.None);
+            await WaitUntilAsync(() => ReferenceEquals(modelManager.ActiveTranscriptionPlugin, longForm));
+            Assert.Equal("accurate", longForm.SelectedModelId);
             captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
 
             var stoppedSessionId = await sut.StopRecordingForApiAsync(CancellationToken.None);
