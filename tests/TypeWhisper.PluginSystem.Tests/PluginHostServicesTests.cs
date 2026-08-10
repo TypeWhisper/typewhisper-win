@@ -130,6 +130,26 @@ public class PluginHostServicesTests : IDisposable
         Assert.Null(ex);
     }
 
+    [Theory]
+    [InlineData("C:\\escaped")]
+    [InlineData("..\\escaped")]
+    [InlineData("nested/escaped")]
+    [InlineData(".. ")]
+    [InlineData(". ")]
+    [InlineData("plugin.")]
+    public void Constructor_RejectsPluginIdsThatCanEscapeTheDataRoot(string pluginId)
+    {
+        var dataRoot = Path.Join(_tempDir, "plugin-data");
+
+        Assert.Throws<ArgumentException>(() => new PluginHostServices(
+            pluginId,
+            _tempDir,
+            _activeWindow.Object,
+            _eventBus.Object,
+            _workflows.Object,
+            pluginDataRoot: dataRoot));
+    }
+
     [Fact]
     public void Localization_IsAvailable()
     {

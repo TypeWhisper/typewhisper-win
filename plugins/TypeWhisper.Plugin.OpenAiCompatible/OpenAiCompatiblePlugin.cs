@@ -28,6 +28,10 @@ public sealed class OpenAiCompatiblePlugin :
 
     private const string DefaultProfileName = "OpenAI Compatible";
     private const string ProfileIdPrefix = "openai-compatible-";
+    internal const int DefaultLlmRequestTimeoutSeconds = 300;
+    internal const int MinLlmRequestTimeoutSeconds = 5;
+    internal const int MaxLlmRequestTimeoutSeconds = 3600;
+    private static readonly TimeSpan DefaultHttpRequestTimeout = TimeSpan.FromMinutes(5);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -49,7 +53,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// Initializes a new instance of the <see cref="OpenAiCompatiblePlugin"/> class.
     /// </summary>
     public OpenAiCompatiblePlugin()
-        : this(new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+        : this(new HttpClient { Timeout = Timeout.InfiniteTimeSpan })
     {
     }
 
@@ -72,7 +76,7 @@ public sealed class OpenAiCompatiblePlugin :
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.5";
+    public string PluginVersion => "1.0.6";
 
     /// <summary>Current profiles, including the default profile.</summary>
     public IReadOnlyList<OpenAiCompatibleProfile> Profiles => _profiles;
@@ -310,6 +314,21 @@ public sealed class OpenAiCompatiblePlugin :
         PersistProfiles();
     }
 
+    /// <summary>Sets the LLM request timeout for a profile.</summary>
+    public void SetLlmRequestTimeoutForProfile(string profileId, int seconds)
+    {
+        if (seconds is < MinLlmRequestTimeoutSeconds or > MaxLlmRequestTimeoutSeconds)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(seconds),
+                seconds,
+                $"LLM request timeout must be between {MinLlmRequestTimeoutSeconds} and {MaxLlmRequestTimeoutSeconds} seconds.");
+        }
+
+        RequireProfile(profileId).LlmRequestTimeoutSeconds = seconds;
+        PersistProfiles();
+    }
+
     /// <summary>Stores fetched models for the default profile.</summary>
     public void SetFetchedModels(List<FetchedModel> models) =>
         SetFetchedModelsForProfile(DefaultProfileId, models);
@@ -338,16 +357,17 @@ public sealed class OpenAiCompatiblePlugin :
 
         try
         {
+            using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{profile.BaseUrl}/v1/models");
             var apiKey = GetApiKey(profile.Id);
             if (!string.IsNullOrEmpty(apiKey))
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-            using var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, timeout.Token);
             if (!response.IsSuccessStatusCode)
                 return [];
 
-            var json = await response.Content.ReadAsStringAsync(ct);
+            var json = await response.Content.ReadAsStringAsync(timeout.Token);
             using var doc = JsonDocument.Parse(json);
 
             if (!doc.RootElement.TryGetProperty("data", out var data))
@@ -385,12 +405,13 @@ public sealed class OpenAiCompatiblePlugin :
 
         try
         {
+            using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{profile.BaseUrl}/v1/models");
             var apiKey = GetApiKey(profile.Id);
             if (!string.IsNullOrEmpty(apiKey))
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-            using var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, timeout.Token);
             return response.IsSuccessStatusCode;
         }
         catch (OperationCanceledException)
@@ -454,17 +475,28 @@ public sealed class OpenAiCompatiblePlugin :
         if (string.IsNullOrEmpty(profile.SelectedModelId))
             throw new InvalidOperationException("Kein Transkriptions-Modell ausgewählt");
 
-        return await OpenAiTranscriptionHelper.TranscribeAsync(
-            _httpClient,
-            profile.BaseUrl,
-            GetApiKey(profile.Id) ?? "",
-            profile.SelectedModelId,
-            wavAudio,
-            language,
-            translate,
-            "verbose_json",
-            ct,
-            prompt);
+        using var timeout = CreateRequestTimeoutSource(ct, DefaultHttpRequestTimeout);
+        try
+        {
+            return await OpenAiTranscriptionHelper.TranscribeAsync(
+                _httpClient,
+                profile.BaseUrl,
+                GetApiKey(profile.Id) ?? "",
+                profile.SelectedModelId,
+                wavAudio,
+                language,
+                translate,
+                "verbose_json",
+                timeout.Token,
+                prompt);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            throw new PluginRequestException(
+                $"OpenAI-compatible transcription request timed out after {DefaultHttpRequestTimeout.TotalSeconds:0} seconds.",
+                PluginRequestFailureKind.Timeout,
+                innerException: ex);
+        }
     }
 
     internal async Task<string> ProcessAsync(
@@ -525,12 +557,24 @@ public sealed class OpenAiCompatiblePlugin :
             Encoding.UTF8,
             "application/json");
 
-        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(
-            _httpClient,
-            request,
-            ct);
-        var json = await response.Content.ReadAsStringAsync(ct);
-        return ParseChatCompletionResponse(json);
+        var timeoutSeconds = NormalizeLlmRequestTimeoutSeconds(profile.LlmRequestTimeoutSeconds);
+        using var timeout = CreateRequestTimeoutSource(ct, TimeSpan.FromSeconds(timeoutSeconds));
+        try
+        {
+            using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(
+                _httpClient,
+                request,
+                timeout.Token);
+            var json = await response.Content.ReadAsStringAsync(timeout.Token);
+            return ParseChatCompletionResponse(json);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested && timeout.IsCancellationRequested)
+        {
+            throw new PluginRequestException(
+                $"OpenAI-compatible LLM request timed out after {timeoutSeconds} seconds.",
+                PluginRequestFailureKind.Timeout,
+                innerException: ex);
+        }
     }
 
     private static string ParseChatCompletionResponse(string json)
@@ -724,6 +768,18 @@ public sealed class OpenAiCompatiblePlugin :
     private static string? NullIfWhiteSpace(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static int NormalizeLlmRequestTimeoutSeconds(int seconds) =>
+        Math.Clamp(seconds, MinLlmRequestTimeoutSeconds, MaxLlmRequestTimeoutSeconds);
+
+    private static CancellationTokenSource CreateRequestTimeoutSource(
+        CancellationToken cancellationToken,
+        TimeSpan timeout)
+    {
+        var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        source.CancelAfter(timeout);
+        return source;
+    }
+
     private void NormalizeProfiles()
     {
         foreach (var profile in _profiles)
@@ -735,6 +791,7 @@ public sealed class OpenAiCompatiblePlugin :
             profile.BaseUrl = NormalizeBaseUrl(profile.BaseUrl ?? "");
             profile.SelectedModelId = NullIfWhiteSpace(profile.SelectedModelId);
             profile.SelectedLlmModelId = NullIfWhiteSpace(profile.SelectedLlmModelId);
+            profile.LlmRequestTimeoutSeconds = NormalizeLlmRequestTimeoutSeconds(profile.LlmRequestTimeoutSeconds);
             profile.FetchedModels = profile.FetchedModels
                 .Where(model => !string.IsNullOrWhiteSpace(model.Id))
                 .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)
@@ -846,6 +903,8 @@ public sealed class OpenAiCompatibleProfile
     public string? SelectedLlmModelId { get; set; }
     /// <summary>Whether compatible chat requests should enable model thinking mode.</summary>
     public bool ThinkingEnabled { get; set; }
+    /// <summary>Maximum duration of one LLM request, in seconds.</summary>
+    public int LlmRequestTimeoutSeconds { get; set; } = OpenAiCompatiblePlugin.DefaultLlmRequestTimeoutSeconds;
     /// <summary>Models fetched from the provider. API keys are never stored here.</summary>
     public List<FetchedModel> FetchedModels { get; set; } = [];
     /// <summary>Display name with a fallback for unnamed profiles.</summary>

@@ -41,15 +41,14 @@ public partial class PluginsSection : UserControl
             ApplyTabSelection(vm.IsMarketplaceSelected);
             EmptyState.Visibility = vm.Plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-            // Setup grouping by Category
-            var view = CollectionViewSource.GetDefaultView(vm.Plugins);
-            if (view.GroupDescriptions.Count == 0)
-                view.GroupDescriptions.Add(new PropertyGroupDescription("Category"));
-            if (view.SortDescriptions.Count == 0)
-            {
-                view.SortDescriptions.Add(new SortDescription("Category", ListSortDirection.Ascending));
-                view.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
-            }
+            ConfigureSourceGrouping(
+                CollectionViewSource.GetDefaultView(vm.Plugins),
+                nameof(PluginItemViewModel.SourceGroupLabel),
+                nameof(PluginItemViewModel.SourceGroupSortOrder));
+            ConfigureSourceGrouping(
+                CollectionViewSource.GetDefaultView(vm.FilteredMarketplacePlugins),
+                nameof(RegistryPluginItemViewModel.SourceGroupLabel),
+                nameof(RegistryPluginItemViewModel.SourceGroupSortOrder));
         }
     }
 
@@ -76,7 +75,7 @@ public partial class PluginsSection : UserControl
             ApplyTabSelection(false);
     }
 
-    private void OnMarketplaceTabClick(object sender, RoutedEventArgs e)
+    private void OnDiscoverTabClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is SettingsWindowViewModel vm)
             vm.Plugins.IsMarketplaceSelected = true;
@@ -122,20 +121,32 @@ public partial class PluginsSection : UserControl
         dialog.ShowDialog();
     }
 
-    private void ApplyTabSelection(bool marketplaceSelected)
+    private void ApplyTabSelection(bool discoverSelected)
     {
-        TabInstalled.Style = (Style)Resources[marketplaceSelected ? "TabButtonStyle" : "ActiveTabButtonStyle"];
-        TabMarketplace.Style = (Style)Resources[marketplaceSelected ? "ActiveTabButtonStyle" : "TabButtonStyle"];
-        InstalledPanel.Visibility = marketplaceSelected ? Visibility.Collapsed : Visibility.Visible;
-        MarketplacePanel.Visibility = marketplaceSelected ? Visibility.Visible : Visibility.Collapsed;
+        TabInstalled.Style = (Style)Resources[discoverSelected ? "TabButtonStyle" : "ActiveTabButtonStyle"];
+        TabDiscover.Style = (Style)Resources[discoverSelected ? "ActiveTabButtonStyle" : "TabButtonStyle"];
+        InstalledPanel.Visibility = discoverSelected ? Visibility.Collapsed : Visibility.Visible;
+        DiscoverPanel.Visibility = discoverSelected ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void OnMarketplacePanelPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    private static void ConfigureSourceGrouping(
+        ICollectionView view,
+        string groupProperty,
+        string sortProperty)
     {
-        if (MarketplacePanel.Visibility != Visibility.Visible)
+        view.GroupDescriptions.Clear();
+        view.GroupDescriptions.Add(new PropertyGroupDescription(groupProperty));
+        view.SortDescriptions.Clear();
+        view.SortDescriptions.Add(new SortDescription(sortProperty, ListSortDirection.Ascending));
+        view.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+    }
+
+    private void OnDiscoverPanelPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (DiscoverPanel.Visibility != Visibility.Visible)
             return;
 
-        MarketplacePanel.ScrollToVerticalOffset(MarketplacePanel.VerticalOffset - (e.Delta / 3.0));
+        DiscoverPanel.ScrollToVerticalOffset(DiscoverPanel.VerticalOffset - (e.Delta / 3.0));
         e.Handled = true;
     }
 }

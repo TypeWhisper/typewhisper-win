@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "TypeWhisper Browser Microphone Research",
+  "version": "0.1.0",
+  "description": "Research-only browser microphone control for TypeWhisper.",
+  "permissions": [
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "field-target.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

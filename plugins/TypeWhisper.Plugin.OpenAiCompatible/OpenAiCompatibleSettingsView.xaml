@@ -73,6 +73,32 @@
         <TextBlock x:Name="ApiKeyHintText"
                    FontSize="11" Foreground="{StaticResource PluginHintBrush}" Margin="0,3,0,0"/>
 
+        <!-- LLM request timeout -->
+        <TextBlock x:Name="LlmRequestTimeoutHeader" Foreground="{StaticResource PluginLabelBrush}"
+                   FontWeight="SemiBold" Margin="0,14,0,6"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="LlmRequestTimeoutBox" MaxLength="10"
+                     AutomationProperties.AutomationId="OpenAiCompatibleLlmRequestTimeout"
+                     AutomationProperties.LabeledBy="{Binding ElementName=LlmRequestTimeoutHeader}"/>
+            <TextBlock Grid.Column="1" x:Name="LlmRequestTimeoutUnit" Margin="8,0,0,0"
+                       VerticalAlignment="Center" Foreground="{StaticResource PluginHintBrush}"/>
+            <Button Grid.Column="2" x:Name="SaveLlmRequestTimeoutButton" Margin="8,0,0,0"
+                    AutomationProperties.AutomationId="OpenAiCompatibleSaveLlmRequestTimeout"
+                    Click="OnSaveLlmRequestTimeout"/>
+        </Grid>
+        <TextBlock x:Name="LlmRequestTimeoutHint" FontSize="11"
+                   Foreground="{StaticResource PluginHintBrush}" Margin="0,3,0,0"
+                   TextWrapping="Wrap"/>
+        <TextBlock x:Name="LlmRequestTimeoutError" FontSize="11" Foreground="#EF5350"
+                   Margin="0,3,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                   AutomationProperties.AutomationId="OpenAiCompatibleLlmRequestTimeoutError"
+                   AutomationProperties.LiveSetting="Assertive"/>
+
         <!-- Models Section (hidden until connected) -->
         <StackPanel x:Name="ModelsSection" Visibility="Collapsed" Margin="0,16,0,0">
             <!-- Header with refresh -->

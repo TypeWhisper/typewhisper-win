@@ -3,6 +3,9 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
 using TypeWhisper.Plugin.OpenAiCompatible;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -34,7 +37,7 @@ public class OpenAiCompatiblePluginTests
         var manifest = LoadManifest();
         var sut = new OpenAiCompatiblePlugin();
 
-        Assert.Equal("1.0.5", manifest.Version);
+        Assert.Equal("1.0.6", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
@@ -71,11 +74,13 @@ public class OpenAiCompatiblePluginTests
         Assert.Equal("whisper-legacy", profile.SelectedModelId);
         Assert.Equal("gpt-legacy", profile.SelectedLlmModelId);
         Assert.False(profile.ThinkingEnabled);
+        Assert.Equal(300, profile.LlmRequestTimeoutSeconds);
         Assert.Equal(["gpt-legacy", "whisper-legacy"], profile.FetchedModels.Select(model => model.Id).Order().ToArray());
         Assert.Equal("legacy-token", sut.GetApiKey());
 
         var persistedProfiles = host.GetRawSettingJson("profiles");
         Assert.Contains("whisper-legacy", persistedProfiles);
+        Assert.Contains("\"LlmRequestTimeoutSeconds\":300", persistedProfiles);
         Assert.DoesNotContain("legacy-token", persistedProfiles);
         Assert.Equal("https://legacy.example", host.GetSetting<string>("baseUrl"));
         Assert.Equal("whisper-legacy", host.GetSetting<string>("selectedModel"));
@@ -104,8 +109,66 @@ public class OpenAiCompatiblePluginTests
 
         var profile = Assert.Single(sut.Profiles);
         Assert.False(profile.ThinkingEnabled);
+        Assert.Equal(300, profile.LlmRequestTimeoutSeconds);
         using var persisted = JsonDocument.Parse(host.GetRawSettingJson("profiles"));
         Assert.False(persisted.RootElement[0].GetProperty("ThinkingEnabled").GetBoolean());
+        Assert.Equal(300, persisted.RootElement[0].GetProperty("LlmRequestTimeoutSeconds").GetInt32());
+    }
+
+    [Fact]
+    public async Task LlmRequestTimeout_BoundariesPersistPerProfileAndInvalidValuesDoNotMutate()
+    {
+        var host = new TestPluginHostServices();
+        var sut = new OpenAiCompatiblePlugin();
+        await sut.ActivateAsync(host);
+
+        var additional = sut.AddProfile("Long-running server");
+        sut.SetLlmRequestTimeoutForProfile(OpenAiCompatiblePlugin.DefaultProfileId, 5);
+        sut.SetLlmRequestTimeoutForProfile(additional.Id, 3600);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            sut.SetLlmRequestTimeoutForProfile(OpenAiCompatiblePlugin.DefaultProfileId, 4));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            sut.SetLlmRequestTimeoutForProfile(additional.Id, 3601));
+        Assert.Equal(5, sut.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+        Assert.Equal(3600, sut.Profiles.Single(profile => profile.Id == additional.Id).LlmRequestTimeoutSeconds);
+
+        var reloaded = new OpenAiCompatiblePlugin();
+        await reloaded.ActivateAsync(host);
+
+        Assert.Equal(5, reloaded.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+        Assert.Equal(3600, reloaded.Profiles.Single(profile => profile.Id == additional.Id).LlmRequestTimeoutSeconds);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_ClampsPersistedLlmRequestTimeoutsToSupportedRange()
+    {
+        var host = new TestPluginHostServices();
+        host.SetSetting("profiles", new[]
+        {
+            new
+            {
+                id = OpenAiCompatiblePlugin.DefaultProfileId,
+                name = "OpenAI Compatible",
+                baseUrl = "https://minimum.example",
+                llmRequestTimeoutSeconds = 0,
+                fetchedModels = Array.Empty<object>()
+            },
+            new
+            {
+                id = "openai-compatible-maximum",
+                name = "Maximum",
+                baseUrl = "https://maximum.example",
+                llmRequestTimeoutSeconds = 9999,
+                fetchedModels = Array.Empty<object>()
+            }
+        });
+
+        var sut = new OpenAiCompatiblePlugin();
+        await sut.ActivateAsync(host);
+
+        Assert.Equal(5, sut.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+        Assert.Equal(3600, sut.Profiles.Single(profile => profile.Id == "openai-compatible-maximum").LlmRequestTimeoutSeconds);
     }
 
     [Fact]
@@ -493,6 +556,152 @@ public class OpenAiCompatiblePluginTests
         Assert.True(error.IsTransient);
     }
 
+    [Fact]
+    public async Task ConcurrentProfileRequests_UseIndependentLlmTimeouts()
+    {
+        var timeoutObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new AsyncHandler(async (request, cancellationToken) =>
+        {
+            if (request.RequestUri!.Host == "timeout.example")
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    timeoutObserved.TrySetResult();
+                    throw;
+                }
+            }
+
+            await Task.Delay(25, cancellationToken);
+            return JsonResponse("""
+                {
+                  "choices": [
+                    { "message": { "content": "completed" } }
+                  ]
+                }
+                """);
+        });
+        using var httpClient = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        var host = new TestPluginHostServices();
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://timeout.example");
+        sut.SelectLlmModel("timeout-model");
+        sut.SetLlmRequestTimeoutForProfile(OpenAiCompatiblePlugin.DefaultProfileId, 5);
+
+        var additional = sut.AddProfile("Fast profile");
+        sut.SetBaseUrl("https://success.example", additional.Id);
+        sut.SelectLlmModelForProfile(additional.Id, "success-model");
+        sut.SetLlmRequestTimeoutForProfile(additional.Id, 3600);
+        var additionalRole = Assert.Single(((IAdditionalLlmProvidersProvider)sut).AdditionalLlmProviders);
+
+        var timeoutTask = sut.ProcessAsync("system", "timeout", "", CancellationToken.None);
+        var completed = await additionalRole.ProcessAsync("system", "success", "", CancellationToken.None);
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => timeoutTask);
+
+        Assert.Equal("completed", completed);
+        Assert.Equal(PluginRequestFailureKind.Timeout, error.FailureKind);
+        Assert.Contains("5 seconds", error.Message);
+        await timeoutObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_CallerCancellationRemainsCancellation()
+    {
+        var handler = new AsyncHandler(async (_, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Unreachable");
+        });
+        using var httpClient = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        var host = new TestPluginHostServices();
+        var sut = new OpenAiCompatiblePlugin(httpClient);
+        await sut.ActivateAsync(host);
+        sut.SetBaseUrl("https://cancel.example");
+        sut.SelectLlmModel("cancel-model");
+        sut.SetLlmRequestTimeoutForProfile(OpenAiCompatiblePlugin.DefaultProfileId, 300);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            sut.ProcessAsync("system", "cancel", "", cancellation.Token));
+        Assert.True(cancellation.IsCancellationRequested);
+    }
+
+    [Fact]
+    public void SettingsView_ValidatesPersistsAndExposesAccessibleTimeoutControls()
+    {
+        RunInSta(() =>
+        {
+            var host = new TestPluginHostServices();
+            var plugin = new OpenAiCompatiblePlugin();
+            plugin.ActivateAsync(host).GetAwaiter().GetResult();
+            var additional = plugin.AddProfile("Additional");
+            var view = Assert.IsType<OpenAiCompatibleSettingsView>(plugin.CreateSettingsView());
+            view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+
+            var header = Assert.IsType<TextBlock>(view.FindName("LlmRequestTimeoutHeader"));
+            var input = Assert.IsType<TextBox>(view.FindName("LlmRequestTimeoutBox"));
+            var save = Assert.IsType<Button>(view.FindName("SaveLlmRequestTimeoutButton"));
+            var error = Assert.IsType<TextBlock>(view.FindName("LlmRequestTimeoutError"));
+            var profilePicker = Assert.IsType<ComboBox>(view.FindName("ProfilePicker"));
+
+            Assert.Equal("300", input.Text);
+            Assert.Same(header, AutomationProperties.GetLabeledBy(input));
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(input)));
+            Assert.Equal("OpenAiCompatibleLlmRequestTimeout", AutomationProperties.GetAutomationId(input));
+            Assert.Equal("OpenAiCompatibleSaveLlmRequestTimeout", AutomationProperties.GetAutomationId(save));
+            Assert.Equal(AutomationLiveSetting.Assertive, AutomationProperties.GetLiveSetting(error));
+            Assert.True(input.Focusable);
+            Assert.True(input.IsTabStop);
+            Assert.True(save.Focusable);
+            Assert.True(save.IsTabStop);
+
+            input.Text = "4";
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(Visibility.Visible, error.Visibility);
+            Assert.Equal(300, plugin.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+
+            input.Text = "not-a-number";
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(Visibility.Visible, error.Visibility);
+            Assert.Equal(300, plugin.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+
+            input.Text = "3601";
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(Visibility.Visible, error.Visibility);
+            Assert.Equal(300, plugin.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+
+            input.Text = "5";
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(Visibility.Collapsed, error.Visibility);
+            Assert.Equal(5, plugin.Profiles.Single(profile => profile.Id == OpenAiCompatiblePlugin.DefaultProfileId).LlmRequestTimeoutSeconds);
+            Assert.Contains("\"LlmRequestTimeoutSeconds\":5", host.GetRawSettingJson("profiles"));
+
+            profilePicker.SelectedItem = additional;
+            Assert.Equal("300", input.Text);
+            input.Text = "3600";
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("3600", input.Text);
+            Assert.Equal(3600, additional.LlmRequestTimeoutSeconds);
+        });
+    }
+
+    [Fact]
+    public void SettingsView_ConnectionTestKeepsItsIndependentTenSecondTimeouts()
+    {
+        var source = TestFile.ReadProjectFile(
+            "plugins",
+            "TypeWhisper.Plugin.OpenAiCompatible",
+            "OpenAiCompatibleSettingsView.xaml.cs");
+        var connectHandler = TestFile.ExtractBlock(source, "private async void OnConnectClick");
+
+        Assert.Equal(2, connectHandler.Split("CancellationTokenSource(TimeSpan.FromSeconds(10))").Length - 1);
+        Assert.DoesNotContain("LlmRequestTimeout", connectHandler);
+    }
+
     private static PluginManifest LoadManifest()
     {
         var basePath = Path.GetFullPath(AppContext.BaseDirectory);
@@ -526,6 +735,25 @@ public class OpenAiCompatiblePluginTests
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             return responder(request, body);
         }
+    }
+
+    private sealed class AsyncHandler(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            responder(request, cancellationToken);
+    }
+
+    private static void RunInSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() => failure = Record.Exception(action));
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "STA test did not finish.");
+        Assert.Null(failure);
     }
 
     private sealed class TestPluginHostServices : IPluginHostServices

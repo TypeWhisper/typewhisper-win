@@ -18,6 +18,7 @@ public sealed class RecorderSectionLayoutTests
         "Recorder.TracksHint",
         "Recorder.DuckingHint",
         "Recorder.TranscriptionHint",
+        "Recorder.ModelOverrideHint",
         "Recorder.ModeTitle",
         "Recorder.ModeHint",
         "Recorder.CaptureTitle",
@@ -48,6 +49,13 @@ public sealed class RecorderSectionLayoutTests
         Assert.Contains("Recorder.TracksHint", xaml);
         Assert.Contains("Recorder.DuckingHint", xaml);
         Assert.Contains("Recorder.TranscriptionHint", xaml);
+        Assert.Contains("RecorderTranscriptionEngine", xaml);
+        Assert.Contains("Recorder.TranscriptionEngineOptions", xaml);
+        Assert.Contains("Recorder.TranscriptionEngineSelection", xaml);
+        Assert.Contains("RecorderTranscriptionModel", xaml);
+        Assert.Contains("Recorder.TranscriptionModelOptions", xaml);
+        Assert.Contains("Recorder.TranscriptionModelSelection", xaml);
+        Assert.Contains("Recorder.CanChooseTranscriptionModel", xaml);
         Assert.Contains("Recorder.ModeTitle", xaml);
         Assert.Contains("Recorder.ModeHint", xaml);
         Assert.Contains("Recorder.TranslationModeEnabled", xaml);

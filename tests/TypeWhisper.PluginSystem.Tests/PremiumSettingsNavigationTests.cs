@@ -3,6 +3,7 @@ using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.ViewModels;
 using TypeWhisper.Windows.Views.Sections;
 using TypeWhisper.Core.Models;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -83,6 +84,35 @@ public sealed class PremiumSettingsNavigationTests
         Assert.DoesNotContain("transcript", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("prompt", json, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Diagnostics_IncludeTranscriptionAccelerationRuntimeState()
+    {
+        var diagnostics = new TranscriptionAccelerationDiagnostics(
+            "whisper-cpp",
+            "Local (whisper.cpp)",
+            TranscriptionAccelerationPreference.AmdVulkan,
+            TranscriptionAccelerationBackend.Cpu,
+            @"C:\TypeWhisper\runtimes\vulkan\win-x64\whisper.dll",
+            "External component has thrown an exception.");
+
+        var json = SettingsWindowViewModel.AddTranscriptionAccelerationDiagnostics(
+            "{}",
+            diagnostics);
+        using var document = JsonDocument.Parse(json);
+        var acceleration = document.RootElement.GetProperty("transcription_acceleration");
+
+        Assert.Equal("whisper-cpp", acceleration.GetProperty("engine_id").GetString());
+        Assert.Equal("amd_vulkan", acceleration.GetProperty("selected_preference").GetString());
+        Assert.Equal("cpu", acceleration.GetProperty("active_backend").GetString());
+        Assert.Equal(diagnostics.RuntimePath, acceleration.GetProperty("runtime_path").GetString());
+        Assert.Equal(diagnostics.LastNativeError, acceleration.GetProperty("last_native_error").GetString());
+    }
+
+    [Fact]
+    public void AccelerationDiagnostics_RejectNonObjectRoot()
+        => Assert.Throws<JsonException>(() =>
+            SettingsWindowViewModel.AddTranscriptionAccelerationDiagnostics("[]", null));
 
     [Fact]
     public void RecoveryNavigation_FollowsFileTranscriptionInCaptureGroup()

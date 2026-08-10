@@ -8,6 +8,7 @@ using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 using TypeWhisper.Windows.ViewModels;
 
@@ -131,6 +132,67 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
         Assert.False(viewModel.IsMarketplaceSelected);
     }
 
+    [Fact]
+    public async Task CatalogSources_KeepManualInstalledAndCommunityDiscoverEntriesDistinct()
+    {
+        var manualPlugin = CreateLoadedPlugin("com.example.manual", "Manual Plugin", "1.0.0");
+        const string officialJson =
+            "[{\"id\":\"com.example.official\",\"name\":\"Official Plugin\",\"version\":\"1.0.0\",\"author\":\"TypeWhisper\",\"description\":\"Official\",\"size\":10,\"downloadUrl\":\"u\"}]";
+        const string communityJson =
+            "{\"schemaVersion\":1,\"plugins\":[{\"id\":\"com.example.community\",\"name\":\"Community Plugin\",\"version\":\"1.0.0\",\"author\":\"Community\",\"description\":\"Community\",\"size\":10,\"downloadUrl\":\"u\"}]}";
+        var manager = CreateManager();
+        TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { manualPlugin });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateRegistryHttpClient(officialJson, communityJson),
+            _pluginsRoot);
+        var viewModel = new PluginsViewModel(manager, service);
+
+        await viewModel.RefreshRegistryCommand.ExecuteAsync(null);
+
+        var installed = Assert.Single(viewModel.Plugins);
+        Assert.Equal(Loc.Instance["Plugins.SourceManual"], installed.SourceGroupLabel);
+        Assert.Equal(3, installed.SourceGroupSortOrder);
+        Assert.Collection(
+            viewModel.RegistryPlugins.OrderBy(plugin => plugin.SourceGroupSortOrder),
+            official =>
+            {
+                Assert.Equal(RegistryArtifactSource.Official, official.ArtifactSource);
+                Assert.Equal(Loc.Instance["Plugins.SourceOfficial"], official.SourceGroupLabel);
+            },
+            community =>
+            {
+                Assert.Equal(RegistryArtifactSource.Community, community.ArtifactSource);
+                Assert.Equal(Loc.Instance["Plugins.SourceCommunity"], community.SourceGroupLabel);
+            });
+    }
+
+    [Fact]
+    public async Task RegistryFailure_LeavesManualInstalledPluginAndFolderGuidanceAvailable()
+    {
+        var manualPlugin = CreateLoadedPlugin("com.example.offline", "Offline Plugin", "1.0.0");
+        var manager = CreateManager();
+        TestPluginManagerFactory.SetPrivateField(manager, "_allPlugins", new List<LoadedPlugin> { manualPlugin });
+        var service = new PluginRegistryService(
+            manager,
+            _loader,
+            _settings.Object,
+            CreateRegistryHttpClient("", "", HttpStatusCode.BadGateway, HttpStatusCode.ServiceUnavailable),
+            _pluginsRoot);
+        var viewModel = new PluginsViewModel(manager, service);
+
+        await viewModel.RefreshRegistryCommand.ExecuteAsync(null);
+
+        var installed = Assert.Single(viewModel.Plugins);
+        Assert.Empty(viewModel.RegistryPlugins);
+        Assert.Equal(Loc.Instance["Plugins.SourceManual"], installed.ArtifactSourceBadge);
+        Assert.True(installed.UninstallCommand.CanExecute(null));
+        Assert.Equal(Path.GetFullPath(_pluginsRoot), viewModel.ManualPluginFolderPath);
+        Assert.NotNull(viewModel.OpenManualPluginFolderCommand);
+    }
+
     private async Task<PluginsViewModel> CreateViewModelAsync()
         => await CreateViewModelAsync(null, "1.0.0");
 
@@ -212,7 +274,14 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
 
     private PluginManager CreateManager()
     {
-        _manager = new PluginManager(_loader, _eventBus, _activeWindow.Object, _workflows.Object, _settings.Object);
+        _manager = new PluginManager(
+            _loader,
+            _eventBus,
+            _activeWindow.Object,
+            _workflows.Object,
+            _settings.Object,
+            [_pluginsRoot],
+            Path.Combine(_pluginsRoot, ".plugin-data"));
         return _manager;
     }
 
@@ -227,6 +296,32 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
             .ReturnsAsync(() => new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(responseJson)
+            });
+
+        return new HttpClient(handler.Object);
+    }
+
+    private static HttpClient CreateRegistryHttpClient(
+        string officialJson,
+        string communityJson,
+        HttpStatusCode officialStatus = HttpStatusCode.OK,
+        HttpStatusCode communityStatus = HttpStatusCode.OK)
+    {
+        var handler = new Mock<HttpMessageHandler>();
+        handler.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
+            {
+                var isCommunity = request.RequestUri!.AbsolutePath.EndsWith(
+                    "plugins-community-v1.json",
+                    StringComparison.Ordinal);
+                return new HttpResponseMessage(isCommunity ? communityStatus : officialStatus)
+                {
+                    Content = new StringContent(isCommunity ? communityJson : officialJson)
+                };
             });
 
         return new HttpClient(handler.Object);
@@ -258,9 +353,10 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
             PluginClass = "TestPlugin"
         };
         File.WriteAllText(Path.Combine(pluginDir, "manifest.json"), JsonSerializer.Serialize(manifest));
+        File.WriteAllBytes(Path.Combine(pluginDir, manifest.AssemblyName), [1, 2, 3, 4]);
     }
 
-    private static LoadedPlugin CreateLoadedPlugin(string id, string name, string version)
+    private LoadedPlugin CreateLoadedPlugin(string id, string name, string version)
     {
         var plugin = new Mock<ITypeWhisperPlugin>();
         plugin.Setup(p => p.PluginId).Returns(id);
@@ -276,10 +372,12 @@ public class PluginsViewModelMarketplaceFilterTests : IDisposable
             PluginClass = "TestPlugin"
         };
 
+        var pluginDirectory = Path.Combine(_pluginsRoot, id);
+        WritePluginManifest(pluginDirectory, id, version);
         return new LoadedPlugin(
             manifest,
             plugin.Object,
             new PluginAssemblyLoadContext(typeof(PluginsViewModelMarketplaceFilterTests).Assembly.Location),
-            AppContext.BaseDirectory);
+            pluginDirectory);
     }
 }

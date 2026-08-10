@@ -408,9 +408,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             transcribeRequest.AwaitDownload,
             ct);
 
-        var dictionaryPrompt = _modelManager.ActiveTranscriptionPlugin?.SupportsDictionaryTerms == true
-            ? _dictionary.GetTermsForPrompt()
-            : null;
+        var dictionaryPrompt = TranscriptionDictionaryPrompt.Create(
+            _dictionary,
+            _modelManager.ActiveTranscriptionPlugin);
         var prompt = MergePrompt(transcribeRequest.Prompt, dictionaryPrompt);
 
         var languageHints = transcribeRequest.Language is { } language

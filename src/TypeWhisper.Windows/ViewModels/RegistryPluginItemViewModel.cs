@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
 
@@ -12,6 +13,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
 {
     private readonly RegistryPlugin _registryPlugin;
     private readonly PluginRegistryService _registryService;
+    private PluginInstallDiagnosis _diagnosis;
+    private RegistryArtifactValidationResult _artifactTrust;
+    private RegistryArtifactValidationResult _installedArtifactTrust;
 
     /// <summary>
     /// Gets the id.
@@ -45,6 +49,10 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// Gets the requires api key.
     /// </summary>
     public bool RequiresApiKey => _registryPlugin.RequiresApiKey;
+    /// <summary>
+    /// Gets the forward-compatible hosting metadata value.
+    /// </summary>
+    public string? Hosting => _registryPlugin.Hosting;
     /// <summary>
     /// Performs format size.
     /// </summary>
@@ -93,7 +101,62 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// <summary>
     /// Gets the location badge.
     /// </summary>
-    public string LocationBadge => RequiresApiKey ? Loc.Instance["Plugins.Cloud"] : Loc.Instance["Plugins.Local"];
+    public string LocationBadge => _registryPlugin.IsCloudHosted
+        ? Loc.Instance["Plugins.Cloud"]
+        : Loc.Instance["Plugins.Local"];
+    /// <summary>
+    /// Gets the verified source label for the current registry artifact.
+    /// </summary>
+    public string SourceBadge => GetSourceBadge(_artifactTrust, installed: false);
+    /// <summary>
+    /// Gets the stable source classification for Discover grouping.
+    /// </summary>
+    public RegistryArtifactSource ArtifactSource => _artifactTrust.Source;
+    /// <summary>
+    /// Gets the localized source group used by Discover.
+    /// </summary>
+    public string SourceGroupLabel => SourceBadge;
+    /// <summary>
+    /// Gets the stable source group order used by Discover.
+    /// </summary>
+    public int SourceGroupSortOrder => ArtifactSource switch
+    {
+        RegistryArtifactSource.Official => 0,
+        RegistryArtifactSource.Community => 1,
+        _ => 2
+    };
+    /// <summary>
+    /// Gets the build trust label for the current registry artifact.
+    /// </summary>
+    public string TrustBadge => GetTrustBadge(_artifactTrust);
+    /// <summary>
+    /// Gets the explanation for the current registry artifact trust label.
+    /// </summary>
+    public string TrustTooltip => GetTrustTooltip(_artifactTrust);
+    /// <summary>
+    /// Gets the persisted source label for an installed copy of this plugin.
+    /// </summary>
+    public string InstalledSourceBadge => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.SourceBundled"]
+        : GetSourceBadge(_installedArtifactTrust, installed: true);
+    /// <summary>
+    /// Gets the persisted source classification for an installed copy of this plugin.
+    /// </summary>
+    public RegistryArtifactSource InstalledArtifactSource => InstallState == PluginInstallState.Bundled
+        ? RegistryArtifactSource.Official
+        : _installedArtifactTrust.Source;
+    /// <summary>
+    /// Gets the persisted build trust label for an installed copy of this plugin.
+    /// </summary>
+    public string InstalledTrustBadge => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.TrustVerifiedOfficial"]
+        : GetTrustBadge(_installedArtifactTrust);
+    /// <summary>
+    /// Gets the explanation for the persisted installed artifact trust label.
+    /// </summary>
+    public string InstalledTrustTooltip => InstallState == PluginInstallState.Bundled
+        ? Loc.Instance["Plugins.TrustTooltipBundled"]
+        : GetTrustTooltip(_installedArtifactTrust);
 
     [ObservableProperty] private PluginInstallState _installState;
     [ObservableProperty] private double _progress;
@@ -109,6 +172,27 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     /// </summary>
     public bool IsInstalledOrUpdateAvailable =>
         InstallState is PluginInstallState.Installed or PluginInstallState.UpdateAvailable;
+    /// <summary>
+    /// Gets whether the plugin needs repair.
+    /// </summary>
+    public bool NeedsRepair => InstallState == PluginInstallState.Broken;
+    /// <summary>
+    /// Gets whether repair requires confirmation to adopt the registry source.
+    /// </summary>
+    public bool RepairRequiresSourceAdoption => NeedsRepair && !_diagnosis.IsRegistryManaged;
+    /// <summary>
+    /// Gets the localized primary diagnostic message.
+    /// </summary>
+    public string DiagnosticMessage => _diagnosis.DiagnosticCode switch
+    {
+        PluginDiagnosticCode.MissingFiles => Loc.Instance["Plugins.DiagnosticMissingFiles"],
+        PluginDiagnosticCode.InvalidManifest => Loc.Instance["Plugins.DiagnosticInvalidManifest"],
+        PluginDiagnosticCode.IntegrityMismatch => Loc.Instance["Plugins.DiagnosticIntegrityMismatch"],
+        PluginDiagnosticCode.LoadFailure => Loc.Instance["Plugins.DiagnosticLoadFailure"],
+        PluginDiagnosticCode.PermissionDenied => Loc.Instance["Plugins.DiagnosticPermissionDenied"],
+        PluginDiagnosticCode.InterruptedInstallation => Loc.Instance["Plugins.DiagnosticInterruptedInstallation"],
+        _ => ""
+    };
 
     /// <summary>
     /// Initializes a new instance of the RegistryPluginItemViewModel class.
@@ -117,12 +201,18 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     {
         _registryPlugin = registryPlugin;
         _registryService = registryService;
-        _installState = registryService.GetInstallState(registryPlugin);
+        _diagnosis = registryService.GetInstallDiagnosis(registryPlugin);
+        _artifactTrust = registryService.GetArtifactTrustStatus(registryPlugin);
+        _installedArtifactTrust = registryService.GetInstalledArtifactTrustStatus(registryPlugin);
+        _installState = _diagnosis.State;
     }
 
     internal void RefreshInstallState()
     {
-        InstallState = _registryService.GetInstallState(_registryPlugin);
+        _artifactTrust = _registryService.GetArtifactTrustStatus(_registryPlugin);
+        _installedArtifactTrust = _registryService.GetInstalledArtifactTrustStatus(_registryPlugin);
+        ApplyDiagnosis(_registryService.GetInstallDiagnosis(_registryPlugin));
+        NotifyTrustStateChanged();
         if (InstallState == PluginInstallState.Installed)
             InstallErrorMessage = "";
     }
@@ -140,14 +230,14 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = result == PluginInstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.Installed;
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
             Progress = 1;
         }
         catch (Exception ex)
         {
-            InstallState = PluginInstallState.NotInstalled;
+            RefreshInstallState();
             InstallErrorMessage = Loc.Instance.GetString("Plugins.InstallFailedFormat", ex.Message);
         }
         finally
@@ -167,9 +257,9 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         try
         {
             var result = await _registryService.UninstallPluginAsync(_registryPlugin.Id);
-            InstallState = result == PluginUninstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.NotInstalled;
+            RefreshInstallState();
+            if (result == PluginUninstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
         }
         catch (Exception ex)
         {
@@ -195,14 +285,14 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         {
             var progressReporter = new Progress<double>(p => Progress = p);
             var result = await _registryService.InstallPluginAsync(_registryPlugin, progressReporter);
-            InstallState = result == PluginInstallResult.PendingRestart
-                ? PluginInstallState.PendingRestart
-                : PluginInstallState.Installed;
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
             Progress = 1;
         }
         catch (Exception ex)
         {
-            InstallState = PluginInstallState.UpdateAvailable;
+            RefreshInstallState();
             InstallErrorMessage = Loc.Instance.GetString("Plugins.UpdateFailedFormat", ex.Message);
         }
         finally
@@ -210,6 +300,106 @@ public partial class RegistryPluginItemViewModel : ObservableObject
             IsWorking = false;
         }
     }
+
+    [RelayCommand(CanExecute = nameof(CanRepair))]
+    private async Task RepairAsync()
+    {
+        if (IsWorking)
+            return;
+
+        var allowSourceAdoption = !RepairRequiresSourceAdoption;
+        if (!allowSourceAdoption)
+        {
+            allowSourceAdoption = MessageBox.Show(
+                Loc.Instance.GetString("Plugins.AdoptRegistryConfirm", Name),
+                Loc.Instance["Plugins.AdoptRegistryTitle"],
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        }
+
+        if (!allowSourceAdoption)
+            return;
+
+        IsWorking = true;
+        Progress = 0;
+        InstallErrorMessage = "";
+
+        try
+        {
+            var progressReporter = new Progress<double>(p => Progress = p);
+            var result = await _registryService.RepairPluginAsync(
+                _registryPlugin,
+                allowSourceAdoption,
+                progressReporter);
+            RefreshInstallState();
+            if (result == PluginInstallResult.PendingRestart)
+                InstallState = PluginInstallState.PendingRestart;
+            Progress = 1;
+        }
+        catch (Exception ex)
+        {
+            RefreshInstallState();
+            InstallErrorMessage = Loc.Instance.GetString("Plugins.RepairFailedFormat", ex.Message);
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    private bool CanRepair() => NeedsRepair && !IsWorking;
+
+    private void ApplyDiagnosis(PluginInstallDiagnosis diagnosis)
+    {
+        _diagnosis = diagnosis;
+        InstallState = diagnosis.State;
+        OnPropertyChanged(nameof(NeedsRepair));
+        OnPropertyChanged(nameof(RepairRequiresSourceAdoption));
+        OnPropertyChanged(nameof(DiagnosticMessage));
+        RepairCommand.NotifyCanExecuteChanged();
+    }
+
+    private void NotifyTrustStateChanged()
+    {
+        OnPropertyChanged(nameof(SourceBadge));
+        OnPropertyChanged(nameof(ArtifactSource));
+        OnPropertyChanged(nameof(SourceGroupLabel));
+        OnPropertyChanged(nameof(SourceGroupSortOrder));
+        OnPropertyChanged(nameof(TrustBadge));
+        OnPropertyChanged(nameof(TrustTooltip));
+        OnPropertyChanged(nameof(InstalledSourceBadge));
+        OnPropertyChanged(nameof(InstalledArtifactSource));
+        OnPropertyChanged(nameof(InstalledTrustBadge));
+        OnPropertyChanged(nameof(InstalledTrustTooltip));
+    }
+
+    private static string GetSourceBadge(RegistryArtifactValidationResult validation, bool installed) =>
+        validation.Source switch
+        {
+            RegistryArtifactSource.Official => Loc.Instance["Plugins.SourceOfficial"],
+            RegistryArtifactSource.Community => Loc.Instance["Plugins.SourceCommunity"],
+            _ when installed => Loc.Instance["Plugins.SourceLegacy"],
+            _ => Loc.Instance["Plugins.SourceUnknown"]
+        };
+
+    private static string GetTrustBadge(RegistryArtifactValidationResult validation) => validation switch
+    {
+        { IsVerified: true, Source: RegistryArtifactSource.Community } =>
+            Loc.Instance["Plugins.TrustVerifiedCommunity"],
+        { IsVerified: true } => Loc.Instance["Plugins.TrustVerifiedOfficial"],
+        { Code: RegistryArtifactValidationCode.MissingMetadata } => Loc.Instance["Plugins.TrustUnverified"],
+        _ => Loc.Instance["Plugins.TrustVerificationFailed"]
+    };
+
+    private static string GetTrustTooltip(RegistryArtifactValidationResult validation) => validation switch
+    {
+        { IsVerified: true, Source: RegistryArtifactSource.Community } =>
+            Loc.Instance["Plugins.TrustTooltipVerifiedCommunity"],
+        { IsVerified: true } => Loc.Instance["Plugins.TrustTooltipVerifiedOfficial"],
+        { Code: RegistryArtifactValidationCode.MissingMetadata } =>
+            Loc.Instance["Plugins.TrustTooltipUnverified"],
+        _ => Loc.Instance.GetString("Plugins.TrustTooltipFailedFormat", validation.Code)
+    };
 
     partial void OnInstallErrorMessageChanged(string value)
     {
@@ -219,6 +409,13 @@ public partial class RegistryPluginItemViewModel : ObservableObject
     partial void OnInstallStateChanged(PluginInstallState value)
     {
         OnPropertyChanged(nameof(IsInstalledOrUpdateAvailable));
+        OnPropertyChanged(nameof(NeedsRepair));
+        RepairCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsWorkingChanged(bool value)
+    {
+        RepairCommand.NotifyCanExecuteChanged();
     }
 
     private static string FormatSize(long bytes) => bytes switch
@@ -233,6 +430,8 @@ public partial class RegistryPluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(CategoryDescriptors));
         OnPropertyChanged(nameof(CategoryLabel));
         OnPropertyChanged(nameof(LocationBadge));
+        OnPropertyChanged(nameof(DiagnosticMessage));
+        NotifyTrustStateChanged();
     }
 }
 

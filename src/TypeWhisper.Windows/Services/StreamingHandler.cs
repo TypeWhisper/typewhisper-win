@@ -87,9 +87,7 @@ public sealed class StreamingHandler : IDisposable
         var ct = _cts.Token;
 
         var plugin = _modelManager.ActiveTranscriptionPlugin;
-        var prompt = plugin?.SupportsDictionaryTerms == true
-            ? _dictionary.GetTermsForPrompt()
-            : null;
+        var prompt = TranscriptionDictionaryPrompt.Create(_dictionary, plugin);
 
         if (plugin is not null && plugin.SupportsStreamingForPrompt(prompt))
         {
@@ -207,9 +205,7 @@ public sealed class StreamingHandler : IDisposable
             }
 
             var plugin = preparation.Plugin!;
-            var prompt = plugin.SupportsDictionaryTerms
-                ? _dictionary.GetTermsForPrompt()
-                : null;
+            var prompt = TranscriptionDictionaryPrompt.Create(_dictionary, plugin);
 
             if (plugin.SupportsStreamingForPrompt(prompt))
             {

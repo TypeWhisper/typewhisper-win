@@ -1,11 +1,15 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
@@ -96,6 +100,10 @@ public partial class PluginsViewModel : ObservableObject
     /// Gets whether has active marketplace capability filters.
     /// </summary>
     public bool HasActiveMarketplaceCapabilityFilters => _selectedMarketplaceCapabilityKeys.Count > 0;
+    /// <summary>
+    /// Gets the folder where manually installed plugins are discovered.
+    /// </summary>
+    public string ManualPluginFolderPath => _registryService.PluginsPath;
 
     [ObservableProperty] private bool _isLoadingRegistry;
     [ObservableProperty] private bool _isMarketplaceSelected;
@@ -208,6 +216,28 @@ public partial class PluginsViewModel : ObservableObject
         NotifyStateChanged();
     }
 
+    [RelayCommand]
+    private void OpenManualPluginFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(ManualPluginFolderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ManualPluginFolderPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            MessageBox.Show(
+                Loc.Instance.GetString("App.ErrorFormat", ex.Message),
+                Loc.Instance["App.ErrorTitle"],
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void NotifyStateChanged()
     {
         OnPropertyChanged(nameof(InstalledPluginCount));
@@ -265,6 +295,8 @@ public partial class PluginsViewModel : ObservableObject
     {
         foreach (var plugin in Plugins)
             plugin.RegistryPlugin = FindRegistryPlugin(plugin.Id);
+
+        CollectionViewSource.GetDefaultView(Plugins)?.Refresh();
     }
 
     private RegistryPluginItemViewModel? FindRegistryPlugin(string pluginId) =>
@@ -507,6 +539,43 @@ public partial class PluginItemViewModel : ObservableObject
     /// </summary>
     public string LocationBadge => IsLocal ? Loc.Instance["Plugins.Local"] : Loc.Instance["Plugins.Cloud"];
     /// <summary>
+    /// Gets the persisted source label for the installed plugin.
+    /// </summary>
+    public string ArtifactSourceBadge => RegistryPlugin?.InstalledSourceBadge ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.SourceBundled"]
+            : Loc.Instance["Plugins.SourceManual"]);
+    /// <summary>
+    /// Gets the persisted trust label for the installed plugin.
+    /// </summary>
+    public string ArtifactTrustBadge => RegistryPlugin?.InstalledTrustBadge ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.TrustVerifiedOfficial"]
+            : Loc.Instance["Plugins.TrustUnverified"]);
+    /// <summary>
+    /// Gets the persisted trust explanation for the installed plugin.
+    /// </summary>
+    public string ArtifactTrustTooltip => RegistryPlugin?.InstalledTrustTooltip ??
+        (_registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+            ? Loc.Instance["Plugins.TrustTooltipBundled"]
+            : Loc.Instance["Plugins.TrustTooltipUnverified"]);
+    /// <summary>
+    /// Gets the localized source group used by the installed catalog.
+    /// </summary>
+    public string SourceGroupLabel => ArtifactSourceBadge;
+    /// <summary>
+    /// Gets the stable source group order used by the installed catalog.
+    /// </summary>
+    public int SourceGroupSortOrder => _registryService.IsBundledPluginPath(_plugin.PluginDirectory)
+        ? 0
+        : RegistryPlugin?.InstalledArtifactSource switch
+        {
+            RegistryArtifactSource.Official => 1,
+            RegistryArtifactSource.Community => 2,
+            _ when RegistryPlugin is null => 3,
+            _ => 4
+        };
+    /// <summary>
     /// Gets the matching marketplace registry plugin.
     /// </summary>
     public RegistryPluginItemViewModel? RegistryPlugin
@@ -536,6 +605,14 @@ public partial class PluginItemViewModel : ObservableObject
     /// Gets whether an update is staged and requires restart.
     /// </summary>
     public bool IsUpdatePendingRestart => RegistryPlugin?.InstallState == PluginInstallState.PendingRestart;
+    /// <summary>
+    /// Gets whether the matching registry plugin needs repair.
+    /// </summary>
+    public bool NeedsRepair => RegistryPlugin?.NeedsRepair == true;
+    /// <summary>
+    /// Gets the localized primary repair diagnostic.
+    /// </summary>
+    public string? RepairDiagnosticMessage => NeedsRepair ? RegistryPlugin?.DiagnosticMessage : null;
     /// <summary>
     /// Gets the available update version.
     /// </summary>
@@ -606,10 +683,25 @@ public partial class PluginItemViewModel : ObservableObject
     private bool CanUpdateRegistryPlugin() =>
         HasUpdateAvailable && RegistryPlugin?.UpdateCommand.CanExecute(null) == true;
 
+    [RelayCommand(CanExecute = nameof(CanRepairRegistryPlugin))]
+    private async Task RepairRegistryPluginAsync()
+    {
+        if (RegistryPlugin is null)
+            return;
+
+        await RegistryPlugin.RepairCommand.ExecuteAsync(null);
+        NotifyUpdateStateChanged();
+    }
+
+    private bool CanRepairRegistryPlugin() =>
+        NeedsRepair && RegistryPlugin?.RepairCommand.CanExecute(null) == true;
+
     private void OnRegistryPluginPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(RegistryPluginItemViewModel.InstallState)
             or nameof(RegistryPluginItemViewModel.IsWorking)
+            or nameof(RegistryPluginItemViewModel.NeedsRepair)
+            or nameof(RegistryPluginItemViewModel.DiagnosticMessage)
             or nameof(RegistryPluginItemViewModel.Version))
         {
             NotifyUpdateStateChanged();
@@ -621,8 +713,16 @@ public partial class PluginItemViewModel : ObservableObject
         OnPropertyChanged(nameof(RegistryPlugin));
         OnPropertyChanged(nameof(HasUpdateAvailable));
         OnPropertyChanged(nameof(IsUpdatePendingRestart));
+        OnPropertyChanged(nameof(NeedsRepair));
+        OnPropertyChanged(nameof(RepairDiagnosticMessage));
         OnPropertyChanged(nameof(AvailableUpdateVersion));
+        OnPropertyChanged(nameof(ArtifactSourceBadge));
+        OnPropertyChanged(nameof(ArtifactTrustBadge));
+        OnPropertyChanged(nameof(ArtifactTrustTooltip));
+        OnPropertyChanged(nameof(SourceGroupLabel));
+        OnPropertyChanged(nameof(SourceGroupSortOrder));
         UpdateRegistryPluginCommand.NotifyCanExecuteChanged();
+        RepairRegistryPluginCommand.NotifyCanExecuteChanged();
     }
 
     private IEnumerable<string> ResolveDeclaredAndDetectedCategories()

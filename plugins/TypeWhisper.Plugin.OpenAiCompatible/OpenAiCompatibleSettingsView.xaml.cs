@@ -1,4 +1,7 @@
+using System.Globalization;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -38,6 +41,15 @@ public partial class OpenAiCompatibleSettingsView : UserControl
         LlmModelLabel2.Text = L("Settings.LlmModel");
         SaveLlmButton.Content = L("Settings.Save");
         ThinkingModeCheckBox.Content = L("Settings.ThinkingMode");
+        LlmRequestTimeoutHeader.Text = L("Settings.LlmRequestTimeout");
+        LlmRequestTimeoutUnit.Text = L("Settings.Seconds");
+        SaveLlmRequestTimeoutButton.Content = L("Settings.Save");
+        LlmRequestTimeoutHint.Text = L(
+            "Settings.LlmRequestTimeoutHelp",
+            OpenAiCompatiblePlugin.MinLlmRequestTimeoutSeconds,
+            OpenAiCompatiblePlugin.MaxLlmRequestTimeoutSeconds,
+            OpenAiCompatiblePlugin.DefaultLlmRequestTimeoutSeconds);
+        AutomationProperties.SetHelpText(LlmRequestTimeoutBox, LlmRequestTimeoutHint.Text);
 
         Loaded += OnLoaded;
     }
@@ -85,6 +97,8 @@ public partial class OpenAiCompatibleSettingsView : UserControl
             ManualTranscriptionBox.Text = profile.SelectedModelId ?? "";
             ManualLlmBox.Text = profile.SelectedLlmModelId ?? "";
             ThinkingModeCheckBox.IsChecked = profile.ThinkingEnabled;
+            LlmRequestTimeoutBox.Text = profile.LlmRequestTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
+            ClearLlmRequestTimeoutError();
             DeleteProfileButton.IsEnabled = profile.Id != OpenAiCompatiblePlugin.DefaultProfileId;
 
             ConnectionStatusPanel.Visibility = Visibility.Collapsed;
@@ -302,6 +316,49 @@ public partial class OpenAiCompatibleSettingsView : UserControl
                 profile.Id,
                 ThinkingModeCheckBox.IsChecked.GetValueOrDefault());
         }
+    }
+
+    private void OnSaveLlmRequestTimeout(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (SelectedProfile() is not { } profile)
+            return;
+
+        var text = LlmRequestTimeoutBox.Text.Trim();
+        if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+            || seconds is < OpenAiCompatiblePlugin.MinLlmRequestTimeoutSeconds
+                or > OpenAiCompatiblePlugin.MaxLlmRequestTimeoutSeconds)
+        {
+            ShowLlmRequestTimeoutError();
+            LlmRequestTimeoutBox.Focus();
+            return;
+        }
+
+        _plugin.SetLlmRequestTimeoutForProfile(profile.Id, seconds);
+        LlmRequestTimeoutBox.Text = seconds.ToString(CultureInfo.InvariantCulture);
+        ClearLlmRequestTimeoutError();
+    }
+
+    private void ShowLlmRequestTimeoutError()
+    {
+        var message = L(
+            "Settings.LlmRequestTimeoutInvalid",
+            OpenAiCompatiblePlugin.MinLlmRequestTimeoutSeconds,
+            OpenAiCompatiblePlugin.MaxLlmRequestTimeoutSeconds);
+        LlmRequestTimeoutError.Text = message;
+        LlmRequestTimeoutError.Visibility = Visibility.Visible;
+        AutomationProperties.SetHelpText(LlmRequestTimeoutBox, message);
+
+        var peer = UIElementAutomationPeer.FromElement(LlmRequestTimeoutError)
+                   ?? UIElementAutomationPeer.CreatePeerForElement(LlmRequestTimeoutError);
+        peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+    }
+
+    private void ClearLlmRequestTimeoutError()
+    {
+        LlmRequestTimeoutError.Text = "";
+        LlmRequestTimeoutError.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetHelpText(LlmRequestTimeoutBox, LlmRequestTimeoutHint.Text);
     }
 
     private void OnSaveManualTranscription(object sender, RoutedEventArgs e)

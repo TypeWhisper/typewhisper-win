@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.openai",
   "name": "OpenAI / ChatGPT",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minHostVersion": "1.0.0",
   "author": "TypeWhisper",
   "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",

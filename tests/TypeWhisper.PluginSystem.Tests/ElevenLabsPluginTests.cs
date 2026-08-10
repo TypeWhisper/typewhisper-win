@@ -44,6 +44,9 @@ public class ElevenLabsPluginTests
         Assert.True(sut.IsConfigured);
         Assert.True(sut.SupportsStreaming);
         Assert.True(sut.SupportsDictionaryTerms);
+        Assert.Equal(
+            new DictionaryTermsBudget(MaxTerms: 1000, MaxCharsPerTerm: 49, MaxWordsPerTerm: 5),
+            sut.DictionaryTermsBudget);
         Assert.True(sut.SupportsStreamingForPrompt(null));
         Assert.False(sut.SupportsStreamingForPrompt("TypeWhisper"));
         Assert.False(sut.SupportsTranslation);

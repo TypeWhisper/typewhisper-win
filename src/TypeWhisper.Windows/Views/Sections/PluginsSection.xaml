@@ -87,10 +87,10 @@
                             AutomationProperties.Name="{loc:Str Plugins.Installed}">
                         <TextBlock><Run Text="&#x1F9E9;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Installed], Mode=OneWay}"/></TextBlock>
                     </Button>
-                    <Button x:Name="TabMarketplace" Style="{StaticResource TabButtonStyle}" Click="OnMarketplaceTabClick"
-                            AutomationProperties.AutomationId="IntegrationsTabMarketplace"
-                            AutomationProperties.Name="{loc:Str Plugins.Marketplace}">
-                        <TextBlock><Run Text="&#x1F6D2;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Marketplace], Mode=OneWay}"/></TextBlock>
+                    <Button x:Name="TabDiscover" Style="{StaticResource TabButtonStyle}" Click="OnDiscoverTabClick"
+                            AutomationProperties.AutomationId="IntegrationsTabDiscover"
+                            AutomationProperties.Name="{loc:Str Plugins.Discover}">
+                        <TextBlock><Run Text="&#x2728;  "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.Discover], Mode=OneWay}"/></TextBlock>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -109,6 +109,43 @@
                                        Margin="0,4,0,0"
                                        Visibility="{Binding Plugins.HasAvailablePluginUpdates, Converter={StaticResource BoolToVis}}"/>
                         </StackPanel>
+                    </Border>
+
+                    <Border AutomationProperties.AutomationId="IntegrationsManualGuidance"
+                            Style="{StaticResource SettingsGroupPanelStyle}"
+                            Padding="14"
+                            Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{loc:Str Plugins.ManualTitle}"
+                                           Foreground="{StaticResource TextBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="{loc:Str Plugins.ManualDescription}"
+                                           Style="{StaticResource HintStyle}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding Plugins.ManualPluginFolderPath}"
+                                           Foreground="{StaticResource HintBrush}"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Plugins.ManualPluginFolderPath}"
+                                           Margin="0,6,0,0"/>
+                            </StackPanel>
+                            <ui:Button Grid.Column="1"
+                                       AutomationProperties.AutomationId="IntegrationsOpenManualFolder"
+                                       AutomationProperties.Name="{loc:Str Plugins.OpenManualFolder}"
+                                       Appearance="Secondary"
+                                       Content="{loc:Str Plugins.OpenManualFolder}"
+                                       Command="{Binding Plugins.OpenManualPluginFolderCommand}"
+                                       Icon="{ui:SymbolIcon FolderOpen24}"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
 
                     <Border x:Name="EmptyState"
@@ -173,6 +210,12 @@
                                                     <TextBlock Text="{Binding Version, StringFormat='  v{0}'}" Foreground="{StaticResource HintBrush}" FontSize="12" Margin="4,0,0,0"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding RepairDiagnosticMessage}"
+                                                           Foreground="{StaticResource DangerBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,4,0,0"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <WrapPanel Margin="0,7,0,0">
                                                     <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
                                                         <ItemsControl.ItemsPanel>
@@ -190,6 +233,20 @@
                                                     </ItemsControl>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsSource.{0}}"
+                                                            AutomationProperties.Name="{Binding ArtifactSourceBadge}"
+                                                            ToolTip="{Binding ArtifactTrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding ArtifactSourceBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsTrust.{0}}"
+                                                            AutomationProperties.Name="{Binding ArtifactTrustBadge}"
+                                                            ToolTip="{Binding ArtifactTrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding ArtifactTrustBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding StatusLabel}" Foreground="#D6DEE9" FontSize="10"/>
@@ -209,10 +266,21 @@
                                                             <Run Text="&#x21BB; "/><Run Text="{Binding Source={x:Static loc:Loc.Instance}, Path=[Plugins.RestartRequiredBadge], Mode=OneWay}"/>
                                                         </TextBlock>
                                                     </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{loc:Str Plugins.BrokenBadge}" Foreground="{StaticResource DangerBrush}" FontSize="10"/>
+                                                    </Border>
                                                 </WrapPanel>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsRepair.{0}}"
+                                                           Content="{loc:Str Plugins.Repair}"
+                                                           Command="{Binding RepairRegistryPluginCommand}"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                           Margin="0,0,8,0"/>
                                                 <ui:Button Appearance="Secondary"
                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsUpdate.{0}}"
                                                            Content="{loc:Str Plugins.Update}"
@@ -247,10 +315,10 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="MarketplacePanel"
+            <ScrollViewer x:Name="DiscoverPanel"
                           VerticalScrollBarVisibility="Auto"
                           Visibility="Collapsed"
-                          PreviewMouseWheel="OnMarketplacePanelPreviewMouseWheel">
+                          PreviewMouseWheel="OnDiscoverPanelPreviewMouseWheel">
                 <StackPanel>
                     <Border Style="{StaticResource SettingsFilterRowStyle}">
                         <Grid>
@@ -260,7 +328,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Text="{Binding Plugins.MarketplaceCategorySummaryText}" Style="{StaticResource PageSubtitleStyle}" Margin="0,0,0,4"/>
-                                <TextBlock Text="{loc:Str Plugins.MarketplaceDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
+                                <TextBlock Text="{loc:Str Plugins.DiscoverDescription}" Style="{StaticResource HintStyle}" Margin="0"/>
                                 <WrapPanel Margin="0,10,0,0">
                                     <ui:Button Appearance="Secondary"
                                                AutomationProperties.AutomationId="IntegrationsClearFilters"
@@ -295,9 +363,9 @@
                                 </WrapPanel>
                             </StackPanel>
                             <ui:Button Grid.Column="1"
-                                       AutomationProperties.AutomationId="IntegrationsRefreshMarketplace"
+                                       AutomationProperties.AutomationId="IntegrationsRefreshDiscover"
                                        Appearance="Secondary"
-                                       Content="{loc:Str Plugins.MarketplaceRefresh}"
+                                       Content="{loc:Str Plugins.DiscoverRefresh}"
                                        Command="{Binding Plugins.RefreshRegistryCommand}"
                                        Icon="{ui:SymbolIcon ArrowSync24}"
                                        VerticalAlignment="Center"/>
@@ -308,13 +376,22 @@
                             Style="{StaticResource SettingsSummaryBarStyle}">
                         <StackPanel HorizontalAlignment="Center">
                             <ui:ProgressRing IsIndeterminate="True" Width="32" Height="32" Margin="0,0,0,8"/>
-                            <TextBlock Text="{loc:Str Plugins.MarketplaceLoading}" Foreground="{StaticResource HintBrush}" FontSize="13" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str Plugins.DiscoverLoading}" Foreground="{StaticResource HintBrush}" FontSize="13" HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource SettingsGroupPanelStyle}"
                             Visibility="{Binding Plugins.IsLoadingRegistry, Converter={StaticResource InverseBoolToVis}}">
                         <ItemsControl ItemsSource="{Binding Plugins.FilteredMarketplacePlugins}">
+                            <ItemsControl.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource SettingsGroupTitleStyle}" Margin="0,6,0,8"/>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ItemsControl.GroupStyle>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:RegistryPluginItemViewModel}">
                                     <Border Style="{StaticResource SettingsCollectionRowStyle}">
@@ -349,6 +426,12 @@
                                                     <TextBlock Text="{Binding Version, StringFormat='  v{0}'}" Foreground="{StaticResource HintBrush}" FontSize="12" Margin="4,0,0,0"/>
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding Description}" Foreground="{StaticResource HintBrush}" FontSize="12" TextTrimming="CharacterEllipsis" MaxHeight="18" Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding DiagnosticMessage}"
+                                                           Foreground="{StaticResource DangerBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,4,0,0"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <WrapPanel Margin="0,7,0,0">
                                                     <ItemsControl ItemsSource="{Binding CategoryDescriptors}">
                                                         <ItemsControl.ItemsPanel>
@@ -367,8 +450,27 @@
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding LocationBadge}" Foreground="#D6DEE9" FontSize="10"/>
                                                     </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsMarketplaceSource.{0}}"
+                                                            AutomationProperties.Name="{Binding SourceBadge}"
+                                                            ToolTip="{Binding TrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding SourceBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsMarketplaceTrust.{0}}"
+                                                            AutomationProperties.Name="{Binding TrustBadge}"
+                                                            ToolTip="{Binding TrustTooltip}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{Binding TrustBadge}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
                                                     <Border Style="{StaticResource BadgeStyle}" Margin="0,0,6,0">
                                                         <TextBlock Text="{Binding SizeDisplay}" Foreground="#D6DEE9" FontSize="10"/>
+                                                    </Border>
+                                                    <Border Style="{StaticResource BadgeStyle}"
+                                                            Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"
+                                                            Margin="0,0,6,0">
+                                                        <TextBlock Text="{loc:Str Plugins.BrokenBadge}" Foreground="{StaticResource DangerBrush}" FontSize="10"/>
                                                     </Border>
                                                 </WrapPanel>
                                                 <ProgressBar Value="{Binding Progress}" Maximum="1" Height="3" Margin="0,8,0,0" Visibility="{Binding IsWorking, Converter={StaticResource BoolToVis}}"/>
@@ -393,6 +495,12 @@
                                                            Command="{Binding UpdateCommand}"
                                                            IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=UpdateAvailable}"/>
+                                                <ui:Button Appearance="Primary"
+                                                           AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsRepairMarketplace.{0}}"
+                                                           Content="{loc:Str Plugins.Repair}"
+                                                           Command="{Binding RepairCommand}"
+                                                           IsEnabled="{Binding IsWorking, Converter={StaticResource InvertBool}}"
+                                                           Visibility="{Binding NeedsRepair, Converter={StaticResource BoolToVis}}"/>
                                                 <TextBlock Foreground="{StaticResource ActiveIndicatorBrush}"
                                                            FontSize="12"
                                                            Visibility="{Binding InstallState, Converter={StaticResource InstallStateToVis}, ConverterParameter=Installed}">

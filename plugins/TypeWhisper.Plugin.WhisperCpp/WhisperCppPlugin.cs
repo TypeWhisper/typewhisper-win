@@ -14,7 +14,10 @@ namespace TypeWhisper.Plugin.WhisperCpp;
 /// <summary>
 /// Provides whisper cpp plugin behavior.
 /// </summary>
-public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
+public sealed class WhisperCppPlugin :
+    ITypeWhisperPlugin,
+    ITranscriptionEnginePlugin,
+    ITranscriptionAccelerationDiagnosticsProvider
 {
     private const string CudaRuntimeDependencyHint =
         "Missing CUDA/cuBLAS runtime dependency cublas64_13.dll. TypeWhisper can download it when NVIDIA CUDA is selected.";
@@ -60,6 +63,8 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     private TranscriptionAccelerationPreference _accelerationPreference = TranscriptionAccelerationPreference.Auto;
     private bool _customRocmRuntimeLoaded;
     private bool _runtimeRestartRequired;
+    private string? _runtimePath;
+    private string? _lastNativeError;
     private TranscriptionAccelerationStatus _accelerationStatus = new(
         TranscriptionAccelerationBackend.Cpu,
         "Using CPU");
@@ -87,7 +92,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.2";
+    public string PluginVersion => "1.0.3";
 
     /// <summary>
     /// Gets the stable provider identifier used for model and settings selection.
@@ -135,6 +140,16 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// Gets the acceleration status.
     /// </summary>
     public TranscriptionAccelerationStatus AccelerationStatus => _accelerationStatus;
+    /// <summary>
+    /// Gets support-oriented details about the selected and active native runtime.
+    /// </summary>
+    public TranscriptionAccelerationDiagnostics AccelerationDiagnostics => new(
+        ProviderId,
+        ProviderDisplayName,
+        _accelerationPreference,
+        _accelerationStatus.ActiveBackend,
+        _runtimePath,
+        _lastNativeError);
 
     /// <summary>
     /// Gets the transcription models.
@@ -308,10 +323,18 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             }
             catch (Exception ex) when (IsNativeLoadFailure(ex))
             {
+                _runtimePath = ResolveRuntimePathForDiagnostics(
+                    RuntimeOptions.LoadedLibrary,
+                    _accelerationPreference,
+                    useRequestedBackend: true);
+                _lastNativeError = GetRootCauseMessage(ex);
                 var loadException = CreateNativeLoadFailureException(ex);
                 _accelerationStatus = CreateNativeLoadFailureStatus(
                     loadException,
                     _accelerationPreference);
+                _host?.Log(
+                    PluginLogLevel.Error,
+                    BuildAccelerationDiagnosticMessage(AccelerationDiagnostics));
                 throw _accelerationPreference == TranscriptionAccelerationPreference.NvidiaCuda
                     ? new InvalidOperationException(_accelerationStatus.Detail, loadException)
                     : loadException;
@@ -322,12 +345,17 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 loadedLibrary,
                 _accelerationPreference);
             _customRocmRuntimeLoaded = _accelerationPreference == TranscriptionAccelerationPreference.AmdRocm;
+            _runtimePath = ResolveRuntimePathForDiagnostics(
+                loadedLibrary,
+                _accelerationPreference,
+                useRequestedBackend: false);
+            _lastNativeError = null;
             _loadedModelId = modelId;
             _selectedModelId = modelId;
             _host?.SetSetting("selectedModel", modelId);
             _host?.Log(
                 PluginLogLevel.Info,
-                $"Loaded model {modelId} using runtime {loadedLibrary?.ToString() ?? "unknown"} ({_accelerationStatus.DisplayText})");
+                $"Loaded model {modelId}. {BuildAccelerationDiagnosticMessage(AccelerationDiagnostics)}");
         }
         finally
         {
@@ -659,7 +687,7 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         for (var current = error; current is not null; current = current.InnerException)
         {
-            if (current is DllNotFoundException or BadImageFormatException)
+            if (current is DllNotFoundException or BadImageFormatException or SEHException)
                 return true;
 
             if (current.Message.Contains("Unable to load DLL", StringComparison.OrdinalIgnoreCase)
@@ -672,6 +700,28 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         return false;
     }
 
+    internal static string BuildAccelerationDiagnosticMessage(
+        TranscriptionAccelerationDiagnostics diagnostics)
+    {
+        var builder = new StringBuilder()
+            .Append("engine=").Append(diagnostics.EngineId)
+            .Append(" selected=").Append(diagnostics.SelectedPreference)
+            .Append(" active=").Append(diagnostics.ActiveBackend);
+
+        if (!string.IsNullOrWhiteSpace(diagnostics.RuntimePath))
+            builder.Append(" runtime='").Append(diagnostics.RuntimePath).Append("'");
+        if (!string.IsNullOrWhiteSpace(diagnostics.LastNativeError))
+            builder.Append(" native-error='").Append(diagnostics.LastNativeError).Append("'");
+
+        if (diagnostics.ActiveBackend == TranscriptionAccelerationBackend.NvidiaCuda)
+        {
+            builder.Append(
+                " cuda-origin=unknown (native NVIDIA CUDA and CUDA translation layers such as ZLUDA are not distinguishable)");
+        }
+
+        return builder.ToString();
+    }
+
     private InvalidOperationException CreateNativeLoadFailureException(Exception error)
     {
         var pluginDirectory = _pluginDirectory
@@ -682,6 +732,46 @@ public sealed class WhisperCppPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
             RuntimeInformation.RuntimeIdentifier,
             error);
         return new InvalidOperationException(message, error);
+    }
+
+    private string? ResolveRuntimePathForDiagnostics(
+        RuntimeLibrary? loadedLibrary,
+        TranscriptionAccelerationPreference preference,
+        bool useRequestedBackend)
+    {
+        if (preference == TranscriptionAccelerationPreference.AmdRocm)
+            return ResolveRocmLibraryPathFromEnvironment();
+
+        var effectiveLibrary = useRequestedBackend
+            ? preference switch
+            {
+                TranscriptionAccelerationPreference.Cpu => RuntimeLibrary.Cpu,
+                TranscriptionAccelerationPreference.NvidiaCuda => RuntimeLibrary.Cuda,
+                TranscriptionAccelerationPreference.AmdVulkan => RuntimeLibrary.Vulkan,
+                _ => loadedLibrary,
+            }
+            : loadedLibrary;
+        if (effectiveLibrary is null || string.IsNullOrWhiteSpace(_pluginDirectory))
+            return null;
+
+        var runtimeIdentifier = Path.GetFileName(RuntimeInformation.RuntimeIdentifier);
+        var runtimeDirectory = effectiveLibrary switch
+        {
+            RuntimeLibrary.Cuda => Path.Join(_pluginDirectory, "runtimes", "cuda", runtimeIdentifier),
+            RuntimeLibrary.Vulkan => Path.Join(_pluginDirectory, "runtimes", "vulkan", runtimeIdentifier),
+            _ => Path.Join(_pluginDirectory, "runtimes", runtimeIdentifier),
+        };
+        var runtimePath = Path.Join(runtimeDirectory, "whisper.dll");
+        return Path.GetFullPath(runtimePath);
+    }
+
+    private static string GetRootCauseMessage(Exception error)
+    {
+        var current = error;
+        while (current.InnerException is not null)
+            current = current.InnerException;
+
+        return current.Message;
     }
 
     private void DisposeFactoryUnsafe()

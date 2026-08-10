@@ -84,6 +84,7 @@ public sealed class AutomaticTranscriptionFallbackService
             || string.Equals(candidate.ProviderId, engineId, StringComparison.OrdinalIgnoreCase));
         if (!IsEligibleEngine(engine, modelId, primaryEngineId, settings, out var resolvedModelId))
             return null;
+        var fallbackEngine = engine!;
 
         var task = string.Equals(
             settings.DictationRecoveryTask,
@@ -95,17 +96,15 @@ public sealed class AutomaticTranscriptionFallbackService
             || settings.DictationRecoveryLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase)
                 ? Array.Empty<string>()
                 : new[] { settings.DictationRecoveryLanguage.Trim() };
-        var prompt = engine!.SupportsDictionaryTerms
-            ? _dictionary.GetTermsForPrompt()
-            : null;
+        var prompt = TranscriptionDictionaryPrompt.Create(_dictionary, fallbackEngine);
 
         System.Diagnostics.Debug.WriteLine(
-            $"[TranscriptionFallback] engine={engine.GetTranscriptionSelectionId()} model={resolvedModelId} event=start");
+            $"[TranscriptionFallback] engine={fallbackEngine.GetTranscriptionSelectionId()} model={resolvedModelId} event=start");
         var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             await using var scope = await _modelManager.BeginTranscriptionRequestAsync(
-                engine.GetTranscriptionSelectionId(),
+                fallbackEngine.GetTranscriptionSelectionId(),
                 resolvedModelId,
                 awaitDownload: false,
                 cancellationToken).ConfigureAwait(false);
@@ -124,10 +123,10 @@ public sealed class AutomaticTranscriptionFallbackService
 
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
             System.Diagnostics.Debug.WriteLine(
-                $"[TranscriptionFallback] engine={result.EngineId ?? engine.ProviderId} model={result.ModelId ?? resolvedModelId} event=success elapsed-ms={elapsed:0}");
+                $"[TranscriptionFallback] engine={result.EngineId ?? fallbackEngine.ProviderId} model={result.ModelId ?? resolvedModelId} event=success elapsed-ms={elapsed:0}");
             return new AutomaticTranscriptionFallbackResult(
                 result.Result,
-                result.EngineSelectionId ?? engine.GetTranscriptionSelectionId(),
+                result.EngineSelectionId ?? fallbackEngine.GetTranscriptionSelectionId(),
                 result.ModelId ?? resolvedModelId,
                 task);
         }
@@ -139,7 +138,7 @@ public sealed class AutomaticTranscriptionFallbackService
         {
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
             System.Diagnostics.Debug.WriteLine(
-                $"[TranscriptionFallback] engine={engine.GetTranscriptionSelectionId()} model={resolvedModelId} event=failure kind={ClassifyFailure(fallbackFailure)} elapsed-ms={elapsed:0}");
+                $"[TranscriptionFallback] engine={fallbackEngine.GetTranscriptionSelectionId()} model={resolvedModelId} event=failure kind={ClassifyFailure(fallbackFailure)} elapsed-ms={elapsed:0}");
             throw new TranscriptionFallbackException(primaryFailure, fallbackFailure);
         }
     }

@@ -940,5 +940,5 @@ internal sealed class PluginTranscriptionEngineAdapter : ITranscriptionEngine
     }
 
     private string? GetDictionaryPrompt() =>
-        _plugin.SupportsDictionaryTerms ? _dictionary?.GetTermsForPrompt() : null;
+        TranscriptionDictionaryPrompt.Create(_dictionary, _plugin);
 }

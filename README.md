@@ -8,6 +8,8 @@ Speech-to-text and AI text processing for Windows. Dictate anywhere, transcribe 
 
 TypeWhisper for Windows includes system-wide dictation, file transcription, workflows, history, dictionary, snippets, local and cloud transcription engines, and bundled integrations. Advanced surfaces like the HTTP API, CLI, plugin SDK, marketplace, and action plugins remain available for power users and automation.
 
+See [Platform parity and exclusions](docs/PLATFORM_PARITY.md) for the Windows support matrix, Windows-native replacements, and Apple-only non-goals.
+
 ## Screenshots
 
 The full 1.0 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
@@ -130,6 +132,10 @@ TypeWhisper for Windows release artifacts are built from this repository by GitH
 
 Local models are provided by bundled plugins and can be installed from the built-in marketplace.
 
+For backend compatibility and troubleshooting on AMD GPUs, see [AMD acceleration on Windows](docs/AMD_ACCELERATION.md).
+
+The current Windows evaluation of NVIDIA's streaming Parakeet EOU model is documented in [Parakeet Realtime EOU on Windows](docs/PARAKEET_REALTIME_EOU_WINDOWS.md).
+
 ## Build
 
 1. Clone the repository:
@@ -221,6 +227,8 @@ curl -X POST http://localhost:8978/v1/dictation/start
 curl -X POST http://localhost:8978/v1/dictation/stop
 curl "http://localhost:8978/v1/dictation/transcription?id=<session-id>"
 ```
+
+The browser microphone integration research, security boundary, proof of concept, and test plan are documented in [`docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md`](docs/BROWSER_MICROPHONE_INTEGRATION_WINDOWS.md).
 
 ## CLI Tool
 

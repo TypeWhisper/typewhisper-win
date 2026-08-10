@@ -565,6 +565,21 @@ public partial class ModelManagerViewModel : ObservableObject
             ? status.DisplayText
             : $"{status.DisplayText}: {status.Detail}";
 
+    internal TranscriptionAccelerationDiagnostics? GetAccelerationDiagnostics()
+    {
+        var plugin = GetDisplayTranscriptionPlugin();
+        if (plugin is null)
+            return null;
+
+        return plugin is ITranscriptionAccelerationDiagnosticsProvider diagnosticsProvider
+            ? diagnosticsProvider.AccelerationDiagnostics
+            : new TranscriptionAccelerationDiagnostics(
+                plugin.GetTranscriptionSelectionId(),
+                plugin.ProviderDisplayName,
+                plugin.AccelerationPreference,
+                plugin.AccelerationStatus.ActiveBackend);
+    }
+
     internal static bool ShouldShowAccelerationSection(ITranscriptionEnginePlugin? plugin)
     {
         if (plugin is null)

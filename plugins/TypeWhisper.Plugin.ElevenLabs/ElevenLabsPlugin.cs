@@ -32,6 +32,10 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
 
     private static readonly char[] InvalidKeytermCharacters = ['<', '>', '{', '}', '[', ']', '\\'];
     private static readonly char[] KeytermSeparators = [',', '\r', '\n'];
+    private static readonly DictionaryTermsBudget DictionaryBudget = new(
+        MaxTerms: 1000,
+        MaxCharsPerTerm: 49,
+        MaxWordsPerTerm: 5);
 
     private static readonly IReadOnlyList<ElevenLabsModelEntry> ModelEntries =
     [
@@ -89,7 +93,7 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.1";
+    public string PluginVersion => "1.0.2";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -160,6 +164,10 @@ public sealed class ElevenLabsPlugin : ITranscriptionEnginePlugin
     /// Gets whether TypeWhisper may add active dictionary terms to transcription prompts.
     /// </summary>
     public bool SupportsDictionaryTerms => _useDictionaryTerms;
+    /// <summary>
+    /// Gets the provider limits for REST keyterms.
+    /// </summary>
+    public DictionaryTermsBudget DictionaryTermsBudget => DictionaryBudget;
     /// <summary>
     /// Gets whether realtime streaming is suitable for the supplied prompt.
     /// </summary>

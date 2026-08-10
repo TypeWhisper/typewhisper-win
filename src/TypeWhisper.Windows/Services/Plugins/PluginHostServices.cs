@@ -48,7 +48,8 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         IPluginEventBus eventBus,
         IWorkflowService workflows,
         Action? onCapabilitiesChanged = null,
-        ISettingsService? settings = null)
+        ISettingsService? settings = null,
+        string? pluginDataRoot = null)
     {
         _pluginId = pluginId;
         _activeWindow = activeWindow;
@@ -57,7 +58,17 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _settings = settings;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
-        _pluginDataDirectory = Path.Combine(Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
+        var windowsNormalizedPluginId = pluginId?.TrimEnd(' ', '.');
+        if (string.IsNullOrWhiteSpace(pluginId)
+            || !string.Equals(pluginId, windowsNormalizedPluginId, StringComparison.Ordinal)
+            || Path.IsPathRooted(pluginId)
+            || pluginId.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0
+            || pluginId is "." or "..")
+        {
+            throw new ArgumentException("Plugin ID must be a single relative path segment.", nameof(pluginId));
+        }
+
+        _pluginDataDirectory = Path.Combine(pluginDataRoot ?? Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
     }
 
