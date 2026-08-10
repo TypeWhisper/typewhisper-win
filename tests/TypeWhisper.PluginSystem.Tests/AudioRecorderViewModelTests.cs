@@ -198,6 +198,9 @@ public sealed class AudioRecorderViewModelTests
             var sessionId = await sut.StartRecordingForApiAsync(true, false, CancellationToken.None);
             await WaitUntilAsync(() => ReferenceEquals(modelManager.ActiveTranscriptionPlugin, longForm));
             Assert.Equal("accurate", longForm.SelectedModelId);
+            var repeatError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                sut.StartRecordingForApiAsync(true, false, CancellationToken.None));
+            Assert.Equal(Loc.Instance["Recorder.AlreadyRecording"], repeatError.Message);
             captures.Created.Single().RaiseData(BuildPcm16Chunk(), bytesRecorded: 3200);
 
             var stoppedSessionId = await sut.StopRecordingForApiAsync(CancellationToken.None);

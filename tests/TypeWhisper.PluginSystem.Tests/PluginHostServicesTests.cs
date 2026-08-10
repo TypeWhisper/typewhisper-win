@@ -134,6 +134,9 @@ public class PluginHostServicesTests : IDisposable
     [InlineData("C:\\escaped")]
     [InlineData("..\\escaped")]
     [InlineData("nested/escaped")]
+    [InlineData(".. ")]
+    [InlineData(". ")]
+    [InlineData("plugin.")]
     public void Constructor_RejectsPluginIdsThatCanEscapeTheDataRoot(string pluginId)
     {
         var dataRoot = Path.Join(_tempDir, "plugin-data");
