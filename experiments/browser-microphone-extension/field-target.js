@@ -11,7 +11,7 @@
   const textInputTypes = new Set(["", "text", "search", "email", "url", "tel"]);
 
   function isSupportedTarget(element) {
-    if (!element || element.disabled || element.readOnly) {
+    if (!element || element.disabled || element.readOnly || element.matches?.(":disabled") === true) {
       return false;
     }
 
@@ -57,7 +57,11 @@
     return {
       kind: "contenteditable",
       element,
-      range: range.cloneRange()
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset,
+      htmlSnapshot: String(element.innerHTML || "")
     };
   }
 
@@ -104,12 +108,27 @@
       return { ok: true };
     }
 
-    if (snapshot.kind !== "contenteditable" || !snapshot.range) {
+    if (snapshot.kind !== "contenteditable") {
       return { ok: false, reason: "unsupported" };
     }
 
-    const range = snapshot.range.cloneRange();
-    if (range.commonAncestorContainer?.isConnected === false) {
+    const startContainer = snapshot.startContainer;
+    const endContainer = snapshot.endContainer;
+    if (!startContainer || !endContainer
+        || startContainer.isConnected === false
+        || endContainer.isConnected === false
+        || !element.contains(startContainer)
+        || !element.contains(endContainer)
+        || snapshot.htmlSnapshot !== String(element.innerHTML || "")
+        || typeof documentRef.createRange !== "function") {
+      return { ok: false, reason: "selection-unavailable" };
+    }
+
+    const range = documentRef.createRange();
+    try {
+      range.setStart(startContainer, snapshot.startOffset);
+      range.setEnd(endContainer, snapshot.endOffset);
+    } catch {
       return { ok: false, reason: "selection-unavailable" };
     }
 

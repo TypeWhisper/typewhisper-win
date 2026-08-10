@@ -724,8 +724,10 @@ public class PluginRegistryServiceTests : IDisposable
         await service.RepairPluginAsync(registryPlugin, allowSourceAdoption: true);
         File.WriteAllText(Path.Combine(pluginDirectory, "unexpected.txt"), "tampered");
 
+        var state = service.GetInstallState(registryPlugin);
         var diagnosis = service.GetInstallDiagnosis(registryPlugin);
 
+        Assert.Equal(PluginInstallState.Installed, state);
         Assert.Equal(PluginInstallState.Broken, diagnosis.State);
         Assert.Equal(PluginDiagnosticCode.IntegrityMismatch, diagnosis.DiagnosticCode);
         Assert.True(diagnosis.IsRegistryManaged);

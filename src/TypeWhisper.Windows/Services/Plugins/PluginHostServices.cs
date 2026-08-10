@@ -58,6 +58,14 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _settings = settings;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
+        if (string.IsNullOrWhiteSpace(pluginId)
+            || Path.IsPathRooted(pluginId)
+            || pluginId.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0
+            || pluginId is "." or "..")
+        {
+            throw new ArgumentException("Plugin ID must be a single relative path segment.", nameof(pluginId));
+        }
+
         _pluginDataDirectory = Path.Combine(pluginDataRoot ?? Core.TypeWhisperEnvironment.PluginDataPath, pluginId);
         _settingsFilePath = Path.Combine(_pluginDataDirectory, "settings.json");
     }

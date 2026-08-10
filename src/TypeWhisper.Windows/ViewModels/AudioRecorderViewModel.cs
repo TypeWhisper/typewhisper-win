@@ -85,7 +85,11 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     private readonly StreamingHandler _streamingHandler;
     private readonly Dictionary<Guid, RecorderApiSessionSnapshot> _apiSessions = new();
     private readonly object _apiSessionLock = new();
+    private readonly object _streamingModelScopeLock = new();
     private System.Timers.Timer? _timer;
+    private CancellationTokenSource? _streamingModelPreparationCts;
+    private Task<StreamingModelPreparation>? _streamingModelPreparationTask;
+    private ModelManagerService.TranscriptionRequestModelScope? _streamingModelScope;
     private DateTime _recordingStart;
     private string? _statusKey;
     private bool _isLoadingSettings;
@@ -371,10 +375,25 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         };
         _timer.Start();
 
-        if (TranscriptionEnabled && !string.IsNullOrWhiteSpace(_settings.Current.SelectedModelId))
+        var settings = _settings.Current;
+        var engineOverride = FirstNonBlank(TranscriptionEngineOverride, settings.RecorderTranscriptionEngineOverride);
+        var modelOverride = FirstNonBlank(TranscriptionModelOverride, settings.RecorderTranscriptionModelOverride);
+        if (TranscriptionEnabled
+            && (!string.IsNullOrWhiteSpace(settings.SelectedModelId)
+                || !string.IsNullOrWhiteSpace(engineOverride)
+                || !string.IsNullOrWhiteSpace(modelOverride)))
         {
-            _streamingHandler.StartWithLanguageHints(
-                _settings.Current.GetLanguageHints(), CurrentRecorderTask, () => IsRecording);
+            _streamingModelPreparationCts = new CancellationTokenSource();
+            _streamingModelPreparationTask = PrepareStreamingModelAsync(
+                engineOverride,
+                modelOverride,
+                _streamingModelPreparationCts.Token);
+            _streamingHandler.StartWhenReadyWithLanguageHints(
+                settings.GetLanguageHints(),
+                CurrentRecorderTask,
+                () => IsRecording,
+                _streamingModelPreparationTask,
+                allowOnlineBatchPolling: true);
         }
 
         return true;
@@ -391,6 +410,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         SetLocalizedStatus("Recorder.Finalizing");
         MarkActiveApiSession(RecorderSessionStatus.Finalizing);
         var liveTranscript = _streamingHandler.Stop();
+        await ReleaseStreamingModelAsync();
 
         var capture = await _capture.StopAsync(ct);
         IsRecording = false;
@@ -437,6 +457,70 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         CompleteActiveApiSession(transcript, capture.FilePath);
         DurationText = "0:00";
         return item;
+    }
+
+    private async Task<StreamingModelPreparation> PrepareStreamingModelAsync(
+        string? engineOverride,
+        string? modelOverride,
+        CancellationToken ct)
+    {
+        var scope = await _modelManager.BeginTranscriptionRequestAsync(
+            engineOverride,
+            modelOverride,
+            awaitDownload: false,
+            ct);
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            lock (_streamingModelScopeLock)
+                _streamingModelScope = scope;
+
+            var requestedModelId = _modelManager.ActiveModelId ?? "";
+            return new StreamingModelPreparation(
+                requestedModelId,
+                _modelManager.ActiveModelId,
+                _modelManager.Engine,
+                _modelManager.ActiveTranscriptionPlugin,
+                IsReady: !string.IsNullOrWhiteSpace(requestedModelId));
+        }
+        catch
+        {
+            await scope.DisposeAsync();
+            throw;
+        }
+    }
+
+    private async Task ReleaseStreamingModelAsync()
+    {
+        var preparationCts = _streamingModelPreparationCts;
+        _streamingModelPreparationCts = null;
+        preparationCts?.Cancel();
+
+        var preparationTask = _streamingModelPreparationTask;
+        _streamingModelPreparationTask = null;
+        if (preparationTask is not null)
+        {
+            try
+            {
+                await preparationTask;
+            }
+            catch (Exception ex) when (ex is OperationCanceledException || NonFatalExceptionFilter.IsNonFatal(ex))
+            {
+                Debug.WriteLine($"Recorder live transcription preparation stopped: {ex.Message}");
+            }
+        }
+
+        ModelManagerService.TranscriptionRequestModelScope? scope;
+        lock (_streamingModelScopeLock)
+        {
+            scope = _streamingModelScope;
+            _streamingModelScope = null;
+        }
+
+        if (scope is not null)
+            await scope.DisposeAsync();
+        preparationCts?.Dispose();
     }
 
     private async Task<string> PostProcessTranscriptAsync(
@@ -1154,6 +1238,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         _settings.SettingsChanged -= OnSettingsChanged;
         _modelManager.PluginManager.PluginStateChanged -= OnPluginStateChanged;
         _streamingHandler.Dispose();
+        _ = ReleaseStreamingModelAsync();
         _timer?.Dispose();
         _capture.Dispose();
         _disposed = true;

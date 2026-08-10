@@ -15,7 +15,20 @@ const allowedResponseStates = new Set([
   "error"
 ]);
 
-let activeSession = null;
+const activeSessionStorageKey = "typewhisperActiveSession";
+
+async function getActiveSession() {
+  const stored = await chrome.storage.session.get(activeSessionStorageKey);
+  return stored[activeSessionStorageKey] || null;
+}
+
+async function setActiveSession(session) {
+  if (session) {
+    await chrome.storage.session.set({ [activeSessionStorageKey]: session });
+  } else {
+    await chrome.storage.session.remove(activeSessionStorageKey);
+  }
+}
 
 function senderIdentity(sender) {
   const tabId = sender?.tab?.id;
@@ -74,6 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   (async () => {
     if (message.type === "typewhisper.start") {
+      const activeSession = await getActiveSession();
       if (activeSession) {
         sendResponse({ ok: false, state: "error", error: "TypeWhisper is already active in another field." });
         return;
@@ -81,12 +95,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       const response = await sendNative("start", null);
       if (response.ok && response.state === "recording") {
-        activeSession = { ...identity, sessionId: response.sessionId };
+        await setActiveSession({ ...identity, sessionId: response.sessionId });
       }
       sendResponse(response);
       return;
     }
 
+    const activeSession = await getActiveSession();
     if (!sameIdentity(identity, activeSession)) {
       sendResponse({ ok: false, state: "error", error: "This field does not own the active TypeWhisper session." });
       return;
@@ -94,11 +109,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     const command = message.type === "typewhisper.stop" ? "stop" : "cancel";
     const response = await sendNative(command, activeSession.sessionId);
-    activeSession = null;
+    await setActiveSession(null);
     sendResponse(response);
   })().catch((error) => {
-    activeSession = null;
-    sendResponse({ ok: false, state: "error", error: String(error?.message || error) });
+    setActiveSession(null).finally(() => {
+      sendResponse({ ok: false, state: "error", error: String(error?.message || error) });
+    });
   });
 
   return true;
