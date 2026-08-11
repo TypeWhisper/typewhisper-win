@@ -1359,7 +1359,7 @@
   "Api.RateLimitReached": "Rate-Limit erreicht, bitte warten",
   "Api.ErrorFormat": "API-Fehler {0}: {1}",
 
-  "Dictionary.ReplacementEscapesHint": "Ersetzungs-Escapes: \\n Zeilenumbruch, \\r Wagenrücklauf, \\t Tabulator, \\\\ Backslash. Die Suche ist standardmäßig wörtlich; reguläre Ausdrücke müssen aktiviert werden.",
+  "Dictionary.ReplacementEscapesHint": "Ersetzungs-Escapes: \\s Leerzeichen, \\n Zeilenumbruch, \\r Wagenrücklauf, \\t Tabulator, \\\\ Backslash. Die Suche ist standardmäßig wörtlich; reguläre Ausdrücke müssen aktiviert werden.",
   "Dictionary.Regex": "Regulärer Ausdruck",
   "Dictionary.InvalidRegexFormat": "Ungültiger regulärer Ausdruck: {0}",
   "Workflows.ProviderWarningTitle": "KI-Provider erforderlich",
