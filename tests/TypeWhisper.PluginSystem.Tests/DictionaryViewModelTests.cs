@@ -219,6 +219,124 @@ public sealed class DictionaryViewModelTests
     }
 
     [Fact]
+    public void LoadingRemotePacksAfterRestart_PreservesExplicitlyDisabledPackState()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default with
+            {
+                SelectedIndustryPresetId = "architecture",
+                EnabledPackIds = [],
+                VocabularyBoostingEnabled = false
+            });
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir)
+            {
+                CommercialStatus = LicenseStatus.Active
+            };
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+            ApplyRemotePacks(viewModel,
+            [
+                new TermPack(
+                    "architecture",
+                    "Architecture",
+                    "",
+                    ["Scale"],
+                    RequiresCommercialLicense: true)
+            ]);
+
+            dictionary.Verify(service => service.ActivatePack(It.IsAny<TermPack>()), Times.Never);
+            Assert.Empty(settings.Object.Current.EnabledPackIds);
+            Assert.False(settings.Object.Current.VocabularyBoostingEnabled);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RestoringCommercialLicense_PreservesExplicitlyDisabledPresetPack()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default with
+            {
+                SelectedIndustryPresetId = "architecture",
+                EnabledPackIds = []
+            });
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir);
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+            ApplyRemotePacks(viewModel,
+            [
+                new TermPack(
+                    "architecture",
+                    "Architecture",
+                    "",
+                    ["Scale"],
+                    RequiresCommercialLicense: true)
+            ]);
+
+            license.CommercialStatus = LicenseStatus.Active;
+
+            dictionary.Verify(service => service.ActivatePack(It.IsAny<TermPack>()), Times.Never);
+            Assert.Empty(settings.Object.Current.EnabledPackIds);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LoadingRemotePacks_ActivatesPresetSelectedWhileCatalogWasUnavailable()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default);
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir)
+            {
+                CommercialStatus = LicenseStatus.Active
+            };
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+
+            viewModel.ApplyIndustryPreset("real-estate");
+            ApplyRemotePacks(viewModel,
+            [
+                new TermPack(
+                    "real-estate",
+                    "Real estate",
+                    "",
+                    ["Property"],
+                    RequiresCommercialLicense: true)
+            ]);
+
+            dictionary.Verify(service => service.ActivatePack(
+                It.Is<TermPack>(pack => pack.Id == "real-estate")), Times.Once);
+            Assert.Equal(["real-estate"], settings.Object.Current.EnabledPackIds);
+            Assert.True(settings.Object.Current.VocabularyBoostingEnabled);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void PrepareAlias_ReusesTheExistingAddFlow()
     {
         var existing = Correction("1", "recieve", "receive");
@@ -592,6 +710,15 @@ public sealed class DictionaryViewModelTests
         EntryType = DictionaryEntryType.Term,
         Original = original
     };
+
+    private static void ApplyRemotePacks(DictionaryViewModel viewModel, IReadOnlyList<TermPack> packs)
+    {
+        var method = typeof(DictionaryViewModel).GetMethod(
+            "ApplyRemotePacks",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method.Invoke(viewModel, [packs]);
+    }
 
     private static IReadOnlyList<Delegate> GetLanguageChangedSubscribers()
     {

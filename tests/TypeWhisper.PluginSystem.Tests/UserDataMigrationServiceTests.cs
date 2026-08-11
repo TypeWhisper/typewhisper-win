@@ -1,4 +1,5 @@
 using System.IO;
+using TypeWhisper.Core.Services;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -86,6 +87,28 @@ public sealed class UserDataMigrationServiceTests : IDisposable
         Assert.Equal("token", File.ReadAllText(Path.Join(userData, "api-token")));
         Assert.Equal("plugin", File.ReadAllText(Path.Join(userData, "Plugins", "com.test.plugin", "manifest.json")));
         Assert.Equal("database", File.ReadAllText(Path.Join(userData, "Data", "typewhisper.db")));
+    }
+
+    [Fact]
+    public void MigrateLegacyData_PreservesExplicitlyDisabledPackSettings()
+    {
+        var legacy = Path.Join(_root, "TypeWhisper");
+        var userData = Path.Join(_root, "TypeWhisper-UserData");
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Join(legacy, "settings.json"), """
+        {
+          "selectedIndustryPresetId": "architecture",
+          "enabledPackIds": [],
+          "vocabularyBoostingEnabled": false
+        }
+        """);
+
+        UserDataMigrationService.MigrateLegacyData(legacy, userData);
+
+        var migratedSettings = new SettingsService(Path.Join(userData, "settings.json")).Current;
+        Assert.Equal("architecture", migratedSettings.SelectedIndustryPresetId);
+        Assert.Empty(migratedSettings.EnabledPackIds);
+        Assert.False(migratedSettings.VocabularyBoostingEnabled);
     }
 
     [Fact]
