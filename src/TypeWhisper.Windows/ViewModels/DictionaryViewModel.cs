@@ -575,7 +575,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         var preset = IndustryPreset.Resolve(presetId);
         var current = _settings.Current;
         var enableVocabulary = current.VocabularyBoostingEnabled || preset.TermPackId is not null;
-        _pendingIndustryPresetPackId = null;
+        _pendingIndustryPresetPackId = preset.TermPackId;
 
         _settings.Save(current with
         {
@@ -584,17 +584,15 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         });
         VocabularyBoostingEnabled = enableVocabulary;
 
-        if (preset.TermPackId is null || !HasCommercialLicense)
+        if (_pendingIndustryPresetPackId is null || !HasCommercialLicense)
             return;
 
-        var pack = FindPackById(preset.TermPackId);
+        var pack = FindPackById(_pendingIndustryPresetPackId);
         if (pack is null)
-        {
-            _pendingIndustryPresetPackId = preset.TermPackId;
             return;
-        }
 
         ActivateIndustryPresetPack(pack);
+        _pendingIndustryPresetPackId = null;
     }
 
     private void ReconcileCommercialPackAccess()
@@ -630,6 +628,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         if (HasCommercialLicense)
         {
             ActivateEnabledRemotePacks();
+            ActivatePendingIndustryPresetPack();
         }
         else
         {
@@ -684,17 +683,22 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     private void ActivatePendingIndustryPresetPack()
     {
         var pendingPackId = _pendingIndustryPresetPackId;
-        _pendingIndustryPresetPackId = null;
         if (pendingPackId is null || !HasCommercialLicense)
             return;
 
         var selectedPreset = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId);
         if (!string.Equals(selectedPreset.TermPackId, pendingPackId, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingIndustryPresetPackId = null;
             return;
+        }
 
         var pack = FindPackById(pendingPackId);
         if (pack is not null)
+        {
             ActivateIndustryPresetPack(pack);
+            _pendingIndustryPresetPackId = null;
+        }
     }
 
     private void ActivateIndustryPresetPack(TermPack pack)

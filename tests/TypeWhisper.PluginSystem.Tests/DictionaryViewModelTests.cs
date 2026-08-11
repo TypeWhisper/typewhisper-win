@@ -337,6 +337,82 @@ public sealed class DictionaryViewModelTests
     }
 
     [Fact]
+    public void SelectingPresetWhileUnlicensed_ActivatesAfterCatalogThenLicense()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default);
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir);
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+
+            viewModel.ApplyIndustryPreset("real-estate");
+            ApplyRemotePacks(viewModel,
+            [
+                new TermPack(
+                    "real-estate",
+                    "Real estate",
+                    "",
+                    ["Property"],
+                    RequiresCommercialLicense: true)
+            ]);
+            dictionary.Verify(service => service.ActivatePack(It.IsAny<TermPack>()), Times.Never);
+
+            license.CommercialStatus = LicenseStatus.Active;
+
+            dictionary.Verify(service => service.ActivatePack(
+                It.Is<TermPack>(pack => pack.Id == "real-estate")), Times.AtLeastOnce);
+            Assert.Equal(["real-estate"], settings.Object.Current.EnabledPackIds);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SelectingPresetWhileUnlicensed_ActivatesAfterLicenseThenCatalog()
+    {
+        var tempDir = Path.Join(Path.GetTempPath(), $"TypeWhisperDictionaryViewModelTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var dictionary = CreateDictionaryMock();
+            var settings = CreateSettingsMock(AppSettings.Default);
+            using var http = new HttpClient();
+            var license = new LicenseService(http, tempDir);
+            using var viewModel = new DictionaryViewModel(dictionary.Object, settings.Object, license);
+
+            viewModel.ApplyIndustryPreset("real-estate");
+            license.CommercialStatus = LicenseStatus.Active;
+            dictionary.Verify(service => service.ActivatePack(It.IsAny<TermPack>()), Times.Never);
+
+            ApplyRemotePacks(viewModel,
+            [
+                new TermPack(
+                    "real-estate",
+                    "Real estate",
+                    "",
+                    ["Property"],
+                    RequiresCommercialLicense: true)
+            ]);
+
+            dictionary.Verify(service => service.ActivatePack(
+                It.Is<TermPack>(pack => pack.Id == "real-estate")), Times.Once);
+            Assert.Equal(["real-estate"], settings.Object.Current.EnabledPackIds);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void PrepareAlias_ReusesTheExistingAddFlow()
     {
         var existing = Correction("1", "recieve", "receive");
