@@ -271,7 +271,8 @@ public sealed class DictionaryViewModelTests
             var settings = CreateSettingsMock(AppSettings.Default with
             {
                 SelectedIndustryPresetId = "architecture",
-                EnabledPackIds = []
+                EnabledPackIds = [],
+                VocabularyBoostingEnabled = false
             });
             using var http = new HttpClient();
             var license = new LicenseService(http, tempDir);
@@ -290,6 +291,7 @@ public sealed class DictionaryViewModelTests
 
             dictionary.Verify(service => service.ActivatePack(It.IsAny<TermPack>()), Times.Never);
             Assert.Empty(settings.Object.Current.EnabledPackIds);
+            Assert.False(settings.Object.Current.VocabularyBoostingEnabled);
         }
         finally
         {
@@ -367,6 +369,7 @@ public sealed class DictionaryViewModelTests
             dictionary.Verify(service => service.ActivatePack(
                 It.Is<TermPack>(pack => pack.Id == "real-estate")), Times.AtLeastOnce);
             Assert.Equal(["real-estate"], settings.Object.Current.EnabledPackIds);
+            Assert.True(settings.Object.Current.VocabularyBoostingEnabled);
         }
         finally
         {
@@ -405,6 +408,7 @@ public sealed class DictionaryViewModelTests
             dictionary.Verify(service => service.ActivatePack(
                 It.Is<TermPack>(pack => pack.Id == "real-estate")), Times.Once);
             Assert.Equal(["real-estate"], settings.Object.Current.EnabledPackIds);
+            Assert.True(settings.Object.Current.VocabularyBoostingEnabled);
         }
         finally
         {
