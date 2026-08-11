@@ -219,6 +219,9 @@ public sealed class WindowsClipboardTransactionTests
                 var originalClipboard = BackupClipboard(transaction);
                 try
                 {
+                    var bitmapAliasFormat = NativeMethods.RegisterClipboardFormat(
+                        "System.Drawing.Bitmap");
+                    Assert.NotEqual(0u, bitmapAliasFormat);
                     var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(
                         1,
                         1,
@@ -233,6 +236,10 @@ public sealed class WindowsClipboardTransactionTests
                     seedData.SetData(DataFormats.UnicodeText, "previous", autoConvert: false);
                     seedData.SetImage(bitmap);
                     Clipboard.SetDataObject(seedData, copy: true);
+                    Assert.Contains(bitmapAliasFormat, EnumerateClipboardFormats());
+                    Assert.Equal(
+                        IntPtr.Zero,
+                        ReadClipboardHandleWithError(bitmapAliasFormat).Handle);
                     releasedFormats.Clear();
 
                     using var lease = transaction.BeginTemporaryTextAsync(
@@ -411,13 +418,19 @@ public sealed class WindowsClipboardTransactionTests
 
     private static IntPtr ReadClipboardHandle(uint format)
     {
+        var result = ReadClipboardHandleWithError(format);
+        Assert.Equal(0, result.Error);
+        return result.Handle;
+    }
+
+    private static (IntPtr Handle, int Error) ReadClipboardHandleWithError(uint format)
+    {
         Assert.True(NativeMethods.OpenClipboard(IntPtr.Zero));
         try
         {
             Marshal.SetLastPInvokeError(0);
             var handle = NativeMethods.GetClipboardData(format);
-            Assert.Equal(0, Marshal.GetLastPInvokeError());
-            return handle;
+            return (handle, Marshal.GetLastPInvokeError());
         }
         finally
         {
