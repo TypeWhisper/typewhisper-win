@@ -833,6 +833,22 @@
                                         </StackPanel>
                                     </Border>
 
+                                    <StackPanel Visibility="{Binding Workflows.ShowContextMatchModeEditor, Converter={StaticResource BoolToVis}}"
+                                                Margin="0,0,0,14">
+                                        <TextBlock Text="{loc:Str Workflows.ContextMatchMode}"
+                                                   Style="{StaticResource WorkflowFieldLabelStyle}"/>
+                                        <ComboBox ItemsSource="{Binding Workflows.ContextMatchModeOptions}"
+                                                  AutomationProperties.AutomationId="WorkflowsContextMatchMode"
+                                                  AutomationProperties.Name="{loc:Str Workflows.ContextMatchMode}"
+                                                  SelectedValue="{Binding Workflows.EditContextMatchMode}"
+                                                  SelectedValuePath="Mode"
+                                                  DisplayMemberPath="DisplayName"
+                                                  Style="{StaticResource WorkflowComboBoxStyle}"
+                                                  Margin="0,0,0,6"/>
+                                        <TextBlock Text="{Binding Workflows.SelectedContextMatchModeDescription}"
+                                                   Style="{StaticResource HintStyle}"/>
+                                    </StackPanel>
+
                                     <StackPanel Visibility="{Binding Workflows.ShowAppTriggerEditor, Converter={StaticResource BoolToVis}}">
                                         <ItemsControl ItemsSource="{Binding Workflows.ProcessNameChips}">
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>

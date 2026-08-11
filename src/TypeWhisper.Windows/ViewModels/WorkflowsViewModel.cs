@@ -44,6 +44,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     [ObservableProperty] private bool _editWebsiteTriggerEnabled;
     [ObservableProperty] private bool _editHotkeyTriggerEnabled = true;
     [ObservableProperty] private WorkflowHotkeyBehavior _editHotkeyBehavior = WorkflowHotkeyBehavior.StartDictation;
+    [ObservableProperty] private WorkflowContextMatchMode _editContextMatchMode = WorkflowContextMatchMode.Any;
     [ObservableProperty] private string _editName = "";
     [ObservableProperty] private bool _editIsEnabled = true;
     [ObservableProperty] private string _processNameInput = "";
@@ -108,6 +109,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// Gets the hotkey behavior options.
     /// </summary>
     public ObservableCollection<WorkflowHotkeyBehaviorOption> HotkeyBehaviorOptions { get; } = [];
+    /// <summary>
+    /// Gets the app and website context match mode options.
+    /// </summary>
+    public ObservableCollection<WorkflowContextMatchModeOption> ContextMatchModeOptions { get; } = [];
     /// <summary>
     /// Gets the language options.
     /// </summary>
@@ -200,6 +205,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// </summary>
     public bool ShowHotkeyTriggerEditor => IsAutomaticTriggerModeSelected && EditHotkeyTriggerEnabled;
     /// <summary>
+    /// Gets whether to show the app and website context match mode editor.
+    /// </summary>
+    public bool ShowContextMatchModeEditor =>
+        IsAutomaticTriggerModeSelected && EditAppTriggerEnabled && EditWebsiteTriggerEnabled;
+    /// <summary>
     /// Gets whether is translation template.
     /// </summary>
     public bool IsTranslationTemplate => EditTemplate == WorkflowTemplate.Translation;
@@ -261,6 +271,10 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     /// Performs hotkey behavior description.
     /// </summary>
     public string SelectedHotkeyBehaviorDescription => HotkeyBehaviorDescription(EditHotkeyBehavior);
+    /// <summary>
+    /// Gets the selected app and website context match mode description.
+    /// </summary>
+    public string SelectedContextMatchModeDescription => ContextMatchModeDescription(EditContextMatchMode);
     /// <summary>
     /// Builds review text.
     /// </summary>
@@ -659,7 +673,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         IsEnabled = true,
         SortOrder = _workflows.NextSortOrder(),
         Template = WorkflowTemplate.CleanedText,
-        Trigger = WorkflowTrigger.Hotkey(),
+        Trigger = WorkflowTrigger.Hotkey() with { ContextMatchMode = WorkflowContextMatchMode.Any },
         Behavior = new WorkflowBehavior { InputLanguage = "auto" },
         Output = new WorkflowOutput()
     };
@@ -748,7 +762,8 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             ProcessNames = processNames,
             WebsitePatterns = websitePatterns,
             Hotkeys = hotkeys,
-            HotkeyBehavior = EditHotkeyBehavior
+            HotkeyBehavior = EditHotkeyBehavior,
+            ContextMatchMode = EditContextMatchMode
         };
     }
 
@@ -766,6 +781,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         EditWebsiteTriggerEnabled = trigger.HasWebsiteBindings || (!hasAutomaticValues && trigger.Kind == WorkflowTriggerKind.Website);
         EditHotkeyTriggerEnabled = trigger.HasHotkeyBindings || (!hasAutomaticValues && trigger.Kind == WorkflowTriggerKind.Hotkey);
         EditHotkeyBehavior = trigger.HotkeyBehavior;
+        EditContextMatchMode = trigger.ContextMatchMode;
 
         if (EditTriggerMode == WorkflowTriggerMode.Automatic
             && !EditAppTriggerEnabled
@@ -851,11 +867,19 @@ public sealed partial class WorkflowsViewModel : ObservableObject
 
         var parts = new List<string>();
 
-        if (EditAppTriggerEnabled)
-            parts.Add(ProcessNameChips.Count == 0 ? TriggerDisplayName(WorkflowTriggerKind.App) : string.Join(", ", ProcessNameChips));
+        var appText = ProcessNameChips.Count == 0
+            ? TriggerDisplayName(WorkflowTriggerKind.App)
+            : string.Join(", ", ProcessNameChips);
+        var websiteText = WebsitePatternChips.Count == 0
+            ? TriggerDisplayName(WorkflowTriggerKind.Website)
+            : string.Join(", ", WebsitePatternChips);
 
-        if (EditWebsiteTriggerEnabled)
-            parts.Add(WebsitePatternChips.Count == 0 ? TriggerDisplayName(WorkflowTriggerKind.Website) : string.Join(", ", WebsitePatternChips));
+        if (EditAppTriggerEnabled && EditWebsiteTriggerEnabled)
+            parts.Add(CombineContextParts(appText, websiteText, EditContextMatchMode));
+        else if (EditAppTriggerEnabled)
+            parts.Add(appText);
+        else if (EditWebsiteTriggerEnabled)
+            parts.Add(websiteText);
 
         if (EditHotkeyTriggerEnabled)
         {
@@ -1010,6 +1034,15 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             new WorkflowHotkeyBehaviorOption(
                 WorkflowHotkeyBehavior.ProcessSelectedText,
                 Loc.Instance["Workflows.HotkeyBehaviorProcessSelectedText"])
+        ]);
+        ReplaceCollection(ContextMatchModeOptions,
+        [
+            new WorkflowContextMatchModeOption(
+                WorkflowContextMatchMode.Any,
+                Loc.Instance["Workflows.ContextMatchAny"]),
+            new WorkflowContextMatchModeOption(
+                WorkflowContextMatchMode.All,
+                Loc.Instance["Workflows.ContextMatchAll"])
         ]);
         ReplaceCollection(LanguageOptions,
         [
@@ -1368,9 +1401,25 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         if (trigger.Kind == WorkflowTriggerKind.Manual)
             return TriggerDisplayName(WorkflowTriggerKind.Manual);
 
-        var parts = AutomaticTriggerComponents(trigger)
-            .Select(TriggerDisplayName)
-            .ToList();
+        var parts = new List<string>();
+        if (trigger.HasAppBindings && trigger.HasWebsiteBindings)
+        {
+            parts.Add(CombineContextParts(
+                TriggerDisplayName(WorkflowTriggerKind.App),
+                TriggerDisplayName(WorkflowTriggerKind.Website),
+                trigger.ContextMatchMode));
+        }
+        else if (trigger.HasAppBindings)
+        {
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.App));
+        }
+        else if (trigger.HasWebsiteBindings)
+        {
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.Website));
+        }
+
+        if (trigger.HasHotkeyBindings)
+            parts.Add(TriggerDisplayName(WorkflowTriggerKind.Hotkey));
 
         return parts.Count == 0
             ? TriggerModeDisplayName(WorkflowTriggerMode.Automatic)
@@ -1390,10 +1439,21 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             return Loc.Instance["Workflows.TriggerManualDetail"];
 
         var parts = new List<string>();
-        if (trigger.HasAppBindings)
+        if (trigger.HasAppBindings && trigger.HasWebsiteBindings)
+        {
+            parts.Add(CombineContextParts(
+                string.Join(", ", trigger.ProcessNames),
+                string.Join(", ", trigger.WebsitePatterns),
+                trigger.ContextMatchMode));
+        }
+        else if (trigger.HasAppBindings)
+        {
             parts.Add(string.Join(", ", trigger.ProcessNames));
-        if (trigger.HasWebsiteBindings)
+        }
+        else if (trigger.HasWebsiteBindings)
+        {
             parts.Add(string.Join(", ", trigger.WebsitePatterns));
+        }
         if (trigger.HasHotkeyBindings)
         {
             var hotkeys = string.Join(", ", trigger.Hotkeys);
@@ -1455,6 +1515,16 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         _ => ""
     };
 
+    /// <summary>
+    /// Gets the app and website context match mode description.
+    /// </summary>
+    public static string ContextMatchModeDescription(WorkflowContextMatchMode mode) => mode switch
+    {
+        WorkflowContextMatchMode.Any => Loc.Instance["Workflows.ContextMatchAnyHint"],
+        WorkflowContextMatchMode.All => Loc.Instance["Workflows.ContextMatchAllHint"],
+        _ => ""
+    };
+
     private string SelectedTriggerGlyph()
     {
         if (EditTriggerMode == WorkflowTriggerMode.Global)
@@ -1481,10 +1551,21 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             return TriggerModeDisplayName(EditTriggerMode);
 
         var parts = new List<string>();
-        if (EditAppTriggerEnabled)
+        if (EditAppTriggerEnabled && EditWebsiteTriggerEnabled)
+        {
+            parts.Add(CombineContextParts(
+                TriggerDisplayName(WorkflowTriggerKind.App),
+                TriggerDisplayName(WorkflowTriggerKind.Website),
+                EditContextMatchMode));
+        }
+        else if (EditAppTriggerEnabled)
+        {
             parts.Add(TriggerDisplayName(WorkflowTriggerKind.App));
-        if (EditWebsiteTriggerEnabled)
+        }
+        else if (EditWebsiteTriggerEnabled)
+        {
             parts.Add(TriggerDisplayName(WorkflowTriggerKind.Website));
+        }
         if (EditHotkeyTriggerEnabled)
             parts.Add(TriggerDisplayName(WorkflowTriggerKind.Hotkey));
 
@@ -1493,17 +1574,16 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             : string.Join(" + ", parts);
     }
 
-    private static IReadOnlyList<WorkflowTriggerKind> AutomaticTriggerComponents(WorkflowTrigger trigger)
-    {
-        var parts = new List<WorkflowTriggerKind>();
-        if (trigger.HasAppBindings)
-            parts.Add(WorkflowTriggerKind.App);
-        if (trigger.HasWebsiteBindings)
-            parts.Add(WorkflowTriggerKind.Website);
-        if (trigger.HasHotkeyBindings)
-            parts.Add(WorkflowTriggerKind.Hotkey);
-        return parts;
-    }
+    private static string CombineContextParts(
+        string appText,
+        string websiteText,
+        WorkflowContextMatchMode mode) =>
+        Loc.Instance.GetString(
+            mode == WorkflowContextMatchMode.Any
+                ? "Workflows.ContextMatchAnyFormat"
+                : "Workflows.ContextMatchAllFormat",
+            appText,
+            websiteText);
 
     partial void OnSearchTextChanged(string value) => RefreshFilteredWorkflows();
     partial void OnEditTemplateChanged(WorkflowTemplate value)
@@ -1549,6 +1629,11 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedHotkeyBehaviorDescription));
         NotifyEditorStateChanged();
     }
+    partial void OnEditContextMatchModeChanged(WorkflowContextMatchMode value)
+    {
+        OnPropertyChanged(nameof(SelectedContextMatchModeDescription));
+        NotifyEditorStateChanged();
+    }
     partial void OnAppPickerSearchTextChanged(string value) => RefreshAppPickerOptions();
     partial void OnWebsitePatternInputChanged(string value) => RefreshDomainSuggestions();
     partial void OnCurrentWebsiteDomainChanged(string? value) => OnPropertyChanged(nameof(HasCurrentWebsiteDomain));
@@ -1573,11 +1658,13 @@ public sealed partial class WorkflowsViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowAppTriggerEditor));
         OnPropertyChanged(nameof(ShowWebsiteTriggerEditor));
         OnPropertyChanged(nameof(ShowHotkeyTriggerEditor));
+        OnPropertyChanged(nameof(ShowContextMatchModeEditor));
         OnPropertyChanged(nameof(IsTranslationTemplate));
         OnPropertyChanged(nameof(IsCustomTemplate));
         OnPropertyChanged(nameof(SelectedTriggerIconGlyph));
         OnPropertyChanged(nameof(SelectedTriggerLabel));
         OnPropertyChanged(nameof(SelectedHotkeyBehaviorDescription));
+        OnPropertyChanged(nameof(SelectedContextMatchModeDescription));
         OnPropertyChanged(nameof(ReviewText));
     }
 
@@ -1638,6 +1725,12 @@ public sealed record WorkflowTriggerModeOption(WorkflowTriggerMode Mode, string 
 /// <param name="Behavior">Behavior supplied to the member.</param>
 /// <param name="DisplayName">Display name supplied to the member.</param>
 public sealed record WorkflowHotkeyBehaviorOption(WorkflowHotkeyBehavior Behavior, string DisplayName);
+/// <summary>
+/// Represents workflow context match mode option data.
+/// </summary>
+/// <param name="Mode">Mode supplied to the member.</param>
+/// <param name="DisplayName">Display name supplied to the member.</param>
+public sealed record WorkflowContextMatchModeOption(WorkflowContextMatchMode Mode, string DisplayName);
 /// <summary>
 /// Represents workflow number normalization option data.
 /// </summary>

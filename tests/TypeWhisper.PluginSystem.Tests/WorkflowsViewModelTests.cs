@@ -110,6 +110,92 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void NewDraft_DefaultsCombinedContextMatchingToRecommendedAnyMode()
+    {
+        var sut = CreateViewModel();
+
+        Assert.Equal(WorkflowContextMatchMode.Any, sut.EditContextMatchMode);
+        Assert.Contains(
+            sut.ContextMatchModeOptions,
+            option => option.Mode == WorkflowContextMatchMode.Any
+                      && option.DisplayName.Contains("recommended", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ContextMatchModeEditor_IsVisibleOnlyForAppAndWebsiteCombination()
+    {
+        var sut = CreateViewModel();
+
+        sut.EditAppTriggerEnabled = true;
+        Assert.False(sut.ShowContextMatchModeEditor);
+
+        sut.EditWebsiteTriggerEnabled = true;
+        Assert.True(sut.ShowContextMatchModeEditor);
+
+        sut.EditAppTriggerEnabled = false;
+        Assert.False(sut.ShowContextMatchModeEditor);
+    }
+
+    [Fact]
+    public void ExistingCombinedWorkflow_LoadsBackwardCompatibleAllMode()
+    {
+        var workflow = NewWorkflow(
+            "Combined",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"]
+            });
+        var sut = CreateViewModel(new TestWorkflowService([workflow]));
+
+        sut.StartEditCommand.Execute(workflow);
+
+        Assert.Equal(WorkflowContextMatchMode.All, sut.EditContextMatchMode);
+        Assert.True(sut.ShowContextMatchModeEditor);
+    }
+
+    [Fact]
+    public void SaveEditor_PersistsAnyContextMatchMode()
+    {
+        var workflows = new TestWorkflowService();
+        var sut = CreateViewModel(workflows);
+        sut.EditAppTriggerEnabled = true;
+        sut.EditWebsiteTriggerEnabled = true;
+        sut.EditHotkeyTriggerEnabled = false;
+        sut.ProcessNameChips.Add("antigravity");
+        sut.WebsitePatternChips.Add("perplexity.ai");
+        sut.EditContextMatchMode = WorkflowContextMatchMode.Any;
+
+        sut.SaveEditorCommand.Execute(null);
+
+        var saved = Assert.Single(workflows.Workflows);
+        Assert.Equal(WorkflowContextMatchMode.Any, saved.Trigger.ContextMatchMode);
+    }
+
+    [Theory]
+    [InlineData(WorkflowContextMatchMode.Any, "App or Website")]
+    [InlineData(WorkflowContextMatchMode.All, "App and Website")]
+    public void WorkflowTriggerSummary_UsesContextMatchMode(
+        WorkflowContextMatchMode mode,
+        string expected)
+    {
+        var workflow = NewWorkflow(
+            "Combined",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"],
+                ContextMatchMode = mode
+            });
+
+        var summary = WorkflowsViewModel.WorkflowTriggerSummary(workflow);
+
+        Assert.Equal(expected, summary);
+    }
+
+    [Fact]
     public void ExistingCleanedTextWorkflowName_IsNotMigrated()
     {
         var workflow = NewWorkflow("My existing cleaned text", WorkflowTrigger.Global());

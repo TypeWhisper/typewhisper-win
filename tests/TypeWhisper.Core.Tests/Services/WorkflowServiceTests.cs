@@ -78,6 +78,66 @@ public sealed class WorkflowServiceTests : IDisposable
     }
 
     [Fact]
+    public void AddWorkflow_ContextMatchMode_PersistsAndLoads()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Shared",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"],
+                ContextMatchMode = WorkflowContextMatchMode.Any
+            }));
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+
+        Assert.Equal(WorkflowContextMatchMode.Any, loaded.Trigger.ContextMatchMode);
+    }
+
+    [Fact]
+    public void WorkflowTrigger_ContextMatchModeDefaultsToAllForBackwardCompatibility()
+    {
+        var trigger = new WorkflowTrigger
+        {
+            Kind = WorkflowTriggerKind.App,
+            ProcessNames = ["chrome"],
+            WebsitePatterns = ["github.com"]
+        };
+
+        Assert.Equal(WorkflowContextMatchMode.All, trigger.ContextMatchMode);
+    }
+
+    [Fact]
+    public void LegacyWorkflowWithoutContextMatchMode_LoadsAsAll()
+    {
+        File.WriteAllText(_filePath, """
+            [{
+              "id": "legacy",
+              "name": "Legacy combined",
+              "isEnabled": true,
+              "sortOrder": 0,
+              "template": "CleanedText",
+              "trigger": {
+                "kind": "App",
+                "processNames": ["chrome"],
+                "websitePatterns": ["github.com"],
+                "hotkeys": [],
+                "hotkeyBehavior": "StartDictation"
+              },
+              "behavior": {},
+              "output": {}
+            }]
+            """);
+
+        var freshService = new WorkflowService(_filePath);
+        var loaded = Assert.Single(freshService.Workflows);
+
+        Assert.Equal(WorkflowContextMatchMode.All, loaded.Trigger.ContextMatchMode);
+    }
+
+    [Fact]
     public void ToggleWorkflow_UpdatesEnabledState()
     {
         var workflow = NewWorkflow("Mail", WorkflowTrigger.App("OUTLOOK"));
@@ -179,6 +239,46 @@ public sealed class WorkflowServiceTests : IDisposable
 
         Assert.NotNull(match);
         Assert.Equal("App", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.App, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_AnyContextCombinedWorkflowMatchesWebsiteOnlyContext()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Shared",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["chrome"],
+                WebsitePatterns = ["github.com"],
+                ContextMatchMode = WorkflowContextMatchMode.Any
+            }));
+
+        var match = _sut.MatchWorkflow("firefox", "https://github.com/typewhisper");
+
+        Assert.NotNull(match);
+        Assert.Equal("Shared", match.Workflow.Name);
+        Assert.Equal(WorkflowMatchKind.Website, match.Kind);
+    }
+
+    [Fact]
+    public void MatchWorkflow_AnyContextCombinedWorkflowMatchesAppOnlyContext()
+    {
+        _sut.AddWorkflow(NewWorkflow(
+            "Shared",
+            new WorkflowTrigger
+            {
+                Kind = WorkflowTriggerKind.App,
+                ProcessNames = ["antigravity"],
+                WebsitePatterns = ["perplexity.ai"],
+                ContextMatchMode = WorkflowContextMatchMode.Any
+            }));
+
+        var match = _sut.MatchWorkflow("antigravity", null);
+
+        Assert.NotNull(match);
+        Assert.Equal("Shared", match.Workflow.Name);
         Assert.Equal(WorkflowMatchKind.App, match.Kind);
     }
 
