@@ -88,6 +88,22 @@ public enum WorkflowHotkeyBehavior
 }
 
 /// <summary>
+/// Lists the supported workflow context match mode values.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<WorkflowContextMatchMode>))]
+public enum WorkflowContextMatchMode
+{
+    /// <summary>
+    /// Requires all configured context components to match.
+    /// </summary>
+    All,
+    /// <summary>
+    /// Requires any configured context component to match.
+    /// </summary>
+    Any
+}
+
+/// <summary>
 /// Represents workflow template definition data.
 /// </summary>
 /// <param name="Template">Template supplied to the member.</param>
@@ -157,6 +173,10 @@ public sealed record WorkflowTrigger
     /// Gets or sets the hotkey behavior value.
     /// </summary>
     public WorkflowHotkeyBehavior HotkeyBehavior { get; init; } = WorkflowHotkeyBehavior.StartDictation;
+    /// <summary>
+    /// Gets or sets how configured app and website context components are matched.
+    /// </summary>
+    public WorkflowContextMatchMode ContextMatchMode { get; init; } = WorkflowContextMatchMode.All;
 
     /// <summary>
     /// Gets whether is automatic.

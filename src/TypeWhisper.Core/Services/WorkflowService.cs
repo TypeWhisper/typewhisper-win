@@ -190,7 +190,8 @@ public sealed class WorkflowService : IWorkflowService
         {
             var websiteMatches = enabled
                 .Where(w => w.Trigger.IsAutomatic
-                            && !w.Trigger.HasAppBindings
+                            && (!w.Trigger.HasAppBindings
+                                || w.Trigger.ContextMatchMode == WorkflowContextMatchMode.Any)
                             && w.Trigger.WebsitePatterns.Any(pattern => MatchesUrlPattern(domain, pattern)))
                 .ToList();
             if (BestMatch(websiteMatches, WorkflowMatchKind.Website, domain) is { } websiteResult)
@@ -201,7 +202,8 @@ public sealed class WorkflowService : IWorkflowService
         {
             var appMatches = enabled
                 .Where(w => w.Trigger.IsAutomatic
-                            && !w.Trigger.HasWebsiteBindings
+                            && (!w.Trigger.HasWebsiteBindings
+                                || w.Trigger.ContextMatchMode == WorkflowContextMatchMode.Any)
                             && w.Trigger.ProcessNames.Any(name =>
                                 processName.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
