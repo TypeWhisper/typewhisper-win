@@ -29,6 +29,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     private readonly LicenseService? _license;
     private readonly TermPackRegistryService? _termPackRegistry;
     private IReadOnlyList<TermPack> _remotePacks = [];
+    private string? _pendingIndustryPresetPackId;
 
     // Tab: 0=Alle, 1=Begriffe, 2=Korrekturen, 3=Automatisch gelernt, 4=Packs
     [ObservableProperty] private int _selectedTab;
@@ -574,6 +575,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         var preset = IndustryPreset.Resolve(presetId);
         var current = _settings.Current;
         var enableVocabulary = current.VocabularyBoostingEnabled || preset.TermPackId is not null;
+        _pendingIndustryPresetPackId = preset.TermPackId;
 
         _settings.Save(current with
         {
@@ -582,23 +584,15 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         });
         VocabularyBoostingEnabled = enableVocabulary;
 
-        if (preset.TermPackId is null || !HasCommercialLicense)
+        if (_pendingIndustryPresetPackId is null || !HasCommercialLicense)
             return;
 
-        var pack = FindPackById(preset.TermPackId);
+        var pack = FindPackById(_pendingIndustryPresetPackId);
         if (pack is null)
             return;
 
-        _dictionary.ActivatePack(pack);
-        RefreshEntries();
-
-        var enabledIds = _settings.Current.EnabledPackIds
-            .Append(pack.Id)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
-        NotifyResetStateChanged();
-        InitializePacks();
+        ActivateIndustryPresetPack(pack);
+        _pendingIndustryPresetPackId = null;
     }
 
     private void ReconcileCommercialPackAccess()
@@ -634,7 +628,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         if (HasCommercialLicense)
         {
             ActivateEnabledRemotePacks();
-            ApplyIndustryPreset(_settings.Current.SelectedIndustryPresetId);
+            ActivatePendingIndustryPresetPack();
         }
         else
         {
@@ -681,10 +675,43 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         _remotePacks = packs;
         ReconcileCommercialPackAccess();
         ActivateEnabledRemotePacks();
+        ActivatePendingIndustryPresetPack();
 
-        if (HasCommercialLicense)
-            ApplyIndustryPreset(_settings.Current.SelectedIndustryPresetId);
+        InitializePacks();
+    }
 
+    private void ActivatePendingIndustryPresetPack()
+    {
+        var pendingPackId = _pendingIndustryPresetPackId;
+        if (pendingPackId is null || !HasCommercialLicense)
+            return;
+
+        var selectedPreset = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId);
+        if (!string.Equals(selectedPreset.TermPackId, pendingPackId, StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingIndustryPresetPackId = null;
+            return;
+        }
+
+        var pack = FindPackById(pendingPackId);
+        if (pack is not null)
+        {
+            ActivateIndustryPresetPack(pack);
+            _pendingIndustryPresetPackId = null;
+        }
+    }
+
+    private void ActivateIndustryPresetPack(TermPack pack)
+    {
+        _dictionary.ActivatePack(pack);
+        RefreshEntries();
+
+        var enabledIds = _settings.Current.EnabledPackIds
+            .Append(pack.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _settings.Save(_settings.Current with { EnabledPackIds = enabledIds });
+        NotifyResetStateChanged();
         InitializePacks();
     }
 
