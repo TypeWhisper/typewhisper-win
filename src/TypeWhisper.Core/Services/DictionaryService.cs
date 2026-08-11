@@ -166,6 +166,10 @@ public sealed class DictionaryService : IDictionaryService
             var escaped = replacement[index + 1];
             switch (escaped)
             {
+                case 's':
+                    builder.Append(' ');
+                    index++;
+                    break;
                 case 'n':
                     builder.Append('\n');
                     index++;

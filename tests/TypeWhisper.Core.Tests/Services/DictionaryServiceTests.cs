@@ -121,6 +121,12 @@ public class DictionaryServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData(@"\s", " ")]
+    [InlineData(@"\s-\s", " - ")]
+    [InlineData(@"\s\n", " \n")]
+    [InlineData(@"\s\\n", @" \n")]
+    [InlineData(@"\s\x", @" \x")]
+    [InlineData(" \r\n\t", " \r\n\t")]
     [InlineData(@"\n", "\n")]
     [InlineData(@"\n\n", "\n\n")]
     [InlineData(@"\r\n", "\r\n")]
