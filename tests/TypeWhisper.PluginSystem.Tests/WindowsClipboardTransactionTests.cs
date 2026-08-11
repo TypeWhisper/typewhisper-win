@@ -13,6 +13,7 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class WindowsClipboardTransactionTests
 {
     private const string CustomFormat = "TypeWhisper.Test.CustomClipboardFormat";
+    private const string UnavailableFormat = "TypeWhisper.Test.UnavailableClipboardFormat";
     private static readonly object ClipboardTestLock = new();
 
     [Fact]
@@ -205,7 +206,7 @@ public sealed class WindowsClipboardTransactionTests
     }
 
     [Fact]
-    public void UnsupportedOleFormat_AbortsBeforeClearingAndReleasesCapturedHandles()
+    public void OleBitmap_RestoresImageWhenRegisteredBitmapAliasCannotBeMaterialized()
     {
         lock (ClipboardTestLock)
         {
@@ -218,6 +219,9 @@ public sealed class WindowsClipboardTransactionTests
                 var originalClipboard = BackupClipboard(transaction);
                 try
                 {
+                    var bitmapAliasFormat = NativeMethods.RegisterClipboardFormat(
+                        "System.Drawing.Bitmap");
+                    Assert.NotEqual(0u, bitmapAliasFormat);
                     var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(
                         1,
                         1,
@@ -232,6 +236,96 @@ public sealed class WindowsClipboardTransactionTests
                     seedData.SetData(DataFormats.UnicodeText, "previous", autoConvert: false);
                     seedData.SetImage(bitmap);
                     Clipboard.SetDataObject(seedData, copy: true);
+                    Assert.Contains(bitmapAliasFormat, EnumerateClipboardFormats());
+                    Assert.Equal(
+                        IntPtr.Zero,
+                        ReadClipboardHandleWithError(bitmapAliasFormat).Handle);
+                    releasedFormats.Clear();
+
+                    using var lease = transaction.BeginTemporaryTextAsync(
+                            "dictated",
+                            CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    Assert.Equal("dictated", Clipboard.GetText());
+
+                    var result = transaction.RestoreAsync(lease, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    Assert.Equal(ClipboardRestoreResult.Restored, result);
+                    Assert.Equal("previous", Clipboard.GetText());
+                    var restoredBitmap = Clipboard.GetImage();
+                    Assert.NotNull(restoredBitmap);
+                    Assert.Equal(1, restoredBitmap.PixelWidth);
+                    Assert.Equal(1, restoredBitmap.PixelHeight);
+                    Assert.NotEmpty(releasedFormats);
+                }
+                finally
+                {
+                    RestoreClipboardBackup(transaction, originalClipboard);
+                }
+            });
+        }
+    }
+
+    [Fact]
+    public void DelayedDib_RestoresAvailableBitmapRepresentation()
+    {
+        lock (ClipboardTestLock)
+        {
+            RunOnStaThread(() =>
+            {
+                using var transaction = new WindowsClipboardTransaction(Dispatcher.CurrentDispatcher);
+                var originalClipboard = BackupClipboard(transaction);
+                try
+                {
+                    using var bitmapOwner = SeedBitmapWithUnavailableDib();
+                    Assert.Contains(NativeMethods.CF_BITMAP, EnumerateClipboardFormats());
+                    Assert.Contains(NativeMethods.CF_DIB, EnumerateClipboardFormats());
+                    Assert.NotEqual(IntPtr.Zero, ReadClipboardHandle(NativeMethods.CF_BITMAP));
+                    Assert.Equal(IntPtr.Zero, ReadClipboardHandle(NativeMethods.CF_DIB));
+
+                    using var lease = transaction.BeginTemporaryTextAsync(
+                            "dictated",
+                            CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    Assert.Equal("dictated", Clipboard.GetText());
+
+                    var result = transaction.RestoreAsync(lease, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    Assert.Equal(ClipboardRestoreResult.Restored, result);
+                    var restoredBitmap = Clipboard.GetImage();
+                    Assert.NotNull(restoredBitmap);
+                    Assert.Equal(1, restoredBitmap.PixelWidth);
+                    Assert.Equal(1, restoredBitmap.PixelHeight);
+                }
+                finally
+                {
+                    RestoreClipboardBackup(transaction, originalClipboard);
+                }
+            });
+        }
+    }
+
+    [Fact]
+    public void UnavailableUniqueFormat_AbortsBeforeClearingAndReleasesCapturedHandles()
+    {
+        lock (ClipboardTestLock)
+        {
+            RunOnStaThread(() =>
+            {
+                var releasedFormats = new List<uint>();
+                using var transaction = new WindowsClipboardTransaction(
+                    Dispatcher.CurrentDispatcher,
+                    (format, _) => releasedFormats.Add(format));
+                var originalClipboard = BackupClipboard(transaction);
+                try
+                {
+                    using var owner = SeedUnavailableUniqueFormat();
                     releasedFormats.Clear();
 
                     Assert.Throws<COMException>(() =>
@@ -240,7 +334,6 @@ public sealed class WindowsClipboardTransactionTests
                             .GetResult());
 
                     Assert.Equal("previous", Clipboard.GetText());
-                    Assert.True(Clipboard.ContainsImage());
                     Assert.NotEmpty(releasedFormats);
                 }
                 finally
@@ -325,18 +418,96 @@ public sealed class WindowsClipboardTransactionTests
 
     private static IntPtr ReadClipboardHandle(uint format)
     {
+        var result = ReadClipboardHandleWithError(format);
+        Assert.Equal(0, result.Error);
+        return result.Handle;
+    }
+
+    private static (IntPtr Handle, int Error) ReadClipboardHandleWithError(uint format)
+    {
         Assert.True(NativeMethods.OpenClipboard(IntPtr.Zero));
         try
         {
             Marshal.SetLastPInvokeError(0);
             var handle = NativeMethods.GetClipboardData(format);
-            Assert.Equal(0, Marshal.GetLastPInvokeError());
-            return handle;
+            return (handle, Marshal.GetLastPInvokeError());
         }
         finally
         {
             NativeMethods.CloseClipboard();
         }
+    }
+
+    private static HwndSource SeedBitmapWithUnavailableDib()
+    {
+        var owner = new HwndSource(new HwndSourceParameters("TypeWhisper delayed bitmap owner")
+        {
+            ParentWindow = new IntPtr(-3),
+            WindowStyle = 0
+        });
+
+        Assert.True(NativeMethods.OpenClipboard(owner.Handle));
+        try
+        {
+            Assert.True(NativeMethods.EmptyClipboard());
+            var bitmap = CreateBitmap(
+                1,
+                1,
+                1,
+                32,
+                new byte[] { 0x11, 0x22, 0x33, 0xFF });
+            Assert.NotEqual(IntPtr.Zero, bitmap);
+            if (NativeMethods.SetClipboardData(NativeMethods.CF_BITMAP, bitmap) == IntPtr.Zero)
+            {
+                NativeMethods.DeleteObject(bitmap);
+                throw new ExternalException(
+                    "Could not seed the delayed native bitmap clipboard format.",
+                    Marshal.GetLastPInvokeError());
+            }
+
+            Marshal.SetLastPInvokeError(0);
+            Assert.Equal(
+                IntPtr.Zero,
+                NativeMethods.SetClipboardData(NativeMethods.CF_DIB, IntPtr.Zero));
+            Assert.Equal(0, Marshal.GetLastPInvokeError());
+        }
+        finally
+        {
+            NativeMethods.CloseClipboard();
+        }
+
+        return owner;
+    }
+
+    private static HwndSource SeedUnavailableUniqueFormat()
+    {
+        var unavailableFormat = NativeMethods.RegisterClipboardFormat(UnavailableFormat);
+        Assert.NotEqual(0u, unavailableFormat);
+        var owner = new HwndSource(new HwndSourceParameters("TypeWhisper delayed format owner")
+        {
+            ParentWindow = new IntPtr(-3),
+            WindowStyle = 0
+        });
+
+        Assert.True(NativeMethods.OpenClipboard(owner.Handle));
+        try
+        {
+            Assert.True(NativeMethods.EmptyClipboard());
+            SetGlobalData(
+                NativeMethods.CF_UNICODETEXT,
+                Encoding.Unicode.GetBytes("previous\0"));
+            Marshal.SetLastPInvokeError(0);
+            Assert.Equal(
+                IntPtr.Zero,
+                NativeMethods.SetClipboardData(unavailableFormat, IntPtr.Zero));
+            Assert.Equal(0, Marshal.GetLastPInvokeError());
+        }
+        finally
+        {
+            NativeMethods.CloseClipboard();
+        }
+
+        return owner;
     }
 
     private static string? ReadEnterpriseClipboardId()

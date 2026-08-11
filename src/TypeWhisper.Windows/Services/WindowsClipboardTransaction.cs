@@ -220,6 +220,8 @@ internal sealed class WindowsClipboardTransaction : IDisposable
     private WindowsClipboardSnapshot CaptureSnapshotCore(uint enterpriseFormat)
     {
         var entries = new List<ClipboardFormatHandle>();
+        var capturedFormats = new HashSet<uint>();
+        var unavailableFormats = new List<UnavailableClipboardFormat>();
         string? enterpriseId = null;
         try
         {
@@ -261,8 +263,11 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                 var sourceHandle = NativeMethods.GetClipboardData(nextFormat);
                 if (sourceHandle == IntPtr.Zero)
                 {
-                    throw LastClipboardError(
-                        $"Could not materialize clipboard format {DescribeFormat(nextFormat)}.");
+                    unavailableFormats.Add(new UnavailableClipboardFormat(
+                        nextFormat,
+                        Marshal.GetLastPInvokeError()));
+                    currentFormat = nextFormat;
+                    continue;
                 }
 
                 var duplicateHandle = DuplicateClipboardHandle(nextFormat, sourceHandle);
@@ -276,7 +281,21 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     nextFormat,
                     duplicateHandle,
                     _handleReleaseObserver));
+                capturedFormats.Add(nextFormat);
                 currentFormat = nextFormat;
+            }
+
+            foreach (var unavailableFormat in unavailableFormats)
+            {
+                if (CanRestoreFromCapturedBitmapRepresentation(
+                        unavailableFormat.Format,
+                        capturedFormats))
+                    continue;
+
+                throw ClipboardError(
+                    $"Could not materialize clipboard format " +
+                    $"{DescribeFormat(unavailableFormat.Format)}.",
+                    unavailableFormat.Error);
             }
 
             return new WindowsClipboardSnapshot(entries, enterpriseId);
@@ -334,6 +353,41 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         var name = new StringBuilder(256);
         var length = NativeMethods.GetClipboardFormatName(format, name, name.Capacity);
         return length > 0 ? $"{format} ('{name}')" : format.ToString();
+    }
+
+    private static bool CanRestoreFromCapturedBitmapRepresentation(
+        uint unavailableFormat,
+        IReadOnlySet<uint> capturedFormats)
+    {
+        var hasBitmapRepresentation =
+            capturedFormats.Contains(NativeMethods.CF_BITMAP) ||
+            capturedFormats.Contains(NativeMethods.CF_DIB) ||
+            capturedFormats.Contains(NativeMethods.CF_DIBV5);
+        if (!hasBitmapRepresentation)
+            return false;
+
+        // EnumClipboardFormats includes bitmap formats synthesized from another available
+        // bitmap representation. Windows recreates those alternatives after restoration.
+        if (unavailableFormat is NativeMethods.CF_BITMAP
+            or NativeMethods.CF_DIB
+            or NativeMethods.CF_DIBV5)
+            return true;
+
+        if (unavailableFormat < 0xC000)
+            return false;
+
+        var name = new StringBuilder(256);
+        var length = NativeMethods.GetClipboardFormatName(
+            unavailableFormat,
+            name,
+            name.Capacity);
+
+        // OLE image providers can advertise this managed bitmap alias without exposing a
+        // native handle. The captured standard bitmap formats preserve the same image.
+        return length > 0 && string.Equals(
+            name.ToString(),
+            "System.Drawing.Bitmap",
+            StringComparison.Ordinal);
     }
 
     private static IntPtr DuplicateClipboardHandle(uint format, IntPtr sourceHandle)
@@ -575,6 +629,8 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
     private sealed class ClipboardBusyException(int error)
         : ExternalException("The clipboard is currently in use.", HResultFromWin32(error));
+
+    private readonly record struct UnavailableClipboardFormat(uint Format, int Error);
 
     private sealed class WindowsClipboardLease(WindowsClipboardSnapshot snapshot) : IClipboardLease
     {
