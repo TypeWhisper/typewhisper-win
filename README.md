@@ -67,7 +67,7 @@ The full 1.0 screenshot set is available in [`docs/screenshots/windows`](docs/sc
 ### Personalization
 
 - **Workflow triggers:** Match by process name, website pattern, or hotkey for language, task, model, whisper mode, prompt processing, output format, and action routing.
-- **Dictionary:** Custom term corrections fix names, jargon, and recurring misrecognitions with literal phrase matching, optional case sensitivity, and built-in term packs for developer, medical, legal, finance, and creative domains. Replacement text supports `\n`, `\r`, `\t`, and `\\` escapes.
+- **Dictionary:** Custom term corrections fix names, jargon, and recurring misrecognitions with literal phrase matching, optional case sensitivity, and built-in term packs for developer, medical, legal, finance, and creative domains. Replacement text supports `\s`, `\n`, `\r`, `\t`, and `\\` escapes.
 - **Advanced transformations:** Use the Script Runner integration for regex, Python, or global transformations such as converting `ß` to `ss`.
 - **Snippets:** Text shortcuts with trigger -> replacement. Placeholders include `{date}`, `{time}`, `{datetime}`, `{clipboard}`, `{day}`, and `{year}`. Date/time placeholders support custom formats, such as `{date:dd.MM.yyyy}`.
 - **History:** Searchable transcription history with raw/final text tracking, app context, inline editing, export, retention controls, and recent-transcription access.
@@ -214,7 +214,7 @@ Raw audio requests can pass the same options with headers: `X-Language`, `X-Lang
 }
 ```
 
-Dictionary terms use `PUT /v1/dictionary/terms` with `{ "terms": ["TypeWhisper"], "replace": false }` and `DELETE /v1/dictionary/terms` with `{ "term": "TypeWhisper" }`. Corrections use literal phrase matching and optional case sensitivity, for example `{ "original": "neuer Absatz", "replacement": "\\n\\n", "caseSensitive": false }`. Replacement values decode `\n`, `\r`, `\t`, and `\\` once when applied. Dictionary search expressions are never treated as regex; use the Script Runner integration for regex, Python, and global text transformations.
+Dictionary terms use `PUT /v1/dictionary/terms` with `{ "terms": ["TypeWhisper"], "replace": false }` and `DELETE /v1/dictionary/terms` with `{ "term": "TypeWhisper" }`. Corrections use literal phrase matching and optional case sensitivity, for example `{ "original": "neuer Absatz", "replacement": "\\n\\n", "caseSensitive": false }`. Replacement values decode `\s`, `\n`, `\r`, `\t`, and `\\` once when applied. Corrections created through the HTTP API remain literal; regular expression matching can be enabled in the Dictionary UI.
 
 ```bash
 curl -X POST http://localhost:8978/v1/transcribe \
