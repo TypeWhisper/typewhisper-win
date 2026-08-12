@@ -1080,19 +1080,34 @@ public sealed partial class WorkflowsViewModel : ObservableObject
     private void RebuildProviderOptions()
     {
         var explicitOptions = new List<ProviderOption>();
-        foreach (var provider in _pluginManager.LlmProviders.Where(p => p.IsAvailable))
+        ProviderOption? firstAvailableOption = null;
+        foreach (var provider in _pluginManager.LlmProviders)
         {
             var selectionId = provider.GetLlmSelectionId();
             foreach (var model in provider.SupportedModels)
-                explicitOptions.Add(new ProviderOption(
+            {
+                var option = new ProviderOption(
                     $"plugin:{selectionId}:{model.Id}",
-                    $"{provider.ProviderName} / {model.DisplayName}"));
+                    provider.IsAvailable
+                        ? $"{provider.ProviderName} / {model.DisplayName}"
+                        : Loc.Instance.GetString(
+                            "Workflows.ProviderUnavailableFormat",
+                            $"{provider.ProviderName} / {model.DisplayName}"));
+                explicitOptions.Add(option);
+                if (provider.IsAvailable)
+                    firstAvailableOption ??= option;
+            }
         }
+
+        AddMissingSelectionOption(explicitOptions, DefaultLlmProvider);
+        AddMissingSelectionOption(explicitOptions, EditProviderOverride);
 
         _isRefreshingProviders = true;
         AvailableProviders.Clear();
         AvailableEditProviders.Clear();
-        var defaultOption = new ProviderOption(null, GetDefaultProviderLabel(explicitOptions));
+        var defaultOption = new ProviderOption(
+            null,
+            GetDefaultProviderLabel(explicitOptions, firstAvailableOption));
         AvailableProviders.Add(defaultOption);
         AvailableEditProviders.Add(new ProviderOption("none", Loc.Instance["Workflows.NoPostProcessingProvider"]));
         AvailableEditProviders.Add(defaultOption);
@@ -1101,13 +1116,7 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             AvailableProviders.Add(option);
             AvailableEditProviders.Add(option);
         }
-        var clearDefaultProvider = IsStaleProviderSelection(DefaultLlmProvider, AvailableProviders);
-        var clearEditProvider = IsStaleProviderSelection(EditProviderOverride, AvailableEditProviders);
         _isRefreshingProviders = false;
-        if (clearDefaultProvider)
-            DefaultLlmProvider = null;
-        if (clearEditProvider)
-            EditProviderOverride = null;
         OnPropertyChanged(nameof(SelectedDefaultProvider));
         OnPropertyChanged(nameof(SelectedEditProvider));
         OnPropertyChanged(nameof(HasAvailableLlmProvider));
@@ -1123,11 +1132,23 @@ public sealed partial class WorkflowsViewModel : ObservableObject
             action();
     }
 
-    private static bool IsStaleProviderSelection(string? value, IEnumerable<ProviderOption> options) =>
-        !string.IsNullOrWhiteSpace(value)
-        && !options.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal));
+    private static void AddMissingSelectionOption(List<ProviderOption> options, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || string.Equals(value, "none", StringComparison.OrdinalIgnoreCase)
+            || options.Any(option => string.Equals(option.Value, value, StringComparison.Ordinal)))
+        {
+            return;
+        }
 
-    private string GetDefaultProviderLabel(IReadOnlyList<ProviderOption> explicitOptions)
+        options.Add(new ProviderOption(
+            value,
+            Loc.Instance.GetString("Workflows.ProviderUnavailableFormat", value)));
+    }
+
+    private string GetDefaultProviderLabel(
+        IReadOnlyList<ProviderOption> explicitOptions,
+        ProviderOption? firstAvailableOption)
     {
         var configuredDefault = _settings.Current.DefaultLlmProvider;
         if (!string.IsNullOrWhiteSpace(configuredDefault))
@@ -1138,10 +1159,9 @@ public sealed partial class WorkflowsViewModel : ObservableObject
                 return Loc.Instance.GetString("Workflows.DefaultProviderLabelFormat", configuredOption.DisplayName);
         }
 
-        var fallbackOption = explicitOptions.FirstOrDefault();
-        return fallbackOption is null
+        return firstAvailableOption is null
             ? Loc.Instance["Workflows.DefaultProviderLabelNone"]
-            : Loc.Instance.GetString("Workflows.DefaultProviderLabelAutoFormat", fallbackOption.DisplayName);
+            : Loc.Instance.GetString("Workflows.DefaultProviderLabelAutoFormat", firstAvailableOption.DisplayName);
     }
 
     private void RebuildModelOptions()

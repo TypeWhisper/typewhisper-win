@@ -38,6 +38,7 @@ jobs:
             'sherpa-onnx'        = 'TypeWhisper.Plugin.SherpaOnnx'
             'openai'             = 'TypeWhisper.Plugin.OpenAI'
             'openai-compatible'  = 'TypeWhisper.Plugin.OpenAiCompatible'
+            'authenticated-cli'  = 'TypeWhisper.Plugin.AuthenticatedCli'
             'groq'               = 'TypeWhisper.Plugin.Groq'
             'xai'                = 'TypeWhisper.Plugin.Xai'
             'webhook'            = 'TypeWhisper.Plugin.Webhook'

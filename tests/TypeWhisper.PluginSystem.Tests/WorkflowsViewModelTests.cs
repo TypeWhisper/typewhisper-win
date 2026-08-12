@@ -40,7 +40,29 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void DefaultProviderOption_ShowsAutoFallbackWhenConfiguredDefaultIsStale()
+    public void DefaultProviderOption_SkipsKnownUnavailableProviderForAutoFallback()
+    {
+        var unavailable = new FakeLlmProvider(
+            "com.test.unavailable",
+            "Unavailable",
+            [new PluginModelInfo("default", "Default")])
+        {
+            IsAvailable = false
+        };
+        var available = new FakeLlmProvider(
+            "com.test.available",
+            "Available",
+            [new PluginModelInfo("default", "Default")]);
+        SetLlmProviders(unavailable, available);
+
+        var sut = CreateViewModel();
+
+        var defaultOption = Assert.Single(sut.AvailableProviders, option => option.Value is null);
+        Assert.Equal("Default AI provider: Available / Default (auto)", defaultOption.DisplayName);
+    }
+
+    [Fact]
+    public void DefaultProviderOption_PreservesUnavailableConfiguredDefault()
     {
         _settings.Save(_settings.Current with { DefaultLlmProvider = "plugin:missing:gpt-4o" });
         AddLlmProvider(new FakeLlmProvider(
@@ -51,8 +73,11 @@ public sealed class WorkflowsViewModelTests : IDisposable
         var sut = CreateViewModel();
 
         var defaultOption = Assert.Single(sut.AvailableProviders, option => option.Value is null);
-        Assert.Equal("Default AI provider: OpenAI / GPT-5.5 (auto)", defaultOption.DisplayName);
-        Assert.Same(defaultOption, sut.SelectedDefaultProvider);
+        Assert.Contains("unavailable", defaultOption.DisplayName, StringComparison.OrdinalIgnoreCase);
+        var selected = Assert.IsType<ProviderOption>(sut.SelectedDefaultProvider);
+        Assert.Equal("plugin:missing:gpt-4o", selected.Value);
+        Assert.Contains("unavailable", selected.DisplayName, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("plugin:missing:gpt-4o", _settings.Current.DefaultLlmProvider);
     }
 
     [Fact]
@@ -72,7 +97,7 @@ public sealed class WorkflowsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void ProviderOptions_ClearStaleEditProviderOverrideOnRefresh()
+    public void ProviderOptions_PreserveStaleEditProviderOverrideOnRefresh()
     {
         AddLlmProvider(new FakeLlmProvider(
             "com.test.openai",
@@ -83,10 +108,31 @@ public sealed class WorkflowsViewModelTests : IDisposable
 
         InvokeRebuildProviderOptions(sut);
 
-        Assert.Null(sut.EditProviderOverride);
-        Assert.Same(
-            Assert.Single(sut.AvailableEditProviders, option => option.Value is null),
-            sut.SelectedEditProvider);
+        Assert.Equal("plugin:missing:gpt-4o", sut.EditProviderOverride);
+        var selected = Assert.IsType<ProviderOption>(sut.SelectedEditProvider);
+        Assert.Equal("plugin:missing:gpt-4o", selected.Value);
+        Assert.Contains("unavailable", selected.DisplayName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProviderOptions_ShowKnownUnavailableProviderWithoutClearingSelection()
+    {
+        var provider = new FakeLlmProvider(
+            "com.test.cli",
+            "CLI Provider",
+            [new PluginModelInfo("default", "Provider default")])
+        {
+            IsAvailable = false
+        };
+        AddLlmProvider(provider);
+        _settings.Save(_settings.Current with { DefaultLlmProvider = "plugin:com.test.cli:default" });
+
+        var sut = CreateViewModel();
+
+        var selected = Assert.IsType<ProviderOption>(sut.SelectedDefaultProvider);
+        Assert.Equal("plugin:com.test.cli:default", selected.Value);
+        Assert.Equal("CLI Provider / Provider default (unavailable)", selected.DisplayName);
+        Assert.True(sut.HasNoAvailableLlmProvider);
     }
 
     [Fact]
@@ -552,21 +598,29 @@ public sealed class WorkflowsViewModelTests : IDisposable
             Trigger = trigger
         };
 
-    private void AddLlmProvider(FakeLlmProvider provider)
-    {
-        var manifest = new PluginManifest
-        {
-            Id = provider.PluginId,
-            Name = provider.PluginName,
-            Version = provider.PluginVersion,
-            AssemblyName = "Fake.dll",
-            PluginClass = provider.GetType().FullName!
-        };
-        var context = new PluginAssemblyLoadContext(typeof(WorkflowsViewModelTests).Assembly.Location);
-        var loaded = new LoadedPlugin(manifest, provider, context, AppContext.BaseDirectory);
+    private void AddLlmProvider(FakeLlmProvider provider) => SetLlmProviders(provider);
 
-        TestPluginManagerFactory.SetPrivateField(_pluginManager, "_allPlugins", new List<LoadedPlugin> { loaded });
-        TestPluginManagerFactory.SetPrivateField(_pluginManager, "_llmProviders", new List<ILlmProviderPlugin> { provider });
+    private void SetLlmProviders(params FakeLlmProvider[] providers)
+    {
+        var loaded = providers.Select(provider =>
+        {
+            var manifest = new PluginManifest
+            {
+                Id = provider.PluginId,
+                Name = provider.PluginName,
+                Version = provider.PluginVersion,
+                AssemblyName = "Fake.dll",
+                PluginClass = provider.GetType().FullName!
+            };
+            var context = new PluginAssemblyLoadContext(typeof(WorkflowsViewModelTests).Assembly.Location);
+            return new LoadedPlugin(manifest, provider, context, AppContext.BaseDirectory);
+        }).ToList();
+
+        TestPluginManagerFactory.SetPrivateField(_pluginManager, "_allPlugins", loaded);
+        TestPluginManagerFactory.SetPrivateField(
+            _pluginManager,
+            "_llmProviders",
+            providers.Cast<ILlmProviderPlugin>().ToList());
     }
 
     private static void InvokeRebuildProviderOptions(WorkflowsViewModel viewModel) =>

@@ -435,7 +435,7 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
         if (!string.IsNullOrEmpty(providerOverride))
         {
             var result = ResolvePluginModelId(providerOverride, modelOverride);
-            if (result.Provider is not null) return result;
+            return RequireConfiguredProvider(result, providerOverride);
         }
 
         // 2. Default LLM provider from settings
@@ -443,7 +443,7 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
         if (!string.IsNullOrEmpty(defaultProvider))
         {
             var result = ResolvePluginModelId(defaultProvider, null);
-            if (result.Provider is not null) return result;
+            return RequireConfiguredProvider(result, defaultProvider);
         }
 
         // 3. First available provider
@@ -468,8 +468,7 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
             var modelId = parts.Length == 3 ? parts[2] : modelOverride;
 
             var provider = _pluginManager.LlmProviders
-                .FirstOrDefault(p => p.IsAvailable
-                    && string.Equals(
+                .FirstOrDefault(p => string.Equals(
                         p.GetLlmSelectionId(),
                         providerSelectionId,
                         StringComparison.OrdinalIgnoreCase));
@@ -496,6 +495,29 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
         }
 
         return (null, "");
+    }
+
+    private static (ILlmProviderPlugin Provider, string ModelId) RequireConfiguredProvider(
+        (ILlmProviderPlugin? Provider, string ModelId) result,
+        string selection)
+    {
+        if (result.Provider is null)
+        {
+            throw new PluginRequestException(
+                Loc.Instance.GetString("Error.SelectedLlmProviderMissing", selection),
+                PluginRequestFailureKind.Configuration,
+                isTransient: false);
+        }
+
+        if (!result.Provider.IsAvailable)
+        {
+            throw new PluginRequestException(
+                Loc.Instance.GetString("Error.SelectedLlmProviderUnavailable", result.Provider.ProviderName),
+                PluginRequestFailureKind.Configuration,
+                isTransient: false);
+        }
+
+        return (result.Provider, result.ModelId);
     }
 }
 

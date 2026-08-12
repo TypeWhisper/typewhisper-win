@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\TypeWhisper.Plugin.OpenAi.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAiCompatible\TypeWhisper.Plugin.OpenAiCompatible.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.AuthenticatedCli\TypeWhisper.Plugin.AuthenticatedCli.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\TypeWhisper.Plugin.OpenRouter.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Groq\TypeWhisper.Plugin.Groq.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Xai\TypeWhisper.Plugin.Xai.csproj" />
@@ -44,6 +45,7 @@
     <ProjectReference Include="..\..\src\TypeWhisper.Cli\TypeWhisper.Cli.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Windows\TypeWhisper.Windows.csproj" />
+    <ProjectReference Include="..\TypeWhisper.FakeProviderCli\TypeWhisper.FakeProviderCli.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

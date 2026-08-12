@@ -1336,6 +1336,9 @@
   "Translation.None": "No Translation",
 
   "Error.NoLlmProvider": "No AI provider available. Configure a local or cloud provider in Integrations.",
+  "Error.SelectedLlmProviderMissing": "The selected AI provider is no longer installed: {0}. Choose another provider in Workflows.",
+  "Error.SelectedLlmProviderUnavailable": "The selected AI provider is not ready: {0}. Check its login and configuration in Integrations.",
+  "Workflows.ProviderUnavailableFormat": "{0} (unavailable)",
   "Error.PromptProcessingFailed": "Prompt processing failed: {0}",
   "Error.NoApiKeyFormat": "No API key for {0}",
   "Error.FileNotFound": "File not found.",
