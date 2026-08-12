@@ -34,6 +34,25 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
+    public void RecordingOverlay_ExposesStableUiAutomationIdentifiers()
+    {
+        var mainWindow = TestFile.ReadProjectFile(
+            "src", "TypeWhisper.Windows", "Views", "MainWindow.xaml");
+        var statusIsland = TestFile.ReadProjectFile(
+            "src", "TypeWhisper.Windows", "Controls", "Overlay", "DictationOverlayView.xaml");
+        var edgeDock = TestFile.ReadProjectFile(
+            "src", "TypeWhisper.Windows", "Controls", "Overlay", "EdgeDockIndicatorView.xaml");
+        var compactBadge = TestFile.ReadProjectFile(
+            "src", "TypeWhisper.Windows", "Controls", "Overlay", "CompactBadgeIndicatorView.xaml");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"RecordingOverlayWindow\"", mainWindow);
+        Assert.Contains("AutomationProperties.ItemStatus=\"{Binding StatusText}\"", mainWindow);
+        Assert.Contains("AutomationProperties.AutomationId=\"RecordingOverlayStatusIsland\"", statusIsland);
+        Assert.Contains("AutomationProperties.AutomationId=\"RecordingOverlayEdgeDock\"", edgeDock);
+        Assert.Contains("AutomationProperties.AutomationId=\"RecordingOverlayCompactBadge\"", compactBadge);
+    }
+
+    [Fact]
     public void MainWindow_RepositionsAfterDisplayPowerAndUnlockEvents()
     {
         var code = TestFile.ReadProjectFile(

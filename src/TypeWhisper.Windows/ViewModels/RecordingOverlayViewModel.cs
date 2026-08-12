@@ -7,13 +7,43 @@ using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.Windows.ViewModels;
 
+internal interface IRecordingOverlayDictationSource : INotifyPropertyChanged
+{
+    bool IsOverlayVisible { get; }
+    bool ShowFeedback { get; }
+    bool ShowInlineFeedback { get; }
+    bool HasOverlayContentVisible { get; }
+    bool ShowDetachedFeedback { get; }
+    DictationState State { get; }
+    float AudioLevel { get; }
+    double RecordingSeconds { get; }
+    string? CancelWarningText { get; }
+    string StatusText { get; }
+    HotkeyMode? CurrentHotkeyMode { get; }
+    string? ActiveProcessName { get; }
+    string? ActiveWorkflowName { get; }
+    string? FeedbackText { get; }
+    bool FeedbackIsError { get; }
+    string? FeedbackActionText { get; }
+    ICommand? FeedbackActionCommand { get; }
+    bool ShowFeedbackAction { get; }
+}
+
+internal interface IRecordingOverlayRecorderSource : INotifyPropertyChanged
+{
+    RecorderActivityState ActivityState { get; }
+    float AudioLevel { get; }
+    double RecordingSeconds { get; }
+    string StatusText { get; }
+}
+
 /// <summary>
 /// Presents the active recording source to the overlay, preferring dictation over recorder capture.
 /// </summary>
 public sealed class RecordingOverlayViewModel : ObservableObject
 {
-    private readonly DictationViewModel _dictation;
-    private readonly AudioRecorderViewModel _recorder;
+    private readonly IRecordingOverlayDictationSource _dictation;
+    private readonly IRecordingOverlayRecorderSource _recorder;
     private readonly ISettingsService _settings;
     private readonly Dictionary<string, object?> _lastPublishedValues = new(StringComparer.Ordinal);
 
@@ -24,6 +54,17 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         DictationViewModel dictation,
         AudioRecorderViewModel recorder,
         ISettingsService settings)
+        : this(
+            new DictationSourceAdapter(dictation),
+            new RecorderSourceAdapter(recorder),
+            settings)
+    {
+    }
+
+    internal RecordingOverlayViewModel(
+        IRecordingOverlayDictationSource dictation,
+        IRecordingOverlayRecorderSource recorder,
+        ISettingsService settings)
     {
         _dictation = dictation;
         _recorder = recorder;
@@ -32,6 +73,7 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         _dictation.PropertyChanged += OnSourcePropertyChanged;
         _recorder.PropertyChanged += OnSourcePropertyChanged;
         _settings.SettingsChanged += _ => RefreshAll();
+        CaptureCurrentValues();
     }
 
     /// <summary>
@@ -63,19 +105,19 @@ public sealed class RecordingOverlayViewModel : ObservableObject
     /// </summary>
     public bool HasOverlayContentVisible => UseDictation
         ? _dictation.HasOverlayContentVisible
-        : _recorder.IsRecording;
+        : UseRecorder;
     /// <summary>
     /// Gets whether the main overlay is visible.
     /// </summary>
     public bool IsOverlayVisible => UseDictation
         ? _dictation.IsOverlayVisible
-        : _recorder.IsRecording;
+        : UseRecorder;
     /// <summary>
     /// Gets the active overlay state.
     /// </summary>
     public DictationState State => UseDictation
         ? _dictation.State
-        : _recorder.IsRecording ? DictationState.Recording : DictationState.Idle;
+        : UseRecorder ? DictationState.Recording : DictationState.Idle;
     /// <summary>
     /// Gets the overlay audio level.
     /// </summary>
@@ -128,6 +170,8 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         || _dictation.ShowFeedback
         || _dictation.State != DictationState.Idle;
 
+    private bool UseRecorder => _recorder.ActivityState == RecorderActivityState.Recording;
+
     private void OnSourcePropertyChanged(object? sender, PropertyChangedEventArgs e) =>
         RefreshAll();
 
@@ -155,6 +199,33 @@ public sealed class RecordingOverlayViewModel : ObservableObject
         PublishIfChanged(nameof(ShowFeedbackAction), ShowFeedbackAction);
     }
 
+    private void CaptureCurrentValues()
+    {
+        TrackCurrentValue(nameof(LeftWidget), LeftWidget);
+        TrackCurrentValue(nameof(RightWidget), RightWidget);
+        TrackCurrentValue(nameof(IndicatorStyle), IndicatorStyle);
+        TrackCurrentValue(nameof(OverlayPosition), OverlayPosition);
+        TrackCurrentValue(nameof(ShowInlineFeedback), ShowInlineFeedback);
+        TrackCurrentValue(nameof(HasOverlayContentVisible), HasOverlayContentVisible);
+        TrackCurrentValue(nameof(ShowDetachedFeedback), ShowDetachedFeedback);
+        TrackCurrentValue(nameof(IsOverlayVisible), IsOverlayVisible);
+        TrackCurrentValue(nameof(AudioLevel), AudioLevel);
+        TrackCurrentValue(nameof(RecordingSeconds), RecordingSeconds);
+        TrackCurrentValue(nameof(StatusText), StatusText);
+        TrackCurrentValue(nameof(State), State);
+        TrackCurrentValue(nameof(CurrentHotkeyMode), CurrentHotkeyMode);
+        TrackCurrentValue(nameof(ActiveProcessName), ActiveProcessName);
+        TrackCurrentValue(nameof(ActiveWorkflowName), ActiveWorkflowName);
+        TrackCurrentValue(nameof(FeedbackText), FeedbackText);
+        TrackCurrentValue(nameof(FeedbackIsError), FeedbackIsError);
+        TrackCurrentValue(nameof(FeedbackActionText), FeedbackActionText);
+        TrackCurrentValue(nameof(FeedbackActionCommand), FeedbackActionCommand);
+        TrackCurrentValue(nameof(ShowFeedbackAction), ShowFeedbackAction);
+    }
+
+    private void TrackCurrentValue<T>(string propertyName, T value) =>
+        _lastPublishedValues[propertyName] = value;
+
     private void PublishIfChanged<T>(string propertyName, T value)
     {
         if (_lastPublishedValues.TryGetValue(propertyName, out var previous)
@@ -163,5 +234,55 @@ public sealed class RecordingOverlayViewModel : ObservableObject
 
         _lastPublishedValues[propertyName] = value;
         OnPropertyChanged(propertyName);
+    }
+
+    private sealed class DictationSourceAdapter : IRecordingOverlayDictationSource
+    {
+        private readonly DictationViewModel _source;
+
+        public DictationSourceAdapter(DictationViewModel source) => _source = source;
+
+        public event PropertyChangedEventHandler? PropertyChanged
+        {
+            add => _source.PropertyChanged += value;
+            remove => _source.PropertyChanged -= value;
+        }
+
+        public bool IsOverlayVisible => _source.IsOverlayVisible;
+        public bool ShowFeedback => _source.ShowFeedback;
+        public bool ShowInlineFeedback => _source.ShowInlineFeedback;
+        public bool HasOverlayContentVisible => _source.HasOverlayContentVisible;
+        public bool ShowDetachedFeedback => _source.ShowDetachedFeedback;
+        public DictationState State => _source.State;
+        public float AudioLevel => _source.AudioLevel;
+        public double RecordingSeconds => _source.RecordingSeconds;
+        public string? CancelWarningText => _source.CancelWarningText;
+        public string StatusText => _source.StatusText;
+        public HotkeyMode? CurrentHotkeyMode => _source.CurrentHotkeyMode;
+        public string? ActiveProcessName => _source.ActiveProcessName;
+        public string? ActiveWorkflowName => _source.ActiveWorkflowName;
+        public string? FeedbackText => _source.FeedbackText;
+        public bool FeedbackIsError => _source.FeedbackIsError;
+        public string? FeedbackActionText => _source.FeedbackActionText;
+        public ICommand? FeedbackActionCommand => _source.FeedbackActionCommand;
+        public bool ShowFeedbackAction => _source.ShowFeedbackAction;
+    }
+
+    private sealed class RecorderSourceAdapter : IRecordingOverlayRecorderSource
+    {
+        private readonly AudioRecorderViewModel _source;
+
+        public RecorderSourceAdapter(AudioRecorderViewModel source) => _source = source;
+
+        public event PropertyChangedEventHandler? PropertyChanged
+        {
+            add => _source.PropertyChanged += value;
+            remove => _source.PropertyChanged -= value;
+        }
+
+        public RecorderActivityState ActivityState => _source.ActivityState;
+        public float AudioLevel => _source.AudioLevel;
+        public double RecordingSeconds => _source.RecordingSeconds;
+        public string StatusText => _source.StatusText;
     }
 }

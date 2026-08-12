@@ -68,6 +68,13 @@ public sealed record RecorderTranscriptionEngineOption(string Id, string Display
 /// </summary>
 public sealed record RecorderTranscriptionModelOption(string Id, string DisplayName);
 
+internal enum RecorderActivityState
+{
+    Idle,
+    Recording,
+    Finalizing
+}
+
 /// <summary>
 /// Provides audio recorder view model behavior.
 /// </summary>
@@ -96,6 +103,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     private bool _isLoadingSettings;
     private Guid? _activeApiSessionId;
     private bool _disposed;
+    private RecorderActivityState _activityState;
 
     [ObservableProperty] private bool _isRecording;
     [ObservableProperty] private string _durationText = "0:00";
@@ -137,6 +145,11 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
     /// Gets available transcription models for the selected Recorder engine.
     /// </summary>
     public ObservableCollection<RecorderTranscriptionModelOption> TranscriptionModelOptions { get; } = [];
+    internal RecorderActivityState ActivityState
+    {
+        get => _activityState;
+        private set => SetProperty(ref _activityState, value);
+    }
     /// <summary>
     /// Gets whether has recordings.
     /// </summary>
@@ -380,6 +393,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         }
 
         IsRecording = true;
+        ActivityState = RecorderActivityState.Recording;
         PartialText = "";
         _recordingStart = DateTime.UtcNow;
         SetLocalizedStatus("Status.Recording");
@@ -439,6 +453,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         {
             apiSessionId = _activeApiSessionId;
             MarkApiSession(apiSessionId, RecorderSessionStatus.Finalizing);
+            ActivityState = RecorderActivityState.Finalizing;
 
             _timer?.Stop();
             _timer?.Dispose();
@@ -449,6 +464,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
 
             capture = await _capture.StopAsync(ct);
             IsRecording = false;
+            ActivityState = RecorderActivityState.Idle;
             RecordingSeconds = 0;
             MicLevel = 0;
             SystemLevel = 0;
@@ -459,6 +475,9 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         }
         finally
         {
+            if (ActivityState == RecorderActivityState.Finalizing)
+                ActivityState = IsRecording ? RecorderActivityState.Recording : RecorderActivityState.Idle;
+
             _recordingLifecycleGate.Release();
         }
 
