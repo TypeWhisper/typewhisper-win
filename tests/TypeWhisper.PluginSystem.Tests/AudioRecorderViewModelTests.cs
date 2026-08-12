@@ -304,6 +304,47 @@ public sealed class AudioRecorderViewModelTests
     }
 
     [Fact]
+    public async Task RecorderActivityState_TransitionsThroughFinalizingBeforeReturningToIdle()
+    {
+        Loc.Instance.Initialize();
+        Loc.Instance.CurrentLanguage = "en";
+
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        using var sut = new AudioRecorderViewModel(
+            audio,
+            modelManager,
+            settings,
+            new AudioFileService(),
+            new FakeErrorLogService(),
+            new PostProcessingPipeline(),
+            Mock.Of<ITranslationService>());
+        var observedStates = new List<RecorderActivityState>();
+        sut.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(sut.ActivityState))
+                observedStates.Add(sut.ActivityState);
+        };
+
+        await sut.StartRecordingForApiAsync(true, false, CancellationToken.None);
+        await sut.StopRecordingForApiAsync(CancellationToken.None);
+
+        Assert.Equal(
+            [
+                RecorderActivityState.Recording,
+                RecorderActivityState.Finalizing,
+                RecorderActivityState.Idle
+            ],
+            observedStates);
+        Assert.False(sut.IsRecording);
+        Assert.Equal(RecorderActivityState.Idle, sut.ActivityState);
+    }
+
+    [Fact]
     public async Task Recorder_UsesTranslationPipeline_WhenRecorderTranslationTargetIsConfigured()
     {
         Loc.Instance.Initialize();
