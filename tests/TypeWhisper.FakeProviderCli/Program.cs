@@ -19,8 +19,8 @@ if (args.Contains("--version", StringComparer.Ordinal) || args.Contains("-v", St
 
 if (args.Contains("--help", StringComparer.Ordinal))
 {
-    Console.WriteLine("--ignore-user-config --ignore-rules --ephemeral --output-schema --strict-config --json");
-    Console.WriteLine("--safe-mode --tools --strict-mcp-config --no-session-persistence --json-schema");
+    Console.WriteLine("--ignore-user-config --ignore-rules --ephemeral --output-schema --strict-config --json --sandbox --skip-git-repo-check");
+    Console.WriteLine("--safe-mode --tools --strict-mcp-config --no-session-persistence --json-schema --disallowedTools --disable-slash-commands --no-chrome");
     Console.WriteLine("--print --output-format --json-schema");
     return;
 }
@@ -69,7 +69,9 @@ if (scenario.Contains("invalid-json", StringComparison.Ordinal))
 
 if (scenario.Contains("invalid-utf8", StringComparison.Ordinal))
 {
-    await Console.OpenStandardOutput().WriteAsync(new byte[] { 0xff, 0xfe, 0xfd });
+    await using var output = Console.OpenStandardOutput();
+    await output.WriteAsync(new byte[] { 0xff, 0xfe, 0xfd });
+    await output.FlushAsync();
     return;
 }
 
@@ -89,6 +91,20 @@ if (scenario.Contains("huge-output", StringComparison.Ordinal))
 {
     Console.Write(new string('x', 1024 * 1024 + 8192));
     Console.Error.Write(new string('e', 64 * 1024));
+    return;
+}
+
+if (scenario.Contains("instant-child", StringComparison.Ordinal))
+{
+    var child = Process.Start(new ProcessStartInfo
+    {
+        FileName = Environment.ProcessPath!,
+        WorkingDirectory = Environment.CurrentDirectory,
+        UseShellExecute = false,
+        CreateNoWindow = true,
+        ArgumentList = { "--child" }
+    });
+    await File.WriteAllTextAsync(Path.Combine(Environment.CurrentDirectory, "spawned.pid"), child!.Id.ToString());
     return;
 }
 
@@ -119,6 +135,13 @@ if (scenario.Contains("rate-limit", StringComparison.Ordinal))
 {
     Console.Error.WriteLine("rate limit exceeded");
     Environment.ExitCode = 4;
+    return;
+}
+
+if (scenario.Contains("network-auth-model", StringComparison.Ordinal))
+{
+    Console.Error.WriteLine("authentication service unreachable while resolving model");
+    Environment.ExitCode = 5;
     return;
 }
 

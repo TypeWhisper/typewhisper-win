@@ -233,16 +233,7 @@ public sealed class AuthenticatedCliPlugin :
             {
                 var failure = ClassifyFailure(descriptor, result.StandardOutput, result.StandardError);
                 if (failure.FailureKind == PluginRequestFailureKind.Authentication)
-                {
-                    SetSnapshot(
-                        descriptor,
-                        snapshot with
-                        {
-                            State = CliAvailabilityState.SignedOut,
-                            CheckedAt = DateTimeOffset.UtcNow
-                        },
-                        notifyHost: true);
-                }
+                    SetSnapshotState(descriptor, CliAvailabilityState.SignedOut, notifyHost: true);
                 throw failure;
             }
 
@@ -261,24 +252,42 @@ public sealed class AuthenticatedCliPlugin :
         }
         finally
         {
-            await DeleteTempDirectoryAsync(tempDirectory).ConfigureAwait(false);
+            if (!await DeleteTempDirectoryAsync(tempDirectory).ConfigureAwait(false))
+                LogCleanupFailure(descriptor, "request");
         }
     }
 
     private async Task PollAvailabilityAsync(CancellationToken cancellationToken)
     {
-        await RefreshAllAsync(notifyHost: true, cancellationToken).ConfigureAwait(false);
         using var timer = new PeriodicTimer(AvailabilityRefreshInterval);
-        while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-            await RefreshAllAsync(notifyHost: true, cancellationToken).ConfigureAwait(false);
+        while (true)
+        {
+            try
+            {
+                await RefreshAllAsync(notifyHost: true, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    $"event=availability-monitor-error type={ex.GetType().Name}");
+            }
+
+            if (!await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+                return;
+        }
     }
 
     private async Task RefreshAllAsync(bool notifyHost, CancellationToken cancellationToken)
     {
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        SettingsActivityChanged?.Invoke(GetString("Settings.Refreshing"));
         try
         {
+            NotifySettingsActivity(GetString("Settings.Refreshing"));
             foreach (var descriptor in CliProviderDescriptor.All)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -289,7 +298,7 @@ public sealed class AuthenticatedCliPlugin :
         finally
         {
             _refreshGate.Release();
-            SettingsActivityChanged?.Invoke(null);
+            NotifySettingsActivity(null);
         }
     }
 
@@ -462,7 +471,8 @@ public sealed class AuthenticatedCliPlugin :
         }
         finally
         {
-            await DeleteTempDirectoryAsync(tempDirectory).ConfigureAwait(false);
+            if (!await DeleteTempDirectoryAsync(tempDirectory).ConfigureAwait(false))
+                LogCleanupFailure(descriptor, "probe");
         }
     }
 
@@ -500,6 +510,37 @@ public sealed class AuthenticatedCliPlugin :
             _snapshots[descriptor.Key] = snapshot;
         }
 
+        PublishSnapshotChange(descriptor, snapshot, changed, notifyHost);
+    }
+
+    private void SetSnapshotState(
+        CliProviderDescriptor descriptor,
+        CliAvailabilityState state,
+        bool notifyHost)
+    {
+        bool changed;
+        CliAvailabilitySnapshot updated;
+        lock (_stateLock)
+        {
+            var current = _snapshots[descriptor.Key];
+            updated = current with
+            {
+                State = state,
+                CheckedAt = DateTimeOffset.UtcNow
+            };
+            changed = !current.HasSameCapabilities(updated);
+            _snapshots[descriptor.Key] = updated;
+        }
+
+        PublishSnapshotChange(descriptor, updated, changed, notifyHost);
+    }
+
+    private void PublishSnapshotChange(
+        CliProviderDescriptor descriptor,
+        CliAvailabilitySnapshot snapshot,
+        bool changed,
+        bool notifyHost)
+    {
         if (!changed)
             return;
 
@@ -509,6 +550,39 @@ public sealed class AuthenticatedCliPlugin :
         AvailabilityChanged?.Invoke(this, EventArgs.Empty);
         if (notifyHost)
             _host?.NotifyCapabilitiesChanged();
+    }
+
+    internal void RecordSettingsFailure(CliProviderDescriptor? descriptor, Exception exception)
+    {
+        _host?.Log(
+            PluginLogLevel.Warning,
+            $"event=settings-provider-error provider={descriptor?.Key ?? "all"} type={exception.GetType().Name}");
+        IEnumerable<CliProviderDescriptor> descriptors = descriptor is null
+            ? CliProviderDescriptor.All
+            : [descriptor];
+        foreach (var affected in descriptors)
+            SetSnapshotState(affected, CliAvailabilityState.Error, notifyHost: true);
+    }
+
+    private void NotifySettingsActivity(string? activity)
+    {
+        var handlers = SettingsActivityChanged;
+        if (handlers is null)
+            return;
+
+        foreach (Action<string?> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(activity);
+            }
+            catch (Exception ex)
+            {
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    $"event=settings-activity-handler-error type={ex.GetType().Name}");
+            }
+        }
     }
 
     private void LogProcessMetadata(
@@ -527,7 +601,33 @@ public sealed class AuthenticatedCliPlugin :
         string standardError)
     {
         var text = (standardOutput + "\n" + standardError).ToLowerInvariant();
-        if (ContainsAny(text, "not logged in", "not authenticated", "authentication", "sign in", "login required"))
+        if (ContainsAny(
+                text,
+                "network",
+                "connection",
+                "dns",
+                "unreachable",
+                "service unavailable",
+                "timed out",
+                "timeout"))
+        {
+            return new PluginRequestException(
+                $"{descriptor.Key} CLI could not reach the provider.",
+                PluginRequestFailureKind.Network,
+                isTransient: true);
+        }
+
+        if (ContainsAny(
+                text,
+                "not logged in",
+                "not authenticated",
+                "login required",
+                "sign in required",
+                "please log in",
+                "please sign in",
+                "invalid credentials",
+                "expired credentials",
+                "authentication failed"))
         {
             return new PluginRequestException(
                 $"{descriptor.Key} CLI is not signed in.",
@@ -551,20 +651,19 @@ public sealed class AuthenticatedCliPlugin :
                 isTransient: false);
         }
 
-        if (ContainsAny(text, "model", "invalid argument", "unknown option"))
+        if (ContainsAny(
+                text,
+                "model not found",
+                "unknown model",
+                "invalid model",
+                "unsupported model",
+                "invalid argument",
+                "unknown option"))
         {
             return new PluginRequestException(
                 $"{descriptor.Key} CLI rejected the request configuration.",
                 PluginRequestFailureKind.InvalidRequest,
                 isTransient: false);
-        }
-
-        if (ContainsAny(text, "network", "connection", "dns", "unreachable"))
-        {
-            return new PluginRequestException(
-                $"{descriptor.Key} CLI could not reach the provider.",
-                PluginRequestFailureKind.Network,
-                isTransient: true);
         }
 
         return new PluginRequestException(
@@ -601,12 +700,12 @@ public sealed class AuthenticatedCliPlugin :
         return directory;
     }
 
-    private static async Task DeleteTempDirectoryAsync(string directory)
+    private static async Task<bool> DeleteTempDirectoryAsync(string directory)
     {
         var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "TypeWhisper", "AuthenticatedCli"));
         var fullPath = Path.GetFullPath(directory);
         if (!fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            return;
+            return false;
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
@@ -614,7 +713,7 @@ public sealed class AuthenticatedCliPlugin :
             {
                 if (Directory.Exists(fullPath))
                     Directory.Delete(fullPath, recursive: true);
-                return;
+                return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -622,7 +721,14 @@ public sealed class AuthenticatedCliPlugin :
                     await Task.Delay(50).ConfigureAwait(false);
             }
         }
+
+        return false;
     }
+
+    private void LogCleanupFailure(CliProviderDescriptor descriptor, string operation) =>
+        _host?.Log(
+            PluginLogLevel.Warning,
+            $"provider={descriptor.Key} event=temp-cleanup-failed operation={operation}");
 
     /// <inheritdoc />
     public void Dispose()
@@ -636,6 +742,7 @@ public sealed class AuthenticatedCliPlugin :
         _lifetimeCancellation = null;
         _pollTask = null;
         _host = null;
+        _refreshGate.Dispose();
     }
 
     private sealed class AuthenticatedCliProviderRole : ILlmProviderPlugin, ILlmProviderSelectionIdentity

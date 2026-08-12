@@ -105,8 +105,19 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
         {
             if (_updating || picker.SelectedItem is not string selected)
                 return;
-            await _plugin.SelectExecutableAsync(descriptor, selected);
-            UpdateCards();
+
+            try
+            {
+                await _plugin.SelectExecutableAsync(descriptor, selected);
+            }
+            catch (Exception ex)
+            {
+                _plugin.RecordSettingsFailure(descriptor, ex);
+            }
+            finally
+            {
+                UpdateCards();
+            }
         };
         var help = new TextBlock
         {
@@ -168,10 +179,14 @@ internal sealed class AuthenticatedCliSettingsView : UserControl
         try
         {
             await _plugin.RefreshFromSettingsAsync();
-            UpdateCards();
+        }
+        catch (Exception ex)
+        {
+            _plugin.RecordSettingsFailure(null, ex);
         }
         finally
         {
+            UpdateCards();
             _refreshButton.IsEnabled = true;
         }
     }

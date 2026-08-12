@@ -33,6 +33,13 @@ internal interface ICliProcessRunner
 
 internal sealed class CliProcessRunner : ICliProcessRunner
 {
+    private const uint CreateSuspended = 0x00000004;
+    private const uint CreateNoWindow = 0x08000000;
+    private const uint CreateUnicodeEnvironment = 0x00000400;
+    private const uint ExtendedStartupInfoPresent = 0x00080000;
+    private const uint StartfUseStdHandles = 0x00000100;
+    private const uint HandleFlagInherit = 0x00000001;
+    private const int ProcThreadAttributeHandleList = 0x00020002;
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(2);
     private static readonly Encoding Utf8WithoutBom = new UTF8Encoding(false, true);
     private static readonly string[] CommonEnvironmentVariables =
@@ -58,41 +65,21 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        using var process = new Process { StartInfo = CreateStartInfo(request) };
         using var job = WindowsJobObject.CreateKillOnClose();
-
-        try
-        {
-            if (!process.Start())
-                throw CreateConfigurationFailure("The provider CLI could not be started.");
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        {
-            throw CreateConfigurationFailure("The provider CLI could not be started.", ex);
-        }
-
-        try
-        {
-            job.Assign(process);
-            VerifyStartedExecutable(process, request.ExecutablePath);
-        }
-        catch
-        {
-            await StopProcessAsync(process, job).ConfigureAwait(false);
-            throw;
-        }
+        using var launched = StartSuspended(CreateStartInfo(request), job);
+        var process = launched.Process;
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(request.Timeout);
 
-        var inputTask = WriteInputAsync(process, request.StandardInput, timeout.Token);
+        var inputTask = WriteInputAsync(launched.StandardInput, request.StandardInput, timeout.Token);
         var outputTask = ReadLimitedAsync(
-            process.StandardOutput.BaseStream,
+            launched.StandardOutput,
             request.MaximumStandardOutputBytes,
             "stdout",
             timeout.Token);
         var errorTask = ReadLimitedAsync(
-            process.StandardError.BaseStream,
+            launched.StandardError,
             request.MaximumStandardErrorBytes,
             "stderr",
             timeout.Token);
@@ -106,6 +93,7 @@ internal sealed class CliProcessRunner : ICliProcessRunner
                 throw streamFailure;
 
             await exitTask.ConfigureAwait(false);
+            job.Terminate();
             await inputTask.ConfigureAwait(false);
             var outputBytes = await outputTask.ConfigureAwait(false);
             var errorBytes = await errorTask.ConfigureAwait(false);
@@ -189,7 +177,7 @@ internal sealed class CliProcessRunner : ICliProcessRunner
 
             if (name is "CODEX_HOME" or "CLAUDE_CONFIG_DIR")
             {
-                if (!IsSafeLocalDirectory(value))
+                if (!CliPathSafety.IsSafeLocalDirectory(value))
                     continue;
             }
 
@@ -213,31 +201,248 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         return startInfo;
     }
 
-    private static bool IsSafeLocalDirectory(string value)
+    private static NativeLaunchedProcess StartSuspended(
+        ProcessStartInfo startInfo,
+        WindowsJobObject job)
     {
         try
         {
-            if (!Path.IsPathFullyQualified(value))
-                return false;
-
-            var path = Path.GetFullPath(value);
-            var root = Path.GetPathRoot(path);
-            return !path.StartsWith("\\\\", StringComparison.Ordinal)
-                   && root is not null
-                   && new DriveInfo(root).DriveType != DriveType.Network
-                   && Directory.Exists(path);
+            return StartSuspendedCore(startInfo, job);
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        catch (PluginRequestException)
         {
-            return false;
+            throw;
+        }
+        catch (Exception ex) when (ex is Win32Exception
+                                   or InvalidOperationException
+                                   or ArgumentException
+                                   or IOException)
+        {
+            throw CreateConfigurationFailure("The provider CLI could not be started safely.", ex);
         }
     }
 
-    private static void VerifyStartedExecutable(Process process, string requestedPath)
+    private static NativeLaunchedProcess StartSuspendedCore(
+        ProcessStartInfo startInfo,
+        WindowsJobObject job)
+    {
+        using var inputPipe = CreateNativePipe(parentReads: false);
+        using var outputPipe = CreateNativePipe(parentReads: true);
+        using var errorPipe = CreateNativePipe(parentReads: true);
+        SafeFileHandle? processHandle = null;
+        SafeFileHandle? primaryThreadHandle = null;
+        FileStream? standardInput = null;
+        FileStream? standardOutput = null;
+        FileStream? standardError = null;
+        Process? process = null;
+        var attributeList = IntPtr.Zero;
+        var inheritedHandleList = IntPtr.Zero;
+        var environmentBlock = IntPtr.Zero;
+        var attributeListInitialized = false;
+        var assignedToJob = false;
+
+        try
+        {
+            var attributeListSize = IntPtr.Zero;
+            _ = InitializeProcThreadAttributeList(
+                IntPtr.Zero,
+                1,
+                0,
+                ref attributeListSize);
+            if (attributeListSize == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not size process attributes.");
+
+            attributeList = Marshal.AllocHGlobal(attributeListSize);
+            if (!InitializeProcThreadAttributeList(attributeList, 1, 0, ref attributeListSize))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not initialize process attributes.");
+            attributeListInitialized = true;
+
+            inheritedHandleList = Marshal.AllocHGlobal(3 * IntPtr.Size);
+            Marshal.WriteIntPtr(inheritedHandleList, 0, inputPipe.Child.DangerousGetHandle());
+            Marshal.WriteIntPtr(inheritedHandleList, IntPtr.Size, outputPipe.Child.DangerousGetHandle());
+            Marshal.WriteIntPtr(inheritedHandleList, 2 * IntPtr.Size, errorPipe.Child.DangerousGetHandle());
+            if (!UpdateProcThreadAttribute(
+                    attributeList,
+                    0,
+                    new IntPtr(ProcThreadAttributeHandleList),
+                    inheritedHandleList,
+                    new IntPtr(3 * IntPtr.Size),
+                    IntPtr.Zero,
+                    IntPtr.Zero))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not restrict inherited handles.");
+            }
+
+            var startupInfo = new StartupInfoEx
+            {
+                StartupInfo = new StartupInfo
+                {
+                    Size = Marshal.SizeOf<StartupInfoEx>(),
+                    Flags = StartfUseStdHandles,
+                    StandardInput = inputPipe.Child.DangerousGetHandle(),
+                    StandardOutput = outputPipe.Child.DangerousGetHandle(),
+                    StandardError = errorPipe.Child.DangerousGetHandle()
+                },
+                AttributeList = attributeList
+            };
+            var environment = BuildEnvironmentBlock(startInfo);
+            environmentBlock = Marshal.StringToHGlobalUni(environment);
+            var commandLine = new StringBuilder(BuildCommandLine(startInfo));
+            var creationFlags = CreateSuspended
+                                | CreateUnicodeEnvironment
+                                | ExtendedStartupInfoPresent
+                                | CreateNoWindow;
+
+            if (!CreateProcessW(
+                    startInfo.FileName,
+                    commandLine,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    inheritHandles: true,
+                    creationFlags,
+                    environmentBlock,
+                    startInfo.WorkingDirectory,
+                    ref startupInfo,
+                    out var processInformation))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not create the provider process.");
+            }
+
+            processHandle = new SafeFileHandle(processInformation.Process, ownsHandle: true);
+            primaryThreadHandle = new SafeFileHandle(processInformation.Thread, ownsHandle: true);
+            inputPipe.Child.Dispose();
+            outputPipe.Child.Dispose();
+            errorPipe.Child.Dispose();
+
+            job.Assign(processHandle.DangerousGetHandle());
+            assignedToJob = true;
+            VerifyStartedExecutable(processHandle.DangerousGetHandle(), startInfo.FileName);
+            process = Process.GetProcessById(unchecked((int)processInformation.ProcessId));
+
+            standardInput = CreateParentStream(inputPipe, FileAccess.Write);
+            standardOutput = CreateParentStream(outputPipe, FileAccess.Read);
+            standardError = CreateParentStream(errorPipe, FileAccess.Read);
+
+            if (ResumeThread(primaryThreadHandle.DangerousGetHandle()) == uint.MaxValue)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not resume the provider process.");
+
+            var launched = new NativeLaunchedProcess(process, standardInput, standardOutput, standardError);
+            process = null;
+            standardInput = null;
+            standardOutput = null;
+            standardError = null;
+            return launched;
+        }
+        catch
+        {
+            if (assignedToJob)
+                job.Terminate();
+            else if (processHandle is { IsInvalid: false, IsClosed: false })
+                _ = TerminateProcess(processHandle, 1);
+            throw;
+        }
+        finally
+        {
+            standardInput?.Dispose();
+            standardOutput?.Dispose();
+            standardError?.Dispose();
+            process?.Dispose();
+            primaryThreadHandle?.Dispose();
+            processHandle?.Dispose();
+            if (attributeList != IntPtr.Zero)
+            {
+                if (attributeListInitialized)
+                    DeleteProcThreadAttributeList(attributeList);
+                Marshal.FreeHGlobal(attributeList);
+            }
+            if (inheritedHandleList != IntPtr.Zero)
+                Marshal.FreeHGlobal(inheritedHandleList);
+            if (environmentBlock != IntPtr.Zero)
+                Marshal.FreeHGlobal(environmentBlock);
+        }
+    }
+
+    private static NativePipePair CreateNativePipe(bool parentReads)
+    {
+        var attributes = new SecurityAttributes
+        {
+            Length = Marshal.SizeOf<SecurityAttributes>(),
+            InheritHandle = 1
+        };
+        if (!CreatePipe(out var readHandle, out var writeHandle, ref attributes, 0))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not create a redirected process pipe.");
+
+        var parent = parentReads ? readHandle : writeHandle;
+        var child = parentReads ? writeHandle : readHandle;
+        if (!SetHandleInformation(parent, HandleFlagInherit, 0))
+        {
+            var error = Marshal.GetLastWin32Error();
+            readHandle.Dispose();
+            writeHandle.Dispose();
+            throw new Win32Exception(error, "Could not protect a parent pipe handle.");
+        }
+
+        return new NativePipePair(parent, child);
+    }
+
+    private static FileStream CreateParentStream(NativePipePair pipe, FileAccess access)
+    {
+        var stream = new FileStream(pipe.Parent, access, 4096, isAsync: false);
+        _ = pipe.TakeParent();
+        return stream;
+    }
+
+    private static string BuildEnvironmentBlock(ProcessStartInfo startInfo) =>
+        string.Concat(startInfo.Environment
+            .Where(pair => pair.Value is not null)
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => $"{pair.Key}={pair.Value}\0")) + "\0";
+
+    private static string BuildCommandLine(ProcessStartInfo startInfo) =>
+        // CreateProcessW requires one command-line buffer. Quote each ArgumentList entry
+        // with Windows argv rules; no command shell participates in this conversion.
+        string.Join(
+            " ",
+            startInfo.ArgumentList
+                .Prepend(startInfo.FileName)
+                .Select(QuoteWindowsArgument));
+
+    private static string QuoteWindowsArgument(string argument)
+    {
+        if (argument.Length == 0)
+            return "\"\"";
+        if (!argument.Any(character => char.IsWhiteSpace(character) || character == '"'))
+            return argument;
+
+        var quoted = new StringBuilder(argument.Length + 2).Append('"');
+        var backslashes = 0;
+        foreach (var character in argument)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+
+            if (character == '"')
+            {
+                quoted.Append('\\', backslashes * 2 + 1).Append('"');
+                backslashes = 0;
+                continue;
+            }
+
+            quoted.Append('\\', backslashes).Append(character);
+            backslashes = 0;
+        }
+
+        return quoted.Append('\\', backslashes * 2).Append('"').ToString();
+    }
+
+    private static void VerifyStartedExecutable(IntPtr processHandle, string requestedPath)
     {
         var buffer = new StringBuilder(32_768);
         var length = buffer.Capacity;
-        if (!QueryFullProcessImageNameW(process.Handle, 0, buffer, ref length))
+        if (!QueryFullProcessImageNameW(processHandle, 0, buffer, ref length))
         {
             throw CreateConfigurationFailure(
                 "The started provider CLI could not be verified.",
@@ -265,14 +470,15 @@ internal sealed class CliProcessRunner : ICliProcessRunner
     }
 
     private static async Task WriteInputAsync(
-        Process process,
+        Stream standardInput,
         string input,
         CancellationToken cancellationToken)
     {
         try
         {
-            await process.StandardInput.WriteAsync(input.AsMemory(), cancellationToken).ConfigureAwait(false);
-            await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+            var bytes = Utf8WithoutBom.GetBytes(input);
+            await standardInput.WriteAsync(bytes.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await standardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (IOException)
         {
@@ -282,7 +488,7 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         {
             try
             {
-                process.StandardInput.Close();
+                standardInput.Close();
             }
             catch (IOException)
             {
@@ -361,7 +567,7 @@ internal sealed class CliProcessRunner : ICliProcessRunner
             isTransient: false,
             innerException: inner);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool QueryFullProcessImageNameW(
         IntPtr process,
@@ -369,12 +575,165 @@ internal sealed class CliProcessRunner : ICliProcessRunner
         StringBuilder executablePath,
         ref int executablePathLength);
 
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreatePipe(
+        out SafeFileHandle readPipe,
+        out SafeFileHandle writePipe,
+        ref SecurityAttributes pipeAttributes,
+        uint size);
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetHandleInformation(
+        SafeFileHandle handle,
+        uint mask,
+        uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool InitializeProcThreadAttributeList(
+        IntPtr attributeList,
+        int attributeCount,
+        uint flags,
+        ref IntPtr size);
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UpdateProcThreadAttribute(
+        IntPtr attributeList,
+        uint flags,
+        IntPtr attribute,
+        IntPtr value,
+        IntPtr size,
+        IntPtr previousValue,
+        IntPtr returnSize);
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern void DeleteProcThreadAttributeList(IntPtr attributeList);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateProcessW(
+        string applicationName,
+        StringBuilder commandLine,
+        IntPtr processAttributes,
+        IntPtr threadAttributes,
+        [MarshalAs(UnmanagedType.Bool)] bool inheritHandles,
+        uint creationFlags,
+        IntPtr environment,
+        string currentDirectory,
+        ref StartupInfoEx startupInfo,
+        out ProcessInformation processInformation);
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern uint ResumeThread(IntPtr thread);
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool TerminateProcess(SafeFileHandle process, uint exitCode);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SecurityAttributes
+    {
+        internal int Length;
+        internal IntPtr SecurityDescriptor;
+        internal int InheritHandle;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct StartupInfo
+    {
+        internal int Size;
+        internal IntPtr Reserved;
+        internal IntPtr Desktop;
+        internal IntPtr Title;
+        internal uint X;
+        internal uint Y;
+        internal uint XSize;
+        internal uint YSize;
+        internal uint XCountChars;
+        internal uint YCountChars;
+        internal uint FillAttribute;
+        internal uint Flags;
+        internal ushort ShowWindow;
+        internal ushort ReservedSize;
+        internal IntPtr ReservedData;
+        internal IntPtr StandardInput;
+        internal IntPtr StandardOutput;
+        internal IntPtr StandardError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct StartupInfoEx
+    {
+        internal StartupInfo StartupInfo;
+        internal IntPtr AttributeList;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessInformation
+    {
+        internal IntPtr Process;
+        internal IntPtr Thread;
+        internal uint ProcessId;
+        internal uint ThreadId;
+    }
+
+    private sealed class NativePipePair(SafeFileHandle parent, SafeFileHandle child) : IDisposable
+    {
+        private SafeFileHandle? _parent = parent;
+
+        internal SafeFileHandle Parent => _parent
+            ?? throw new ObjectDisposedException(nameof(NativePipePair));
+
+        internal SafeFileHandle Child { get; } = child;
+
+        internal SafeFileHandle TakeParent()
+        {
+            var handle = Parent;
+            _parent = null;
+            return handle;
+        }
+
+        public void Dispose()
+        {
+            _parent?.Dispose();
+            _parent = null;
+            Child.Dispose();
+        }
+    }
+
+    private sealed class NativeLaunchedProcess(
+        Process process,
+        Stream standardInput,
+        Stream standardOutput,
+        Stream standardError) : IDisposable
+    {
+        internal Process Process { get; } = process;
+        internal Stream StandardInput { get; } = standardInput;
+        internal Stream StandardOutput { get; } = standardOutput;
+        internal Stream StandardError { get; } = standardError;
+
+        public void Dispose()
+        {
+            StandardInput.Dispose();
+            StandardOutput.Dispose();
+            StandardError.Dispose();
+            Process.Dispose();
+        }
+    }
+
     private sealed class CliOutputLimitExceededException(string message) : IOException(message);
 }
 
 internal sealed class WindowsJobObject : IDisposable
 {
+    private const uint JobObjectLimitActiveProcess = 0x00000008;
+    private const uint JobObjectLimitJobMemory = 0x00000200;
     private const uint JobObjectLimitKillOnJobClose = 0x00002000;
+    private const uint MaximumActiveProcesses = 32;
+    private const ulong MaximumJobMemoryBytes = 2UL * 1024 * 1024 * 1024;
     private const int JobObjectExtendedLimitInformationClass = 9;
     private readonly SafeFileHandle _handle;
 
@@ -394,7 +753,11 @@ internal sealed class WindowsJobObject : IDisposable
             BasicLimitInformation = new JobObjectBasicLimitInformation
             {
                 LimitFlags = JobObjectLimitKillOnJobClose
-            }
+                             | JobObjectLimitActiveProcess
+                             | JobObjectLimitJobMemory,
+                ActiveProcessLimit = MaximumActiveProcesses
+            },
+            JobMemoryLimit = new UIntPtr(MaximumJobMemoryBytes)
         };
         var length = (uint)Marshal.SizeOf<JobObjectExtendedLimitInformation>();
         if (!SetInformationJobObject(
@@ -411,9 +774,9 @@ internal sealed class WindowsJobObject : IDisposable
         return new WindowsJobObject(handle);
     }
 
-    internal void Assign(Process process)
+    internal void Assign(IntPtr processHandle)
     {
-        if (!AssignProcessToJobObject(_handle, process.Handle))
+        if (!AssignProcessToJobObject(_handle, processHandle))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not assign the provider CLI to cleanup control.");
     }
 
@@ -425,7 +788,7 @@ internal sealed class WindowsJobObject : IDisposable
 
     public void Dispose() => _handle.Dispose();
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, ExactSpelling = true)]
     private static extern SafeFileHandle CreateJobObjectW(IntPtr jobAttributes, string? name);
 
     [DllImport("kernel32.dll", SetLastError = true)]

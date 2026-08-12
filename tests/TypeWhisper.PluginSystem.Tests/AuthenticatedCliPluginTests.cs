@@ -154,6 +154,26 @@ public sealed class AuthenticatedCliPluginTests
     }
 
     [Fact]
+    public async Task NetworkFailureMentioningAuthenticationAndModel_RemainsTransient()
+    {
+        using var fake = FakeCliInstallation.Create("network-auth-model", "codex.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        await plugin.ActivateAsync(CreateHost().Object);
+        var role = GetRole(plugin, "authenticated-cli-codex");
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => role.ProcessAsync(
+            "Instruction",
+            "Input",
+            "default",
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.Network, error.FailureKind);
+        Assert.True(error.IsTransient);
+        Assert.True(role.IsAvailable);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
     public async Task UnsupportedModel_FailsBeforeLaunchingProviderCli()
     {
         using var fake = FakeCliInstallation.Create("success", "codex.exe");
@@ -229,6 +249,33 @@ public sealed class AuthenticatedCliPluginTests
         File.WriteAllText(scriptPath, "exit /b 0");
         Assert.False(CliExecutableDiscovery.IsSafeNativeExecutable(scriptPath, "codex.exe"));
         Assert.False(CliExecutableDiscovery.IsSafeNativeExecutable("codex.exe", "codex.exe"));
+        Assert.False(CliPathSafety.IsSafeLocalDirectory($"\\\\?\\{fake.DirectoryPath}"));
+    }
+
+    [Fact]
+    public void CapabilityProbe_RequiresExactSafetyFlagTokens()
+    {
+        var codex = Descriptor(CliProviderKind.Codex);
+        const string exact = "--ignore-user-config --ignore-rules --ephemeral --output-schema --strict-config --json --sandbox --skip-git-repo-check";
+        const string substringOnly = "--ignore-user-config --ignore-rules --ephemeral --output-schema --strict-config --json-schema --sandbox --skip-git-repo-check";
+
+        Assert.True(codex.HasRequiredCapabilities(exact));
+        Assert.False(codex.HasRequiredCapabilities(substringOnly));
+    }
+
+    [Fact]
+    public async Task ThrowingSettingsActivitySubscriber_DoesNotLeakRefreshGate()
+    {
+        using var fake = FakeCliInstallation.Create("success", "codex.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        plugin.SettingsActivityChanged += _ => throw new InvalidOperationException("subscriber failure");
+        await plugin.ActivateAsync(CreateHost().Object);
+
+        await plugin.RefreshFromSettingsAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        await plugin.RefreshFromSettingsAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(CliAvailabilityState.Ready, plugin.GetSnapshot(Descriptor(CliProviderKind.Codex)).State);
+        await plugin.DeactivateAsync();
     }
 
     [Fact]
@@ -374,6 +421,20 @@ public sealed class AuthenticatedCliPluginTests
             CreateRunnerRequest(fake, "input", TimeSpan.FromSeconds(2)),
             CancellationToken.None));
 
+        var childPid = int.Parse(await File.ReadAllTextAsync(Path.Combine(fake.WorkingDirectory, "spawned.pid")));
+        Assert.True(await WaitForProcessExitAsync(childPid, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public async Task Runner_ContainsChildSpawnedBeforeParentExits()
+    {
+        using var fake = FakeCliInstallation.Create("instant-child", "codex.exe");
+
+        var result = await new CliProcessRunner().RunAsync(
+            CreateRunnerRequest(fake, "input", TimeSpan.FromSeconds(5)),
+            CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
         var childPid = int.Parse(await File.ReadAllTextAsync(Path.Combine(fake.WorkingDirectory, "spawned.pid")));
         Assert.True(await WaitForProcessExitAsync(childPid, TimeSpan.FromSeconds(2)));
     }

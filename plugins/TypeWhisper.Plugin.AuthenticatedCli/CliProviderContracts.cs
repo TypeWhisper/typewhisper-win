@@ -115,7 +115,10 @@ internal sealed class CliProviderDescriptor
             ["--version"],
             ["exec", "--help"],
             ["login", "status"],
-            ["--ignore-user-config", "--ignore-rules", "--ephemeral", "--output-schema", "--strict-config", "--json"],
+            [
+                "--ignore-user-config", "--ignore-rules", "--ephemeral", "--output-schema",
+                "--strict-config", "--json", "--sandbox", "--skip-git-repo-check"
+            ],
             ["CODEX_HOME"],
             safetyControlsAvailable: true),
         new(
@@ -128,7 +131,10 @@ internal sealed class CliProviderDescriptor
             ["--version"],
             ["--help"],
             ["auth", "status"],
-            ["--safe-mode", "--tools", "--strict-mcp-config", "--no-session-persistence", "--json-schema"],
+            [
+                "--safe-mode", "--tools", "--strict-mcp-config", "--no-session-persistence",
+                "--json-schema", "--disallowedTools", "--disable-slash-commands", "--no-chrome"
+            ],
             ["CLAUDE_CONFIG_DIR"],
             safetyControlsAvailable: true),
         new(
@@ -222,7 +228,10 @@ internal sealed class CliProviderDescriptor
     }
 
     internal bool HasRequiredCapabilities(string helpOutput) =>
-        RequiredHelpTokens.All(token => helpOutput.Contains(token, StringComparison.Ordinal));
+        RequiredHelpTokens.All(token => Regex.IsMatch(
+            helpOutput,
+            $@"(?<![0-9A-Za-z_-]){Regex.Escape(token)}(?![0-9A-Za-z_-])",
+            RegexOptions.CultureInvariant));
 
     internal bool IsAuthenticated(int exitCode, string stdout)
     {

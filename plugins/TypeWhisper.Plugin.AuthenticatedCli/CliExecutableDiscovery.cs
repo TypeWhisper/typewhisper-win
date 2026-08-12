@@ -35,7 +35,7 @@ internal sealed class CliExecutableDiscovery
             foreach (var rawDirectory in value.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
             {
                 var directory = Environment.ExpandEnvironmentVariables(rawDirectory.Trim().Trim('"'));
-                if (!IsSafeLocalDirectory(directory))
+                if (!CliPathSafety.IsSafeLocalDirectory(directory))
                     continue;
 
                 string candidate;
@@ -66,8 +66,8 @@ internal sealed class CliExecutableDiscovery
                 return false;
 
             var fullPath = Path.GetFullPath(path);
-            if (IsNetworkOrDevicePath(fullPath)
-                || IsNetworkDrive(fullPath)
+            if (CliPathSafety.IsNetworkOrDevicePath(fullPath)
+                || CliPathSafety.IsNetworkDrive(fullPath)
                 || !string.Equals(Path.GetExtension(fullPath), ".exe", StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(Path.GetFileName(fullPath), executableName, StringComparison.OrdinalIgnoreCase)
                 || !File.Exists(fullPath)
@@ -96,7 +96,15 @@ internal sealed class CliExecutableDiscovery
         }
     }
 
-    private static bool IsSafeLocalDirectory(string path)
+    private static string? ReadPath(EnvironmentVariableTarget target) =>
+        target == EnvironmentVariableTarget.Process
+            ? Environment.GetEnvironmentVariable("PATH")
+            : Environment.GetEnvironmentVariable("PATH", target);
+}
+
+internal static class CliPathSafety
+{
+    internal static bool IsSafeLocalDirectory(string path)
     {
         try
         {
@@ -104,9 +112,22 @@ internal sealed class CliExecutableDiscovery
                 return false;
 
             var fullPath = Path.GetFullPath(path);
-            return !IsNetworkOrDevicePath(fullPath)
-                   && !IsNetworkDrive(fullPath)
-                   && Directory.Exists(fullPath);
+            if (IsNetworkOrDevicePath(fullPath)
+                || IsNetworkDrive(fullPath)
+                || !Directory.Exists(fullPath))
+            {
+                return false;
+            }
+
+            var directory = new DirectoryInfo(fullPath);
+            while (directory is not null)
+            {
+                if (directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    return false;
+                directory = directory.Parent;
+            }
+
+            return true;
         }
         catch (Exception ex) when (ex is ArgumentException
                                    or IOException
@@ -118,19 +139,14 @@ internal sealed class CliExecutableDiscovery
         }
     }
 
-    private static bool IsNetworkOrDevicePath(string path) =>
+    internal static bool IsNetworkOrDevicePath(string path) =>
         path.StartsWith("\\\\", StringComparison.Ordinal)
-        || path.StartsWith("\\?\\", StringComparison.Ordinal)
-        || path.StartsWith("\\.\\", StringComparison.Ordinal);
+        || path.StartsWith("\\\\?\\", StringComparison.Ordinal)
+        || path.StartsWith("\\\\.\\", StringComparison.Ordinal);
 
-    private static bool IsNetworkDrive(string path)
+    internal static bool IsNetworkDrive(string path)
     {
         var root = Path.GetPathRoot(path);
         return root is null || new DriveInfo(root).DriveType == DriveType.Network;
     }
-
-    private static string? ReadPath(EnvironmentVariableTarget target) =>
-        target == EnvironmentVariableTarget.Process
-            ? Environment.GetEnvironmentVariable("PATH")
-            : Environment.GetEnvironmentVariable("PATH", target);
 }
