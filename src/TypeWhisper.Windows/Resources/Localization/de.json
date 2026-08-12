@@ -1336,6 +1336,9 @@
   "Translation.None": "Keine \u00dcbersetzung",
 
   "Error.NoLlmProvider": "Kein KI-Anbieter verf\u00fcgbar. Richte einen lokalen oder Cloud-Anbieter in Integrationen ein.",
+  "Error.SelectedLlmProviderMissing": "Der ausgew\u00e4hlte KI-Anbieter ist nicht mehr installiert: {0}. W\u00e4hle in Workflows einen anderen Anbieter.",
+  "Error.SelectedLlmProviderUnavailable": "Der ausgew\u00e4hlte KI-Anbieter ist nicht bereit: {0}. Pr\u00fcfe Anmeldung und Konfiguration unter Integrationen.",
+  "Workflows.ProviderUnavailableFormat": "{0} (nicht verf\u00fcgbar)",
   "Error.PromptProcessingFailed": "Prompt-Verarbeitung fehlgeschlagen: {0}",
   "Error.NoApiKeyFormat": "Kein API-Key f\u00fcr {0}",
   "Error.FileNotFound": "Datei nicht gefunden.",

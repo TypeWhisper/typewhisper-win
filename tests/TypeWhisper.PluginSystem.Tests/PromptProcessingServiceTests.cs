@@ -143,6 +143,78 @@ public sealed class PromptProcessingServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ProcessAsync_UnavailableProviderOverrideFailsWithoutCrossProviderFallback()
+    {
+        var unavailable = new CapturingLlmProvider(
+            "com.test.unavailable",
+            "Unavailable",
+            "unavailable-model")
+        {
+            IsAvailable = false
+        };
+        var fallback = new CapturingLlmProvider("com.test.fallback", "Fallback", "fallback-model");
+        SetLlmProviders(_pluginManager, unavailable, fallback);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => CreateService().ProcessAsync(
+            "Prompt",
+            "Private input",
+            "plugin:com.test.unavailable:unavailable-model",
+            null,
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.False(error.IsTransient);
+        Assert.Equal(0, unavailable.CallCount);
+        Assert.Equal(0, fallback.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UnavailableDefaultProviderFailsWithoutCrossProviderFallback()
+    {
+        var unavailable = new CapturingLlmProvider(
+            "com.test.unavailable",
+            "Unavailable",
+            "unavailable-model")
+        {
+            IsAvailable = false
+        };
+        var fallback = new CapturingLlmProvider("com.test.fallback", "Fallback", "fallback-model");
+        SetLlmProviders(_pluginManager, unavailable, fallback);
+        _settings.Save(_settings.Current with
+        {
+            DefaultLlmProvider = "plugin:com.test.unavailable:unavailable-model"
+        });
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => CreateService().ProcessAsync(
+            "Prompt",
+            "Private input",
+            null,
+            null,
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Equal(0, unavailable.CallCount);
+        Assert.Equal(0, fallback.CallCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MissingProviderOverrideFailsWithoutCrossProviderFallback()
+    {
+        var fallback = new CapturingLlmProvider("com.test.fallback", "Fallback", "fallback-model");
+        SetLlmProviders(_pluginManager, fallback);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => CreateService().ProcessAsync(
+            "Prompt",
+            "Private input",
+            "plugin:com.test.missing:missing-model",
+            null,
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.Configuration, error.FailureKind);
+        Assert.Equal(0, fallback.CallCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_RemovesEchoedBoundaryScaffoldFromResult()
     {
         var provider = new CapturingLlmProvider("com.test.primary", "Primary", "test-model");

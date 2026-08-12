@@ -1,0 +1,12 @@
+{
+  "id": "com.typewhisper.authenticated-cli",
+  "name": "Authenticated Provider CLIs",
+  "version": "1.0.0",
+  "author": "TypeWhisper",
+  "description": "Use authenticated Codex and Claude CLI sessions for prompt processing",
+  "category": "llm",
+  "categories": ["llm", "integrations"],
+  "requiresApiKey": false,
+  "assemblyName": "TypeWhisper.Plugin.AuthenticatedCli.dll",
+  "pluginClass": "TypeWhisper.Plugin.AuthenticatedCli.AuthenticatedCliPlugin"
+}

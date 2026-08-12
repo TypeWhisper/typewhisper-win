@@ -125,9 +125,6 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
         var workflowRequiresLlm = systemPrompt is not null;
         if (systemPrompt is not null)
         {
-            if (!_workflowTextProcessor.IsAnyProviderAvailable)
-                throw new InvalidOperationException(Localization.Loc.Instance["Error.NoLlmProvider"]);
-
             var behavior = request.Workflow!.Behavior;
             llmHandler = (text, token) => _workflowTextProcessor.ProcessAsync(
                 systemPrompt,
