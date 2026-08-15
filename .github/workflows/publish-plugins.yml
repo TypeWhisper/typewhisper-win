@@ -51,6 +51,7 @@ jobs:
             'linear'             = 'TypeWhisper.Plugin.Linear'
             'obsidian'           = 'TypeWhisper.Plugin.Obsidian'
             'script'             = 'TypeWhisper.Plugin.Script'
+            'filler-words'       = 'TypeWhisper.Plugin.FillerWords'
             'live-transcript'    = 'TypeWhisper.Plugin.LiveTranscript'
             'granite-speech'     = 'TypeWhisper.Plugin.GraniteSpeech'
             'cohere-transcribe'  = 'TypeWhisper.Plugin.CohereTranscribe'

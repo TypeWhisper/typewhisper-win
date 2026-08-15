@@ -23,6 +23,7 @@
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.Gemini\Tests\**\*.cs" LinkBase="Gemini" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\Tests\*.cs" LinkBase="LiveTranscript" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\Tests\*.cs" LinkBase="SmallestAi" />
+    <Compile Include="..\..\plugins\TypeWhisper.Plugin.FillerWords\Tests\*.cs" LinkBase="FillerWords" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +47,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\TypeWhisper.Plugin.LiveTranscript.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Script\TypeWhisper.Plugin.Script.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.SmallestAi\TypeWhisper.Plugin.SmallestAi.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.FillerWords\TypeWhisper.Plugin.FillerWords.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Cli\TypeWhisper.Cli.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
     <ProjectReference Include="..\..\src\TypeWhisper.Windows\TypeWhisper.Windows.csproj" />
