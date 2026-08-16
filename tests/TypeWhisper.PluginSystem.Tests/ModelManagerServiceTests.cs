@@ -71,6 +71,44 @@ public class ModelManagerServiceTests
     }
 
     [Fact]
+    public async Task LoadModelAsync_SwitchingTranscriptionPlugin_UnloadsPreviousPlugin()
+    {
+        const string localPluginId = "com.typewhisper.sherpa-onnx";
+        const string localModelId = "parakeet";
+        const string cloudPluginId = "com.typewhisper.cloud";
+        const string cloudModelId = "whisper";
+        var localFullModelId = ModelManagerService.GetPluginModelId(localPluginId, localModelId);
+        var cloudFullModelId = ModelManagerService.GetPluginModelId(cloudPluginId, cloudModelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = cloudFullModelId
+        });
+
+        var localPlugin = new FakeTranscriptionPlugin(
+            localPluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [localModelId]);
+        var cloudPlugin = new FakeTranscriptionPlugin(
+            cloudPluginId,
+            configured: true,
+            selectedModelId: null,
+            modelIds: [cloudModelId]);
+        var sut = new ModelManagerService(
+            CreatePluginManager(localPlugin, cloudPlugin),
+            _settings.Object);
+
+        await sut.LoadModelAsync(localFullModelId);
+        await sut.LoadModelAsync(cloudFullModelId);
+
+        Assert.Equal(1, localPlugin.UnloadCallCount);
+        Assert.Equal(cloudFullModelId, sut.ActiveModelId);
+        Assert.Same(cloudPlugin, sut.ActiveTranscriptionPlugin);
+    }
+
+    [Fact]
     public async Task PluginInstanceReplacement_InvalidatesAndReloadsActiveModel()
     {
         const string pluginId = "com.typewhisper.sherpa-onnx";
