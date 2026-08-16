@@ -79,6 +79,9 @@ public class ModelManagerServiceTests
         const string cloudModelId = "whisper";
         var localFullModelId = ModelManagerService.GetPluginModelId(localPluginId, localModelId);
         var cloudFullModelId = ModelManagerService.GetPluginModelId(cloudPluginId, cloudModelId);
+        var unloadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var unloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lifecycleEvents = new List<string>();
 
         _settings.Setup(s => s.Current).Returns(new AppSettings
         {
@@ -90,7 +93,68 @@ public class ModelManagerServiceTests
             configured: true,
             selectedModelId: null,
             supportsModelDownload: true,
-            modelIds: [localModelId]);
+            modelIds: [localModelId])
+        {
+            UnloadStarted = unloadStarted,
+            UnloadGate = unloadGate,
+            LifecycleEvents = lifecycleEvents
+        };
+        var cloudPlugin = new FakeTranscriptionPlugin(
+            cloudPluginId,
+            configured: true,
+            selectedModelId: null,
+            modelIds: [cloudModelId])
+        {
+            LifecycleEvents = lifecycleEvents
+        };
+        var sut = new ModelManagerService(
+            CreatePluginManager(localPlugin, cloudPlugin),
+            _settings.Object);
+
+        await sut.LoadModelAsync(localFullModelId);
+        lifecycleEvents.Clear();
+
+        var switchTask = sut.LoadModelAsync(cloudFullModelId);
+        await unloadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(switchTask.IsCompleted);
+        Assert.Null(cloudPlugin.SelectedModelId);
+
+        unloadGate.SetResult();
+        await switchTask;
+
+        Assert.Equal(1, localPlugin.UnloadCallCount);
+        Assert.Equal(
+            [$"{localPluginId}:unload", $"{cloudPluginId}:select"],
+            lifecycleEvents);
+        Assert.Equal(cloudFullModelId, sut.ActiveModelId);
+        Assert.Same(cloudPlugin, sut.ActiveTranscriptionPlugin);
+    }
+
+    [Fact]
+    public async Task LoadModelAsync_SwitchingTranscriptionPlugin_ClearsActiveStateWhenUnloadFails()
+    {
+        const string localPluginId = "com.typewhisper.sherpa-onnx";
+        const string localModelId = "parakeet";
+        const string cloudPluginId = "com.typewhisper.cloud";
+        const string cloudModelId = "whisper";
+        var localFullModelId = ModelManagerService.GetPluginModelId(localPluginId, localModelId);
+        var cloudFullModelId = ModelManagerService.GetPluginModelId(cloudPluginId, cloudModelId);
+
+        _settings.Setup(s => s.Current).Returns(new AppSettings
+        {
+            SelectedModelId = cloudFullModelId
+        });
+
+        var localPlugin = new FakeTranscriptionPlugin(
+            localPluginId,
+            configured: true,
+            selectedModelId: null,
+            supportsModelDownload: true,
+            modelIds: [localModelId])
+        {
+            UnloadException = new InvalidOperationException("Unload failed")
+        };
         var cloudPlugin = new FakeTranscriptionPlugin(
             cloudPluginId,
             configured: true,
@@ -101,11 +165,15 @@ public class ModelManagerServiceTests
             _settings.Object);
 
         await sut.LoadModelAsync(localFullModelId);
-        await sut.LoadModelAsync(cloudFullModelId);
 
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.LoadModelAsync(cloudFullModelId));
+
+        Assert.Equal("Unload failed", exception.Message);
         Assert.Equal(1, localPlugin.UnloadCallCount);
-        Assert.Equal(cloudFullModelId, sut.ActiveModelId);
-        Assert.Same(cloudPlugin, sut.ActiveTranscriptionPlugin);
+        Assert.Null(cloudPlugin.SelectedModelId);
+        Assert.Null(sut.ActiveModelId);
+        Assert.Null(sut.ActiveTranscriptionPlugin);
     }
 
     [Fact]
@@ -1017,6 +1085,10 @@ public class ModelManagerServiceTests
         public Exception? LoadException { get; init; }
         public Exception? DownloadException { get; set; }
         public TaskCompletionSource? LoadGate { get; init; }
+        public Exception? UnloadException { get; init; }
+        public TaskCompletionSource? UnloadStarted { get; init; }
+        public TaskCompletionSource? UnloadGate { get; init; }
+        public List<string>? LifecycleEvents { get; init; }
         public Exception? DownloadStatusException { get; init; }
         public bool ModelDownloaded { get; set; } = true;
         public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements { get; init; } = [];
@@ -1031,7 +1103,11 @@ public class ModelManagerServiceTests
         public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
         public Task DeactivateAsync() => Task.CompletedTask;
         public System.Windows.Controls.UserControl? CreateSettingsView() => null;
-        public void SelectModel(string modelId) => SelectedModelId = modelId;
+        public void SelectModel(string modelId)
+        {
+            SelectedModelId = modelId;
+            LifecycleEvents?.Add($"{PluginId}:select");
+        }
         public void SetAccelerationPreference(TranscriptionAccelerationPreference preference) =>
             LastAccelerationPreference = preference;
         public bool IsModelDownloaded(string modelId)
@@ -1066,10 +1142,17 @@ public class ModelManagerServiceTests
             return Task.CompletedTask;
         }
 
-        public Task UnloadModelAsync()
+        public async Task UnloadModelAsync()
         {
             UnloadCallCount++;
-            return Task.CompletedTask;
+            UnloadStarted?.TrySetResult();
+            if (UnloadGate is not null)
+                await UnloadGate.Task;
+
+            if (UnloadException is not null)
+                throw UnloadException;
+
+            LifecycleEvents?.Add($"{PluginId}:unload");
         }
 
         public async Task LoadModelAsync(string modelId, CancellationToken ct)
