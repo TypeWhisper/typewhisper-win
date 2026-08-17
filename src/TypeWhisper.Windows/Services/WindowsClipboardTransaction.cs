@@ -220,7 +220,6 @@ internal sealed class WindowsClipboardTransaction : IDisposable
     private WindowsClipboardSnapshot CaptureSnapshotCore(uint enterpriseFormat)
     {
         var entries = new List<ClipboardFormatHandle>();
-        var capturedFormats = new HashSet<uint>();
         var unavailableFormats = new List<UnavailableClipboardFormat>();
         string? enterpriseId = null;
         try
@@ -281,15 +280,12 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     nextFormat,
                     duplicateHandle,
                     _handleReleaseObserver));
-                capturedFormats.Add(nextFormat);
                 currentFormat = nextFormat;
             }
 
             foreach (var unavailableFormat in unavailableFormats)
             {
-                if (CanRestoreFromCapturedBitmapRepresentation(
-                        unavailableFormat.Format,
-                        capturedFormats))
+                if (CanSkipUnavailableBitmapFormat(unavailableFormat.Format))
                     continue;
 
                 throw ClipboardError(
@@ -355,19 +351,10 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return length > 0 ? $"{format} ('{name}')" : format.ToString();
     }
 
-    private static bool CanRestoreFromCapturedBitmapRepresentation(
-        uint unavailableFormat,
-        IReadOnlySet<uint> capturedFormats)
+    private static bool CanSkipUnavailableBitmapFormat(uint unavailableFormat)
     {
-        var hasBitmapRepresentation =
-            capturedFormats.Contains(NativeMethods.CF_BITMAP) ||
-            capturedFormats.Contains(NativeMethods.CF_DIB) ||
-            capturedFormats.Contains(NativeMethods.CF_DIBV5);
-        if (!hasBitmapRepresentation)
-            return false;
-
-        // EnumClipboardFormats includes bitmap formats synthesized from another available
-        // bitmap representation. Windows recreates those alternatives after restoration.
+        // Some clipboard owners advertise delayed bitmap formats but fail to render them.
+        // Drop those unusable representations instead of blocking dictated text insertion.
         if (unavailableFormat is NativeMethods.CF_BITMAP
             or NativeMethods.CF_DIB
             or NativeMethods.CF_DIBV5)
@@ -383,7 +370,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             name.Capacity);
 
         // OLE image providers can advertise this managed bitmap alias without exposing a
-        // native handle. The captured standard bitmap formats preserve the same image.
+        // native handle.
         return length > 0 && string.Equals(
             name.ToString(),
             "System.Drawing.Bitmap",
