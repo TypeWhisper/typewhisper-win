@@ -169,7 +169,6 @@ public static class Program
                         continue;
 
                     NativeMethods.AllowSetForegroundWindow((uint)candidate.Id);
-                    return;
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                 {

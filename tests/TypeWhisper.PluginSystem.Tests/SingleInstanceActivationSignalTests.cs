@@ -60,6 +60,31 @@ public sealed class SingleInstanceActivationSignalTests
     }
 
     [Fact]
+    public void Program_GrantsForegroundAccessToEverySameSessionCandidate()
+    {
+        var source = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Program.cs");
+        var methodStart = source.IndexOf(
+            "private static void AllowRunningInstanceToSetForegroundWindow()",
+            StringComparison.Ordinal);
+        Assert.True(methodStart >= 0);
+
+        var methodEnd = source.IndexOf(
+            "internal static bool IsPortableLayout",
+            methodStart,
+            StringComparison.Ordinal);
+
+        Assert.True(methodEnd > methodStart);
+
+        var methodSource = source[methodStart..methodEnd];
+        Assert.Contains("candidate.SessionId != current.SessionId", methodSource);
+        Assert.Contains("NativeMethods.AllowSetForegroundWindow((uint)candidate.Id);", methodSource);
+        Assert.DoesNotContain("return;", methodSource);
+    }
+
+    [Fact]
     public void App_ActivatesOnboardingOrDashboardWhenAnotherInstanceStarts()
     {
         var source = TestFile.ReadProjectFile(
