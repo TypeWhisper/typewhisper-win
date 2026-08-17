@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
@@ -9,6 +10,7 @@ using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 using TypeWhisper.Core.Services.SpokenFormatting;
 using TypeWhisper.Core.Services.Sync;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
@@ -31,6 +33,9 @@ public partial class App : Application
     private FileTranscriptionWindow? _fileTranscriptionWindow;
     private WelcomeWindow? _welcomeWindow;
     private DispatcherTimer? _protocolCallbackTimer;
+    private RegisteredWaitHandle? _singleInstanceActivationRegistration;
+    private bool _startupPresentationReady;
+    private bool _pendingSingleInstanceActivation;
     private static readonly string ProtocolCallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
     /// <summary>
@@ -149,6 +154,7 @@ public partial class App : Application
 
         var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
         mainWindow.Show();
+        StartSingleInstanceActivationListener();
         await Dispatcher.Yield(DispatcherPriority.ContextIdle);
 
         // Apply staged plugin updates before plugin assemblies are loaded.
@@ -252,6 +258,13 @@ public partial class App : Application
                     ShowSettingsWindow(route, focusPluginId: completionRequest.PluginIdToConfigure);
             };
             _welcomeWindow.Show();
+        }
+
+        _startupPresentationReady = true;
+        if (_pendingSingleInstanceActivation)
+        {
+            _pendingSingleInstanceActivation = false;
+            ActivatePrimaryInstance();
         }
 
         // Migrate old local model IDs to plugin-prefixed format
@@ -409,6 +422,43 @@ public partial class App : Application
         ShowSettingsWindow(SettingsRoute.License);
     }
 
+    private void StartSingleInstanceActivationListener()
+    {
+        _singleInstanceActivationRegistration = Program.ListenForActivationRequests(() =>
+        {
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            _ = Dispatcher.BeginInvoke(() =>
+            {
+                if (!_startupPresentationReady)
+                {
+                    _pendingSingleInstanceActivation = true;
+                    return;
+                }
+
+                ActivatePrimaryInstance();
+            });
+        });
+    }
+
+    private void ActivatePrimaryInstance()
+    {
+        if (_welcomeWindow is { IsLoaded: true })
+        {
+            RestoreAndActivateWindow(_welcomeWindow);
+            return;
+        }
+
+        if (_settingsWindow is { IsLoaded: true })
+        {
+            RestoreAndActivateWindow(_settingsWindow);
+            return;
+        }
+
+        ShowSettingsWindow(SettingsRoute.Dashboard);
+    }
+
     internal void ShowSettingsWindow(
         SettingsRoute? route = null,
         bool presentFileImporter = false,
@@ -424,7 +474,7 @@ public partial class App : Application
         {
             if (_settingsWindow.DataContext is SettingsWindowViewModel existingViewModel)
                 ApplySettingsWindowRequest(existingViewModel, route, presentFileImporter, focusPluginId);
-            _settingsWindow.Activate();
+            RestoreAndActivateWindow(_settingsWindow);
             return;
         }
 
@@ -434,6 +484,22 @@ public partial class App : Application
 
         if (_settingsWindow.DataContext is SettingsWindowViewModel viewModel)
             ApplySettingsWindowRequest(viewModel, route, presentFileImporter, focusPluginId);
+
+        RestoreAndActivateWindow(_settingsWindow);
+    }
+
+    private static void RestoreAndActivateWindow(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized)
+            window.WindowState = WindowState.Normal;
+
+        if (!window.IsVisible)
+            window.Show();
+
+        window.Activate();
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle != IntPtr.Zero)
+            NativeMethods.SetForegroundWindow(handle);
     }
 
     private static void ApplySettingsWindowRequest(
@@ -647,6 +713,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _startupCancellation.Cancel();
+        _singleInstanceActivationRegistration?.Unregister(null);
+        _singleInstanceActivationRegistration = null;
         _protocolCallbackTimer?.Stop();
         _historyRetentionCoordinator?.HandleShutdown();
         _trayIcon?.Dispose();

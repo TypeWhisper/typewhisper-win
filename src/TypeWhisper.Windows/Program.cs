@@ -3,6 +3,7 @@ using System.IO;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.Windows.Services.Localization;
 using TypeWhisper.Windows.Services.Plugins;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Core;
 #if TYPEWHISPER_STORE
 using Windows.ApplicationModel;
@@ -19,6 +20,7 @@ namespace TypeWhisper.Windows;
 public static class Program
 {
     private static Mutex? _singleInstanceMutex;
+    private static SingleInstanceActivationSignal? _singleInstanceActivationSignal;
     private static IReadOnlyList<string>? _restartArgs;
     private static readonly string CallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
@@ -78,6 +80,7 @@ public static class Program
         var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
 
         // Single instance check
+        using var activationSignal = SingleInstanceActivationSignal.OpenOrCreate();
         _singleInstanceMutex = new Mutex(true, "TypeWhisper-SingleInstance", out var createdNew);
         if (!createdNew)
         {
@@ -87,6 +90,12 @@ public static class Program
                 {
                     Directory.CreateDirectory(TypeWhisperEnvironment.DataPath);
                     File.WriteAllText(CallbackInboxPath, callbackArg);
+                }
+
+                if (ShouldNotifyRunningInstance(StartMinimized, callbackArg))
+                {
+                    AllowRunningInstanceToSetForegroundWindow();
+                    activationSignal.Notify();
                 }
             }
             finally
@@ -98,6 +107,8 @@ public static class Program
             // Another instance is already running
             return;
         }
+
+        _singleInstanceActivationSignal = activationSignal;
 
         try
         {
@@ -128,9 +139,43 @@ public static class Program
             _singleInstanceMutex.ReleaseMutex();
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
+            _singleInstanceActivationSignal = null;
 
             if (restartArgs is not null)
                 StartRestartProcess(restartArgs);
+        }
+    }
+
+    internal static RegisteredWaitHandle ListenForActivationRequests(Action callback)
+    {
+        var signal = _singleInstanceActivationSignal
+            ?? throw new InvalidOperationException("The single-instance activation signal is not initialized.");
+        return signal.Listen(callback);
+    }
+
+    internal static bool ShouldNotifyRunningInstance(bool startMinimized, string? callbackArg) =>
+        !startMinimized && string.IsNullOrWhiteSpace(callbackArg);
+
+    private static void AllowRunningInstanceToSetForegroundWindow()
+    {
+        using var current = Process.GetCurrentProcess();
+        foreach (var candidate in Process.GetProcessesByName(current.ProcessName))
+        {
+            using (candidate)
+            {
+                try
+                {
+                    if (candidate.Id == current.Id || candidate.SessionId != current.SessionId)
+                        continue;
+
+                    NativeMethods.AllowSetForegroundWindow((uint)candidate.Id);
+                    return;
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    Debug.WriteLine($"Could not grant foreground access to TypeWhisper process {candidate.Id}: {ex.Message}");
+                }
+            }
         }
     }
 

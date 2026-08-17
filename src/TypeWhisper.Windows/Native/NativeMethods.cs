@@ -318,6 +318,13 @@ internal static partial class NativeMethods
     public static partial bool SetForegroundWindow(IntPtr hWnd);
 
     /// <summary>
+    /// Allows the supplied process to set the foreground window.
+    /// </summary>
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AllowSetForegroundWindow(uint processId);
+
+    /// <summary>
     /// Returns an ancestor window for the supplied window handle.
     /// </summary>
     [LibraryImport("user32.dll")]
