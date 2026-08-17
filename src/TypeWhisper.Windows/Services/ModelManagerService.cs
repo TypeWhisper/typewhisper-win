@@ -335,6 +335,8 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         SetStatus(modelId, ModelStatus.LoadingModel);
         try
         {
+            await UnloadActivePluginForSwitchAsync(plugin);
+
             var accelerationPreference = GetAccelerationPreference(_settings.Current.LocalModelAcceleration);
             plugin.SetAccelerationPreference(accelerationPreference);
 
@@ -360,6 +362,34 @@ public sealed class ModelManagerService : INotifyPropertyChanged, IDisposable
         {
             SetStatus(modelId, ModelStatus.Failed(GetModelLoadFailureMessage(plugin, ex)));
             throw;
+        }
+    }
+
+    private async Task UnloadActivePluginForSwitchAsync(ITranscriptionEnginePlugin targetPlugin)
+    {
+        var previousPlugin = _activeTranscriptionPlugin;
+        var previousModelId = ActiveModelId;
+        if (previousPlugin is null || ReferenceEquals(previousPlugin, targetPlugin))
+            return;
+
+        try
+        {
+            await previousPlugin.UnloadModelAsync();
+        }
+        finally
+        {
+            if (ReferenceEquals(_activeTranscriptionPlugin, previousPlugin))
+            {
+                if (previousModelId is not null)
+                {
+                    InvalidateActiveModelState(previousModelId);
+                }
+                else
+                {
+                    _activeTranscriptionPlugin = null;
+                    _activeModelAccelerationPreference = null;
+                }
+            }
         }
     }
 
