@@ -434,12 +434,17 @@ public sealed class KeyboardHook : IDisposable
 
 internal sealed class LowLevelHookThread : IDisposable
 {
+    private static readonly TimeSpan DefaultInvokeTimeout = TimeSpan.FromSeconds(5);
+
     private readonly Thread _thread;
     private readonly Dispatcher _dispatcher;
+    private readonly TimeSpan _invokeTimeout;
+    private Exception? _loopFailure;
     private int _disposed;
 
-    public LowLevelHookThread()
+    public LowLevelHookThread(TimeSpan? invokeTimeout = null)
     {
+        _invokeTimeout = invokeTimeout ?? DefaultInvokeTimeout;
         var ready = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
         _thread = new Thread(() =>
         {
@@ -448,9 +453,18 @@ internal sealed class LowLevelHookThread : IDisposable
                 var dispatcher = Dispatcher.CurrentDispatcher;
                 ready.TrySetResult(dispatcher);
                 Dispatcher.Run();
+
+                if (Volatile.Read(ref _disposed) == 0)
+                {
+                    MarkUnusable(new InvalidOperationException(
+                        "The low-level hook dispatcher stopped unexpectedly."));
+                }
             }
             catch (Exception ex)
             {
+                // This is the thread boundary. Recording every recoverable loop failure prevents
+                // an unhandled background-thread exception or a dead dispatcher reference.
+                MarkUnusable(ex);
                 ready.TrySetException(ex);
             }
         })
@@ -463,26 +477,59 @@ internal sealed class LowLevelHookThread : IDisposable
         _dispatcher = ready.Task.GetAwaiter().GetResult();
     }
 
-    public bool IsAlive => Volatile.Read(ref _disposed) == 0 && _thread.IsAlive;
+    public bool IsAlive =>
+        Volatile.Read(ref _disposed) == 0
+        && Volatile.Read(ref _loopFailure) is null
+        && _thread.IsAlive
+        && !_dispatcher.HasShutdownStarted
+        && !_dispatcher.HasShutdownFinished;
 
     public void Invoke(Action action)
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (_dispatcher.CheckAccess())
+        ArgumentNullException.ThrowIfNull(action);
+        Invoke<object?>(() =>
         {
             action();
-            return;
-        }
-
-        _dispatcher.Invoke(action, DispatcherPriority.Send);
+            return null;
+        });
     }
 
     public T Invoke<T>(Func<T> action)
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        return _dispatcher.CheckAccess()
-            ? action()
-            : _dispatcher.Invoke(action, DispatcherPriority.Send);
+        ArgumentNullException.ThrowIfNull(action);
+        ThrowIfDisposedOrFaulted();
+        if (_dispatcher.CheckAccess())
+            return action();
+
+        ThrowIfCannotSchedule();
+        var operationStarted = 0;
+
+        try
+        {
+            return _dispatcher.Invoke(
+                () =>
+                {
+                    Interlocked.Exchange(ref operationStarted, 1);
+                    return action();
+                },
+                DispatcherPriority.Send,
+                CancellationToken.None,
+                _invokeTimeout);
+        }
+        catch (TimeoutException ex) when (Volatile.Read(ref operationStarted) == 0)
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
+        catch (OperationCanceledException ex) when (Volatile.Read(ref operationStarted) == 0)
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
+        catch (InvalidOperationException ex) when (
+            Volatile.Read(ref operationStarted) == 0
+            && (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished || !_thread.IsAlive))
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
     }
 
     public void Dispose()
@@ -490,14 +537,47 @@ internal sealed class LowLevelHookThread : IDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        if (_dispatcher.CheckAccess())
-            _dispatcher.InvokeShutdown();
-        else
-            _dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+        if (!_dispatcher.HasShutdownStarted && !_dispatcher.HasShutdownFinished)
+        {
+            if (_dispatcher.CheckAccess())
+                _dispatcher.InvokeShutdown();
+            else
+                _dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+        }
 
         if (Thread.CurrentThread != _thread)
             _thread.Join(TimeSpan.FromSeconds(5));
     }
+
+    private void ThrowIfDisposedOrFaulted()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        var failure = Volatile.Read(ref _loopFailure);
+        if (failure is not null)
+            throw CreateUnavailableException(failure);
+    }
+
+    private void ThrowIfCannotSchedule()
+    {
+        if (_thread.IsAlive && !_dispatcher.HasShutdownStarted && !_dispatcher.HasShutdownFinished)
+            return;
+
+        var failure = new InvalidOperationException("The low-level hook dispatcher is not running.");
+        MarkUnusable(failure);
+        throw CreateUnavailableException(Volatile.Read(ref _loopFailure) ?? failure);
+    }
+
+    private InvalidOperationException MarkUnusableAndCreateException(Exception failure)
+    {
+        MarkUnusable(failure);
+        return CreateUnavailableException(Volatile.Read(ref _loopFailure) ?? failure);
+    }
+
+    private void MarkUnusable(Exception failure) =>
+        Interlocked.CompareExchange(ref _loopFailure, failure, null);
+
+    private static InvalidOperationException CreateUnavailableException(Exception failure) =>
+        new("The low-level hook dispatcher is unavailable.", failure);
 }
 
 internal sealed class LowLevelHookEventArgs(long timestamp) : EventArgs

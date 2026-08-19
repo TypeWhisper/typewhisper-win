@@ -182,6 +182,27 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void HybridShortPress_StaysInToggleModeWhenUiDeliveryIsDelayed()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default),
+            new FakeWorkflowService());
+        var starts = 0;
+        var stops = 0;
+        sut.DictationStartRequested += (_, _) => starts++;
+        sut.DictationStopRequested += (_, _) => stops++;
+        var keyDownTimestamp = Stopwatch.GetTimestamp();
+        var keyUpTimestamp = keyDownTimestamp + (long)(Stopwatch.Frequency * 0.1);
+
+        InvokePrivate(sut, "OnHybridKeyDown", new LowLevelHookEventArgs(keyDownTimestamp));
+        InvokePrivate(sut, "OnHybridKeyUp", new LowLevelHookEventArgs(keyUpTimestamp));
+
+        Assert.Equal(1, starts);
+        Assert.Equal(0, stops);
+        Assert.Equal(HotkeyMode.Toggle, sut.CurrentMode);
+    }
+
+    [Fact]
     public void WorkflowPaletteRequested_EventIsRaised()
     {
         var sut = new HotkeyService(
