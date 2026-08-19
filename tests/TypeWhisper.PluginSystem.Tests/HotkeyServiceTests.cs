@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Reflection;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Windows.Native;
 using TypeWhisper.Windows.Services;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -159,6 +161,27 @@ public sealed class HotkeyServiceTests
     }
 
     [Fact]
+    public void HybridHold_UsesInputTimestampsWhenUiDeliveryIsDelayed()
+    {
+        var sut = new HotkeyService(
+            new FakeSettingsService(AppSettings.Default),
+            new FakeWorkflowService());
+        var starts = 0;
+        var stops = 0;
+        sut.DictationStartRequested += (_, _) => starts++;
+        sut.DictationStopRequested += (_, _) => stops++;
+        var keyDownTimestamp = Stopwatch.GetTimestamp();
+        var keyUpTimestamp = keyDownTimestamp + (long)(Stopwatch.Frequency * 0.7);
+
+        InvokePrivate(sut, "OnHybridKeyDown", new LowLevelHookEventArgs(keyDownTimestamp));
+        InvokePrivate(sut, "OnHybridKeyUp", new LowLevelHookEventArgs(keyUpTimestamp));
+
+        Assert.Equal(1, starts);
+        Assert.Equal(1, stops);
+        Assert.Null(sut.CurrentMode);
+    }
+
+    [Fact]
     public void WorkflowPaletteRequested_EventIsRaised()
     {
         var sut = new HotkeyService(
@@ -177,11 +200,11 @@ public sealed class HotkeyServiceTests
         Assert.True(raised);
     }
 
-    private static void InvokePrivate(HotkeyService sut, string methodName)
+    private static void InvokePrivate(HotkeyService sut, string methodName, EventArgs? eventArgs = null)
     {
         var method = typeof(HotkeyService).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        method!.Invoke(sut, [null, EventArgs.Empty]);
+        method!.Invoke(sut, [null, eventArgs ?? EventArgs.Empty]);
     }
 
     [Fact]

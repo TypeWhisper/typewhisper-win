@@ -415,6 +415,20 @@ public class HotkeyInputTests
         Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(hardwareInput));
     }
 
+    [Fact]
+    public void LowLevelHookThread_InvokesOnDedicatedReusableThread()
+    {
+        using var sut = new LowLevelHookThread();
+        var callerThreadId = Environment.CurrentManagedThreadId;
+
+        var firstHookThreadId = sut.Invoke(() => Environment.CurrentManagedThreadId);
+        var secondHookThreadId = sut.Invoke(() => Environment.CurrentManagedThreadId);
+
+        Assert.NotEqual(callerThreadId, firstHookThreadId);
+        Assert.Equal(firstHookThreadId, secondHookThreadId);
+        Assert.True(sut.IsAlive);
+    }
+
     [Theory]
     [InlineData(NativeMethods.VK_RETURN)]
     [InlineData(NativeMethods.VK_TAB)]
