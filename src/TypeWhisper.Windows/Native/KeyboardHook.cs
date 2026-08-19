@@ -10,7 +10,8 @@ namespace TypeWhisper.Windows.Native;
 /// </summary>
 public sealed class KeyboardHook : IDisposable
 {
-    private static readonly Lazy<LowLevelHookThread> SharedHookThread = new();
+    private static readonly Lazy<LowLevelHookThread> SharedHookThread =
+        new(() => new LowLevelHookThread());
 
     private IntPtr _keyboardHookId = IntPtr.Zero;
     private IntPtr _mouseHookId = IntPtr.Zero;
