@@ -415,6 +415,72 @@ public class HotkeyInputTests
         Assert.False(KeyboardHook.ShouldIgnoreInjectedInput(hardwareInput));
     }
 
+    [Fact]
+    public void LowLevelHookThread_InvokesOnDedicatedReusableThread()
+    {
+        using var sut = new LowLevelHookThread();
+        var callerThreadId = Environment.CurrentManagedThreadId;
+
+        var firstHookThreadId = sut.Invoke(() => Environment.CurrentManagedThreadId);
+        var secondHookThreadId = sut.Invoke(() => Environment.CurrentManagedThreadId);
+
+        Assert.NotEqual(callerThreadId, firstHookThreadId);
+        Assert.Equal(firstHookThreadId, secondHookThreadId);
+        Assert.True(sut.IsAlive);
+    }
+
+    [Fact]
+    public void LowLevelHookThread_StopsThreadOnDispose()
+    {
+        var sut = new LowLevelHookThread();
+        _ = sut.Invoke(() => Environment.CurrentManagedThreadId);
+
+        sut.Dispose();
+
+        Assert.False(sut.IsAlive);
+    }
+
+    [Fact]
+    public async Task LowLevelHookThread_FailsFastWhenDispatcherCannotAcceptWork()
+    {
+        using var sut = new LowLevelHookThread(TimeSpan.FromMilliseconds(200));
+        using var dispatcherBlocked = new ManualResetEventSlim();
+        using var releaseDispatcher = new ManualResetEventSlim();
+        var blockingInvoke = Task.Run(() => sut.Invoke(() =>
+        {
+            dispatcherBlocked.Set();
+            releaseDispatcher.Wait();
+        }));
+
+        try
+        {
+            Assert.True(dispatcherBlocked.Wait(TimeSpan.FromSeconds(2)));
+
+            var exception = Assert.Throws<InvalidOperationException>(() => sut.Invoke(() => { }));
+
+            Assert.True(exception.InnerException is TimeoutException or OperationCanceledException);
+            Assert.False(sut.IsAlive);
+        }
+        finally
+        {
+            releaseDispatcher.Set();
+            await blockingInvoke;
+        }
+    }
+
+    [Fact]
+    public void LowLevelHookThread_FailsFastAfterUnexpectedDispatcherShutdown()
+    {
+        using var sut = new LowLevelHookThread();
+
+        sut.Invoke(() =>
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvokeShutdown(
+                System.Windows.Threading.DispatcherPriority.Send));
+
+        Assert.True(SpinWait.SpinUntil(() => !sut.IsAlive, TimeSpan.FromSeconds(2)));
+        Assert.Throws<InvalidOperationException>(() => sut.Invoke(() => { }));
+    }
+
     [Theory]
     [InlineData(NativeMethods.VK_RETURN)]
     [InlineData(NativeMethods.VK_TAB)]
