@@ -451,10 +451,11 @@ public class HotkeyInputTests
             dispatcherBlocked.Set();
             releaseDispatcher.Wait();
         }));
-        Assert.True(dispatcherBlocked.Wait(TimeSpan.FromSeconds(2)));
 
         try
         {
+            Assert.True(dispatcherBlocked.Wait(TimeSpan.FromSeconds(2)));
+
             var exception = Assert.Throws<InvalidOperationException>(() => sut.Invoke(() => { }));
 
             Assert.True(exception.InnerException is TimeoutException or OperationCanceledException);
