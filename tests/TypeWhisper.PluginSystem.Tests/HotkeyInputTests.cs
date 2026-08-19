@@ -692,6 +692,21 @@ public class HotkeyInputTests
     }
 
     [Fact]
+    public void KeyboardHook_StartsAndStopsWithoutLazyConstructionFailure()
+    {
+        using var sut = new KeyboardHook();
+        sut.SetHotkey("Ctrl+Shift");
+
+        var exception = Record.Exception(() =>
+        {
+            sut.Start();
+            sut.Stop();
+        });
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void KeyedHotkey_RequiresExactModifiers()
     {
         var unmodified = CreateStateMachine(0, NativeMethods.VK_INSERT);
