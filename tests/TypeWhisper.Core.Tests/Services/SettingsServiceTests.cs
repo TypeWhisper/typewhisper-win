@@ -76,6 +76,7 @@ public class SettingsServiceTests : IDisposable
             TranscribeShortQuietClipsAggressively = true,
             TranscriptionNumberNormalizationEnabled = false,
             ShortUtterancePunctuationEnabled = false,
+            EnglishOutputVariant = EnglishOutputVariant.UnitedStates,
             GermanOutputVariant = GermanOutputVariant.Switzerland,
             LastTranslationTargetLanguage = "fr",
             IndicatorStyle = IndicatorStyle.EdgeDock,
@@ -131,6 +132,7 @@ public class SettingsServiceTests : IDisposable
         Assert.True(sut2.Current.TranscribeShortQuietClipsAggressively);
         Assert.False(sut2.Current.TranscriptionNumberNormalizationEnabled);
         Assert.False(sut2.Current.ShortUtterancePunctuationEnabled);
+        Assert.Equal(EnglishOutputVariant.UnitedStates, sut2.Current.EnglishOutputVariant);
         Assert.Equal(GermanOutputVariant.Switzerland, sut2.Current.GermanOutputVariant);
         Assert.Equal("fr", sut2.Current.LastTranslationTargetLanguage);
         Assert.Equal(IndicatorStyle.EdgeDock, sut2.Current.IndicatorStyle);
@@ -153,6 +155,19 @@ public class SettingsServiceTests : IDisposable
         Assert.Equal("translate", sut2.Current.DictationRecoveryTask);
         Assert.True(sut2.Current.DictationRecoveryAutomaticFallbackEnabled);
         Assert.False(sut2.Current.WorkflowRequestRecoveryEnabled);
+    }
+
+    [Fact]
+    public void Save_InvalidEnglishOutputVariant_UsesDefault()
+    {
+        var sut = new SettingsService(_filePath);
+
+        sut.Save(AppSettings.Default with
+        {
+            EnglishOutputVariant = (EnglishOutputVariant)999
+        });
+
+        Assert.Equal(EnglishOutputVariant.AsTranscribed, sut.Current.EnglishOutputVariant);
     }
 
     [Fact]

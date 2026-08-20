@@ -302,6 +302,11 @@ public record AppSettings
     public bool ShortUtterancePunctuationEnabled { get; init; } = true;
 
     /// <summary>
+    /// Gets or sets the regional variant used for written English output.
+    /// </summary>
+    public EnglishOutputVariant EnglishOutputVariant { get; init; } = EnglishOutputVariant.AsTranscribed;
+
+    /// <summary>
     /// Gets or sets the regional variant used for written German output.
     /// </summary>
     public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;

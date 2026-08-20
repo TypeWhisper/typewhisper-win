@@ -44,6 +44,23 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void EnglishOutputVariant_LoadsOptionsAndPersistsSelection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.Equal(EnglishOutputVariant.UnitedKingdom, sut.EnglishOutputVariant);
+        Assert.Equal(3, sut.EnglishOutputVariantOptions.Count);
+
+        sut.EnglishOutputVariant = EnglishOutputVariant.UnitedStates;
+
+        Assert.Equal(EnglishOutputVariant.UnitedStates, settings.Current.EnglishOutputVariant);
+    }
+
+    [Fact]
     public void GermanOutputVariant_LoadsOptionsAndPersistsSelection()
     {
         var settings = new FakeSettingsService(AppSettings.Default with
@@ -74,6 +91,28 @@ public class SettingsViewModelIndicatorTests
         sut.ShortUtterancePunctuationEnabled = true;
 
         Assert.True(settings.Current.ShortUtterancePunctuationEnabled);
+    }
+
+    [Fact]
+    public void EnglishOutputVariantVisibility_IncludesEnglishTranslationTarget()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            LanguageHints = ["de"],
+            TranslationTargetLanguage = "en-US"
+        });
+        var sut = CreateSettingsViewModel(settings);
+        var changedProperties = new List<string?>();
+        sut.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+        var saveCountBeforeChange = settings.SaveCount;
+
+        Assert.True(sut.HasSelectedEnglishLanguage);
+
+        sut.TranslationTargetLanguage = "fr";
+
+        Assert.False(sut.HasSelectedEnglishLanguage);
+        Assert.Contains(nameof(SettingsViewModel.HasSelectedEnglishLanguage), changedProperties);
+        Assert.Equal(saveCountBeforeChange + 1, settings.SaveCount);
     }
 
     [Fact]
