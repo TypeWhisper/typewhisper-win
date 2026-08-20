@@ -116,6 +116,19 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void EnglishOutputVariantVisibility_IncludesUnrestrictedLanguageDetection()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            LanguageHints = []
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.True(sut.HasNoSelectedLanguageHints);
+        Assert.True(sut.HasSelectedEnglishLanguage);
+    }
+
+    [Fact]
     public void GermanOutputVariantVisibility_IncludesGermanTranslationTarget()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

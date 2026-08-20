@@ -150,7 +150,8 @@ public partial class SettingsViewModel : ObservableObject
     /// Gets whether English is selected as a spoken language or translation target.
     /// </summary>
     public bool HasSelectedEnglishLanguage =>
-        SelectedLanguageHints.Any(static option => IsLanguageCode(option.Code, "en"))
+        HasNoSelectedLanguageHints
+        || SelectedLanguageHints.Any(static option => IsLanguageCode(option.Code, "en"))
         || IsLanguageCode(TranslationTargetLanguage, "en");
     /// <summary>
     /// Gets whether German is selected as a spoken language or translation target.
