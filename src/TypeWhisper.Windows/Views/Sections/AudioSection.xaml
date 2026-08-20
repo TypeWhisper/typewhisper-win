@@ -342,6 +342,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -418,6 +420,41 @@
 
                         <Border Grid.Row="2"
                                 Style="{StaticResource SettingsRowBorderStyle}"
+                                Visibility="{Binding Settings.HasSelectedEnglishLanguage, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Str Dictation.EnglishOutputVariant}"
+                                           Style="{StaticResource SettingsRowLabelStyle}"/>
+                                <ComboBox Grid.Column="1"
+                                          AutomationProperties.AutomationId="DictationEnglishOutputVariant"
+                                          AutomationProperties.Name="{loc:Str Dictation.EnglishOutputVariant}"
+                                          Style="{StaticResource SettingsAlignedComboBoxStyle}"
+                                          ItemsSource="{Binding Settings.EnglishOutputVariantOptions}"
+                                          SelectedValue="{Binding Settings.EnglishOutputVariant}"
+                                          SelectedValuePath="Value"
+                                          DisplayMemberPath="DisplayName"/>
+                                <TextBlock Grid.Row="1"
+                                           Grid.ColumnSpan="2"
+                                           Margin="0,8,0,0"
+                                           Text="{loc:Str Dictation.EnglishOutputVariantHint}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3"
+                                Background="#18FFFFFF"
+                                Visibility="{Binding Settings.HasSelectedEnglishLanguage, Converter={StaticResource BoolToVis}}"/>
+
+                        <Border Grid.Row="4"
+                                Style="{StaticResource SettingsRowBorderStyle}"
                                 Visibility="{Binding Settings.HasSelectedGermanLanguage, Converter={StaticResource BoolToVis}}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -447,11 +484,11 @@
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="3"
+                        <Border Grid.Row="5"
                                 Background="#18FFFFFF"
                                 Visibility="{Binding Settings.HasSelectedGermanLanguage, Converter={StaticResource BoolToVis}}"/>
 
-                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>

@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Windows.Threading;
 
 namespace TypeWhisper.Windows.Native;
 
@@ -8,11 +10,21 @@ namespace TypeWhisper.Windows.Native;
 /// </summary>
 public sealed class KeyboardHook : IDisposable
 {
+    private static readonly Lazy<LowLevelHookThread> SharedHookThread =
+        new(() => new LowLevelHookThread());
+
     private IntPtr _keyboardHookId = IntPtr.Zero;
     private IntPtr _mouseHookId = IntPtr.Zero;
     private readonly NativeMethods.LowLevelKeyboardProc _keyboardProc;
     private readonly NativeMethods.LowLevelMouseProc _mouseProc;
-    private bool _disposed;
+    private readonly object _lifecycleGate = new();
+    private readonly ConcurrentQueue<Action> _pendingEvents = new();
+    private volatile SynchronizationContext? _eventContext;
+    private int _eventDrainScheduled;
+    private int _eventGeneration;
+    private bool _started;
+    private volatile bool _disposed;
+    private volatile bool _isEnabled = true;
     private readonly HotkeyMatchStateMachine _stateMachine = new();
     private readonly MouseHotkeyMatchStateMachine _mouseStateMachine = new();
     private HotkeyTargetKind _targetKind;
@@ -28,7 +40,11 @@ public sealed class KeyboardHook : IDisposable
     /// <summary>
     /// Gets or sets the is enabled value.
     /// </summary>
-    public bool IsEnabled { get; set; } = true;
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set => _isEnabled = value;
+    }
 
     internal bool HasConfiguredHotkey => _stateMachine.HasHotkey || _mouseStateMachine.HasHotkey;
 
@@ -67,7 +83,23 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public void Start()
     {
-        if (_keyboardHookId != IntPtr.Zero || _mouseHookId != IntPtr.Zero) return;
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started)
+                return;
+
+            _eventContext = SynchronizationContext.Current;
+            Interlocked.Increment(ref _eventGeneration);
+            SharedHookThread.Value.Invoke(StartCore);
+            _started = _keyboardHookId != IntPtr.Zero || _mouseHookId != IntPtr.Zero;
+        }
+    }
+
+    private void StartCore()
+    {
+        if (_keyboardHookId != IntPtr.Zero || _mouseHookId != IntPtr.Zero)
+            return;
 
         using var process = Process.GetCurrentProcess();
         using var module = process.MainModule;
@@ -99,6 +131,21 @@ public sealed class KeyboardHook : IDisposable
     /// </summary>
     public void Stop()
     {
+        lock (_lifecycleGate)
+        {
+            Interlocked.Increment(ref _eventGeneration);
+            if (_started || _keyboardHookId != IntPtr.Zero || _mouseHookId != IntPtr.Zero)
+                SharedHookThread.Value.Invoke(StopCore);
+            else
+                ResetStateMachines();
+
+            _started = false;
+            _eventContext = null;
+        }
+    }
+
+    private void StopCore()
+    {
         if (_keyboardHookId != IntPtr.Zero)
         {
             NativeMethods.UnhookWindowsHookEx(_keyboardHookId);
@@ -109,14 +156,32 @@ public sealed class KeyboardHook : IDisposable
             NativeMethods.UnhookWindowsHookEx(_mouseHookId);
             _mouseHookId = IntPtr.Zero;
         }
+        ResetStateMachines();
+    }
+
+    private void ResetStateMachines()
+    {
         _stateMachine.Reset();
         _mouseStateMachine.Reset();
     }
 
     internal void ResetRuntimeState()
     {
-        _stateMachine.ResetRuntimeState();
-        _mouseStateMachine.ResetRuntimeState();
+        lock (_lifecycleGate)
+        {
+            if (_started)
+            {
+                SharedHookThread.Value.Invoke(() =>
+                {
+                    _stateMachine.ResetRuntimeState();
+                    _mouseStateMachine.ResetRuntimeState();
+                });
+                return;
+            }
+
+            _stateMachine.ResetRuntimeState();
+            _mouseStateMachine.ResetRuntimeState();
+        }
     }
 
     private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -135,6 +200,7 @@ public sealed class KeyboardHook : IDisposable
             var result = _stateMachine.ProcessKeyEvent(vkCode, isKeyDown, isKeyUp);
             if (IsEnabled)
             {
+                var timestamp = Stopwatch.GetTimestamp();
                 if (result.SyntheticKeyDownVk != 0)
                     SendSyntheticKeyDown((ushort)result.SyntheticKeyDownVk);
                 if (result.SyntheticKeyTapVk != 0)
@@ -142,9 +208,9 @@ public sealed class KeyboardHook : IDisposable
                 if (result.SyntheticKeyUpVk != 0)
                     SendSyntheticKeyUp((ushort)result.SyntheticKeyUpVk);
                 if (result.RaiseKeyDown)
-                    KeyDown?.Invoke(this, EventArgs.Empty);
+                    QueueHookEvent(KeyDown, timestamp);
                 if (result.RaiseKeyUp)
-                    KeyUp?.Invoke(this, EventArgs.Empty);
+                    QueueHookEvent(KeyUp, timestamp);
                 if (result.Swallow)
                     return (IntPtr)1;
             }
@@ -168,10 +234,11 @@ public sealed class KeyboardHook : IDisposable
                     GetCurrentModifiers());
                 if (IsEnabled)
                 {
+                    var timestamp = Stopwatch.GetTimestamp();
                     if (result.RaiseKeyDown)
-                        KeyDown?.Invoke(this, EventArgs.Empty);
+                        QueueHookEvent(KeyDown, timestamp);
                     if (result.RaiseKeyUp)
-                        KeyUp?.Invoke(this, EventArgs.Empty);
+                        QueueHookEvent(KeyUp, timestamp);
                     if (result.Swallow)
                         return (IntPtr)1;
                 }
@@ -179,6 +246,55 @@ public sealed class KeyboardHook : IDisposable
         }
 
         return NativeMethods.CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+    }
+
+    private void QueueHookEvent(EventHandler? handler, long timestamp)
+    {
+        if (handler is null)
+            return;
+
+        var generation = Volatile.Read(ref _eventGeneration);
+        _pendingEvents.Enqueue(() =>
+        {
+            if (!_disposed
+                && IsEnabled
+                && generation == Volatile.Read(ref _eventGeneration))
+            {
+                handler(this, new LowLevelHookEventArgs(timestamp));
+            }
+        });
+
+        ScheduleEventDrain();
+    }
+
+    private void ScheduleEventDrain()
+    {
+        if (Interlocked.CompareExchange(ref _eventDrainScheduled, 1, 0) != 0)
+            return;
+
+        var context = _eventContext;
+        if (context is not null)
+        {
+            context.Post(static state => ((KeyboardHook)state!).DrainPendingEvents(), this);
+            return;
+        }
+
+        ThreadPool.QueueUserWorkItem(static state => ((KeyboardHook)state!).DrainPendingEvents(), this);
+    }
+
+    private void DrainPendingEvents()
+    {
+        try
+        {
+            while (_pendingEvents.TryDequeue(out var pendingEvent))
+                pendingEvent();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _eventDrainScheduled, 0);
+            if (!_pendingEvents.IsEmpty)
+                ScheduleEventDrain();
+        }
     }
 
     internal static bool ShouldIgnoreInjectedInput(in NativeMethods.KBDLLHOOKSTRUCT hookStruct) =>
@@ -315,6 +431,159 @@ public sealed class KeyboardHook : IDisposable
         }
         GC.SuppressFinalize(this);
     }
+}
+
+internal sealed class LowLevelHookThread : IDisposable
+{
+    private static readonly TimeSpan DefaultInvokeTimeout = TimeSpan.FromSeconds(5);
+
+    private readonly Thread _thread;
+    private readonly Dispatcher _dispatcher;
+    private readonly TimeSpan _invokeTimeout;
+    private Exception? _loopFailure;
+    private int _disposed;
+
+    public LowLevelHookThread(TimeSpan? invokeTimeout = null)
+    {
+        _invokeTimeout = invokeTimeout ?? DefaultInvokeTimeout;
+        var ready = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _thread = new Thread(() =>
+        {
+            try
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                ready.TrySetResult(dispatcher);
+                Dispatcher.Run();
+
+                if (Volatile.Read(ref _disposed) == 0)
+                {
+                    MarkUnusable(new InvalidOperationException(
+                        "The low-level hook dispatcher stopped unexpectedly."));
+                }
+            }
+            catch (Exception ex)
+            {
+                // This is the thread boundary. Recording every recoverable loop failure prevents
+                // an unhandled background-thread exception or a dead dispatcher reference.
+                MarkUnusable(ex);
+                ready.TrySetException(ex);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "TypeWhisper low-level input hooks"
+        };
+        _thread.SetApartmentState(ApartmentState.MTA);
+        _thread.Start();
+        _dispatcher = ready.Task.GetAwaiter().GetResult();
+    }
+
+    public bool IsAlive =>
+        Volatile.Read(ref _disposed) == 0
+        && Volatile.Read(ref _loopFailure) is null
+        && _thread.IsAlive
+        && !_dispatcher.HasShutdownStarted
+        && !_dispatcher.HasShutdownFinished;
+
+    public void Invoke(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        Invoke<object?>(() =>
+        {
+            action();
+            return null;
+        });
+    }
+
+    public T Invoke<T>(Func<T> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        ThrowIfDisposedOrFaulted();
+        if (_dispatcher.CheckAccess())
+            return action();
+
+        ThrowIfCannotSchedule();
+        var operationStarted = 0;
+
+        try
+        {
+            return _dispatcher.Invoke(
+                () =>
+                {
+                    Interlocked.Exchange(ref operationStarted, 1);
+                    return action();
+                },
+                DispatcherPriority.Send,
+                CancellationToken.None,
+                _invokeTimeout);
+        }
+        catch (TimeoutException ex) when (Volatile.Read(ref operationStarted) == 0)
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
+        catch (OperationCanceledException ex) when (Volatile.Read(ref operationStarted) == 0)
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
+        catch (InvalidOperationException ex) when (
+            Volatile.Read(ref operationStarted) == 0
+            && (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished || !_thread.IsAlive))
+        {
+            throw MarkUnusableAndCreateException(ex);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
+        if (!_dispatcher.HasShutdownStarted && !_dispatcher.HasShutdownFinished)
+        {
+            if (_dispatcher.CheckAccess())
+                _dispatcher.InvokeShutdown();
+            else
+                _dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+        }
+
+        if (Thread.CurrentThread != _thread)
+            _thread.Join(TimeSpan.FromSeconds(5));
+    }
+
+    private void ThrowIfDisposedOrFaulted()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        var failure = Volatile.Read(ref _loopFailure);
+        if (failure is not null)
+            throw CreateUnavailableException(failure);
+    }
+
+    private void ThrowIfCannotSchedule()
+    {
+        if (_thread.IsAlive && !_dispatcher.HasShutdownStarted && !_dispatcher.HasShutdownFinished)
+            return;
+
+        var failure = new InvalidOperationException("The low-level hook dispatcher is not running.");
+        MarkUnusable(failure);
+        throw CreateUnavailableException(Volatile.Read(ref _loopFailure) ?? failure);
+    }
+
+    private InvalidOperationException MarkUnusableAndCreateException(Exception failure)
+    {
+        MarkUnusable(failure);
+        return CreateUnavailableException(Volatile.Read(ref _loopFailure) ?? failure);
+    }
+
+    private void MarkUnusable(Exception failure) =>
+        Interlocked.CompareExchange(ref _loopFailure, failure, null);
+
+    private static InvalidOperationException CreateUnavailableException(Exception failure) =>
+        new("The low-level hook dispatcher is unavailable.", failure);
+}
+
+internal sealed class LowLevelHookEventArgs(long timestamp) : EventArgs
+{
+    public long Timestamp { get; } = timestamp;
 }
 
 internal readonly record struct HotkeyProcessResult(

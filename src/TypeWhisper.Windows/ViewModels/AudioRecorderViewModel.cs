@@ -619,6 +619,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
+            EnglishOutputVariant = currentSettings.EnglishOutputVariant,
             GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,

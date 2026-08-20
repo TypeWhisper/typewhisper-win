@@ -119,6 +119,7 @@ public sealed class FileTranscriptionProcessor(
         {
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
+            EnglishOutputVariant = currentSettings.EnglishOutputVariant,
             GermanOutputVariant = currentSettings.GermanOutputVariant,
             TranscriptionTask = task,
             DetectedLanguage = result.DetectedLanguage,
@@ -128,14 +129,19 @@ public sealed class FileTranscriptionProcessor(
             DictionaryCorrector = dictionary.ApplyCorrections
         }, cancellationToken);
         var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
-            TranscriptionNumberNormalizationService.NormalizeResult(
-                ShortUtterancePunctuationService.NormalizeResult(
-                    result,
-                    currentSettings.ShortUtterancePunctuationEnabled),
+            EnglishOutputNormalizationService.NormalizeResult(
+                TranscriptionNumberNormalizationService.NormalizeResult(
+                    ShortUtterancePunctuationService.NormalizeResult(
+                        result,
+                        currentSettings.ShortUtterancePunctuationEnabled),
+                    task,
+                    language,
+                    languageHints,
+                    currentSettings.TranscriptionNumberNormalizationEnabled),
+                currentSettings.EnglishOutputVariant,
                 task,
                 language,
-                languageHints,
-                currentSettings.TranscriptionNumberNormalizationEnabled),
+                languageHints),
             currentSettings.GermanOutputVariant,
             task,
             language,

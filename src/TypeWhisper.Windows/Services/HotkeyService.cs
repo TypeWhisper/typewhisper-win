@@ -24,7 +24,7 @@ public sealed class HotkeyService : IDisposable
     private readonly List<(KeyboardHook Hook, string WorkflowId)> _workflowHooks = [];
 
     private bool _disposed;
-    private DateTime _keyDownTime;
+    private long _keyDownTimestamp;
     private bool _isActive;
 
     /// <summary>
@@ -280,8 +280,8 @@ public sealed class HotkeyService : IDisposable
 
     // --- Hybrid: short press = toggle, long hold = PTT ---
 
-    private DateTime _lastActionTime;
-    private DateTime _lastRecorderToggleActionTime;
+    private long _lastActionTimestamp;
+    private long _lastRecorderToggleActionTimestamp;
     private static readonly TimeSpan DebounceInterval = TimeSpan.FromMilliseconds(300);
 
     private void OnHybridKeyDown(object? sender, EventArgs e)
@@ -289,9 +289,9 @@ public sealed class HotkeyService : IDisposable
         if (!IsEnabled) return;
 
         // Debounce rapid key presses
-        var now = DateTime.UtcNow;
-        if (now - _lastActionTime < DebounceInterval) return;
-        _lastActionTime = now;
+        var now = GetEventTimestamp(e);
+        if (IsWithinDebounceInterval(_lastActionTimestamp, now)) return;
+        _lastActionTimestamp = now;
 
         if (_isActive)
         {
@@ -301,7 +301,7 @@ public sealed class HotkeyService : IDisposable
             return;
         }
 
-        _keyDownTime = DateTime.UtcNow;
+        _keyDownTimestamp = now;
         _isActive = true;
         CurrentMode = HotkeyMode.PushToTalk;
         DictationStartRequested?.Invoke(this, EventArgs.Empty);
@@ -311,7 +311,7 @@ public sealed class HotkeyService : IDisposable
     {
         if (!_isActive) return;
 
-        var holdMs = (DateTime.UtcNow - _keyDownTime).TotalMilliseconds;
+        var holdMs = Stopwatch.GetElapsedTime(_keyDownTimestamp, GetEventTimestamp(e)).TotalMilliseconds;
         if (holdMs < PushToTalkThresholdMs)
         {
             CurrentMode = HotkeyMode.Toggle;
@@ -329,9 +329,9 @@ public sealed class HotkeyService : IDisposable
     {
         if (!IsEnabled) return;
 
-        var now = DateTime.UtcNow;
-        if (now - _lastActionTime < DebounceInterval) return;
-        _lastActionTime = now;
+        var now = GetEventTimestamp(e);
+        if (IsWithinDebounceInterval(_lastActionTimestamp, now)) return;
+        _lastActionTimestamp = now;
 
         if (_isActive)
         {
@@ -395,11 +395,18 @@ public sealed class HotkeyService : IDisposable
     private void OnRecorderToggleKeyDown(object? sender, EventArgs e)
     {
         if (!IsEnabled) return;
-        var now = DateTime.UtcNow;
-        if (now - _lastRecorderToggleActionTime < DebounceInterval) return;
-        _lastRecorderToggleActionTime = now;
+        var now = GetEventTimestamp(e);
+        if (IsWithinDebounceInterval(_lastRecorderToggleActionTimestamp, now)) return;
+        _lastRecorderToggleActionTimestamp = now;
         RecorderToggleRequested?.Invoke(this, EventArgs.Empty);
     }
+
+    private static long GetEventTimestamp(EventArgs e) =>
+        e is LowLevelHookEventArgs hookEvent ? hookEvent.Timestamp : Stopwatch.GetTimestamp();
+
+    private static bool IsWithinDebounceInterval(long previousTimestamp, long currentTimestamp) =>
+        previousTimestamp != 0
+        && Stopwatch.GetElapsedTime(previousTimestamp, currentTimestamp) < DebounceInterval;
 
     // --- Common ---
 

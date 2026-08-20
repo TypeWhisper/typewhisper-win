@@ -426,6 +426,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
         var result = activeResult.Result;
         var currentSettings = _settings.Current;
+        var pipelineEnglishOutputVariant = string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage)
+            ? currentSettings.EnglishOutputVariant
+            : EnglishOutputVariant.AsTranscribed;
         var pipelineGermanOutputVariant = string.IsNullOrWhiteSpace(transcribeRequest.TargetLanguage)
             ? currentSettings.GermanOutputVariant
             : GermanOutputVariant.AsTranscribed;
@@ -434,6 +437,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             TranscriptionNumberNormalizationEnabled = currentSettings.TranscriptionNumberNormalizationEnabled,
             ShortUtterancePunctuationEnabled = currentSettings.ShortUtterancePunctuationEnabled,
             NormalizeNumbersOverride = transcribeRequest.NormalizeNumbers,
+            EnglishOutputVariant = pipelineEnglishOutputVariant,
             GermanOutputVariant = pipelineGermanOutputVariant,
             TranscriptionTask = transcribeRequest.Task,
             DetectedLanguage = result.DetectedLanguage,
@@ -444,15 +448,20 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             TranslationTarget = transcribeRequest.TargetLanguage
         }, ct);
         var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
-            TranscriptionNumberNormalizationService.NormalizeResult(
-                ShortUtterancePunctuationService.NormalizeResult(
-                    result,
-                    currentSettings.ShortUtterancePunctuationEnabled),
+            EnglishOutputNormalizationService.NormalizeResult(
+                TranscriptionNumberNormalizationService.NormalizeResult(
+                    ShortUtterancePunctuationService.NormalizeResult(
+                        result,
+                        currentSettings.ShortUtterancePunctuationEnabled),
+                    transcribeRequest.Task,
+                    languageHints.FirstOrDefault(),
+                    languageHints,
+                    currentSettings.TranscriptionNumberNormalizationEnabled,
+                    transcribeRequest.NormalizeNumbers),
+                pipelineEnglishOutputVariant,
                 transcribeRequest.Task,
                 languageHints.FirstOrDefault(),
-                languageHints,
-                currentSettings.TranscriptionNumberNormalizationEnabled,
-                transcribeRequest.NormalizeNumbers),
+                languageHints),
             pipelineGermanOutputVariant,
             transcribeRequest.Task,
             languageHints.FirstOrDefault(),
@@ -472,6 +481,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                     sourceLanguage,
                     transcribeRequest.TargetLanguage,
                     ct);
+                finalText = EnglishOutputNormalizationService.NormalizeText(
+                    finalText,
+                    currentSettings.EnglishOutputVariant,
+                    transcribeRequest.Task,
+                    result.DetectedLanguage,
+                    languageHints.FirstOrDefault(),
+                    languageHints,
+                    transcribeRequest.TargetLanguage);
                 finalText = GermanOutputNormalizationService.NormalizeText(
                     finalText,
                     currentSettings.GermanOutputVariant,
