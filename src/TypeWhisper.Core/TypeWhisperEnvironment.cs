@@ -6,6 +6,11 @@ namespace TypeWhisper.Core;
 public static class TypeWhisperEnvironment
 {
     /// <summary>
+    /// Defines the process environment variable used by debug UI automation runs.
+    /// </summary>
+    public const string UiAutomationDataRootEnvironmentVariable = "TYPEWHISPER_UI_AUTOMATION_DATA_ROOT";
+
+    /// <summary>
     /// Defines the public website URL constant.
     /// </summary>
     public const string WebsiteUrl = "https://www.typewhisper.com/";
@@ -31,14 +36,24 @@ public static class TypeWhisperEnvironment
         _localAppDataPath,
         IsDevelopmentBuild ? "TypeWhisper-Dev" : "TypeWhisper");
 
-    private static readonly string _basePath = Path.Join(
+    private static readonly string _defaultBasePath = Path.Join(
         _localAppDataPath,
         IsDevelopmentBuild ? "TypeWhisper-DevUserData" : "TypeWhisper-UserData");
+
+    private static string ResolveBasePath()
+    {
+#if DEBUG
+        var automationRoot = Environment.GetEnvironmentVariable(UiAutomationDataRootEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(automationRoot))
+            return Path.GetFullPath(automationRoot);
+#endif
+        return _defaultBasePath;
+    }
 
     /// <summary>
     /// Gets the canonical base path for persistent user data.
     /// </summary>
-    public static string BasePath => _basePath;
+    public static string BasePath => ResolveBasePath();
     /// <summary>
     /// Gets the previous base path inside the Velopack install root.
     /// </summary>
@@ -46,31 +61,31 @@ public static class TypeWhisperEnvironment
     /// <summary>
     /// Gets the base path for user-created data that must survive Velopack uninstall cleanup.
     /// </summary>
-    public static string UserDataBasePath => _basePath;
+    public static string UserDataBasePath => BasePath;
     /// <summary>
     /// Gets the models path.
     /// </summary>
-    public static string ModelsPath => Path.Join(_basePath, "Models");
+    public static string ModelsPath => Path.Join(BasePath, "Models");
     /// <summary>
     /// Gets the data path.
     /// </summary>
-    public static string DataPath => Path.Join(_basePath, "Data");
+    public static string DataPath => Path.Join(BasePath, "Data");
     /// <summary>
     /// Gets the logs path.
     /// </summary>
-    public static string LogsPath => Path.Join(_basePath, "Logs");
+    public static string LogsPath => Path.Join(BasePath, "Logs");
     /// <summary>
     /// Gets the plugins path.
     /// </summary>
-    public static string PluginsPath => Path.Join(_basePath, "Plugins");
+    public static string PluginsPath => Path.Join(BasePath, "Plugins");
     /// <summary>
     /// Gets the audio path.
     /// </summary>
-    public static string AudioPath => Path.Join(_basePath, "Audio");
+    public static string AudioPath => Path.Join(BasePath, "Audio");
     /// <summary>
     /// Gets the dictation recovery audio path.
     /// </summary>
-    public static string DictationRecoveryPath => Path.Join(_basePath, "DictationRecovery");
+    public static string DictationRecoveryPath => Path.Join(BasePath, "DictationRecovery");
     /// <summary>
     /// Gets the previous audio path inside the Velopack install root.
     /// </summary>
@@ -78,23 +93,23 @@ public static class TypeWhisperEnvironment
     /// <summary>
     /// Gets the plugin data path.
     /// </summary>
-    public static string PluginDataPath => Path.Join(_basePath, "PluginData");
+    public static string PluginDataPath => Path.Join(BasePath, "PluginData");
     /// <summary>
     /// Gets the api port file path.
     /// </summary>
-    public static string ApiPortFilePath => Path.Join(_basePath, "api-port");
+    public static string ApiPortFilePath => Path.Join(BasePath, "api-port");
     /// <summary>
     /// Gets the api discovery file path.
     /// </summary>
-    public static string ApiDiscoveryFilePath => Path.Join(_basePath, "api-discovery.json");
+    public static string ApiDiscoveryFilePath => Path.Join(BasePath, "api-discovery.json");
     /// <summary>
     /// Gets the api token file path.
     /// </summary>
-    public static string ApiTokenFilePath => Path.Join(_basePath, "api-token");
+    public static string ApiTokenFilePath => Path.Join(BasePath, "api-token");
     /// <summary>
     /// Gets the settings file path.
     /// </summary>
-    public static string SettingsFilePath => Path.Join(_basePath, "settings.json");
+    public static string SettingsFilePath => Path.Join(BasePath, "settings.json");
     /// <summary>
     /// Gets the database path.
     /// </summary>

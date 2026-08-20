@@ -28,6 +28,11 @@ public interface IPluginHostServices
     /// <summary>Directory where the plugin can store large downloadable assets such as models and runtimes.</summary>
     string PluginAssetDirectory => PluginDataDirectory;
 
+    /// <summary>
+    /// Gets whether the plugin is running inside the host's isolated UI automation fixture.
+    /// </summary>
+    bool IsUiAutomation => false;
+
     /// <summary>Process name of the currently active foreground application, or null.</summary>
     string? ActiveAppProcessName { get; }
 

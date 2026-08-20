@@ -66,7 +66,8 @@ public partial class SettingsWindow : FluentWindow
             if (_viewModel.CurrentSection is null)
                 _viewModel.NavigateToDefault();
 
-            await _viewModel.Settings.EnsureMicrophonesLoadedAsync();
+            if (!Program.UiAutomation.IsEnabled)
+                await _viewModel.Settings.EnsureMicrophonesLoadedAsync();
             if (!_isClosed)
                 _viewModel.OnWindowLoaded();
         }

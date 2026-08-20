@@ -37,7 +37,9 @@
                      Margin="18,8,18,0"/>
 
         <Border Grid.Row="1" Style="{StaticResource WizardShellStyle}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="SettingsScroll"
+                          AutomationProperties.AutomationId="PluginSettingsScroll"
+                          VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <ContentControl x:Name="SettingsContent"
                                 HorizontalContentAlignment="Stretch"

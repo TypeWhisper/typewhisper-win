@@ -63,7 +63,8 @@ public partial class OpenRouterSettingsView : UserControl
         PopulateModels();
         UpdateModelSectionVisibility();
         UpdateTemperatureVisibility();
-        await RefreshCreditsAsync();
+        if (!_plugin.IsUiAutomation)
+            await RefreshCreditsAsync();
     }
 
     private void OnToggleApiKeyVisibilityClick(object sender, RoutedEventArgs e)

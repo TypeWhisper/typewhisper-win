@@ -72,11 +72,15 @@ public sealed class PluginSettingsWindowLifetimeTests
         Assert.Contains("AutomationProperties.Name=\"{Binding RelativeSource={RelativeSource Self}, Path=Title}\"", xaml);
         Assert.DoesNotContain("x:Name=\"PluginNameText\"", xaml);
         Assert.Contains("<ScrollViewer", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"PluginSettingsScroll\"", xaml);
         Assert.Contains("plugin.SettingsView is null", section);
         Assert.Contains("Owner = owner", section);
         Assert.Contains("dialog.ShowDialog();", section);
         Assert.Contains("Title = $\"{Loc.Instance[\"Settings.WindowTitle\"]} – {pluginName}\";", dialog);
         Assert.Contains("SettingsContent.Content = null;", dialog);
+        Assert.Contains("SizeToContent = SizeToContent.Height;", dialog);
+        Assert.Contains("SettingsScroll.ScrollableHeight > 0.5", dialog);
+        Assert.Contains("new ScaleTransform(contentScale, contentScale)", dialog);
     }
 
     [Fact]

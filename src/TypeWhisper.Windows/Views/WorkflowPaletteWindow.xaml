@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
         Title="{loc:Str WorkflowPalette.Title}"
+        AutomationProperties.AutomationId="WorkflowPaletteWindow"
+        AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=Title}"
         Width="560"
         Height="420"
         WindowStartupLocation="Manual"

@@ -392,7 +392,8 @@ public sealed class PluginManager : IDisposable
                     PluginStateChanged?.Invoke(this, EventArgs.Empty);
                 },
                 settings: _settings,
-                pluginDataRoot: _pluginDataRoot);
+                pluginDataRoot: _pluginDataRoot,
+                isUiAutomation: Program.UiAutomation.IsEnabled);
 
             await plugin.Instance.ActivateAsync(hostServices);
 

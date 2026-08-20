@@ -99,7 +99,8 @@ public sealed class PluginsSectionLayoutTests
             "PluginsSection.xaml");
 
         Assert.Contains("Click=\"OnInstallPluginClick\"", xaml);
-        Assert.Contains("Click=\"OnPluginSettingsClick\"", xaml);
+        Assert.Contains("Plugins.OpenPluginSettingsCommand", xaml);
+        Assert.Contains("CommandParameter=\"{Binding}\"", xaml);
         Assert.Contains("Visibility=\"{Binding HasSettings", xaml);
         Assert.Contains("AutomationProperties.Name=\"{Binding SettingsAutomationName}\"", xaml);
         Assert.DoesNotContain("<ContentControl Content=\"{Binding SettingsView}\"", xaml);

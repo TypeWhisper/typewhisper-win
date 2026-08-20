@@ -55,16 +55,34 @@ public sealed class DevelopmentDataSeedTests : IDisposable
             entry.EntryType == DictionaryEntryType.Correction &&
             entry.Original == "type whisper" &&
             entry.Replacement == "TypeWhisper");
-        Assert.Equal(14, seed.HistoryRecords.Count);
+        Assert.Equal(92, seed.HistoryRecords.Count);
         Assert.Equal(
-            Enumerable.Range(1, 14).Select(index => $"dev-history-{index:000}"),
+            Enumerable.Range(1, 92).Select(index => $"dev-history-{index:000}"),
             seed.HistoryRecords.Select(record => record.Id));
-        Assert.True(seed.HistoryRecords.Select(record => record.Timestamp.Date).Distinct().Count() >= 10);
+        Assert.Equal(27, seed.HistoryRecords.Select(record => record.Timestamp.Date).Distinct().Count());
+        Assert.Equal(8, seed.HistoryRecords.Select(record => record.AppProcessName).Distinct().Count());
+        Assert.Equal(5, seed.HistoryRecords.Select(record => (record.EngineUsed, record.ModelUsed)).Distinct().Count());
+        Assert.Equal(5, seed.HistoryRecords.Select(record => record.Timestamp.Hour).Distinct().Count());
+        Assert.True(seed.HistoryRecords.Sum(record => record.WordCount) > 1_200);
         Assert.Contains(seed.HistoryRecords, record => record.AppProcessName == "outlook");
         Assert.Contains(seed.HistoryRecords, record => record.AppProcessName == "obsidian");
         Assert.Equal(
-            seed.HistoryRecords.Select(record => record.Timestamp),
-            repeatedSeed.HistoryRecords.Select(record => record.Timestamp));
+            seed.HistoryRecords.Select(record => new
+            {
+                record.Timestamp,
+                record.AppProcessName,
+                record.EngineUsed,
+                record.ModelUsed,
+                record.FinalText
+            }),
+            repeatedSeed.HistoryRecords.Select(record => new
+            {
+                record.Timestamp,
+                record.AppProcessName,
+                record.EngineUsed,
+                record.ModelUsed,
+                record.FinalText
+            }));
         Assert.Equal(new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc), seed.HistoryRecords[0].Timestamp);
     }
 
@@ -135,6 +153,32 @@ public sealed class DevelopmentDataSeedTests : IDisposable
         Assert.Contains(snippets.Snippets, snippet => snippet.Id == "dev-snippet-standup");
         Assert.Contains(workflows.Workflows, workflow => workflow.Id == "dev-workflow-meeting-notes");
         Assert.Contains(history.Records, record => record.Id == "dev-history-001");
+    }
+
+    [Fact]
+    public void ClearAndSeed_UsesRequestedReferenceTime()
+    {
+        var dataDir = Path.Join(_tempDir, "ReferenceTimeData");
+        var settings = new SettingsService(Path.Join(_tempDir, "reference-settings.json"));
+        var dictionary = new DictionaryService(Path.Join(dataDir, "dictionary.json"));
+        var snippets = new SnippetService(Path.Join(dataDir, "snippets.json"));
+        var workflows = new WorkflowService(Path.Join(dataDir, "workflows.json"));
+        var history = new HistoryService(Path.Join(dataDir, "history.json"));
+        var sut = new DevelopmentDataSeeder(
+            settings,
+            history,
+            dictionary,
+            snippets,
+            workflows,
+            isDevelopmentBuild: () => true);
+        var referenceUtc = new DateTime(2026, 1, 15, 8, 30, 0, DateTimeKind.Utc);
+
+        var result = sut.ClearAndSeed(referenceUtc);
+
+        Assert.Equal(DevelopmentDataSeedResult.Seeded, result);
+        Assert.Equal(
+            new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc),
+            history.Records.Single(record => record.Id == "dev-history-001").Timestamp);
     }
 
     [Fact]

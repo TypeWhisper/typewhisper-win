@@ -36,6 +36,32 @@ public class TypeWhisperEnvironmentTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void UiAutomationDataRoot_IsUsedOnlyByDevelopmentBuilds()
+    {
+        var previous = Environment.GetEnvironmentVariable(
+            TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable);
+        var automationRoot = Path.Join(Path.GetTempPath(), $"tw_ui_automation_{Guid.NewGuid():N}");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable,
+                automationRoot);
+
+            if (TypeWhisperEnvironment.IsDevelopmentBuild)
+                Assert.Equal(Path.GetFullPath(automationRoot), TypeWhisperEnvironment.BasePath);
+            else
+                Assert.NotEqual(Path.GetFullPath(automationRoot), TypeWhisperEnvironment.BasePath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable,
+                previous);
+        }
+    }
+
     private static string Normalize(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 

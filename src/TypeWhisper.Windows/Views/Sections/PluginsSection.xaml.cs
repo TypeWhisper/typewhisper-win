@@ -33,9 +33,13 @@ public partial class PluginsSection : UserControl
             if (!ReferenceEquals(_pluginsViewModel, vm))
             {
                 if (_pluginsViewModel is not null)
+                {
                     _pluginsViewModel.PropertyChanged -= OnPluginsPropertyChanged;
+                    _pluginsViewModel.PluginSettingsRequested -= OnPluginSettingsRequested;
+                }
                 _pluginsViewModel = vm;
                 _pluginsViewModel.PropertyChanged += OnPluginsPropertyChanged;
+                _pluginsViewModel.PluginSettingsRequested += OnPluginSettingsRequested;
             }
 
             ApplyTabSelection(vm.IsMarketplaceSelected);
@@ -58,6 +62,7 @@ public partial class PluginsSection : UserControl
             return;
 
         _pluginsViewModel.PropertyChanged -= OnPluginsPropertyChanged;
+        _pluginsViewModel.PluginSettingsRequested -= OnPluginSettingsRequested;
         _pluginsViewModel = null;
     }
 
@@ -109,23 +114,38 @@ public partial class PluginsSection : UserControl
             OpenPluginSettings(installedPlugin);
     }
 
-    private void OnPluginSettingsClick(object sender, RoutedEventArgs e)
+    private void OnPluginSettingsRequested(PluginItemViewModel plugin)
     {
-        if (sender is FrameworkElement { DataContext: PluginItemViewModel plugin })
-            OpenPluginSettings(plugin);
+        Program.UiAutomation.RecordEvent($"Plugin settings request: {plugin.Id}");
+        OpenPluginSettings(plugin);
     }
 
     private void OpenPluginSettings(PluginItemViewModel plugin)
     {
+        Program.UiAutomation.RecordEvent($"Opening plugin settings: {plugin.Id}");
         var owner = Window.GetWindow(this);
         if (owner is null || plugin.SettingsView is null)
+        {
+            Program.UiAutomation.RecordEvent(
+                $"Plugin settings unavailable: {plugin.Id}, owner={owner is not null}, view={plugin.SettingsView is not null}");
             return;
+        }
 
         var dialog = new PluginSettingsWindow(plugin.Name, plugin.SettingsView)
         {
             Owner = owner
         };
-        dialog.ShowDialog();
+
+        // A modal WPF provider blocks UIA InvokePattern until the dialog closes.
+        // Keep production behavior modal while allowing isolated automation runs
+        // to observe and capture the opened top-level window.
+        if (Program.UiAutomation.IsEnabled)
+        {
+            dialog.Loaded += (_, _) => Program.UiAutomation.RecordEvent($"Plugin settings loaded: {plugin.Id}");
+            dialog.Show();
+        }
+        else
+            dialog.ShowDialog();
     }
 
     private void ApplyTabSelection(bool discoverSelected)

@@ -146,122 +146,101 @@ public static class DevelopmentDataSeedFactory
                     UpdatedAt = createdAt
                 }
             ],
-            HistoryRecords =
-            [
-                HistoryRecord(
-                    "dev-history-001",
-                    now,
-                    "type whisper dev seed should make the dashboard feel alive",
-                    "TypeWhisper dev seed should make the dashboard feel alive.",
-                    "Notepad",
-                    "notepad",
-                    7.5),
-                HistoryRecord(
-                    "dev-history-002",
-                    now.AddHours(-2),
-                    "summarize the release checklist and call out the risky items",
-                    "Summarize the release checklist and call out the risky items.",
-                    "Microsoft Outlook",
-                    "outlook",
-                    8.1),
-                HistoryRecord(
-                    "dev-history-003",
-                    now.AddDays(-1).AddHours(2),
-                    "turn this into meeting notes with action items",
-                    "Turn this into meeting notes with action items.",
-                    "Slack",
-                    "slack",
-                    5.8),
-                HistoryRecord(
-                    "dev-history-004",
-                    now.AddDays(-1).AddHours(-1),
-                    "capture the bug reproduction steps from this quick voice note",
-                    "Capture the bug reproduction steps from this quick voice note.",
-                    "Microsoft Teams",
-                    "ms-teams",
-                    6.4),
-                HistoryRecord(
-                    "dev-history-005",
-                    now.AddDays(-2).AddHours(4),
-                    "draft a short pull request summary and test notes",
-                    "Draft a short pull request summary and test notes.",
-                    "Visual Studio Code",
-                    "code",
-                    6.2),
-                HistoryRecord(
-                    "dev-history-006",
-                    now.AddDays(-3).AddHours(1),
-                    "rewrite this paragraph as a concise support response",
-                    "Rewrite this paragraph as a concise support response.",
-                    "Google Chrome",
-                    "chrome",
-                    4.9),
-                HistoryRecord(
-                    "dev-history-007",
-                    now.AddDays(-4).AddHours(3),
-                    "add the follow up tasks to the weekly planning note",
-                    "Add the follow-up tasks to the weekly planning note.",
-                    "Obsidian",
-                    "obsidian",
-                    5.5),
-                HistoryRecord(
-                    "dev-history-008",
-                    now.AddDays(-5).AddHours(2),
-                    "convert these rough notes into a launch announcement",
-                    "Convert these rough notes into a launch announcement.",
-                    "Notepad",
-                    "notepad",
-                    7.0),
-                HistoryRecord(
-                    "dev-history-009",
-                    now.AddDays(-6).AddHours(4),
-                    "make this status update warmer but keep it short",
-                    "Make this status update warmer but keep it short.",
-                    "Slack",
-                    "slack",
-                    4.4),
-                HistoryRecord(
-                    "dev-history-010",
-                    now.AddDays(-7).AddHours(1),
-                    "extract the customer request and the acceptance criteria",
-                    "Extract the customer request and the acceptance criteria.",
-                    "Linear",
-                    "linear",
-                    6.8),
-                HistoryRecord(
-                    "dev-history-011",
-                    now.AddDays(-9).AddHours(5),
-                    "turn this brainstorm into three concrete implementation options",
-                    "Turn this brainstorm into three concrete implementation options.",
-                    "Obsidian",
-                    "obsidian",
-                    8.6),
-                HistoryRecord(
-                    "dev-history-012",
-                    now.AddDays(-10).AddHours(2),
-                    "write a neutral changelog entry for the settings update",
-                    "Write a neutral changelog entry for the settings update.",
-                    "Visual Studio Code",
-                    "code",
-                    5.1),
-                HistoryRecord(
-                    "dev-history-013",
-                    now.AddDays(-12).AddHours(3),
-                    "clean up this email before I send it to the beta tester",
-                    "Clean up this email before I send it to the beta tester.",
-                    "Microsoft Outlook",
-                    "outlook",
-                    5.9),
-                HistoryRecord(
-                    "dev-history-014",
-                    now.AddDays(-13).AddHours(1),
-                    "make a short note about what changed in the prototype",
-                    "Make a short note about what changed in the prototype.",
-                    "Notepad",
-                    "notepad",
-                    4.7)
-            ]
+            HistoryRecords = CreateHistoryRecords(now)
         };
+    }
+
+    private static IReadOnlyList<TranscriptionRecord> CreateHistoryRecords(DateTime now)
+    {
+        (string Name, string ProcessName)[] apps =
+        [
+            ("Notepad", "notepad"),
+            ("Visual Studio Code", "code"),
+            ("Microsoft Outlook", "outlook"),
+            ("Slack", "slack"),
+            ("Microsoft Teams", "ms-teams"),
+            ("Google Chrome", "chrome"),
+            ("Obsidian", "obsidian"),
+            ("Linear", "linear")
+        ];
+        (string Engine, string Model)[] providers =
+        [
+            ("whisper", "large-v3"),
+            ("parakeet", "parakeet-tdt-0.6b"),
+            ("openai", "gpt-4o-mini-transcribe"),
+            ("groq", "whisper-large-v3-turbo"),
+            ("deepgram", "nova-3")
+        ];
+        (string Raw, string Final)[] samples =
+        [
+            (
+                "summarize the release checklist and call out every risky item before the team starts the final validation",
+                "Summarize the release checklist and call out every risky item before the team starts the final validation."),
+            (
+                "turn these rough meeting notes into clear decisions owners and action items for our next product review",
+                "Turn these rough meeting notes into clear decisions, owners, and action items for our next product review."),
+            (
+                "draft a friendly customer response that explains the workaround and asks whether the issue still occurs",
+                "Draft a friendly customer response that explains the workaround and asks whether the issue still occurs."),
+            (
+                "capture the exact reproduction steps expected result and actual behavior from this quick voice note",
+                "Capture the exact reproduction steps, expected result, and actual behavior from this quick voice note."),
+            (
+                "rewrite this project update so it stays concise but includes the completed work and remaining blockers",
+                "Rewrite this project update so it stays concise but includes the completed work and remaining blockers."),
+            (
+                "convert this brainstorm into three practical implementation options with benefits tradeoffs and open questions",
+                "Convert this brainstorm into three practical implementation options with benefits, tradeoffs, and open questions."),
+            (
+                "prepare a neutral changelog entry describing the improved settings flow and the new keyboard shortcuts",
+                "Prepare a neutral changelog entry describing the improved settings flow and the new keyboard shortcuts."),
+            (
+                "extract the customer request acceptance criteria and follow up questions from the conversation below",
+                "Extract the customer request, acceptance criteria, and follow-up questions from the conversation below."),
+            (
+                "write a short launch announcement that highlights privacy local processing and a faster dictation workflow",
+                "Write a short launch announcement that highlights privacy, local processing, and a faster dictation workflow."),
+            (
+                "clean up this email before I send the beta tester our latest build and installation instructions",
+                "Clean up this email before I send the beta tester our latest build and installation instructions."),
+            (
+                "organize the weekly planning note into priorities active tasks waiting items and decisions we need",
+                "Organize the weekly planning note into priorities, active tasks, waiting items, and decisions we need."),
+            (
+                "create a pull request summary with the user facing change technical notes and verification results",
+                "Create a pull request summary with the user-facing change, technical notes, and verification results.")
+        ];
+        int[] hours = [10, 13, 16, 19, 8];
+        var records = new List<TranscriptionRecord>();
+
+        for (var dayOffset = 0; dayOffset < 30; dayOffset++)
+        {
+            if (dayOffset is 6 or 15 or 24)
+                continue;
+
+            var recordsForDay = 2 + dayOffset % 4;
+            for (var recordIndex = 0; recordIndex < recordsForDay; recordIndex++)
+            {
+                var sequence = records.Count;
+                var app = apps[(dayOffset + recordIndex * 3) % apps.Length];
+                var provider = providers[(dayOffset * 2 + recordIndex) % providers.Length];
+                var sample = samples[(dayOffset * 3 + recordIndex) % samples.Length];
+                var timestamp = now.Date.AddDays(-dayOffset).AddHours(hours[recordIndex]);
+
+                records.Add(HistoryRecord(
+                    $"dev-history-{sequence + 1:000}",
+                    timestamp,
+                    sample.Raw,
+                    sample.Final,
+                    app.Name,
+                    app.ProcessName,
+                    8.5 + (dayOffset * 3 + recordIndex * 5) % 16,
+                    provider.Engine,
+                    provider.Model));
+            }
+        }
+
+        return records;
     }
 
     private static DictionaryEntry DictionaryTerm(string id, string term, DateTime createdAt) =>
@@ -296,7 +275,9 @@ public static class DevelopmentDataSeedFactory
         string finalText,
         string appName,
         string appProcessName,
-        double durationSeconds) =>
+        double durationSeconds,
+        string engine,
+        string model) =>
         new()
         {
             Id = id,
@@ -307,8 +288,8 @@ public static class DevelopmentDataSeedFactory
             AppProcessName = appProcessName,
             DurationSeconds = durationSeconds,
             Language = "en",
-            EngineUsed = "dev-seed",
-            ModelUsed = "sample",
+            EngineUsed = engine,
+            ModelUsed = model,
             CreatedAt = timestamp
         };
 }
@@ -357,12 +338,13 @@ public sealed class DevelopmentDataSeeder
     /// <summary>
     /// Clears core user data and writes the default development seed.
     /// </summary>
-    public DevelopmentDataSeedResult ClearAndSeed()
+    /// <param name="referenceUtc">Optional deterministic reference time for generated records.</param>
+    public DevelopmentDataSeedResult ClearAndSeed(DateTime? referenceUtc = null)
     {
         if (!_isDevelopmentBuild())
             return DevelopmentDataSeedResult.NotDevelopmentBuild;
 
-        var seed = DevelopmentDataSeedFactory.CreateDefault();
+        var seed = DevelopmentDataSeedFactory.CreateDefault(referenceUtc);
         var current = _settings.Current;
         var seededSettings = seed.Settings with
         {

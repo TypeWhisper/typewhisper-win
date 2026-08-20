@@ -24,9 +24,65 @@ public class PluginHostServicesTests : IDisposable
 
     private PluginHostServices CreateServices(
         Action? onCapabilitiesChanged = null,
-        ISettingsService? settings = null) =>
-        new("test-plugin", _tempDir, _activeWindow.Object, _eventBus.Object,
-            _workflows.Object, onCapabilitiesChanged, settings);
+        ISettingsService? settings = null,
+        string pluginId = "test-plugin",
+        bool isUiAutomation = false,
+        string? pluginDataRoot = null) =>
+        new(pluginId, _tempDir, _activeWindow.Object, _eventBus.Object,
+            _workflows.Object, onCapabilitiesChanged, settings,
+            pluginDataRoot: pluginDataRoot,
+            isUiAutomation: isUiAutomation);
+
+    [Theory]
+    [InlineData("com.typewhisper.elevenlabs")]
+    [InlineData("com.typewhisper.openai")]
+    [InlineData("com.typewhisper.openrouter")]
+    [InlineData("com.typewhisper.reson8")]
+    [InlineData("com.typewhisper.smallest-ai")]
+    [InlineData("com.typewhisper.soniox")]
+    [InlineData("com.typewhisper.xai")]
+    public async Task LoadSecretAsync_ReturnsPlaceholderForApiKeyScreenshotFixtures(string pluginId)
+    {
+        var services = CreateServices(
+            pluginId: pluginId,
+            isUiAutomation: true,
+            pluginDataRoot: Path.Join(_tempDir, "fixture-data"));
+
+        var value = await services.LoadSecretAsync("api-key");
+
+        Assert.True(services.IsUiAutomation);
+        Assert.Equal("typewhisper-ui-automation-placeholder", value);
+    }
+
+    [Fact]
+    public async Task LoadSecretAsync_DoesNotReturnPlaceholderOutsideUiAutomation()
+    {
+        var services = CreateServices(
+            pluginId: "com.typewhisper.openai",
+            pluginDataRoot: Path.Join(_tempDir, "fixture-data"));
+
+        var value = await services.LoadSecretAsync("api-key");
+
+        Assert.False(services.IsUiAutomation);
+        Assert.Null(value);
+    }
+
+    [Fact]
+    public async Task LoadSecretAsync_PrefersStoredSecretOverScreenshotFixture()
+    {
+        var services = CreateServices(
+            pluginId: "com.typewhisper.openai",
+            isUiAutomation: true,
+            pluginDataRoot: Path.Join(_tempDir, "fixture-data"));
+        Assert.True(
+            services.PluginDataDirectory.StartsWith(_tempDir, StringComparison.OrdinalIgnoreCase),
+            "The secret-writing test must stay inside its temporary data root.");
+        await services.StoreSecretAsync("api-key", "stored-test-secret");
+
+        var value = await services.LoadSecretAsync("api-key");
+
+        Assert.Equal("stored-test-secret", value);
+    }
 
     [Fact]
     public void NotifyCapabilitiesChanged_InvokesCallback()

@@ -97,7 +97,9 @@
         </Border>
 
         <Grid Grid.Row="2">
-            <ScrollViewer x:Name="InstalledPanel" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="InstalledPanel"
+                          AutomationProperties.AutomationId="IntegrationsInstalledScroll"
+                          VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Border Style="{StaticResource SettingsFilterRowStyle}">
                         <StackPanel>
@@ -291,7 +293,8 @@
                                                            AutomationProperties.AutomationId="{Binding Id, StringFormat=IntegrationsSettings.{0}}"
                                                            AutomationProperties.Name="{Binding SettingsAutomationName}"
                                                            Content="{loc:Str Settings.WindowTitle}"
-                                                           Click="OnPluginSettingsClick"
+                                                           Command="{Binding DataContext.Plugins.OpenPluginSettingsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                           CommandParameter="{Binding}"
                                                            Visibility="{Binding HasSettings, Converter={StaticResource BoolToVis}}"
                                                            Margin="0,0,8,0"/>
                                                 <ui:Button Appearance="Secondary"

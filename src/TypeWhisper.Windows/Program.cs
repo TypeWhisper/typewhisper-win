@@ -22,7 +22,12 @@ public static class Program
     private static Mutex? _singleInstanceMutex;
     private static SingleInstanceActivationSignal? _singleInstanceActivationSignal;
     private static IReadOnlyList<string>? _restartArgs;
-    private static readonly string CallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
+    private static string CallbackInboxPath => Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
+
+    /// <summary>
+    /// Gets the current debug UI automation launch options.
+    /// </summary>
+    internal static UiAutomationLaunchOptions UiAutomation { get; private set; } = UiAutomationLaunchOptions.Disabled;
 
     /// <summary>
     /// Gets or sets the start minimized value.
@@ -49,6 +54,21 @@ public static class Program
             return;
         }
 
+        if (!UiAutomationLaunchOptions.TryParse(args, out var automationOptions, out var automationError))
+        {
+            Debug.WriteLine(automationError);
+            Environment.ExitCode = 2;
+            return;
+        }
+
+        UiAutomation = automationOptions;
+        if (UiAutomation.IsEnabled)
+        {
+            Environment.SetEnvironmentVariable(
+                TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable,
+                UiAutomation.DataRoot);
+        }
+
         var isStartupActivation = false;
 #if TYPEWHISPER_STORE
         try
@@ -60,19 +80,22 @@ public static class Program
             Debug.WriteLine($"Store activation detection failed: {ex.Message}");
         }
 #else
-        VelopackApp.Build()
-            .SetAutoApplyOnStartup(!IsPortableLayout(AppContext.BaseDirectory))
-            .OnFirstRun((_) => StartupService.Enable())
-            .OnBeforeUninstallFastCallback((v) =>
-            {
-                UninstallUserDataProtector.ProtectLegacyAudioDirectory();
-            })
-            .OnAfterUpdateFastCallback((v) =>
-            {
-                if (StartupService.IsEnabled)
-                    StartupService.Enable();
-            })
-            .Run();
+        if (!UiAutomation.IsEnabled)
+        {
+            VelopackApp.Build()
+                .SetAutoApplyOnStartup(!IsPortableLayout(AppContext.BaseDirectory))
+                .OnFirstRun((_) => StartupService.Enable())
+                .OnBeforeUninstallFastCallback((v) =>
+                {
+                    UninstallUserDataProtector.ProtectLegacyAudioDirectory();
+                })
+                .OnAfterUpdateFastCallback((v) =>
+                {
+                    if (StartupService.IsEnabled)
+                        StartupService.Enable();
+                })
+                .Run();
+        }
 #endif
 
         StartMinimized = isStartupActivation
@@ -80,8 +103,13 @@ public static class Program
         var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
 
         // Single instance check
-        using var activationSignal = SingleInstanceActivationSignal.OpenOrCreate();
-        _singleInstanceMutex = new Mutex(true, "TypeWhisper-SingleInstance", out var createdNew);
+        var synchronizationSuffix = UiAutomation.IsEnabled ? $"-UiAutomation-{UiAutomation.InstanceId}" : string.Empty;
+        using var activationSignal = SingleInstanceActivationSignal.OpenOrCreate(
+            $"TypeWhisper-SingleInstance-Activation{synchronizationSuffix}");
+        _singleInstanceMutex = new Mutex(
+            true,
+            $"TypeWhisper-SingleInstance{synchronizationSuffix}",
+            out var createdNew);
         if (!createdNew)
         {
             try
@@ -112,11 +140,14 @@ public static class Program
 
         try
         {
-            Loc.Instance.CurrentLanguage = Loc.Instance.DetectSystemLanguage();
+            Loc.Instance.CurrentLanguage = UiAutomation.IsEnabled
+                ? UiAutomation.Language
+                : Loc.Instance.DetectSystemLanguage();
 
             try
             {
-                UserDataMigrationService.MigrateLegacyDataIfNeeded();
+                if (!UiAutomation.IsEnabled)
+                    UserDataMigrationService.MigrateLegacyDataIfNeeded();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

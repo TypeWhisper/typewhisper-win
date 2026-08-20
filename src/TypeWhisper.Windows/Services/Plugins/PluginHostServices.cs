@@ -49,7 +49,8 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         IWorkflowService workflows,
         Action? onCapabilitiesChanged = null,
         ISettingsService? settings = null,
-        string? pluginDataRoot = null)
+        string? pluginDataRoot = null,
+        bool isUiAutomation = false)
     {
         _pluginId = pluginId;
         _activeWindow = activeWindow;
@@ -57,6 +58,7 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
         _workflows = workflows;
         _onCapabilitiesChanged = onCapabilitiesChanged;
         _settings = settings;
+        IsUiAutomation = isUiAutomation;
         _localization = new PluginLocalization(pluginDirectory, AppLocalization.Loc.Instance.CurrentLanguage);
         var windowsNormalizedPluginId = pluginId?.TrimEnd(' ', '.');
         if (string.IsNullOrWhiteSpace(pluginId)
@@ -91,6 +93,11 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
     {
         get => LocalModelStorageService.ResolveAvailablePluginAssetDirectory(_settings?.Current, _pluginId);
     }
+
+    /// <summary>
+    /// Gets whether this host instance belongs to an isolated UI automation run.
+    /// </summary>
+    public bool IsUiAutomation { get; }
 
     /// <summary>
     /// Gets the active app process name.
@@ -186,6 +193,10 @@ public sealed class PluginHostServices : IPluginHostServices, ILivePreviewAppear
                 return Task.FromResult<string?>(ApiKeyProtection.Decrypt(encrypted));
             }
         }
+
+        if (IsUiAutomation && UiAutomationPluginFixtures.TryGetSecret(_pluginId, key, out var fixture))
+            return Task.FromResult(fixture);
+
         return Task.FromResult<string?>(null);
     }
 
