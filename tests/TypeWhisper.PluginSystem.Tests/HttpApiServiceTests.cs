@@ -609,6 +609,42 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TranscribeTranslation_NormalizesOnlyFinalEnglishOutput()
+    {
+        var plugin = new FakeTranscriptionPlugin { ResponseText = "Die Farbe heißt Colour." };
+        var translation = new Mock<ITranslationService>();
+        string? translatedSource = null;
+        translation
+            .Setup(service => service.TranslateAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((string text, string _, string _, CancellationToken _) => translatedSource = text)
+            .ReturnsAsync("The colour was analysed.");
+        var service = CreateService(
+            settings: new AppSettings
+            {
+                SelectedModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "tiny"),
+                SaveToHistoryEnabled = true,
+                EnglishOutputVariant = EnglishOutputVariant.UnitedStates
+            },
+            translationService: translation.Object,
+            plugins: [plugin]);
+        var request = MultipartTranscribeRequest(
+            ("language", null, null, "de"u8.ToArray()),
+            ("target_language", null, null, "en"u8.ToArray()),
+            ("file", "audio.wav", "audio/wav", WavEncoder.Encode([0f, 0f, 0f, 0f])));
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+        var json = JsonObject(response);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("Die Farbe heißt Colour.", translatedSource);
+        Assert.Equal("The color was analyzed.", json["text"].GetString());
+    }
+
+    [Fact]
     public async Task TranscribeTranslation_NormalizesOnlyFinalGermanOutput()
     {
         var plugin = new FakeTranscriptionPlugin { ResponseText = "The surname is Groß." };

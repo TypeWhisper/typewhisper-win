@@ -34,6 +34,9 @@ public sealed record PipelineOptions
     /// <summary>Per-request or workflow override for spoken number normalization.</summary>
     public bool? NormalizeNumbersOverride { get; init; }
 
+    /// <summary>Regional spelling variant applied to final written English output.</summary>
+    public EnglishOutputVariant EnglishOutputVariant { get; init; } = EnglishOutputVariant.AsTranscribed;
+
     /// <summary>Regional spelling variant applied to final written German output.</summary>
     public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;
 

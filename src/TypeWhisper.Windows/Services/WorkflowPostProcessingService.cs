@@ -152,6 +152,7 @@ public sealed class WorkflowPostProcessingService : IWorkflowPostProcessingServi
             TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
             ShortUtterancePunctuationEnabled = _settings.Current.ShortUtterancePunctuationEnabled,
             NormalizeNumbersOverride = request.Workflow?.Output.NumberNormalizationMode.OverrideValue(),
+            EnglishOutputVariant = _settings.Current.EnglishOutputVariant,
             GermanOutputVariant = _settings.Current.GermanOutputVariant,
             TranscriptionTask = request.TranscriptionTask,
             DetectedLanguage = request.DetectedLanguage,

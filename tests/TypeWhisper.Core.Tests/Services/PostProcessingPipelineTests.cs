@@ -376,6 +376,37 @@ public class PostProcessingPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_AmericanEnglishOutput_RunsAfterDictionaryCorrections()
+    {
+        var options = new PipelineOptions
+        {
+            EnglishOutputVariant = EnglishOutputVariant.UnitedStates,
+            DetectedLanguage = "en",
+            DictionaryCorrector = text => text + " recognised colour"
+        };
+
+        var result = await _sut.ProcessAsync("The", options);
+
+        Assert.Equal("The recognized color", result.Text);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AmericanEnglishOutput_RunsAfterEnglishTranslation()
+    {
+        var options = new PipelineOptions
+        {
+            EnglishOutputVariant = EnglishOutputVariant.UnitedStates,
+            DetectedLanguage = "de",
+            TranslationHandler = (_, _, _, _) => Task.FromResult("The colour was analysed."),
+            TranslationTarget = "en"
+        };
+
+        var result = await _sut.ProcessAsync("Die Farbe wurde analysiert.", options);
+
+        Assert.Equal("The color was analyzed.", result.Text);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SwissGermanOutput_RunsAfterDictionaryCorrections()
     {
         var options = new PipelineOptions

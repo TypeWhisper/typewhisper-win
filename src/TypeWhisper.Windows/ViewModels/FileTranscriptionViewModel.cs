@@ -651,6 +651,7 @@ public partial class FileTranscriptionViewModel : ObservableObject
             {
                 TranscriptionNumberNormalizationEnabled = _settings.Current.TranscriptionNumberNormalizationEnabled,
                 ShortUtterancePunctuationEnabled = _settings.Current.ShortUtterancePunctuationEnabled,
+                EnglishOutputVariant = _settings.Current.EnglishOutputVariant,
                 GermanOutputVariant = _settings.Current.GermanOutputVariant,
                 TranscriptionTask = TranscriptionTask.Transcribe,
                 DetectedLanguage = result.DetectedLanguage,
@@ -660,14 +661,19 @@ public partial class FileTranscriptionViewModel : ObservableObject
                 DictionaryCorrector = _dictionary.ApplyCorrections
             }, ct);
             var normalizedResult = GermanOutputNormalizationService.NormalizeResult(
-                TranscriptionNumberNormalizationService.NormalizeResult(
-                    ShortUtterancePunctuationService.NormalizeResult(
-                        result,
-                        _settings.Current.ShortUtterancePunctuationEnabled),
+                EnglishOutputNormalizationService.NormalizeResult(
+                    TranscriptionNumberNormalizationService.NormalizeResult(
+                        ShortUtterancePunctuationService.NormalizeResult(
+                            result,
+                            _settings.Current.ShortUtterancePunctuationEnabled),
+                        TranscriptionTask.Transcribe,
+                        language,
+                        languageHints,
+                        _settings.Current.TranscriptionNumberNormalizationEnabled),
+                    _settings.Current.EnglishOutputVariant,
                     TranscriptionTask.Transcribe,
                     language,
-                    languageHints,
-                    _settings.Current.TranscriptionNumberNormalizationEnabled),
+                    languageHints),
                 _settings.Current.GermanOutputVariant,
                 TranscriptionTask.Transcribe,
                 language,
