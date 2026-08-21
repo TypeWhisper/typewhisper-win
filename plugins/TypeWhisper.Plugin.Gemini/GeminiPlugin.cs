@@ -54,7 +54,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     /// Initializes a new instance of the GeminiPlugin class.
     /// </summary>
     public GeminiPlugin()
-        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+        : this(new HttpClient { Timeout = TimeSpan.FromSeconds(120) })
     {
     }
 
