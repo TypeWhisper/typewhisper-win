@@ -225,6 +225,28 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
+    public async Task ProcessAsync_OmitsGeminiReasoningEffortForGemmaModels()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return JsonResponse("""{"choices":[{"message":{"content":"ok"}}]}""");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        await sut.ProcessAsync("system", "user", "gemma-4-31b-it", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
+        Assert.Equal("gemma-4-31b-it", body.RootElement.GetProperty("model").GetString());
+        Assert.False(body.RootElement.TryGetProperty("reasoning_effort", out _));
+    }
+
+    [Fact]
     public async Task ProcessAsync_ClassifiesMalformedSuccessResponse()
     {
         var handler = new CapturingHandler((_, _) => JsonResponse("not-json"));

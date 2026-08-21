@@ -310,9 +310,10 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText },
             },
-            ["reasoning_effort"] = "low",
             ["max_tokens"] = 2048,
         };
+        if (model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
+            body["reasoning_effort"] = "low";
 
         using var request = CreateAuthenticatedRequest(
             HttpMethod.Post,
