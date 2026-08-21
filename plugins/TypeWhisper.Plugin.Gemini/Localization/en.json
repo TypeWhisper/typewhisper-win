@@ -1,9 +1,16 @@
 {
   "Settings.Test": "Test",
+  "Settings.Refresh": "Refresh",
   "Settings.Saved": "Saved",
   "Settings.EnterApiKey": "Please enter an API key first",
   "Settings.Testing": "Testing...",
+  "Settings.RefreshingModels": "Refreshing models...",
   "Settings.ApiKeyValid": "API key valid!",
   "Settings.ApiKeyInvalid": "Invalid API key",
+  "Settings.ModelCatalog": "Available LLM models",
+  "Settings.DefaultModelsHint": "Using the built-in Gemini aliases. Refresh to fetch the Gemini and Gemma chat models available to this API key.",
+  "Settings.ModelsFetched": "Compatible Gemini and Gemma models fetched: {0}.",
+  "Settings.ModelsFetchedHint": "Compatible Gemini and Gemma models loaded from the API: {0}.",
+  "Settings.RefreshFailed": "Could not refresh models. Keeping the saved or built-in list.",
   "Settings.Error": "Error: {0}"
 }

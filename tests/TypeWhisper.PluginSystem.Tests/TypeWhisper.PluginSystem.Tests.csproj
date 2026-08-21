@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.AuthenticatedCli\TypeWhisper.Plugin.AuthenticatedCli.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\TypeWhisper.Plugin.OpenRouter.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Groq\TypeWhisper.Plugin.Groq.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Gemini\TypeWhisper.Plugin.Gemini.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Xai\TypeWhisper.Plugin.Xai.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.ElevenLabs\TypeWhisper.Plugin.ElevenLabs.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Reson8\TypeWhisper.Plugin.Reson8.csproj" />
