@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -500,7 +501,8 @@ public sealed class GeminiPluginTests
     [Fact]
     public async Task FetchLlmModelsAsync_RethrowsCallerCancellation()
     {
-        var handler = new BlockingHandler(JsonResponse("""{"data":[]}"""));
+        using var response = JsonResponse("""{"data":[]}""");
+        var handler = new BlockingHandler(response);
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
         using var httpClient = new HttpClient(handler);
@@ -633,20 +635,34 @@ public sealed class GeminiPluginTests
             PropertyNameCaseInsensitive = true,
         };
 
-        private readonly Dictionary<string, JsonElement> _settings = [];
-        public Dictionary<string, string?> Secrets { get; } = [];
-        public int NotifyCapabilitiesChangedCount { get; private set; }
-        public int SetSettingCount { get; private set; }
-        public List<(PluginLogLevel Level, string Message)> Logs { get; } = [];
-        public Exception? StoreSecretException { get; set; }
-        public Exception? SetSettingException { get; set; }
-        public Exception? SetSettingExceptionAfterWrite { get; set; }
+        private readonly ConcurrentDictionary<string, JsonElement> _settings = [];
+        private Exception? _storeSecretException;
+        private Exception? _setSettingException;
+        private Exception? _setSettingExceptionAfterWrite;
+        private int _notifyCapabilitiesChangedCount;
+        private int _setSettingCount;
+
+        public ConcurrentDictionary<string, string?> Secrets { get; } = [];
+        public int NotifyCapabilitiesChangedCount => Volatile.Read(ref _notifyCapabilitiesChangedCount);
+        public int SetSettingCount => Volatile.Read(ref _setSettingCount);
+        public ConcurrentQueue<(PluginLogLevel Level, string Message)> Logs { get; } = [];
+        public Exception? StoreSecretException
+        {
+            set => Interlocked.Exchange(ref _storeSecretException, value);
+        }
+        public Exception? SetSettingException
+        {
+            set => Interlocked.Exchange(ref _setSettingException, value);
+        }
+        public Exception? SetSettingExceptionAfterWrite
+        {
+            set => Interlocked.Exchange(ref _setSettingExceptionAfterWrite, value);
+        }
 
         public Task StoreSecretAsync(string key, string value)
         {
-            if (StoreSecretException is { } exception)
+            if (Interlocked.Exchange(ref _storeSecretException, null) is { } exception)
             {
-                StoreSecretException = null;
                 throw exception;
             }
 
@@ -659,7 +675,7 @@ public sealed class GeminiPluginTests
 
         public Task DeleteSecretAsync(string key)
         {
-            Secrets.Remove(key);
+            Secrets.TryRemove(key, out _);
             return Task.CompletedTask;
         }
 
@@ -670,25 +686,23 @@ public sealed class GeminiPluginTests
 
         public void SetSetting<T>(string key, T value)
         {
-            if (SetSettingException is { } exception)
+            if (Interlocked.Exchange(ref _setSettingException, null) is { } exception)
             {
-                SetSettingException = null;
                 throw exception;
             }
 
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
-            SetSettingCount++;
-            if (SetSettingExceptionAfterWrite is { } afterWriteException)
+            Interlocked.Increment(ref _setSettingCount);
+            if (Interlocked.Exchange(ref _setSettingExceptionAfterWrite, null) is { } afterWriteException)
             {
-                SetSettingExceptionAfterWrite = null;
                 throw afterWriteException;
             }
         }
 
         public void ResetTracking()
         {
-            NotifyCapabilitiesChangedCount = 0;
-            SetSettingCount = 0;
+            Interlocked.Exchange(ref _notifyCapabilitiesChangedCount, 0);
+            Interlocked.Exchange(ref _setSettingCount, 0);
             Logs.Clear();
         }
 
@@ -697,8 +711,8 @@ public sealed class GeminiPluginTests
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) => Logs.Add((level, message));
-        public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
+        public void Log(PluginLogLevel level, string message) => Logs.Enqueue((level, message));
+        public void NotifyCapabilitiesChanged() => Interlocked.Increment(ref _notifyCapabilitiesChangedCount);
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }
 
