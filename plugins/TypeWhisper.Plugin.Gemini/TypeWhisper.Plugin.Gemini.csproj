@@ -11,6 +11,9 @@
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
