@@ -324,7 +324,7 @@ public partial class OpenAiSettingsView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_hasRefreshedModelsOnLoad)
+        if (_hasRefreshedModelsOnLoad || _plugin.IsUiAutomation)
             return;
 
         if ((_plugin.AuthMode == OpenAiAuthMode.ApiKey && !_plugin.IsConfigured)

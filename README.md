@@ -12,19 +12,33 @@ See [Platform parity and exclusions](docs/PLATFORM_PARITY.md) for the Windows su
 
 ## Screenshots
 
-The full 1.0 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
+The complete 1.0.8 screenshot set is available in [`docs/screenshots/windows`](docs/screenshots/windows). App captures use a consistent 1240 x 800 frame. Plugin dialogs keep their content-specific height so every setting remains visible. PNG files are kept for GitHub rendering, and WebP variants are included for web/docs reuse.
 
-| Dashboard | Dictation |
-|-----------|-----------|
-| <img src="docs/screenshots/windows/dashboard.png" alt="TypeWhisper Windows dashboard" width="420"> | <img src="docs/screenshots/windows/dictation.png" alt="TypeWhisper Windows dictation settings" width="420"> |
+### App
+
+| Dashboard | Statistics |
+|-----------|------------|
+| <img src="docs/screenshots/windows/dashboard.png" alt="TypeWhisper Windows dashboard" width="420"> | <img src="docs/screenshots/windows/statistics.png" alt="TypeWhisper Windows usage statistics" width="420"> |
+
+| Dictation | File Transcription |
+|-----------|--------------------|
+| <img src="docs/screenshots/windows/dictation.png" alt="TypeWhisper Windows dictation settings" width="420"> | <img src="docs/screenshots/windows/file-transcription.png" alt="TypeWhisper Windows file transcription" width="420"> |
 
 | Workflows | Integrations |
 |-----------|--------------|
 | <img src="docs/screenshots/windows/workflows.png" alt="TypeWhisper Windows workflows" width="420"> | <img src="docs/screenshots/windows/integrations-installed.png" alt="TypeWhisper Windows integrations" width="420"> |
 
-| File Transcription | Premium |
-|--------------------|---------|
-| <img src="docs/screenshots/windows/file-transcription.png" alt="TypeWhisper Windows file transcription" width="420"> | <img src="docs/screenshots/windows/premium-active.png" alt="TypeWhisper Windows premium settings" width="420"> |
+### Plugin Settings
+
+The complete set of 32 Windows plugin settings dialogs is available in [`docs/screenshots/windows/plugins`](docs/screenshots/windows/plugins). API-key plugins use non-sensitive screenshot fixtures so their configured controls are visible without storing or contacting real provider accounts.
+
+| OpenAI / ChatGPT | xAI / Grok |
+|------------------|------------|
+| <img src="docs/screenshots/windows/plugins/com.typewhisper.openai.png" alt="OpenAI and ChatGPT plugin settings on Windows" width="420"> | <img src="docs/screenshots/windows/plugins/com.typewhisper.xai.png" alt="xAI and Grok plugin settings on Windows" width="420"> |
+
+| ElevenLabs | OpenRouter |
+|------------|------------|
+| <img src="docs/screenshots/windows/plugins/com.typewhisper.elevenlabs.png" alt="ElevenLabs plugin settings on Windows" width="420"> | <img src="docs/screenshots/windows/plugins/com.typewhisper.openrouter.png" alt="OpenRouter plugin settings on Windows" width="420"> |
 
 ## What's New
 

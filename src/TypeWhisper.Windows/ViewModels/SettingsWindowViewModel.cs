@@ -122,7 +122,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// <summary>
     /// Gets the current app version.
     /// </summary>
-    public string CurrentAppVersion => _updateService.CurrentVersion;
+    public string CurrentAppVersion => Program.UiAutomation.IsEnabled
+        ? Program.UiAutomation.DisplayVersion
+        : _updateService.CurrentVersion;
     /// <summary>
     /// Builds current app version display.
     /// </summary>

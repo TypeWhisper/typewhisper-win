@@ -72,11 +72,15 @@ public sealed class PluginSettingsWindowLifetimeTests
         Assert.Contains("AutomationProperties.Name=\"{Binding RelativeSource={RelativeSource Self}, Path=Title}\"", xaml);
         Assert.DoesNotContain("x:Name=\"PluginNameText\"", xaml);
         Assert.Contains("<ScrollViewer", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"PluginSettingsScroll\"", xaml);
         Assert.Contains("plugin.SettingsView is null", section);
         Assert.Contains("Owner = owner", section);
         Assert.Contains("dialog.ShowDialog();", section);
         Assert.Contains("Title = $\"{Loc.Instance[\"Settings.WindowTitle\"]} – {pluginName}\";", dialog);
         Assert.Contains("SettingsContent.Content = null;", dialog);
+        Assert.Contains("SizeToContent = SizeToContent.Height;", dialog);
+        Assert.Contains("SettingsScroll.ScrollableHeight > 0.5", dialog);
+        Assert.Contains("new ScaleTransform(contentScale, contentScale)", dialog);
     }
 
     [Fact]
@@ -96,5 +100,42 @@ public sealed class PluginSettingsWindowLifetimeTests
         Assert.True(
             handler.IndexOf("FocusInstalledPlugin(plugin.Id)", StringComparison.Ordinal)
             < handler.IndexOf("OpenPluginSettings(installedPlugin);", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ScreenshotGuard_RejectsVerticalAndHorizontalOverflow()
+    {
+        var source = TestFile.ReadProjectFile(
+            "tools",
+            "TypeWhisper.UiAutomation",
+            "TypeWhisperAutomationSession.cs");
+
+        Assert.Contains("scroll.VerticallyScrollable.ValueOrDefault", source);
+        Assert.Contains("scroll.HorizontallyScrollable.ValueOrDefault", source);
+    }
+
+    [Fact]
+    public void AutomationSession_TerminatesProcessBeforeDisposingWrappers()
+    {
+        var source = TestFile.ReadProjectFile(
+            "tools",
+            "TypeWhisper.UiAutomation",
+            "TypeWhisperAutomationSession.cs");
+
+        var startupCleanup = source.IndexOf("if (process is not null)", StringComparison.Ordinal);
+        Assert.True(startupCleanup >= 0);
+        var startupTermination = source.IndexOf("TryTerminateProcess(process);", startupCleanup, StringComparison.Ordinal);
+        var startupApplicationDispose = source.IndexOf("application?.Dispose();", startupCleanup, StringComparison.Ordinal);
+        Assert.True(startupTermination > startupCleanup);
+        Assert.True(startupApplicationDispose > startupTermination);
+
+        var disposeMethod = source.IndexOf("public void Dispose()", StringComparison.Ordinal);
+        Assert.True(disposeMethod >= 0);
+        var disposeFinally = source.IndexOf("finally", disposeMethod, StringComparison.Ordinal);
+        Assert.True(disposeFinally >= 0);
+        var sessionTermination = source.IndexOf("TryTerminateProcess(_process);", disposeFinally, StringComparison.Ordinal);
+        var sessionApplicationDispose = source.IndexOf("_application.Dispose();", disposeFinally, StringComparison.Ordinal);
+        Assert.True(sessionTermination > disposeFinally);
+        Assert.True(sessionApplicationDispose > sessionTermination);
     }
 }

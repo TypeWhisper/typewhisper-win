@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
         Title="{loc:Str RecentTranscriptions.Title}"
+        AutomationProperties.AutomationId="RecentTranscriptionsPaletteWindow"
+        AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=Title}"
         Width="520"
         Height="360"
         WindowStartupLocation="Manual"

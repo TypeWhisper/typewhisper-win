@@ -149,6 +149,11 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
     public bool IsConfigured => IsAvailable;
 
     /// <summary>
+    /// Gets whether the host is running the isolated UI automation fixture.
+    /// </summary>
+    internal bool IsUiAutomation => _host?.IsUiAutomation == true;
+
+    /// <summary>
     /// Gets the transcription models exposed by this provider.
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels =>

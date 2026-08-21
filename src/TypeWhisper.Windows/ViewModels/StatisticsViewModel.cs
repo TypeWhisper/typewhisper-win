@@ -185,7 +185,12 @@ public sealed partial class StatisticsViewModel : ObservableObject
     /// Initializes the statistics view model.
     /// </summary>
     public StatisticsViewModel(IUsageStatisticsService statistics, PluginManager pluginManager)
-        : this(statistics, () => DateTime.Now, () => pluginManager.TranscriptionEngines)
+        : this(
+            statistics,
+            () => Program.UiAutomation.IsEnabled
+                ? Program.UiAutomation.ReferenceUtc.ToLocalTime()
+                : DateTime.Now,
+            () => pluginManager.TranscriptionEngines)
     {
         _pluginManager = pluginManager;
         _pluginManager.PluginStateChanged += OnPluginStateChanged;

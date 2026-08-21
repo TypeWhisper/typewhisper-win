@@ -489,7 +489,8 @@ public sealed class ScriptPluginTests
             {
                 Name = shell,
                 Shell = shell,
-                Command = "$text = [Console]::In.ReadToEnd(); [Console]::Out.Write($env:TYPEWHISPER_LANGUAGE + '|' + $text)"
+                Command = "$text = [Console]::In.ReadToEnd(); [Console]::Out.Write($env:TYPEWHISPER_LANGUAGE + '|' + $text)",
+                TimeoutSeconds = 15
             },
             "hello",
             new PostProcessingContext { SourceLanguage = "de" },

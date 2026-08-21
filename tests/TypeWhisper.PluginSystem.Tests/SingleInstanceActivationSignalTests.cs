@@ -47,7 +47,9 @@ public sealed class SingleInstanceActivationSignalTests
             "TypeWhisper.Windows",
             "Program.cs");
 
-        Assert.Contains("SingleInstanceActivationSignal.OpenOrCreate()", source);
+        Assert.Contains("SingleInstanceActivationSignal.OpenOrCreate(", source);
+        Assert.Contains("UiAutomation.IsEnabled ? $\"-UiAutomation-{UiAutomation.InstanceId}\" : string.Empty", source);
+        Assert.Contains("$\"TypeWhisper-SingleInstance-Activation{synchronizationSuffix}\"", source);
         Assert.Contains("if (ShouldNotifyRunningInstance(StartMinimized, callbackArg))", source);
         Assert.Contains("activationSignal.Notify();", source);
 

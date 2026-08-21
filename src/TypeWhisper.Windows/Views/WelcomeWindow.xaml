@@ -6,6 +6,8 @@
         xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
         Title="{loc:Str Welcome.Title}"
+        AutomationProperties.AutomationId="WelcomeWindow"
+        AutomationProperties.Name="{Binding RelativeSource={RelativeSource Self}, Path=Title}"
         Width="620"
         Height="690"
         MinWidth="620"

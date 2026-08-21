@@ -117,10 +117,11 @@ public sealed class UninstallUserDataProtectorTests : IDisposable
     {
         var source = TestFile.ReadProjectFile("src", "TypeWhisper.Windows", "Program.cs");
 
-        var mutexIndex = source.IndexOf("new Mutex(true, \"TypeWhisper-SingleInstance\"", StringComparison.Ordinal);
+        var mutexIndex = source.IndexOf("_singleInstanceMutex = new Mutex(", StringComparison.Ordinal);
         var migrationIndex = source.IndexOf("UserDataMigrationService.MigrateLegacyDataIfNeeded()", StringComparison.Ordinal);
 
         Assert.True(mutexIndex >= 0);
+        Assert.Contains("$\"TypeWhisper-SingleInstance{synchronizationSuffix}\"", source);
         Assert.True(migrationIndex > mutexIndex);
     }
 

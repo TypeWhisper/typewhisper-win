@@ -1,0 +1,20 @@
+{
+  "steps": [
+    {
+      "action": "invoke",
+      "automationId": "History"
+    },
+    {
+      "action": "wait",
+      "automationId": "SettingsSection.History"
+    },
+    {
+      "action": "settle"
+    },
+    {
+      "action": "capture",
+      "automationId": "SettingsWindow",
+      "file": "history-flow.png"
+    }
+  ]
+}

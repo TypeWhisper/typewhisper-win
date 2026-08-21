@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "action": "invoke",
+      "automationId": "Statistics"
+    },
+    {
+      "action": "wait",
+      "automationId": "SettingsSection.Statistics"
+    },
+    {
+      "action": "settle"
+    },
+    {
+      "action": "settle"
+    },
+    {
+      "action": "capture",
+      "automationId": "SettingsWindow",
+      "file": "statistics.png"
+    }
+  ]
+}

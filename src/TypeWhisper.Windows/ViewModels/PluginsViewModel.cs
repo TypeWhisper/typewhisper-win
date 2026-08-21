@@ -23,6 +23,11 @@ public partial class PluginsViewModel : ObservableObject
     private readonly PluginRegistryService _registryService;
 
     /// <summary>
+    /// Raised when a plugin settings window should be opened by the active view.
+    /// </summary>
+    public event Action<PluginItemViewModel>? PluginSettingsRequested;
+
+    /// <summary>
     /// Gets the loaded plugin view models.
     /// </summary>
     public ObservableCollection<PluginItemViewModel> Plugins { get; } = [];
@@ -250,6 +255,14 @@ public partial class PluginsViewModel : ObservableObject
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    [RelayCommand]
+    private void OpenPluginSettings(PluginItemViewModel? plugin)
+    {
+        Program.UiAutomation.RecordEvent($"Plugin settings command: {plugin?.Id ?? "<null>"}");
+        if (plugin?.HasSettings == true)
+            PluginSettingsRequested?.Invoke(plugin);
     }
 
     private void NotifyStateChanged()

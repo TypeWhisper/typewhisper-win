@@ -2,6 +2,13 @@ using TypeWhisper.Core;
 
 namespace TypeWhisper.Core.Tests;
 
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class TypeWhisperEnvironmentCollection
+{
+    public const string Name = "TypeWhisper environment";
+}
+
+[Collection(TypeWhisperEnvironmentCollection.Name)]
 public class TypeWhisperEnvironmentTests
 {
     [Fact]
@@ -34,6 +41,32 @@ public class TypeWhisperEnvironmentTests
             $"{userDataDirectoryName}{Path.DirectorySeparatorChar}Audio",
             audioPath,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UiAutomationDataRoot_IsUsedOnlyByDevelopmentBuilds()
+    {
+        var previous = Environment.GetEnvironmentVariable(
+            TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable);
+        var automationRoot = Path.Join(Path.GetTempPath(), $"tw_ui_automation_{Guid.NewGuid():N}");
+
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable,
+                automationRoot);
+
+            if (TypeWhisperEnvironment.IsDevelopmentBuild)
+                Assert.Equal(Path.GetFullPath(automationRoot), TypeWhisperEnvironment.BasePath);
+            else
+                Assert.NotEqual(Path.GetFullPath(automationRoot), TypeWhisperEnvironment.BasePath);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                TypeWhisperEnvironment.UiAutomationDataRootEnvironmentVariable,
+                previous);
+        }
     }
 
     private static string Normalize(string path) =>

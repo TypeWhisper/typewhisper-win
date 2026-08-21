@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -36,7 +37,7 @@ public partial class App : Application
     private RegisteredWaitHandle? _singleInstanceActivationRegistration;
     private bool _startupPresentationReady;
     private bool _pendingSingleInstanceActivation;
-    private static readonly string ProtocolCallbackInboxPath = Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
+    private static string ProtocolCallbackInboxPath => Path.Combine(TypeWhisperEnvironment.DataPath, "protocol-callback.txt");
 
     /// <summary>
     /// Gets or sets the services value.
@@ -77,7 +78,8 @@ public partial class App : Application
         };
 
         TypeWhisperEnvironment.EnsureDirectories();
-        EnsureCustomProtocolRegistration();
+        if (!Program.UiAutomation.IsEnabled)
+            EnsureCustomProtocolRegistration();
 
         var services = new ServiceCollection();
         ConfigureServices(services);
@@ -87,12 +89,29 @@ public partial class App : Application
         // Load settings
         var settings = _serviceProvider.GetRequiredService<ISettingsService>();
         settings.Load();
+        if (Program.UiAutomation.IsEnabled)
+        {
+            _serviceProvider.GetRequiredService<DevelopmentDataSeeder>().ClearAndSeed(
+                Program.UiAutomation.ReferenceUtc);
+            settings.Save(settings.Current with
+            {
+                UiLanguage = Program.UiAutomation.Language,
+                HasCompletedOnboarding = true,
+                PluginFirstRunCompleted = true
+            });
+        }
+
         var recoveryStore = _serviceProvider.GetRequiredService<DictationRecoveryAudioStore>();
         await recoveryStore.InitializeAsync();
         await recoveryStore.SetRetentionAsync(settings.Current.DictationRecoveryRetentionDays);
         settings.SettingsChanged += updated =>
             _ = recoveryStore.SetRetentionAsync(updated.DictationRecoveryRetentionDays);
         var licenseService = _serviceProvider.GetRequiredService<LicenseService>();
+        if (Program.UiAutomation.HasPremiumFixture)
+        {
+            licenseService.CommercialStatus = LicenseStatus.Active;
+            licenseService.CommercialTier = CommercialLicenseTier.Team;
+        }
 
         // Restore enabled term packs into the dictionary on startup.
         var dictionary = _serviceProvider.GetRequiredService<IDictionaryService>();
@@ -108,7 +127,8 @@ public partial class App : Application
         foreach (var pack in TermPack.VisiblePacks(licenseService.HasCommercialLicense).Where(pack => enabledPackIds.Contains(pack.Id)))
             dictionary.ActivatePack(pack);
         var termPackRegistry = _serviceProvider.GetRequiredService<TermPackRegistryService>();
-        _ = RestoreRemoteTermPacksAsync(termPackRegistry, dictionary, settings, licenseService);
+        if (!Program.UiAutomation.IsEnabled)
+            _ = RestoreRemoteTermPacksAsync(termPackRegistry, dictionary, settings, licenseService);
 
         // Initialize localization
         Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
@@ -122,6 +142,12 @@ public partial class App : Application
         var speechFeedback = _serviceProvider.GetRequiredService<SpeechFeedbackService>();
         speechFeedback.IsEnabled = settings.Current.SpokenFeedbackEnabled;
         settings.SettingsChanged += s => speechFeedback.IsEnabled = s.SpokenFeedbackEnabled;
+
+        if (Program.UiAutomation.IsEnabled)
+        {
+            await StartUiAutomationSessionAsync();
+            return;
+        }
 
         // Publish the native shell before plugin discovery. The tray is the
         // primary idle surface, while the transparent overlay creates the
@@ -299,6 +325,33 @@ public partial class App : Application
         {
             _ = Interlocked.CompareExchange(ref _startupBackgroundTask, null, task);
         }
+    }
+
+    private async Task StartUiAutomationSessionAsync()
+    {
+        var pluginManager = _serviceProvider!.GetRequiredService<PluginManager>();
+        await pluginManager.InitializeAsync(_startupCancellation.Token);
+
+        ShowSettingsWindow(SettingsRoute.Dashboard);
+        _startupPresentationReady = true;
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+
+        var readyFile = Program.UiAutomation.ReadyFile;
+        if (string.IsNullOrWhiteSpace(readyFile))
+            return;
+
+        var directory = Path.GetDirectoryName(readyFile);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var ready = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            ProcessId = Environment.ProcessId,
+            AutomationId = "SettingsWindow",
+            Language = Program.UiAutomation.Language,
+            Premium = Program.UiAutomation.HasPremiumFixture
+        });
+        await File.WriteAllTextAsync(readyFile, ready, _startupCancellation.Token);
     }
 
     private void RunTrayActionOnUiThread(Action action)
@@ -479,7 +532,12 @@ public partial class App : Application
         }
 
         _settingsWindow = _serviceProvider!.GetRequiredService<SettingsWindow>();
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            if (Program.UiAutomation.IsEnabled)
+                Shutdown();
+        };
         _settingsWindow.Show();
 
         if (_settingsWindow.DataContext is SettingsWindowViewModel viewModel)
@@ -540,7 +598,29 @@ public partial class App : Application
         services.AddSingleton<PluginLoader>();
         services.AddSingleton<PluginEventBus>();
         services.AddSingleton<PluginManager>();
-        services.AddSingleton<PluginRegistryService>();
+        if (Program.UiAutomation.IsEnabled)
+        {
+            services.AddSingleton(sp =>
+            {
+                var registryFile = Program.UiAutomation.PluginRegistryFile;
+                var httpClient = string.IsNullOrWhiteSpace(registryFile)
+                    ? new HttpClient()
+                    : new HttpClient(new UiAutomationRegistryMessageHandler(registryFile));
+                return new PluginRegistryService(
+                    sp.GetRequiredService<PluginManager>(),
+                    sp.GetRequiredService<PluginLoader>(),
+                    sp.GetRequiredService<ISettingsService>(),
+                    httpClient: httpClient,
+                    officialRegistryUrl: string.IsNullOrWhiteSpace(registryFile)
+                        ? string.Empty
+                        : "https://ui-automation.typewhisper.invalid/plugins.json",
+                    communityRegistryUrl: string.Empty);
+            });
+        }
+        else
+        {
+            services.AddSingleton<PluginRegistryService>();
+        }
         services.AddSingleton<TermPackRegistryService>();
 
         // Model manager (plugin-based)
