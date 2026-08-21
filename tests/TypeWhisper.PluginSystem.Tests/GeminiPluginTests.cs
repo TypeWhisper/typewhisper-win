@@ -14,7 +14,7 @@ public sealed class GeminiPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var manifestPath = Path.Combine(
+        var manifestPath = Path.Join(
             RepositoryRoot(),
             "plugins",
             "TypeWhisper.Plugin.Gemini",
@@ -486,8 +486,8 @@ public sealed class GeminiPluginTests
             directory is not null;
             directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "TypeWhisper.slnx"))
-                && Directory.Exists(Path.Combine(directory.FullName, "plugins")))
+            if (File.Exists(Path.Join(directory.FullName, "TypeWhisper.slnx"))
+                && Directory.Exists(Path.Join(directory.FullName, "plugins")))
             {
                 return directory.FullName;
             }
