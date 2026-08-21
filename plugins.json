@@ -100,22 +100,22 @@
   {
     "id": "com.typewhisper.gemini",
     "name": "Google Gemini",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "minHostVersion": null,
     "author": "TypeWhisper",
-    "description": "Google Gemini LLM provider (Flash, Pro, Flash Lite)",
+    "description": "Google Gemini and Gemma LLM provider with dynamic model discovery for prompt actions and translation",
     "category": "llm",
-    "size": 10444,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.gemini-1.1.0.zip",
+    "size": 21986,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.gemini-1.2.0.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
-      "de": "Google Gemini LLM-Anbieter (Flash, Pro, Flash Lite)"
+      "de": "Google-Gemini- und Gemma-LLM-Anbieter mit dynamischer Modellerkennung für Prompt-Aktionen und Übersetzungen"
     },
     "categories": [
       "llm"
     ],
-    "sha256": "20cbf83c8ad59884da75342962d24b43efc529403d294fd1b9de63e039b8612f"
+    "sha256": "f5d890387c435e026fd3d65fcc38d6a1eb07f6eb757e1724987953e4cea3b62c"
   },
   {
     "id": "com.typewhisper.linear",
