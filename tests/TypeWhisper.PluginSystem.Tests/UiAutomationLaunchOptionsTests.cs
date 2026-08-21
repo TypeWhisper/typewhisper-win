@@ -42,7 +42,11 @@ public sealed class UiAutomationLaunchOptionsTests : IDisposable
             out var error);
 
         Assert.False(parsed);
+#if DEBUG
         Assert.Contains("--automation-data-root", error, StringComparison.Ordinal);
+#else
+        Assert.Contains("available only in debug builds", error, StringComparison.Ordinal);
+#endif
     }
 
     [Fact]
@@ -66,6 +70,7 @@ public sealed class UiAutomationLaunchOptionsTests : IDisposable
             out var options,
             out var error);
 
+#if DEBUG
         Assert.True(parsed);
         Assert.Null(error);
         Assert.True(options.IsEnabled);
@@ -79,5 +84,10 @@ public sealed class UiAutomationLaunchOptionsTests : IDisposable
         Assert.Equal(Path.GetFullPath(_tempDirectory), options.DataRoot);
         Assert.Equal(Path.GetFullPath(readyFile), options.ReadyFile);
         Assert.Equal(Path.GetFullPath(registryFile), options.PluginRegistryFile);
+#else
+        Assert.False(parsed);
+        Assert.Contains("available only in debug builds", error, StringComparison.Ordinal);
+        Assert.False(options.IsEnabled);
+#endif
     }
 }
