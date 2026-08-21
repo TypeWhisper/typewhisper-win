@@ -10,7 +10,7 @@ namespace TypeWhisper.Plugin.Gemini;
 public partial class GeminiSettingsView : UserControl
 {
     private readonly GeminiPlugin _plugin;
-    private bool _suppressPasswordChanged;
+    private readonly bool _suppressPasswordChanged;
     private bool _autoRefreshStarted;
 
     /// <summary>
