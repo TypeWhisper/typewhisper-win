@@ -35,7 +35,7 @@ public sealed class GeminiPluginTests
         using var sut = new GeminiPlugin();
 
         Assert.Equal(
-            ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"],
+            ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"],
             sut.SupportedModels.Select(model => model.Id).ToArray());
         Assert.Equal(GeminiPlugin.DefaultModel, Assert.Single(sut.SupportedModels, model => model.IsRecommended).Id);
     }
@@ -178,7 +178,7 @@ public sealed class GeminiPluginTests
 
         Assert.Equal("second-key", host.Secrets["api-key"]);
         Assert.Equal(
-            ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"],
+            ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"],
             sut.SupportedModels.Select(model => model.Id).ToArray());
         Assert.Empty(host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!);
         Assert.Equal(1, host.SetSettingCount);
@@ -218,6 +218,7 @@ public sealed class GeminiPluginTests
         using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
         Assert.Equal("gemini-3.7-flash", body.RootElement.GetProperty("model").GetString());
         Assert.Equal(2048, body.RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.Equal("low", body.RootElement.GetProperty("reasoning_effort").GetString());
         Assert.False(body.RootElement.TryGetProperty("temperature", out _));
         Assert.Equal("system", body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
         Assert.Equal("user", body.RootElement.GetProperty("messages")[1].GetProperty("role").GetString());

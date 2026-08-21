@@ -18,13 +18,13 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
     private const string ApiKeySecretName = "api-key";
     private const string FetchedLlmModelsSettingName = "fetchedLlmModels.v2";
-    internal const string DefaultModel = "gemini-flash-latest";
+    internal const string DefaultModel = "gemini-flash-lite-latest";
 
     private static readonly IReadOnlyList<PluginModelInfo> FallbackLlmModels =
     [
-        new(DefaultModel, "Gemini Flash Latest") { IsRecommended = true },
+        new(DefaultModel, "Gemini Flash Lite Latest") { IsRecommended = true },
+        new("gemini-flash-latest", "Gemini Flash Latest"),
         new("gemini-pro-latest", "Gemini Pro Latest"),
-        new("gemini-flash-lite-latest", "Gemini Flash-Lite Latest"),
     ];
 
     private static readonly string[] ExcludedModelTokens =
@@ -310,6 +310,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText },
             },
+            ["reasoning_effort"] = "low",
             ["max_tokens"] = 2048,
         };
 
