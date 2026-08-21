@@ -107,5 +107,82 @@ public sealed class UiAutomationLaunchOptionsTests : IDisposable
         Assert.False(parsed);
         Assert.Contains("instance identifier", error, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TryParse_AllowsAbsentOptionalValues()
+    {
+        var parsed = UiAutomationLaunchOptions.TryParse(
+            ["--ui-automation", "--automation-data-root", _tempDirectory],
+            out var options,
+            out var error);
+
+        Assert.True(parsed);
+        Assert.Null(error);
+        Assert.Equal("en", options.Language);
+        Assert.Equal("1.0.0", options.DisplayVersion);
+        Assert.Null(options.ReadyFile);
+        Assert.Null(options.PluginRegistryFile);
+    }
+
+    [Fact]
+    public void TryParse_RejectsOptionWithoutValue()
+    {
+        var parsed = UiAutomationLaunchOptions.TryParse(
+            [
+                "--ui-automation",
+                "--automation-data-root", _tempDirectory,
+                "--automation-language"
+            ],
+            out _,
+            out var error);
+
+        Assert.False(parsed);
+        Assert.Contains("--automation-language", error, StringComparison.Ordinal);
+        Assert.Contains("requires a value", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryParse_RejectsAnotherOptionAsValue()
+    {
+        var parsed = UiAutomationLaunchOptions.TryParse(
+            [
+                "--ui-automation",
+                "--automation-data-root", _tempDirectory,
+                "--automation-instance", "--automation-premium"
+            ],
+            out _,
+            out var error);
+
+        Assert.False(parsed);
+        Assert.Contains("--automation-instance", error, StringComparison.Ordinal);
+        Assert.Contains("requires a value", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--automation-data-root")]
+    [InlineData("--automation-ready-file")]
+    public void TryParse_RejectsInvalidPaths(string optionName)
+    {
+        var args = new List<string>
+        {
+            "--ui-automation",
+            "--automation-data-root", _tempDirectory
+        };
+        if (string.Equals(optionName, "--automation-data-root", StringComparison.Ordinal))
+        {
+            args[2] = "\0";
+        }
+        else
+        {
+            args.Add(optionName);
+            args.Add("\0");
+        }
+
+        var parsed = UiAutomationLaunchOptions.TryParse(args, out _, out var error);
+
+        Assert.False(parsed);
+        Assert.Contains(optionName, error, StringComparison.Ordinal);
+        Assert.Contains("Invalid path", error, StringComparison.Ordinal);
+    }
 #endif
 }

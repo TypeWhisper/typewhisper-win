@@ -112,21 +112,32 @@ internal sealed record UiAutomationLaunchOptions
         if (!TryReadRequiredPath(args, "--automation-data-root", out var dataRoot, out error))
             return false;
 
-        var language = ReadValue(args, "--automation-language") ?? "en";
+        if (!TryReadValue(args, "--automation-language", out var languageValue, out error))
+            return false;
+
+        var language = languageValue ?? "en";
         if (!SupportedLanguages.Contains(language))
         {
             error = $"Unsupported UI automation language '{language}'.";
             return false;
         }
 
-        var displayVersion = ReadValue(args, "--automation-display-version") ?? "1.0.0";
-        if (displayVersion.Length > 32 || displayVersion.Any(char.IsWhiteSpace))
+        if (!TryReadValue(args, "--automation-display-version", out var displayVersionValue, out error))
+            return false;
+
+        var displayVersion = displayVersionValue ?? "1.0.0";
+        if (string.IsNullOrWhiteSpace(displayVersion)
+            || displayVersion.Length > 32
+            || displayVersion.Any(char.IsWhiteSpace))
         {
             error = "The automation display version must be a short value without whitespace.";
             return false;
         }
 
-        var instanceId = ReadValue(args, "--automation-instance") ?? Guid.NewGuid().ToString("N");
+        if (!TryReadValue(args, "--automation-instance", out var instanceIdValue, out error))
+            return false;
+
+        var instanceId = instanceIdValue ?? Guid.NewGuid().ToString("N");
         if (string.IsNullOrWhiteSpace(instanceId)
             || instanceId.Length > 64
             || instanceId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
@@ -135,23 +146,38 @@ internal sealed record UiAutomationLaunchOptions
             return false;
         }
 
-        var readyFile = ReadValue(args, "--automation-ready-file");
-        var registryFile = ReadValue(args, "--automation-plugin-registry");
-        if (!string.IsNullOrWhiteSpace(registryFile) && !File.Exists(registryFile))
+        if (!TryReadOptionalPath(args, "--automation-ready-file", out var readyFile, out error)
+            || !TryReadOptionalPath(args, "--automation-plugin-registry", out var registryFile, out error))
         {
-            error = $"The automation plugin registry fixture does not exist: {registryFile}";
+            return false;
+        }
+
+        if (!TryGetFullPath(dataRoot!, "--automation-data-root", out var fullDataRoot, out error)
+            || !TryGetOptionalFullPath(readyFile, "--automation-ready-file", out var fullReadyFile, out error)
+            || !TryGetOptionalFullPath(
+                registryFile,
+                "--automation-plugin-registry",
+                out var fullRegistryFile,
+                out error))
+        {
+            return false;
+        }
+
+        if (fullRegistryFile is not null && !File.Exists(fullRegistryFile))
+        {
+            error = $"The automation plugin registry fixture does not exist: {fullRegistryFile}";
             return false;
         }
 
         options = new UiAutomationLaunchOptions
         {
             IsEnabled = true,
-            DataRoot = Path.GetFullPath(dataRoot!),
+            DataRoot = fullDataRoot,
             Language = language,
             DisplayVersion = displayVersion,
             HasPremiumFixture = args.Contains("--automation-premium", StringComparer.OrdinalIgnoreCase),
-            ReadyFile = string.IsNullOrWhiteSpace(readyFile) ? null : Path.GetFullPath(readyFile),
-            PluginRegistryFile = string.IsNullOrWhiteSpace(registryFile) ? null : Path.GetFullPath(registryFile),
+            ReadyFile = fullReadyFile,
+            PluginRegistryFile = fullRegistryFile,
             InstanceId = instanceId
         };
         return true;
@@ -164,8 +190,9 @@ internal sealed record UiAutomationLaunchOptions
         out string? value,
         out string? error)
     {
-        value = ReadValue(args, name);
-        error = null;
+        if (!TryReadValue(args, name, out value, out error))
+            return false;
+
         if (!string.IsNullOrWhiteSpace(value))
             return true;
 
@@ -173,17 +200,84 @@ internal sealed record UiAutomationLaunchOptions
         return false;
     }
 
-    private static string? ReadValue(IReadOnlyList<string> args, string name)
+    private static bool TryReadOptionalPath(
+        IReadOnlyList<string> args,
+        string name,
+        out string? value,
+        out string? error)
     {
+        if (!TryReadValue(args, name, out value, out error))
+            return false;
+
+        if (value is null || !string.IsNullOrWhiteSpace(value))
+            return true;
+
+        error = $"UI automation option {name} requires a non-empty path.";
+        return false;
+    }
+
+    private static bool TryReadValue(
+        IReadOnlyList<string> args,
+        string name,
+        out string? value,
+        out string? error)
+    {
+        value = null;
+        error = null;
         for (var index = 0; index < args.Count; index++)
         {
             if (!string.Equals(args[index], name, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            return index + 1 < args.Count ? args[index + 1] : null;
+            if (index + 1 >= args.Count || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                error = $"UI automation option {name} requires a value.";
+                return false;
+            }
+
+            value = args[index + 1];
+            return true;
         }
 
-        return null;
+        return true;
+    }
+
+    private static bool TryGetOptionalFullPath(
+        string? path,
+        string name,
+        out string? fullPath,
+        out string? error)
+    {
+        fullPath = null;
+        error = null;
+        if (path is null)
+            return true;
+
+        if (!TryGetFullPath(path, name, out var resolvedPath, out error))
+            return false;
+
+        fullPath = resolvedPath;
+        return true;
+    }
+
+    private static bool TryGetFullPath(
+        string path,
+        string name,
+        out string? fullPath,
+        out string? error)
+    {
+        try
+        {
+            fullPath = Path.GetFullPath(path);
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        {
+            fullPath = null;
+            error = $"Invalid path for {name}: {ex.Message}";
+            return false;
+        }
     }
 }
 

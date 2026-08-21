@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -112,17 +113,10 @@ internal sealed class TypeWhisperAutomationSession : IDisposable
         }
         catch
         {
+            if (process is not null)
+                TryTerminateProcess(process);
             automation?.Dispose();
             application?.Dispose();
-            try
-            {
-                if (process is { HasExited: false })
-                    process.Kill(entireProcessTree: true);
-            }
-            catch (InvalidOperationException)
-            {
-                // The attached application can dispose its Process wrapper during failed startup.
-            }
             process?.Dispose();
             TryDeleteDirectory(temporaryDirectory);
             throw;
@@ -313,21 +307,36 @@ internal sealed class TypeWhisperAutomationSession : IDisposable
             if (!_application.HasExited)
             {
                 SettingsWindow.Close();
-                if (!_process.WaitForExit(2000))
-                    _application.Kill();
+                _process.WaitForExit(2000);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
         {
-            if (!_application.HasExited)
-                _application.Kill();
+            System.Diagnostics.Debug.WriteLine(ex);
         }
         finally
         {
+            TryTerminateProcess(_process);
             _automation.Dispose();
             _application.Dispose();
             _process.Dispose();
             TryDeleteDirectory(_temporaryDirectory);
+        }
+    }
+
+    private static void TryTerminateProcess(Process process)
+    {
+        try
+        {
+            if (process.HasExited)
+                return;
+
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(2000);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

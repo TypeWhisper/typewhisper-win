@@ -102,6 +102,7 @@ if ($Scope -in @('Plugins', 'All')) {
 
         $manifest = Get-Content (Join-Path $pluginProject.FullName 'manifest.json') -Raw | ConvertFrom-Json
         $pluginBuildOutput = Join-Path $pluginProject.FullName 'bin\Debug\net10.0-windows'
+        $pluginBuildRoot = [System.IO.Path]::GetFullPath($pluginBuildOutput)
         $pluginInstallOutput = Join-Path (Join-Path $appOutput 'Plugins') ([string]$manifest.id)
         New-Item -ItemType Directory -Force -Path $pluginInstallOutput | Out-Null
         foreach ($file in (Get-ChildItem $pluginBuildOutput -File -Recurse)) {
@@ -109,7 +110,7 @@ if ($Scope -in @('Plugins', 'All')) {
                 continue
             }
 
-            $relativePath = [System.IO.Path]::GetRelativePath($pluginBuildOutput, $file.FullName)
+            $relativePath = $file.FullName.Substring($pluginBuildRoot.Length).TrimStart([char[]]@('\', '/'))
             $destination = Join-Path $pluginInstallOutput $relativePath
             $destinationDirectory = Split-Path -Parent $destination
             New-Item -ItemType Directory -Force -Path $destinationDirectory | Out-Null
