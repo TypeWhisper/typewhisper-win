@@ -1,9 +1,15 @@
 {
   "id": "com.typewhisper.gemini",
   "name": "Google Gemini",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "author": "TypeWhisper",
-  "description": "Google Gemini LLM provider for prompt actions and translation",
+  "description": "Google Gemini and Gemma LLM provider with dynamic model discovery for prompt actions and translation",
+  "descriptions": {
+    "de": "Google-Gemini- und Gemma-LLM-Anbieter mit dynamischer Modellerkennung für Prompt-Aktionen und Übersetzungen"
+  },
+  "category": "llm",
+  "categories": ["llm"],
+  "requiresApiKey": true,
   "assemblyName": "TypeWhisper.Plugin.Gemini.dll",
   "pluginClass": "TypeWhisper.Plugin.Gemini.GeminiPlugin"
 }
