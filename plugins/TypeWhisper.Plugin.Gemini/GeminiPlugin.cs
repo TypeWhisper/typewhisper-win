@@ -37,6 +37,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         "robotics",
         "computer-use",
         "deep-research",
+        "omni",
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -169,8 +170,12 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         var normalized = NormalizeApiKey(apiKey);
         var wasAvailable = IsAvailable;
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
+        var catalogChanged = changed && _fetchedLlmModels.Count > 0;
 
         _apiKey = normalized;
+        if (catalogChanged)
+            _fetchedLlmModels = [];
+
         if (_host is not null)
         {
             if (normalized is null)
@@ -178,14 +183,21 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
             else
                 await _host.StoreSecretAsync(ApiKeySecretName, normalized);
 
-            if (changed && wasAvailable != IsAvailable)
+            if (catalogChanged)
+                _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+
+            if ((changed && wasAvailable != IsAvailable) || catalogChanged)
                 _host.NotifyCapabilitiesChanged();
         }
     }
 
     internal void SetFetchedLlmModels(IEnumerable<GeminiFetchedModel> models)
     {
-        _fetchedLlmModels = NormalizeFetchedLlmModels(models);
+        var normalized = NormalizeFetchedLlmModels(models);
+        if (ModelCatalogsEqual(_fetchedLlmModels, normalized))
+            return;
+
+        _fetchedLlmModels = normalized;
         _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
         _host?.NotifyCapabilitiesChanged();
     }
@@ -201,7 +213,12 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         {
             using var response = await _httpClient.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
+            {
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    $"Model catalog request failed with HTTP status {(int)response.StatusCode}.");
                 return null;
+            }
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var catalog = JsonSerializer.Deserialize<GeminiCompatibleModelsResponse>(json, JsonOptions);
@@ -209,22 +226,27 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
+            _host?.Log(PluginLogLevel.Warning, "Model catalog request timed out.");
             return null;
         }
         catch (OperationCanceledException)
         {
+            _host?.Log(PluginLogLevel.Debug, "Model catalog request was canceled by the caller.");
             throw;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            _host?.Log(PluginLogLevel.Warning, $"Model catalog request failed with {ex.GetType().Name}.");
             return null;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _host?.Log(PluginLogLevel.Warning, $"Model catalog parsing failed with {ex.GetType().Name}.");
             return null;
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
+            _host?.Log(PluginLogLevel.Warning, $"Model catalog request failed with {ex.GetType().Name}.");
             return null;
         }
     }
@@ -288,7 +310,6 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText },
             },
-            ["temperature"] = 0.1,
             ["max_tokens"] = 2048,
         };
 
@@ -310,19 +331,34 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     {
         if (!string.IsNullOrWhiteSpace(json))
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty("choices", out var choices)
-                && choices.ValueKind == JsonValueKind.Array
-                && choices.GetArrayLength() > 0
-                && choices[0].TryGetProperty("message", out var message)
-                && message.TryGetProperty("content", out var content)
-                && content.ValueKind == JsonValueKind.String)
+            JsonDocument doc;
+            try
             {
-                var text = content.GetString()?.Trim();
-                if (!string.IsNullOrWhiteSpace(text))
-                    return text;
+                doc = JsonDocument.Parse(json);
+            }
+            catch (JsonException ex)
+            {
+                throw new PluginRequestException(
+                    "The provider returned a malformed response.",
+                    PluginRequestFailureKind.EmptyResponse,
+                    innerException: ex);
+            }
+
+            using (doc)
+            {
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object
+                    && root.TryGetProperty("choices", out var choices)
+                    && choices.ValueKind == JsonValueKind.Array
+                    && choices.GetArrayLength() > 0
+                    && choices[0].TryGetProperty("message", out var message)
+                    && message.TryGetProperty("content", out var content)
+                    && content.ValueKind == JsonValueKind.String)
+                {
+                    var text = content.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        return text;
+                }
             }
         }
 
@@ -373,11 +409,39 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 && model.Id.Contains("flash", StringComparison.OrdinalIgnoreCase)
                 && !model.Id.Contains("lite", StringComparison.OrdinalIgnoreCase))
             .OrderBy(model => model.Id.Contains("preview", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(model => GetModelVersion(model.Id))
             .ThenByDescending(model => model.Id, StringComparer.OrdinalIgnoreCase)
             .Select(model => model.Id)
             .FirstOrDefault()
             ?? models[0].Id;
     }
+
+    private static Version GetModelVersion(string id)
+    {
+        const string prefix = "gemini-";
+        if (!id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return new Version(0, 0);
+
+        var versionEnd = id.IndexOf('-', prefix.Length);
+        if (versionEnd <= prefix.Length)
+            return new Version(0, 0);
+
+        var versionText = id[prefix.Length..versionEnd];
+        if (!versionText.Contains('.'))
+            versionText += ".0";
+
+        return Version.TryParse(versionText, out var version)
+            ? version
+            : new Version(0, 0);
+    }
+
+    private static bool ModelCatalogsEqual(
+        IReadOnlyList<GeminiFetchedModel> first,
+        IReadOnlyList<GeminiFetchedModel> second) =>
+        first.Count == second.Count
+        && first.Zip(second).All(pair =>
+            string.Equals(pair.First.Id, pair.Second.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(pair.First.DisplayName, pair.Second.DisplayName, StringComparison.Ordinal));
 
     private static string NormalizeModelId(string id)
     {

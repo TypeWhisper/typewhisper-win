@@ -14,11 +14,11 @@ public sealed class GeminiPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var basePath = Path.GetFullPath(AppContext.BaseDirectory);
-        var relativeManifestPath = Path.Join(
-            "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.Gemini", "manifest.json");
-        var manifestPath = Path.GetFullPath(relativeManifestPath, basePath);
+        var manifestPath = Path.Combine(
+            RepositoryRoot(),
+            "plugins",
+            "TypeWhisper.Plugin.Gemini",
+            "manifest.json");
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -48,6 +48,8 @@ public sealed class GeminiPluginTests
     [InlineData("gemini-embedding-2", false)]
     [InlineData("gemini-3.1-flash-tts-preview", false)]
     [InlineData("gemini-3.1-flash-live-preview", false)]
+    [InlineData("gemini-omni-flash", false)]
+    [InlineData("gemini-omni-flash-preview", false)]
     [InlineData("gemini-robotics-er-2-preview", false)]
     [InlineData("deep-research-preview", false)]
     [InlineData("veo-3.1-generate-preview", false)]
@@ -145,6 +147,45 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
+    public async Task SetFetchedLlmModels_DoesNotPersistOrNotifyForUnchangedCatalog()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+
+        sut.SetFetchedLlmModels([new("gemini-3.7-flash", "Gemini 3.7 Flash")]);
+        sut.SetFetchedLlmModels([new("models/gemini-3.7-flash", "Gemini 3.7 Flash")]);
+
+        Assert.Equal(1, host.SetSettingCount);
+        Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task SetApiKeyAsync_ClearsCatalogOwnedByPreviousKey()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+        });
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+        host.ResetTracking();
+
+        await sut.SetApiKeyAsync("second-key");
+
+        Assert.Equal("second-key", host.Secrets["api-key"]);
+        Assert.Equal(
+            ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"],
+            sut.SupportedModels.Select(model => model.Id).ToArray());
+        Assert.Empty(host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!);
+        Assert.Equal(1, host.SetSettingCount);
+        Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesDocumentedGeminiChatEndpoint()
     {
         HttpRequestMessage? capturedRequest = null;
@@ -177,9 +218,29 @@ public sealed class GeminiPluginTests
         using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
         Assert.Equal("gemini-3.7-flash", body.RootElement.GetProperty("model").GetString());
         Assert.Equal(2048, body.RootElement.GetProperty("max_tokens").GetInt32());
-        Assert.Equal(0.1, body.RootElement.GetProperty("temperature").GetDouble(), precision: 3);
+        Assert.False(body.RootElement.TryGetProperty("temperature", out _));
         Assert.Equal("system", body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
         Assert.Equal("user", body.RootElement.GetProperty("messages")[1].GetProperty("role").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ClassifiesMalformedSuccessResponse()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse("not-json"));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => sut.ProcessAsync(
+            "system",
+            "user",
+            "gemini-3.7-flash",
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.EmptyResponse, error.FailureKind);
+        Assert.IsAssignableFrom<JsonException>(error.InnerException);
     }
 
     [Fact]
@@ -233,6 +294,22 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
+    public void SupportedModels_OrdersFallbackFlashVersionsNumerically()
+    {
+        using var sut = new GeminiPlugin();
+
+        sut.SetFetchedLlmModels(
+        [
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+            new("gemini-3.10-flash", "Gemini 3.10 Flash"),
+            new("gemini-3.11-flash-preview", "Gemini 3.11 Flash Preview"),
+        ]);
+
+        Assert.Equal("gemini-3.10-flash", sut.SupportedModels[0].Id);
+        Assert.True(sut.SupportedModels[0].IsRecommended);
+    }
+
+    [Fact]
     public async Task FetchLlmModelsAsync_FailureKeepsCachedCatalog()
     {
         var handler = new CapturingHandler((_, _) =>
@@ -252,6 +329,41 @@ public sealed class GeminiPluginTests
         Assert.Null(result);
         Assert.Contains(sut.SupportedModels, model => model.Id == "gemini-3.7-flash");
         Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Warning
+            && entry.Message.Contains("503", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ValidateApiKeyAsync_ReturnsFalseForUnauthorizedResponse()
+    {
+        var handler = new CapturingHandler((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+
+        var result = await sut.ValidateApiKeyAsync("invalid-key");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task FetchLlmModelsAsync_RethrowsCallerCancellation()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse("""{"data":[]}"""));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.FetchLlmModelsAsync(cts.Token));
+
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Debug
+            && entry.Message.Contains("canceled", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -282,6 +394,7 @@ public sealed class GeminiPluginTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var body = request.Content is null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
@@ -299,6 +412,8 @@ public sealed class GeminiPluginTests
         private readonly Dictionary<string, JsonElement> _settings = [];
         public Dictionary<string, string?> Secrets { get; } = [];
         public int NotifyCapabilitiesChangedCount { get; private set; }
+        public int SetSettingCount { get; private set; }
+        public List<(PluginLogLevel Level, string Message)> Logs { get; } = [];
 
         public Task StoreSecretAsync(string key, string value)
         {
@@ -320,15 +435,25 @@ public sealed class GeminiPluginTests
                 ? value.Deserialize<T>(JsonOptions)
                 : default;
 
-        public void SetSetting<T>(string key, T value) =>
+        public void SetSetting<T>(string key, T value)
+        {
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
+            SetSettingCount++;
+        }
+
+        public void ResetTracking()
+        {
+            NotifyCapabilitiesChangedCount = 0;
+            SetSettingCount = 0;
+            Logs.Clear();
+        }
 
         public string PluginDataDirectory => Path.GetTempPath();
         public string? ActiveAppProcessName => null;
         public string? ActiveAppName => null;
         public IPluginEventBus EventBus { get; } = new TestPluginEventBus();
         public IReadOnlyList<string> AvailableProfileNames => [];
-        public void Log(PluginLogLevel level, string message) { }
+        public void Log(PluginLogLevel level, string message) => Logs.Add((level, message));
         public void NotifyCapabilitiesChanged() => NotifyCapabilitiesChangedCount++;
         public IPluginLocalization Localization { get; } = new TestPluginLocalization();
     }
@@ -352,5 +477,21 @@ public sealed class GeminiPluginTests
     private sealed class NoOpDisposable : IDisposable
     {
         public void Dispose() { }
+    }
+
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            directory is not null;
+            directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "TypeWhisper.slnx"))
+                && Directory.Exists(Path.Combine(directory.FullName, "plugins")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("TypeWhisper repository root not found.");
     }
 }
