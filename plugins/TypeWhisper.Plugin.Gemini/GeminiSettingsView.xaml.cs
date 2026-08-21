@@ -76,9 +76,10 @@ public partial class GeminiSettingsView : UserControl
             var valid = await _plugin.ValidateApiKeyAsync(key);
             if (valid)
             {
+                var catalogKey = _plugin.ApiKey;
                 var models = await _plugin.FetchLlmModelsAsync();
-                if (models is { Count: > 0 })
-                    _plugin.SetFetchedLlmModels(models);
+                if (models is { Count: > 0 } && catalogKey is not null)
+                    await _plugin.SetFetchedLlmModelsAsync(models, catalogKey);
 
                 StatusText.Text = L("Settings.ApiKeyValid");
                 StatusText.Foreground = Brushes.Green;
@@ -122,8 +123,11 @@ public partial class GeminiSettingsView : UserControl
 
         try
         {
+            var catalogKey = _plugin.ApiKey;
             var models = await _plugin.FetchLlmModelsAsync();
-            if (models is not { Count: > 0 })
+            if (models is not { Count: > 0 }
+                || catalogKey is null
+                || !await _plugin.SetFetchedLlmModelsAsync(models, catalogKey))
             {
                 if (showSuccess)
                 {
@@ -133,7 +137,6 @@ public partial class GeminiSettingsView : UserControl
                 return;
             }
 
-            _plugin.SetFetchedLlmModels(models);
             if (showSuccess)
             {
                 StatusText.Text = L("Settings.ModelsFetched", models.Count);

@@ -120,6 +120,47 @@ public sealed class GeminiPluginTests
         Assert.Equal("Bearer gemini-key", capturedRequest?.Headers.Authorization?.ToString());
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("null")]
+    public async Task FetchLlmModelsAsync_RejectsCatalogWithoutDataArray(string json)
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse(json));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+        });
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.FetchLlmModelsAsync();
+
+        Assert.Null(result);
+        Assert.Contains(sut.FetchedLlmModels, model => model.Id == "gemini-3.7-flash");
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Warning
+            && entry.Message.Contains("data array", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FetchLlmModelsAsync_AcceptsExplicitEmptyCatalog()
+    {
+        var handler = new CapturingHandler((_, _) => JsonResponse("""{"data":[]}"""));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.FetchLlmModelsAsync();
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
     [Fact]
     public async Task SetFetchedLlmModels_KeepsCurrentFetchedFlashModelFirstAndNotifiesHost()
     {
@@ -128,7 +169,7 @@ public sealed class GeminiPluginTests
         using var sut = new GeminiPlugin();
         await sut.ActivateAsync(host);
 
-        sut.SetFetchedLlmModels(
+        await sut.SetFetchedLlmModelsAsync(
         [
             new("gemini-3.7-flash", "Gemini 3.7 Flash"),
             new("gemma-4-26b-a4b-it", "Gemma 4 26B MoE IT"),
@@ -154,8 +195,8 @@ public sealed class GeminiPluginTests
         using var sut = new GeminiPlugin();
         await sut.ActivateAsync(host);
 
-        sut.SetFetchedLlmModels([new("gemini-3.7-flash", "Gemini 3.7 Flash")]);
-        sut.SetFetchedLlmModels([new("models/gemini-3.7-flash", "Gemini 3.7 Flash")]);
+        await sut.SetFetchedLlmModelsAsync([new("gemini-3.7-flash", "Gemini 3.7 Flash")]);
+        await sut.SetFetchedLlmModelsAsync([new("models/gemini-3.7-flash", "Gemini 3.7 Flash")]);
 
         Assert.Equal(1, host.SetSettingCount);
         Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
@@ -183,6 +224,70 @@ public sealed class GeminiPluginTests
         Assert.Empty(host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!);
         Assert.Equal(1, host.SetSettingCount);
         Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task SetApiKeyAsync_LeavesStateUnchangedWhenSecretWriteFails()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+        });
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+        host.ResetTracking();
+        host.StoreSecretException = new InvalidOperationException("secret write failed");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetApiKeyAsync("second-key"));
+
+        Assert.Equal("first-key", sut.ApiKey);
+        Assert.Equal("first-key", host.Secrets["api-key"]);
+        Assert.Contains(sut.FetchedLlmModels, model => model.Id == "gemini-3.7-flash");
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task SetApiKeyAsync_RestoresSecretWhenCatalogWriteFails()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+        });
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+        host.ResetTracking();
+        host.SetSettingExceptionAfterWrite = new InvalidOperationException("catalog write failed");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetApiKeyAsync("second-key"));
+
+        Assert.Equal("first-key", sut.ApiKey);
+        Assert.Equal("first-key", host.Secrets["api-key"]);
+        Assert.Contains(sut.FetchedLlmModels, model => model.Id == "gemini-3.7-flash");
+        Assert.Contains(
+            host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!,
+            model => model.Id == "gemini-3.7-flash");
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task SetFetchedLlmModelsAsync_LeavesStateUnchangedWhenSettingWriteFails()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+        host.SetSettingExceptionAfterWrite = new InvalidOperationException("catalog write failed");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetFetchedLlmModelsAsync(
+            [new("gemini-3.7-flash", "Gemini 3.7 Flash")]));
+
+        Assert.Empty(sut.FetchedLlmModels);
+        Assert.Equal(GeminiPlugin.DefaultModel, sut.SupportedModels[0].Id);
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
     }
 
     [Fact]
@@ -244,6 +349,28 @@ public sealed class GeminiPluginTests
         using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
         Assert.Equal("gemma-4-31b-it", body.RootElement.GetProperty("model").GetString());
         Assert.False(body.RootElement.TryGetProperty("reasoning_effort", out _));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NormalizesModelsPrefixBeforeApplyingGeminiOptions()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return JsonResponse("""{"choices":[{"message":{"content":"ok"}}]}""");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        await sut.ProcessAsync("system", "user", "models/gemini-3.7-flash", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
+        Assert.Equal("gemini-3.7-flash", body.RootElement.GetProperty("model").GetString());
+        Assert.Equal("low", body.RootElement.GetProperty("reasoning_effort").GetString());
     }
 
     [Fact]
@@ -317,11 +444,11 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
-    public void SupportedModels_OrdersFallbackFlashVersionsNumerically()
+    public async Task SupportedModels_OrdersFallbackFlashVersionsNumerically()
     {
         using var sut = new GeminiPlugin();
 
-        sut.SetFetchedLlmModels(
+        await sut.SetFetchedLlmModelsAsync(
         [
             new("gemini-3.7-flash", "Gemini 3.7 Flash"),
             new("gemini-3.10-flash", "Gemini 3.10 Flash"),
@@ -373,20 +500,74 @@ public sealed class GeminiPluginTests
     [Fact]
     public async Task FetchLlmModelsAsync_RethrowsCallerCancellation()
     {
-        var handler = new CapturingHandler((_, _) => JsonResponse("""{"data":[]}"""));
+        var handler = new BlockingHandler(JsonResponse("""{"data":[]}"""));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
         using var httpClient = new HttpClient(handler);
         using var sut = new GeminiPlugin(httpClient);
         await sut.ActivateAsync(host);
         using var cts = new CancellationTokenSource();
+
+        var fetchTask = sut.FetchLlmModelsAsync(cts.Token);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         cts.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sut.FetchLlmModelsAsync(cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fetchTask);
 
         Assert.Contains(host.Logs, entry =>
             entry.Level == PluginLogLevel.Debug
             && entry.Message.Contains("canceled", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FetchLlmModelsAsync_DiscardsCatalogWhenApiKeyChangesInFlight()
+    {
+        var handler = new BlockingHandler(JsonResponse("""
+            {"data":[{"id":"gemini-3.7-flash","display_name":"Gemini 3.7 Flash"}]}
+            """));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-2.5-flash", "Gemini 2.5 Flash"),
+        });
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var fetchTask = sut.FetchLlmModelsAsync();
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await sut.SetApiKeyAsync("second-key");
+        handler.Release();
+        var result = await fetchTask;
+
+        Assert.Null(result);
+        Assert.Equal("second-key", sut.ApiKey);
+        Assert.Empty(sut.FetchedLlmModels);
+        Assert.Empty(host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!);
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Debug
+            && entry.Message.Contains("previous API key", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SetFetchedLlmModelsAsync_RejectsCatalogForPreviousApiKey()
+    {
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "first-key";
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+        await sut.SetApiKeyAsync("second-key");
+
+        var applied = await sut.SetFetchedLlmModelsAsync(
+            [new("gemini-3.7-flash", "Gemini 3.7 Flash")],
+            expectedApiKey: "first-key");
+
+        Assert.False(applied);
+        Assert.Empty(sut.FetchedLlmModels);
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Debug
+            && entry.Message.Contains("previous API key", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -425,6 +606,26 @@ public sealed class GeminiPluginTests
         }
     }
 
+    private sealed class BlockingHandler(HttpResponseMessage response) : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource<bool> _release = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> Started { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _release.TrySetResult(true);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(true);
+            await _release.Task.WaitAsync(cancellationToken);
+            return response;
+        }
+    }
+
     private sealed class TestPluginHostServices : IPluginHostServices
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -437,9 +638,18 @@ public sealed class GeminiPluginTests
         public int NotifyCapabilitiesChangedCount { get; private set; }
         public int SetSettingCount { get; private set; }
         public List<(PluginLogLevel Level, string Message)> Logs { get; } = [];
+        public Exception? StoreSecretException { get; set; }
+        public Exception? SetSettingException { get; set; }
+        public Exception? SetSettingExceptionAfterWrite { get; set; }
 
         public Task StoreSecretAsync(string key, string value)
         {
+            if (StoreSecretException is { } exception)
+            {
+                StoreSecretException = null;
+                throw exception;
+            }
+
             Secrets[key] = value;
             return Task.CompletedTask;
         }
@@ -460,8 +670,19 @@ public sealed class GeminiPluginTests
 
         public void SetSetting<T>(string key, T value)
         {
+            if (SetSettingException is { } exception)
+            {
+                SetSettingException = null;
+                throw exception;
+            }
+
             _settings[key] = JsonSerializer.SerializeToElement(value, JsonOptions);
             SetSettingCount++;
+            if (SetSettingExceptionAfterWrite is { } afterWriteException)
+            {
+                SetSettingExceptionAfterWrite = null;
+                throw afterWriteException;
+            }
         }
 
         public void ResetTracking()

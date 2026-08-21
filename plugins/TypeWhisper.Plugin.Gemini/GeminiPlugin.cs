@@ -46,6 +46,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     };
 
     private readonly HttpClient _httpClient;
+    private readonly SemaphoreSlim _configurationGate = new(1, 1);
     private IPluginHostServices? _host;
     private string? _apiKey;
     private List<GeminiFetchedModel> _fetchedLlmModels = [];
@@ -155,7 +156,9 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 "API key not configured",
                 PluginRequestFailureKind.Configuration);
 
-        var modelId = string.IsNullOrWhiteSpace(model) ? SupportedModels.First().Id : model;
+        var modelId = string.IsNullOrWhiteSpace(model)
+            ? SupportedModels.First().Id
+            : NormalizeModelId(model);
         return await SendChatCompletionAsync(modelId, systemPrompt, userText, ct);
     }
 
@@ -167,47 +170,146 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
 
     internal async Task SetApiKeyAsync(string apiKey)
     {
-        var normalized = NormalizeApiKey(apiKey);
-        var wasAvailable = IsAvailable;
-        var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
-        var catalogChanged = changed && _fetchedLlmModels.Count > 0;
-
-        _apiKey = normalized;
-        if (catalogChanged)
-            _fetchedLlmModels = [];
-
-        if (_host is not null)
+        await _configurationGate.WaitAsync();
+        try
         {
-            if (normalized is null)
-                await _host.DeleteSecretAsync(ApiKeySecretName);
-            else
-                await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+            var normalized = NormalizeApiKey(apiKey);
+            var previousApiKey = _apiKey;
+            var wasAvailable = IsAvailable;
+            var changed = !string.Equals(previousApiKey, normalized, StringComparison.Ordinal);
+            var catalogChanged = changed && _fetchedLlmModels.Count > 0;
 
+            if (_host is not null)
+            {
+                var secretPersisted = false;
+                var catalogWriteAttempted = false;
+                try
+                {
+                    await PersistApiKeyAsync(_host, normalized);
+                    secretPersisted = true;
+                    if (catalogChanged)
+                    {
+                        catalogWriteAttempted = true;
+                        _host.SetSetting(FetchedLlmModelsSettingName, new List<GeminiFetchedModel>());
+                    }
+                }
+                catch (Exception writeException)
+                {
+                    var rollbackFailures = new List<Exception>();
+                    if (secretPersisted)
+                    {
+                        try
+                        {
+                            await PersistApiKeyAsync(_host, previousApiKey);
+                        }
+                        catch (Exception rollbackException)
+                        {
+                            rollbackFailures.Add(rollbackException);
+                        }
+                    }
+
+                    if (catalogWriteAttempted)
+                    {
+                        try
+                        {
+                            _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+                        }
+                        catch (Exception rollbackException)
+                        {
+                            rollbackFailures.Add(rollbackException);
+                        }
+                    }
+
+                    if (rollbackFailures.Count > 0)
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to persist the API key and restore the previous state.",
+                            new AggregateException([writeException, .. rollbackFailures]));
+                    }
+
+                    throw;
+                }
+            }
+
+            _apiKey = normalized;
             if (catalogChanged)
-                _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+                _fetchedLlmModels = [];
 
-            if ((changed && wasAvailable != IsAvailable) || catalogChanged)
+            if (_host is not null
+                && ((changed && wasAvailable != IsAvailable) || catalogChanged))
+            {
                 _host.NotifyCapabilitiesChanged();
+            }
+        }
+        finally
+        {
+            _configurationGate.Release();
         }
     }
 
-    internal void SetFetchedLlmModels(IEnumerable<GeminiFetchedModel> models)
+    internal async Task<bool> SetFetchedLlmModelsAsync(
+        IEnumerable<GeminiFetchedModel> models,
+        string? expectedApiKey = null)
     {
         var normalized = NormalizeFetchedLlmModels(models);
-        if (ModelCatalogsEqual(_fetchedLlmModels, normalized))
-            return;
+        await _configurationGate.WaitAsync();
+        try
+        {
+            if (expectedApiKey is not null
+                && !string.Equals(_apiKey, expectedApiKey, StringComparison.Ordinal))
+            {
+                _host?.Log(PluginLogLevel.Debug, "Discarded a model catalog fetched for a previous API key.");
+                return false;
+            }
 
-        _fetchedLlmModels = normalized;
-        _host?.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
-        _host?.NotifyCapabilitiesChanged();
+            if (ModelCatalogsEqual(_fetchedLlmModels, normalized))
+                return true;
+
+            if (_host is not null)
+            {
+                try
+                {
+                    _host.SetSetting(FetchedLlmModelsSettingName, normalized);
+                }
+                catch (Exception writeException)
+                {
+                    try
+                    {
+                        _host.SetSetting(FetchedLlmModelsSettingName, _fetchedLlmModels);
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to persist the model catalog and restore the previous value.",
+                            new AggregateException(writeException, rollbackException));
+                    }
+
+                    throw;
+                }
+            }
+
+            _fetchedLlmModels = normalized;
+            _host?.NotifyCapabilitiesChanged();
+            return true;
+        }
+        finally
+        {
+            _configurationGate.Release();
+        }
     }
+
+    private static Task PersistApiKeyAsync(IPluginHostServices host, string? apiKey) =>
+        apiKey is null
+            ? host.DeleteSecretAsync(ApiKeySecretName)
+            : host.StoreSecretAsync(ApiKeySecretName, apiKey);
 
     internal async Task<List<GeminiFetchedModel>?> FetchLlmModelsAsync(CancellationToken ct = default)
     {
-        if (!IsAvailable)
+        var apiKey = _apiKey;
+        if (apiKey is null)
             return null;
 
-        using var request = CreateAuthenticatedRequest(HttpMethod.Get, $"{BaseUrl}/models", _apiKey!);
+        using var request = CreateAuthenticatedRequest(HttpMethod.Get, $"{BaseUrl}/models", apiKey);
 
         try
         {
@@ -222,7 +324,19 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var catalog = JsonSerializer.Deserialize<GeminiCompatibleModelsResponse>(json, JsonOptions);
-            return NormalizeFetchedLlmModels(catalog?.Data?.OfType<GeminiCompatibleModel>() ?? []);
+            if (catalog?.Data is null)
+            {
+                _host?.Log(PluginLogLevel.Warning, "Model catalog response did not contain a data array.");
+                return null;
+            }
+
+            if (!string.Equals(_apiKey, apiKey, StringComparison.Ordinal))
+            {
+                _host?.Log(PluginLogLevel.Debug, "Discarded a model catalog fetched for a previous API key.");
+                return null;
+            }
+
+            return NormalizeFetchedLlmModels(catalog.Data.OfType<GeminiCompatibleModel>());
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -461,6 +575,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     /// </summary>
     public void Dispose()
     {
+        _configurationGate.Dispose();
         _httpClient.Dispose();
     }
 }
