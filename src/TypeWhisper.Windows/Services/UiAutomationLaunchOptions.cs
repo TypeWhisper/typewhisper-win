@@ -127,7 +127,9 @@ internal sealed record UiAutomationLaunchOptions
         }
 
         var instanceId = ReadValue(args, "--automation-instance") ?? Guid.NewGuid().ToString("N");
-        if (instanceId.Length > 64 || instanceId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
+        if (string.IsNullOrWhiteSpace(instanceId)
+            || instanceId.Length > 64
+            || instanceId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
         {
             error = "The automation instance identifier must contain only ASCII letters, digits, or hyphens.";
             return false;

@@ -90,4 +90,22 @@ public sealed class UiAutomationLaunchOptionsTests : IDisposable
         Assert.False(options.IsEnabled);
 #endif
     }
+
+#if DEBUG
+    [Fact]
+    public void TryParse_RejectsExplicitlyEmptyInstanceId()
+    {
+        var parsed = UiAutomationLaunchOptions.TryParse(
+            [
+                "--ui-automation",
+                "--automation-data-root", _tempDirectory,
+                "--automation-instance", ""
+            ],
+            out _,
+            out var error);
+
+        Assert.False(parsed);
+        Assert.Contains("instance identifier", error, StringComparison.Ordinal);
+    }
+#endif
 }

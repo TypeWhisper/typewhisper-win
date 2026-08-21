@@ -2,6 +2,13 @@ using TypeWhisper.Core;
 
 namespace TypeWhisper.Core.Tests;
 
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class TypeWhisperEnvironmentCollection
+{
+    public const string Name = "TypeWhisper environment";
+}
+
+[Collection(TypeWhisperEnvironmentCollection.Name)]
 public class TypeWhisperEnvironmentTests
 {
     [Fact]

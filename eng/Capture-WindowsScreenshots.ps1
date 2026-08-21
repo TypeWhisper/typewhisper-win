@@ -141,7 +141,9 @@ $registry = foreach ($pluginProject in (Get-ChildItem (Join-Path $repoRoot 'plug
         hosting = if ([bool]$manifest.isLocal) { 'local' } else { 'cloud' }
     }
 }
-$registry | ConvertTo-Json -Depth 8 | Set-Content -Path $registryFile -Encoding utf8NoBOM
+$registryJson = $registry | ConvertTo-Json -Depth 8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($registryFile, $registryJson, $utf8NoBom)
 
 $scopeArgument = $Scope.ToLowerInvariant()
 foreach ($locale in $Locales) {

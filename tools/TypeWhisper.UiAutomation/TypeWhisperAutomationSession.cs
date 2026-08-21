@@ -258,7 +258,8 @@ internal sealed class TypeWhisperAutomationSession : IDisposable
         var scroll = WaitForElement(automationId, root).Patterns.Scroll.PatternOrDefault
             ?? throw new InvalidOperationException(
                 $"Automation element '{automationId}' does not support ScrollPattern.");
-        if (scroll.VerticallyScrollable.ValueOrDefault)
+        if (scroll.VerticallyScrollable.ValueOrDefault
+            || scroll.HorizontallyScrollable.ValueOrDefault)
         {
             var rootName = root.Properties.Name.ValueOrDefault;
             throw new InvalidOperationException(

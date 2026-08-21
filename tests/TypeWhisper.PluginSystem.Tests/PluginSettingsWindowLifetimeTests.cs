@@ -101,4 +101,16 @@ public sealed class PluginSettingsWindowLifetimeTests
             handler.IndexOf("FocusInstalledPlugin(plugin.Id)", StringComparison.Ordinal)
             < handler.IndexOf("OpenPluginSettings(installedPlugin);", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void ScreenshotGuard_RejectsVerticalAndHorizontalOverflow()
+    {
+        var source = TestFile.ReadProjectFile(
+            "tools",
+            "TypeWhisper.UiAutomation",
+            "TypeWhisperAutomationSession.cs");
+
+        Assert.Contains("scroll.VerticallyScrollable.ValueOrDefault", source);
+        Assert.Contains("scroll.HorizontallyScrollable.ValueOrDefault", source);
+    }
 }
