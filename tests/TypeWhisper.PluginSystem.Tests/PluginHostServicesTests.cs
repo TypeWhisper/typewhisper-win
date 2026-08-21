@@ -34,24 +34,48 @@ public class PluginHostServicesTests : IDisposable
             isUiAutomation: isUiAutomation);
 
     [Theory]
-    [InlineData("com.typewhisper.elevenlabs")]
-    [InlineData("com.typewhisper.openai")]
-    [InlineData("com.typewhisper.openrouter")]
-    [InlineData("com.typewhisper.reson8")]
-    [InlineData("com.typewhisper.smallest-ai")]
-    [InlineData("com.typewhisper.soniox")]
-    [InlineData("com.typewhisper.xai")]
-    public async Task LoadSecretAsync_ReturnsPlaceholderForApiKeyScreenshotFixtures(string pluginId)
+    [InlineData("com.typewhisper.assemblyai", "api-key")]
+    [InlineData("com.typewhisper.cerebras", "api-key")]
+    [InlineData("com.typewhisper.claude", "api-key")]
+    [InlineData("com.typewhisper.cloudflare-asr", "account-id")]
+    [InlineData("com.typewhisper.cloudflare-asr", "api-token")]
+    [InlineData("com.typewhisper.cohere", "apiKey")]
+    [InlineData("com.typewhisper.deepgram", "api-key")]
+    [InlineData("com.typewhisper.elevenlabs", "api-key")]
+    [InlineData("com.typewhisper.fireworks", "apiKey")]
+    [InlineData("com.typewhisper.gemini", "api-key")]
+    [InlineData("com.typewhisper.gladia", "api-key")]
+    [InlineData("com.typewhisper.google-cloud-stt", "api-key")]
+    [InlineData("com.typewhisper.groq", "api-key")]
+    [InlineData("com.typewhisper.linear", "api-key")]
+    [InlineData("com.typewhisper.openai", "api-key")]
+    [InlineData("com.typewhisper.openai-compatible", "api-key")]
+    [InlineData("com.typewhisper.openai-vector-memory", "api-key")]
+    [InlineData("com.typewhisper.openrouter", "api-key")]
+    [InlineData("com.typewhisper.qwen3-stt", "api-key")]
+    [InlineData("com.typewhisper.reson8", "api-key")]
+    [InlineData("com.typewhisper.smallest-ai", "api-key")]
+    [InlineData("com.typewhisper.soniox", "api-key")]
+    [InlineData("com.typewhisper.speechmatics", "api-key")]
+    [InlineData("com.typewhisper.voxtral", "api-key")]
+    [InlineData("com.typewhisper.xai", "api-key")]
+    public async Task LoadSecretAsync_ReturnsPlaceholderForConfiguredScreenshotFixtures(
+        string pluginId,
+        string secretName)
     {
         var services = CreateServices(
             pluginId: pluginId,
             isUiAutomation: true,
             pluginDataRoot: Path.Join(_tempDir, "fixture-data"));
 
-        var value = await services.LoadSecretAsync("api-key");
+        var value = await services.LoadSecretAsync(secretName);
 
         Assert.True(services.IsUiAutomation);
-        Assert.Equal("typewhisper-ui-automation-placeholder", value);
+        Assert.Equal(
+            secretName == "account-id"
+                ? "0123456789abcdef0123456789abcdef"
+                : "typewhisper-ui-automation-placeholder",
+            value);
     }
 
     [Fact]
@@ -64,6 +88,19 @@ public class PluginHostServicesTests : IDisposable
         var value = await services.LoadSecretAsync("api-key");
 
         Assert.False(services.IsUiAutomation);
+        Assert.Null(value);
+    }
+
+    [Fact]
+    public async Task LoadSecretAsync_DoesNotInventUnconfiguredAutomationSecrets()
+    {
+        var services = CreateServices(
+            pluginId: "com.typewhisper.openai",
+            isUiAutomation: true,
+            pluginDataRoot: Path.Join(_tempDir, "fixture-data"));
+
+        var value = await services.LoadSecretAsync("oauth-access-token");
+
         Assert.Null(value);
     }
 

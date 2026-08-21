@@ -30,7 +30,7 @@ The complete 1.0.8 screenshot set is available in [`docs/screenshots/windows`](d
 
 ### Plugin Settings
 
-The full Windows plugin settings set is available in [`docs/screenshots/windows/plugins`](docs/screenshots/windows/plugins). API-key plugins use non-sensitive screenshot fixtures so their configured controls are visible without storing or contacting real provider accounts.
+The complete set of 32 Windows plugin settings dialogs is available in [`docs/screenshots/windows/plugins`](docs/screenshots/windows/plugins). API-key plugins use non-sensitive screenshot fixtures so their configured controls are visible without storing or contacting real provider accounts.
 
 | OpenAI / ChatGPT | xAI / Grok |
 |------------------|------------|
