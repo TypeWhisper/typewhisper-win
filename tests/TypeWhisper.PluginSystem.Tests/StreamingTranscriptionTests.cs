@@ -473,6 +473,42 @@ public class StreamingTranscriptionTests
         Assert.True(previewRequestsPerMinute + 1 <= 20);
     }
 
+    [Fact]
+    public async Task StreamingHandler_OnlineBatchNoSpeechStillWaitsBetweenRequests()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new CapturingPollingPlugin { NoSpeechProbability = 1f };
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "batch");
+        await modelManager.LoadModelAsync(fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            Task.FromResult(CreateReadyPreparation(modelManager, fullModelId)),
+            allowOnlineBatchPolling: true);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData(BuildPcm16Chunk(TimeSpan.FromSeconds(45)), 45 * 16000 * 2);
+
+        await WaitUntilAsync(() => plugin.RequestDurations.Count == 1, TimeSpan.FromSeconds(8));
+        await Task.Delay(500);
+
+        Assert.Single(plugin.RequestDurations);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? waitTimeout = null)
     {
         using var timeout = new CancellationTokenSource(waitTimeout ?? TimeSpan.FromSeconds(3));
@@ -685,6 +721,7 @@ public class StreamingTranscriptionTests
             [new PluginModelInfo("batch", "Batch")];
         public string? SelectedModelId { get; private set; }
         public bool SupportsTranslation => false;
+        public float? NoSpeechProbability { get; init; }
         public IReadOnlyList<TimeSpan> RequestDurations
         {
             get
@@ -715,7 +752,8 @@ public class StreamingTranscriptionTests
             return Task.FromResult(new PluginTranscriptionResult(
                 "preview",
                 language ?? "en",
-                reader.TotalTime.TotalSeconds));
+                reader.TotalTime.TotalSeconds,
+                NoSpeechProbability));
         }
     }
 
@@ -1052,6 +1090,39 @@ public class StreamingTranscriptStateTests
             "Alpha bravo charlie delta echo foxtrot golf hotel india juliet",
             mergedDisplay);
         Assert.Equal(mergedDisplay, sut.StopSession());
+    }
+
+    [Fact]
+    public void RollingPolling_RecoversAfterConsecutiveUnmatchedWindows()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplySnapshotPolling(
+            sessionVersion,
+            "Confirmed text before a long pause",
+            text => text,
+            out _));
+        Assert.False(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause",
+            text => text,
+            out _));
+        Assert.False(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause",
+            text => text,
+            out _));
+        Assert.True(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause and continues",
+            text => text,
+            out var recoveredDisplay));
+
+        Assert.Equal(
+            "Confirmed text before a long pause A new topic starts after the pause and continues",
+            recoveredDisplay);
+        Assert.Equal(recoveredDisplay, sut.StopSession());
     }
 
     [Fact]

@@ -523,10 +523,9 @@ public sealed class StreamingHandler : IDisposable
                             task,
                             ct);
 
-                        if (result.NoSpeechProbability is > 0.8f)
-                            continue;
-
-                        var text = result.Text?.Trim() ?? "";
+                        var text = result.NoSpeechProbability is > 0.8f
+                            ? ""
+                            : result.Text?.Trim() ?? "";
 
                         if (!string.IsNullOrEmpty(text))
                         {
