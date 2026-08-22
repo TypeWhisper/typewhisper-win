@@ -30,7 +30,9 @@ public enum PluginRequestFailureKind
     /// <summary>The request was cancelled.</summary>
     Cancellation,
     /// <summary>The provider stopped before completing the response because of an output limit.</summary>
-    OutputTruncated
+    OutputTruncated,
+    /// <summary>The provider returned an incomplete response for a reason other than an output limit.</summary>
+    OutputIncomplete
 }
 
 /// <summary>

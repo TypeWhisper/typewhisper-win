@@ -396,6 +396,7 @@ public sealed class PromptProcessingService : IWorkflowTextProcessor
             PluginRequestFailureKind.ServerError => "provider server error",
             PluginRequestFailureKind.EmptyResponse => "empty response",
             PluginRequestFailureKind.OutputTruncated => "output token limit",
+            PluginRequestFailureKind.OutputIncomplete => "incomplete provider response",
             PluginRequestFailureKind.Authentication => "authentication error",
             PluginRequestFailureKind.Permission => "permission error",
             PluginRequestFailureKind.Configuration => "configuration error",

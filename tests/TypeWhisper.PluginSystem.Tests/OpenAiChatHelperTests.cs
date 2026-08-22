@@ -84,6 +84,41 @@ public sealed class OpenAiChatHelperTests
     }
 
     [Fact]
+    public void OutputTokenBudget_AddsReasoningCapacityWithoutReducingVisibleBudget()
+    {
+        var visibleBudget = LlmOutputTokenBudget.Calculate("", "short input");
+
+        var totalBudget = LlmOutputTokenBudget.CalculateWithReasoningReserve("", "short input");
+
+        Assert.Equal(visibleBudget + LlmOutputTokenBudget.ReasoningReserveTokens, totalBudget);
+    }
+
+    [Fact]
+    public void OutputTokenBudget_CapsLocalGenerationToRemainingContext()
+    {
+        var budget = LlmOutputTokenBudget.FitToContext(
+            requestedOutputTokens: 2048,
+            promptTokenCount: 3500,
+            contextSize: 4096,
+            providerName: "Local model");
+
+        Assert.Equal(596, budget);
+    }
+
+    [Fact]
+    public void OutputTokenBudget_RejectsPromptWithoutOutputCapacity()
+    {
+        var error = Assert.Throws<PluginRequestException>(() =>
+            LlmOutputTokenBudget.FitToContext(
+                requestedOutputTokens: 2048,
+                promptTokenCount: 4097,
+                contextSize: 4096,
+                providerName: "Local model"));
+
+        Assert.Equal(PluginRequestFailureKind.RequestTooLarge, error.FailureKind);
+    }
+
+    [Fact]
     public void SendChatCompletionAsync_PreservesLegacySevenParameterOverload()
     {
         var parameterTypes = new[]

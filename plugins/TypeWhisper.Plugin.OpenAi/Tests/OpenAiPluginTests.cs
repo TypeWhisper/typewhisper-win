@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using TypeWhisper.Plugin.OpenAi;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
@@ -191,6 +192,9 @@ public class OpenAiPluginTests
         Assert.Equal("Fix grammar", body["instructions"].GetString());
         Assert.Equal("medium", body["reasoning"].GetProperty("effort").GetString());
         Assert.Equal("user", body["input"][0].GetProperty("role").GetString());
+        Assert.Equal(
+            LlmOutputTokenBudget.CalculateWithReasoningReserve("Fix grammar", "hello world"),
+            body["max_output_tokens"].GetInt32());
     }
 
     [Fact]
@@ -228,6 +232,23 @@ public class OpenAiPluginTests
         var error = Assert.Throws<PluginRequestException>(() => OpenAiResponsesClient.ParseResponse(json));
 
         Assert.Equal(PluginRequestFailureKind.OutputTruncated, error.FailureKind);
+    }
+
+    [Fact]
+    public void ResponsesParser_ClassifiesNonTokenIncompleteOutputSeparately()
+    {
+        var json = """
+        {
+          "id": "resp_123",
+          "status": "incomplete",
+          "incomplete_details": { "reason": "content_filter" },
+          "output_text": "Partial workflow result"
+        }
+        """;
+
+        var error = Assert.Throws<PluginRequestException>(() => OpenAiResponsesClient.ParseResponse(json));
+
+        Assert.Equal(PluginRequestFailureKind.OutputIncomplete, error.FailureKind);
     }
 
     [Fact]
@@ -812,7 +833,9 @@ public class OpenAiPluginTests
 
         using var doc = JsonDocument.Parse(capturedBody!);
         Assert.Equal("o4-mini", doc.RootElement.GetProperty("model").GetString());
-        Assert.Equal(2048, doc.RootElement.GetProperty("max_completion_tokens").GetInt32());
+        Assert.Equal(
+            LlmOutputTokenBudget.CalculateWithReasoningReserve("Fix grammar", "hello world"),
+            doc.RootElement.GetProperty("max_completion_tokens").GetInt32());
         Assert.Equal("medium", doc.RootElement.GetProperty("reasoning_effort").GetString());
         Assert.False(doc.RootElement.TryGetProperty("max_tokens", out _));
         Assert.False(doc.RootElement.TryGetProperty("temperature", out _));

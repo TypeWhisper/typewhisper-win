@@ -425,10 +425,8 @@ public partial class HistoryEntryViewModel : ObservableObject
     private void SaveEdit()
     {
         _parent.SaveEdit(this, EditText);
-        Record = Record with { FinalText = EditText };
+        ReplaceRecord(Record with { FinalText = EditText });
         IsEditing = false;
-        OnPropertyChanged(nameof(Record));
-        OnPropertyChanged(nameof(HasDistinctWorkflowRawText));
     }
 
     [RelayCommand]
@@ -485,10 +483,8 @@ public partial class HistoryEntryViewModel : ObservableObject
                 status => Application.Current?.Dispatcher.InvokeAsync(() => RetryStatusText = status).Task
                           ?? Task.CompletedTask,
                 _retryCts.Token);
-            Record = updated;
+            ReplaceRecord(updated);
             RetryStatusText = Loc.Instance["History.RetrySucceeded"];
-            OnPropertyChanged(nameof(Record));
-            OnPropertyChanged(nameof(IsWorkflowFailed));
         }
         catch (OperationCanceledException)
         {
@@ -496,11 +492,9 @@ public partial class HistoryEntryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Record = _parent.GetCurrentRecord(Record.Id) ?? Record;
+            ReplaceRecord(_parent.GetCurrentRecord(Record.Id) ?? Record);
             RetryErrorText = HistoryWorkflowRetryService.SanitizeFailure(ex);
             RetryStatusText = "";
-            OnPropertyChanged(nameof(Record));
-            OnPropertyChanged(nameof(IsWorkflowFailed));
         }
         finally
         {
@@ -509,6 +503,17 @@ public partial class HistoryEntryViewModel : ObservableObject
             _retryCts = null;
             RetryWorkflowCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    /// <summary>
+    /// Replaces the backing history record and refreshes all derived UI predicates.
+    /// </summary>
+    internal void ReplaceRecord(TranscriptionRecord record)
+    {
+        Record = record;
+        OnPropertyChanged(nameof(Record));
+        OnPropertyChanged(nameof(IsWorkflowFailed));
+        OnPropertyChanged(nameof(HasDistinctWorkflowRawText));
     }
 
     [RelayCommand]

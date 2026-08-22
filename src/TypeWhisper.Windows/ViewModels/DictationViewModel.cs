@@ -3068,6 +3068,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 PluginRequestFailureKind.ServerError => "The workflow provider returned a server error.",
                 PluginRequestFailureKind.EmptyResponse => "The workflow provider returned an empty response.",
                 PluginRequestFailureKind.OutputTruncated => "The workflow provider stopped at its output token limit.",
+                PluginRequestFailureKind.OutputIncomplete => "The workflow provider returned an incomplete response.",
                 PluginRequestFailureKind.Authentication => "Workflow provider authentication failed.",
                 PluginRequestFailureKind.Permission => "The workflow provider denied this request.",
                 PluginRequestFailureKind.Configuration => "The workflow provider is not configured correctly.",

@@ -55,16 +55,20 @@ public static class LlmResponseTruncationGuard
             ThrowIfResponsesApiIncomplete(response, providerName);
         }
 
+        var reason = root.TryGetProperty("incomplete_details", out var details)
+                     && details.ValueKind == JsonValueKind.Object
+            ? GetString(details, "reason")
+            : null;
         var status = GetString(root, "status");
         if (string.Equals(status, "incomplete", StringComparison.OrdinalIgnoreCase))
-            Throw(providerName);
-
-        if (root.TryGetProperty("incomplete_details", out var details)
-            && details.ValueKind == JsonValueKind.Object
-            && IsTokenLimitReason(GetString(details, "reason")))
         {
-            Throw(providerName);
+            if (IsTokenLimitReason(reason))
+                Throw(providerName);
+            ThrowIncomplete(providerName);
         }
+
+        if (IsTokenLimitReason(reason))
+            Throw(providerName);
     }
 
     private static bool IsTokenLimitReason(string? reason) =>
@@ -82,5 +86,11 @@ public static class LlmResponseTruncationGuard
         throw new PluginRequestException(
             $"{providerName} stopped the workflow response at its token limit.",
             PluginRequestFailureKind.OutputTruncated,
+            isTransient: false);
+
+    private static void ThrowIncomplete(string providerName) =>
+        throw new PluginRequestException(
+            $"{providerName} returned an incomplete workflow response.",
+            PluginRequestFailureKind.OutputIncomplete,
             isTransient: false);
 }

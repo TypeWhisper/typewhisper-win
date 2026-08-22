@@ -23,6 +23,27 @@ public sealed class HistoryWorkflowRawTextTests
     }
 
     [Fact]
+    public void ReplacingRecord_NotifiesDistinctRawTranscriptionPredicate()
+    {
+        var original = new TranscriptionRecord
+        {
+            Id = "successful-workflow",
+            Timestamp = DateTime.UtcNow,
+            RawText = "The original transcription.",
+            FinalText = "The original transcription.",
+            ProfileName = "Coding Prompt Assistant"
+        };
+        var entry = new HistoryEntryViewModel(original, null!);
+        var changedProperties = new List<string?>();
+        entry.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        entry.ReplaceRecord(original with { FinalText = "The transformed workflow result." });
+
+        Assert.True(entry.HasDistinctWorkflowRawText);
+        Assert.Contains(nameof(HistoryEntryViewModel.HasDistinctWorkflowRawText), changedProperties);
+    }
+
+    [Fact]
     public void History_ExposesDistinctRawTextForSuccessfulWorkflowEntries()
     {
         var xaml = TestFile.ReadProjectFile(

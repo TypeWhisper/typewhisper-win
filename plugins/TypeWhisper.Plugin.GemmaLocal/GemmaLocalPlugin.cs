@@ -132,11 +132,17 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
 
             // Build Gemma chat prompt
             var prompt = FormatGemmaPrompt(systemPrompt, userText);
+            var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
+            var maxOutputTokens = LlmOutputTokenBudget.FitToContext(
+                LlmOutputTokenBudget.Calculate(systemPrompt, userText),
+                promptTokenCount,
+                checked((int)_context.ContextSize),
+                ProviderName);
 
             var executor = new StatelessExecutor(_weights, _context.Params);
             var inferenceParams = new InferenceParams
             {
-                MaxTokens = LlmOutputTokenBudget.Calculate(systemPrompt, userText),
+                MaxTokens = maxOutputTokens,
                 AntiPrompts = ["<end_of_turn>", "<eos>"],
                 SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
             };
