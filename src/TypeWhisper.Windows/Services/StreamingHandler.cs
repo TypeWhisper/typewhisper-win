@@ -713,10 +713,7 @@ public sealed class StreamingHandler : IDisposable
                     {
                         bestOverlapLength = overlapLength;
                         bestConfirmedTrailingTokensToReplace = confirmedTrailingTokensToReplace;
-                        var nextWindowWord = windowStart + overlapLength;
-                        bestWindowTailStart = nextWindowWord < windowWords.Count
-                            ? windowWords[nextWindowWord].Start
-                            : windowText.Length;
+                        bestWindowTailStart = windowWords[windowStart + overlapLength - 1].End;
                     }
 
                     break;
@@ -727,21 +724,61 @@ public sealed class StreamingHandler : IDisposable
         if (bestOverlapLength == 0)
             return confirmed;
 
-        var tail = windowText[bestWindowTailStart..].TrimStart();
+        var tail = windowText[bestWindowTailStart..];
         if (string.IsNullOrEmpty(tail))
             return confirmed;
 
         var stablePrefix = bestConfirmedTrailingTokensToReplace == 0
             ? confirmed
             : confirmed[..confirmedWords[^bestConfirmedTrailingTokensToReplace].Start].TrimEnd();
-        return string.IsNullOrEmpty(stablePrefix) ? tail : stablePrefix + " " + tail;
+        return AppendRollingTail(stablePrefix, tail);
     }
+
+    private static string AppendRollingTail(string prefix, string tail)
+    {
+        prefix = prefix.TrimEnd();
+        tail = tail.TrimStart();
+        if (string.IsNullOrEmpty(prefix))
+            return tail;
+        if (string.IsNullOrEmpty(tail))
+            return prefix;
+
+        var firstWordCharacter = 0;
+        while (firstWordCharacter < tail.Length
+               && !char.IsLetterOrDigit(tail[firstWordCharacter]))
+        {
+            firstWordCharacter++;
+        }
+
+        var boundary = tail[..firstWordCharacter];
+        var remainingTail = tail[firstWordCharacter..].TrimStart();
+        var punctuationLength = boundary.Length;
+        while (punctuationLength > 0 && char.IsWhiteSpace(boundary[punctuationLength - 1]))
+            punctuationLength--;
+
+        var punctuation = boundary[..punctuationLength];
+        var boundaryToAppend = !string.IsNullOrEmpty(punctuation)
+            && (prefix.EndsWith(punctuation, StringComparison.Ordinal)
+                || HasRollingBoundaryPunctuation(prefix[^1]))
+                ? boundary[punctuationLength..]
+                : boundary;
+        if (string.IsNullOrEmpty(boundaryToAppend) && string.IsNullOrEmpty(boundary))
+        {
+            boundaryToAppend = " ";
+        }
+
+        return prefix + boundaryToAppend + remainingTail;
+    }
+
+    private static bool HasRollingBoundaryPunctuation(char value) =>
+        ".,!?;:…。！？、，；：".Contains(value);
 
     private static List<RollingWindowWord> TokenizeRollingWindowWords(string text) =>
         RollingWindowWordRegex.Matches(text)
             .Select(match => new RollingWindowWord(
                 match.Value.Replace('’', '\'').ToUpperInvariant(),
-                match.Index))
+                match.Index,
+                match.Index + match.Length))
             .ToList();
 
     private static bool RollingWindowWordsEqual(
@@ -765,7 +802,7 @@ public sealed class StreamingHandler : IDisposable
         return true;
     }
 
-    private sealed record RollingWindowWord(string Normalized, int Start);
+    private sealed record RollingWindowWord(string Normalized, int Start, int End);
 
     /// <summary>
     /// Releases resources held by the instance.

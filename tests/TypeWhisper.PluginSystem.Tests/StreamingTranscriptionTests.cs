@@ -504,9 +504,11 @@ public class StreamingTranscriptionTests
         capture.RaiseData(BuildPcm16Chunk(TimeSpan.FromSeconds(45)), 45 * 16000 * 2);
 
         await WaitUntilAsync(() => plugin.RequestDurations.Count == 1, TimeSpan.FromSeconds(8));
-        await Task.Delay(500);
+        await Task.Delay(TimeSpan.FromSeconds(4));
 
         Assert.Single(plugin.RequestDurations);
+        await WaitUntilAsync(() => plugin.RequestDurations.Count == 2, TimeSpan.FromSeconds(2));
+        Assert.Equal(2, plugin.RequestDurations.Count);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? waitTimeout = null)
@@ -1031,6 +1033,36 @@ public class StabilizeTextTests
         Assert.Equal(
             "Alpha bravo charlie delta echo foxtrot corrected ending and tail",
             result);
+    }
+
+    [Fact]
+    public void RollingWindow_PreservesPunctuationAfterOverlap()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta",
+            "bravo charlie delta. Echo foxtrot");
+
+        Assert.Equal("Alpha bravo charlie delta. Echo foxtrot", result);
+    }
+
+    [Fact]
+    public void RollingWindow_DoesNotDuplicateExistingBoundaryPunctuation()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta.",
+            "BRAVO CHARLIE DELTA. Echo foxtrot");
+
+        Assert.Equal("Alpha bravo charlie delta. Echo foxtrot", result);
+    }
+
+    [Fact]
+    public void RollingWindow_PreservesTrailingPunctuationAfterNormalizedOverlap()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta",
+            "BRAVO CHARLIE DELTA.");
+
+        Assert.Equal("Alpha bravo charlie delta.", result);
     }
 
     [Fact]
