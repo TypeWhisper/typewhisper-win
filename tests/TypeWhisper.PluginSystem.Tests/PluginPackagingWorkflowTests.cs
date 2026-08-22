@@ -138,6 +138,35 @@ public sealed class PluginPackagingWorkflowTests
         Assert.Contains("sha256 = $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PluginReleaseWorkflow_SerializesRegistryPublishingAndChecksGitFailures()
+    {
+        var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml");
+
+        Assert.Contains("group: plugin-release-gh-pages", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("plugin-release-${{ github.ref_name }}", workflow, StringComparison.Ordinal);
+        Assert.Contains(
+            "if ($LASTEXITCODE -ne 0) { throw \"Pushing gh-pages failed with exit code $LASTEXITCODE\" }",
+            workflow,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PluginReleaseWorkflow_PreservesExistingApiKeyRequirementWhenManifestOmitsIt()
+    {
+        var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml");
+
+        Assert.Contains(
+            "if ($manifest.PSObject.Properties['requiresApiKey'])",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))",
+            workflow,
+            StringComparison.Ordinal);
+    }
+
     private static void CreatePortableArchive(
         string releaseDirectory,
         string fileName,

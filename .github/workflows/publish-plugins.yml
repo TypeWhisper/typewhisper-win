@@ -12,8 +12,8 @@ jobs:
   build:
     runs-on: windows-latest
     concurrency:
-      group: plugin-release-${{ github.ref_name }}
-      cancel-in-progress: true
+      group: plugin-release-gh-pages
+      cancel-in-progress: false
     steps:
       - name: Parse tag
         shell: pwsh
@@ -229,7 +229,9 @@ jobs:
             try {
               Push-Location gh-pages-work
               git fetch origin gh-pages
+              if ($LASTEXITCODE -ne 0) { throw "Fetching gh-pages failed with exit code $LASTEXITCODE" }
               git reset --hard origin/gh-pages
+              if ($LASTEXITCODE -ne 0) { throw "Resetting gh-pages failed with exit code $LASTEXITCODE" }
 
               $registry = @(
                 Get-Content plugins.json | ConvertFrom-Json
@@ -287,7 +289,9 @@ jobs:
                   Set-RegistryProperty $registry[$j] 'downloadUrl' $downloadUrl
                   Set-RegistryProperty $registry[$j] 'sha256' $env:PLUGIN_SHA256
                   Set-RegistryProperty $registry[$j] 'iconSystemName' $manifest.iconSystemName
-                  Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))
+                  if ($manifest.PSObject.Properties['requiresApiKey']) {
+                    Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]$manifest.requiresApiKey)
+                  }
                   Set-RegistryProperty $registry[$j] 'descriptions' $manifest.descriptions
                   $updated = $true
                   Write-Host "Updated $($registry[$j].id) to v$env:PLUGIN_VERSION"
@@ -332,7 +336,9 @@ jobs:
               $diff = git diff --cached --quiet 2>&1; $hasChanges = $LASTEXITCODE -ne 0
               if ($hasChanges) {
                 git commit -m "Update $env:PROJECT_NAME to v$env:PLUGIN_VERSION"
+                if ($LASTEXITCODE -ne 0) { throw "Committing gh-pages changes failed with exit code $LASTEXITCODE" }
                 git push origin gh-pages
+                if ($LASTEXITCODE -ne 0) { throw "Pushing gh-pages failed with exit code $LASTEXITCODE" }
                 Write-Host "Successfully updated plugins.json (attempt $i)"
               } else {
                 Write-Host "No changes to deploy"
