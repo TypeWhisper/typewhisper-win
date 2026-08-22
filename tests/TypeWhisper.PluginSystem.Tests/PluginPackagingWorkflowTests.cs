@@ -138,6 +138,60 @@ public sealed class PluginPackagingWorkflowTests
         Assert.Contains("sha256 = $env:PLUGIN_SHA256", workflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PluginReleaseWorkflow_SerializesRegistryPublishingAndChecksGitFailures()
+    {
+        var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml");
+
+        Assert.Contains("group: plugin-release-gh-pages", workflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: false", workflow, StringComparison.Ordinal);
+        Assert.Contains("queue: max", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("plugin-release-${{ github.ref_name }}", workflow, StringComparison.Ordinal);
+
+        foreach (var failureMessage in new[]
+                 {
+                     "Fetching gh-pages for worktree setup failed",
+                     "Adding gh-pages worktree failed",
+                     "Fetching gh-pages failed",
+                     "Resetting gh-pages failed",
+                     "Staging gh-pages changes failed",
+                     "Committing gh-pages changes failed",
+                     "Pushing gh-pages failed"
+                 })
+        {
+            Assert.Contains(
+                $"if ($LASTEXITCODE -ne 0) {{ throw \"{failureMessage} with exit code $LASTEXITCODE\" }}",
+                workflow,
+                StringComparison.Ordinal);
+        }
+
+        Assert.Contains("$locationPushed = $false", workflow, StringComparison.Ordinal);
+        Assert.Contains("if ($locationPushed)", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PluginReleaseWorkflow_PreservesExistingApiKeyRequirementWhenManifestOmitsIt()
+    {
+        var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml")
+            .ReplaceLineEndings("\n");
+        var normalizedWorkflow = string.Join(
+            "\n",
+            workflow.Split('\n').Select(line => line.Trim()));
+
+        Assert.Contains(
+            """
+            if ($manifest.PSObject.Properties['requiresApiKey']) {
+            Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]$manifest.requiresApiKey)
+            }
+            """.ReplaceLineEndings("\n"),
+            normalizedWorkflow,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Set-RegistryProperty $registry[$j] 'requiresApiKey' ([bool]($manifest.requiresApiKey))",
+            workflow,
+            StringComparison.Ordinal);
+    }
+
     private static void CreatePortableArchive(
         string releaseDirectory,
         string fileName,
