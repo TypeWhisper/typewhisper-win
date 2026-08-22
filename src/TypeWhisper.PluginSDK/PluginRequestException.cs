@@ -28,7 +28,11 @@ public enum PluginRequestFailureKind
     /// <summary>The provider rejected an invalid or unsupported request.</summary>
     InvalidRequest,
     /// <summary>The request was cancelled.</summary>
-    Cancellation
+    Cancellation,
+    /// <summary>The provider stopped before completing the response because of an output limit.</summary>
+    OutputTruncated,
+    /// <summary>The provider returned an incomplete response for a reason other than an output limit.</summary>
+    OutputIncomplete
 }
 
 /// <summary>

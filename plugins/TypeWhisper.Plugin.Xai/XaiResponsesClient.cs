@@ -37,6 +37,8 @@ internal sealed class XaiResponsesClient
         {
             ["model"] = XaiJson.Element(model),
             ["store"] = XaiJson.Element(false),
+            ["max_output_tokens"] = XaiJson.Element(
+                LlmOutputTokenBudget.Calculate(systemPrompt, userText)),
             ["input"] = XaiJson.Element(new object[]
             {
                 new { role = "system", content = systemPrompt },
@@ -67,6 +69,7 @@ internal sealed class XaiResponsesClient
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        LlmResponseTruncationGuard.ThrowIfResponsesApiIncomplete(root, "xAI");
 
         if (TryGetNonEmptyString(root, "output_text") is { } outputText)
             return outputText;

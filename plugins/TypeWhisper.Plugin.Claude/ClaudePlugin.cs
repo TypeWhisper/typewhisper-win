@@ -112,7 +112,7 @@ public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         var requestBody = new
         {
             model,
-            max_tokens = 2048,
+            max_tokens = LlmOutputTokenBudget.Calculate(systemPrompt, userText),
             system = systemPrompt,
             messages = new[]
             {
@@ -140,6 +140,7 @@ public sealed class ClaudePlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
         }
 
         using var doc = JsonDocument.Parse(responseBody);
+        LlmResponseTruncationGuard.ThrowIfAnthropicResponseTruncated(doc.RootElement, "Anthropic");
         if (doc.RootElement.ValueKind == JsonValueKind.Object
             && doc.RootElement.TryGetProperty("content", out var content)
             && content.ValueKind == JsonValueKind.Array)

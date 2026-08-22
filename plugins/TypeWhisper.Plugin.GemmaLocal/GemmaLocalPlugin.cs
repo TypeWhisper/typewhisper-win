@@ -6,6 +6,7 @@ using LLama;
 using LLama.Common;
 using LLama.Sampling;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.GemmaLocal;
@@ -131,11 +132,17 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
 
             // Build Gemma chat prompt
             var prompt = FormatGemmaPrompt(systemPrompt, userText);
+            var promptTokenCount = _context.Tokenize(prompt, addBos: true, special: true).Length;
+            var maxOutputTokens = LlmOutputTokenBudget.FitToContext(
+                LlmOutputTokenBudget.Calculate(systemPrompt, userText),
+                promptTokenCount,
+                checked((int)_context.ContextSize),
+                ProviderName);
 
             var executor = new StatelessExecutor(_weights, _context.Params);
             var inferenceParams = new InferenceParams
             {
-                MaxTokens = 2048,
+                MaxTokens = maxOutputTokens,
                 AntiPrompts = ["<end_of_turn>", "<eos>"],
                 SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
             };

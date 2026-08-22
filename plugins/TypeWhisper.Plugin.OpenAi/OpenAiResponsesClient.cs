@@ -68,6 +68,10 @@ internal sealed class OpenAiResponsesClient
                 }
             }),
             ["store"] = OpenAiJson.Element(false),
+            ["max_output_tokens"] = OpenAiJson.Element(
+                string.IsNullOrWhiteSpace(reasoningEffort)
+                    ? LlmOutputTokenBudget.Calculate(systemPrompt, userText)
+                    : LlmOutputTokenBudget.CalculateWithReasoningReserve(systemPrompt, userText)),
         };
 
         if (!string.IsNullOrWhiteSpace(reasoningEffort))
@@ -87,6 +91,7 @@ internal sealed class OpenAiResponsesClient
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        LlmResponseTruncationGuard.ThrowIfResponsesApiIncomplete(root, "OpenAI");
 
         if (root.TryGetProperty("output_text", out var outputText)
             && outputText.ValueKind == JsonValueKind.String)

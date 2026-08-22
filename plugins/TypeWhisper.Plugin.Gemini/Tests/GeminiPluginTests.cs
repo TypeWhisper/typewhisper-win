@@ -331,6 +331,42 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
+    public async Task ProcessAsync_ScalesBudgetAndRejectsTokenLimitedPartialResponse()
+    {
+        string? capturedBody = null;
+        var handler = new CapturingHandler((_, body) =>
+        {
+            capturedBody = body;
+            return JsonResponse("""
+                {
+                  "choices": [
+                    {
+                      "message": { "content": "Partial workflow result" },
+                      "finish_reason": "length"
+                    }
+                  ]
+                }
+                """);
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+        var longTranscript = string.Join(' ', Enumerable.Repeat("dictated workflow input", 1_000));
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => sut.ProcessAsync(
+            "Preserve every detail.",
+            longTranscript,
+            "gemini-3.7-flash",
+            CancellationToken.None));
+
+        using var body = JsonDocument.Parse(Assert.IsType<string>(capturedBody));
+        Assert.True(body.RootElement.GetProperty("max_tokens").GetInt32() > 2048);
+        Assert.Equal(PluginRequestFailureKind.OutputTruncated, error.FailureKind);
+    }
+
+    [Fact]
     public async Task ProcessAsync_OmitsGeminiReasoningEffortForGemmaModels()
     {
         string? capturedBody = null;

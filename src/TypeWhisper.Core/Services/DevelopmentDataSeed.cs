@@ -226,6 +226,7 @@ public static class DevelopmentDataSeedFactory
                 var provider = providers[(dayOffset * 2 + recordIndex) % providers.Length];
                 var sample = samples[(dayOffset * 3 + recordIndex) % samples.Length];
                 var timestamp = now.Date.AddDays(-dayOffset).AddHours(hours[recordIndex]);
+                var isWorkflowSample = dayOffset == 29 && recordIndex == recordsForDay - 1;
 
                 records.Add(HistoryRecord(
                     $"dev-history-{sequence + 1:000}",
@@ -236,7 +237,9 @@ public static class DevelopmentDataSeedFactory
                     app.ProcessName,
                     8.5 + (dayOffset * 3 + recordIndex * 5) % 16,
                     provider.Engine,
-                    provider.Model));
+                    provider.Model,
+                    isWorkflowSample ? "Dev Meeting Notes" : null,
+                    isWorkflowSample ? "dev-workflow-meeting-notes" : null));
             }
         }
 
@@ -277,7 +280,9 @@ public static class DevelopmentDataSeedFactory
         string appProcessName,
         double durationSeconds,
         string engine,
-        string model) =>
+        string model,
+        string? profileName = null,
+        string? workflowId = null) =>
         new()
         {
             Id = id,
@@ -288,6 +293,8 @@ public static class DevelopmentDataSeedFactory
             AppProcessName = appProcessName,
             DurationSeconds = durationSeconds,
             Language = "en",
+            ProfileName = profileName,
+            WorkflowId = workflowId,
             EngineUsed = engine,
             ModelUsed = model,
             CreatedAt = timestamp

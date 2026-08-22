@@ -377,6 +377,15 @@ public partial class HistoryEntryViewModel : ObservableObject
     /// Gets whether post-processing failed for this entry.
     /// </summary>
     public bool IsWorkflowFailed => Record.Status == TranscriptionRecordStatus.WorkflowPostProcessingFailed;
+    /// <summary>
+    /// Gets whether a successful workflow entry has a distinct raw transcription to recover.
+    /// </summary>
+    public bool HasDistinctWorkflowRawText =>
+        !IsWorkflowFailed
+        && (!string.IsNullOrWhiteSpace(Record.WorkflowId)
+            || !string.IsNullOrWhiteSpace(Record.ProfileName))
+        && !string.IsNullOrWhiteSpace(Record.RawText)
+        && !string.Equals(Record.RawText.Trim(), Record.FinalText.Trim(), StringComparison.Ordinal);
 
     /// <summary>
     /// Initializes a new instance of the HistoryEntryViewModel class.
@@ -416,9 +425,8 @@ public partial class HistoryEntryViewModel : ObservableObject
     private void SaveEdit()
     {
         _parent.SaveEdit(this, EditText);
-        Record = Record with { FinalText = EditText };
+        ReplaceRecord(Record with { FinalText = EditText });
         IsEditing = false;
-        OnPropertyChanged(nameof(Record));
     }
 
     [RelayCommand]
@@ -475,10 +483,8 @@ public partial class HistoryEntryViewModel : ObservableObject
                 status => Application.Current?.Dispatcher.InvokeAsync(() => RetryStatusText = status).Task
                           ?? Task.CompletedTask,
                 _retryCts.Token);
-            Record = updated;
+            ReplaceRecord(updated);
             RetryStatusText = Loc.Instance["History.RetrySucceeded"];
-            OnPropertyChanged(nameof(Record));
-            OnPropertyChanged(nameof(IsWorkflowFailed));
         }
         catch (OperationCanceledException)
         {
@@ -486,11 +492,9 @@ public partial class HistoryEntryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Record = _parent.GetCurrentRecord(Record.Id) ?? Record;
+            ReplaceRecord(_parent.GetCurrentRecord(Record.Id) ?? Record);
             RetryErrorText = HistoryWorkflowRetryService.SanitizeFailure(ex);
             RetryStatusText = "";
-            OnPropertyChanged(nameof(Record));
-            OnPropertyChanged(nameof(IsWorkflowFailed));
         }
         finally
         {
@@ -499,6 +503,17 @@ public partial class HistoryEntryViewModel : ObservableObject
             _retryCts = null;
             RetryWorkflowCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    /// <summary>
+    /// Replaces the backing history record and refreshes all derived UI predicates.
+    /// </summary>
+    internal void ReplaceRecord(TranscriptionRecord record)
+    {
+        Record = record;
+        OnPropertyChanged(nameof(Record));
+        OnPropertyChanged(nameof(IsWorkflowFailed));
+        OnPropertyChanged(nameof(HasDistinctWorkflowRawText));
     }
 
     [RelayCommand]

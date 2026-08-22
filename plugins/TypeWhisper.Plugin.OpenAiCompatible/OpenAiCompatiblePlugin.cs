@@ -542,7 +542,7 @@ public sealed class OpenAiCompatiblePlugin :
                 new { role = "user", content = userText }
             },
             ["temperature"] = 0.1,
-            ["max_tokens"] = 2048
+            ["max_tokens"] = LlmOutputTokenBudget.Calculate(systemPrompt, userText)
         };
         AddThinkingConfiguration(body, profile.BaseUrl, profile.ThinkingEnabled);
 
@@ -588,6 +588,9 @@ public sealed class OpenAiCompatiblePlugin :
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(
+            root,
+            "The OpenAI-compatible provider");
 
         if (root.ValueKind == JsonValueKind.Object
             && root.TryGetProperty("choices", out var choices)

@@ -424,7 +424,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText },
             },
-            ["max_tokens"] = 2048,
+            ["max_tokens"] = LlmOutputTokenBudget.Calculate(systemPrompt, userText),
         };
         if (model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
             body["reasoning_effort"] = "low";
@@ -463,6 +463,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
             using (doc)
             {
                 var root = doc.RootElement;
+                LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "Gemini");
                 if (root.ValueKind == JsonValueKind.Object
                     && root.TryGetProperty("choices", out var choices)
                     && choices.ValueKind == JsonValueKind.Array

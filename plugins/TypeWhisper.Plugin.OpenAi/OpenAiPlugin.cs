@@ -445,7 +445,9 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
             systemPrompt,
             userText,
             ct,
-            maxOutputTokens: 2048,
+            maxOutputTokens: SupportsReasoningEffort(modelId)
+                ? LlmOutputTokenBudget.CalculateWithReasoningReserve(systemPrompt, userText)
+                : LlmOutputTokenBudget.Calculate(systemPrompt, userText),
             maxOutputTokenParameter: OutputTokenParameter(modelId),
             reasoningEffort: SupportsReasoningEffort(modelId) ? _reasoningEffort : null,
             temperature: ResolvedTemperature(modelId));
