@@ -115,6 +115,8 @@
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
                     <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="AutomationProperties.AutomationId"
+                            Value="{Binding Record.Id, StringFormat=HistoryEntry.{0}}"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                     <Setter Property="Padding" Value="0"/>
                     <Setter Property="Margin" Value="0"/>
@@ -177,54 +179,60 @@
                         <!-- Right: card -->
                         <Border Grid.Column="1" Style="{StaticResource TimelineCardStyle}"
                                 Margin="0,4,8,4">
-                            <Border.InputBindings>
-                                <MouseBinding MouseAction="LeftClick"
-                                              Command="{Binding ToggleExpandCommand}"/>
-                            </Border.InputBindings>
-
                             <StackPanel>
                                 <!-- Collapsed: time + preview + badges -->
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                <Button Command="{Binding ToggleExpandCommand}"
+                                        AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryToggle.{0}}"
+                                        AutomationProperties.Name="{Binding Record.Preview}"
+                                        Background="Transparent" BorderThickness="0" Padding="0"
+                                        HorizontalContentAlignment="Stretch" Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
-                                               Foreground="{StaticResource HintBrush}" FontSize="12"
-                                               VerticalAlignment="Top" Margin="0,0,10,0"/>
+                                        <TextBlock Grid.Column="0" Text="{Binding TimeLabel}"
+                                                   Foreground="{StaticResource HintBrush}" FontSize="12"
+                                                   VerticalAlignment="Top" Margin="0,0,10,0"/>
 
-                                    <TextBlock Grid.Column="1" Text="{Binding Record.Preview}"
-                                               Foreground="{StaticResource TextBrush}" FontSize="13"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Top"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Record.Preview}"
+                                                   Foreground="{StaticResource TextBrush}" FontSize="13"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Top"/>
 
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
-                                        <Border Style="{StaticResource BadgeStyle}"
-                                                Background="#4A1F24"
-                                                AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryWorkflowFailedBadge.{0}}"
-                                                Visibility="{Binding IsWorkflowFailed, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Text="{loc:Str History.WorkflowFailedBadge}"
-                                                       Foreground="{StaticResource DangerBrush}" FontSize="11"/>
-                                        </Border>
-                                        <Border Style="{StaticResource BadgeStyle}"
-                                                Background="#2A3A5A"
-                                                Visibility="{Binding Record.ProfileName, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
-                                            <TextBlock Text="{Binding Record.ProfileName}"
-                                                       Foreground="{StaticResource AccentBrush}" FontSize="11"/>
-                                        </Border>
-                                        <Border Style="{StaticResource BadgeStyle}"
-                                                Visibility="{Binding Record.AppProcessName, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
-                                            <TextBlock Text="{Binding Record.AppProcessName}"
-                                                       Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                                        </Border>
-                                        <Border Style="{StaticResource BadgeStyle}">
-                                            <TextBlock Text="{Binding DurationLabel}"
-                                                       Foreground="{StaticResource HintBrush}" FontSize="11"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Grid>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Background="#4A1F24"
+                                                    AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryWorkflowFailedBadge.{0}}"
+                                                    Visibility="{Binding IsWorkflowFailed, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{loc:Str History.WorkflowFailedBadge}"
+                                                           Foreground="{StaticResource DangerBrush}" FontSize="11"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Background="#2A3A5A"
+                                                    Visibility="{Binding Record.ProfileName, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <TextBlock Text="{Binding Record.ProfileName}"
+                                                           Foreground="{StaticResource AccentBrush}" FontSize="11"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeStyle}"
+                                                    Visibility="{Binding Record.AppProcessName, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                                                <TextBlock Text="{Binding Record.AppProcessName}"
+                                                           Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeStyle}">
+                                                <TextBlock Text="{Binding DurationLabel}"
+                                                           Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
 
                                 <!-- Expanded -->
                                 <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
@@ -301,6 +309,27 @@
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
+
+                                    <!-- Raw transcription for successful workflow output -->
+                                    <Border CornerRadius="6" Padding="10" Margin="0,0,0,10"
+                                            Background="{StaticResource CardBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1"
+                                            Visibility="{Binding HasDistinctWorkflowRawText, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str History.RawTextLabel}"
+                                                       Foreground="{StaticResource HintBrush}" FontSize="11"/>
+                                            <TextBlock Text="{Binding Record.RawText}" TextWrapping="Wrap"
+                                                       AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistorySuccessfulRawText.{0}}"
+                                                       Foreground="{StaticResource TextBrush}" FontSize="13"
+                                                       Margin="0,3,0,6"/>
+                                            <Button Content="{loc:Str History.CopyRawText}"
+                                                    Command="{Binding CopyRawTextCommand}"
+                                                    AutomationProperties.AutomationId="{Binding Record.Id, StringFormat=HistoryCopySuccessfulRawText.{0}}"
+                                                    Style="{StaticResource LinkButtonStyle}"
+                                                    HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- Edit mode -->
                                     <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">

@@ -33,7 +33,7 @@ public static class OpenAiChatHelper
             systemPrompt,
             userText,
             ct,
-            maxOutputTokens: 2048,
+            maxOutputTokens: LlmOutputTokenBudget.Calculate(systemPrompt, userText),
             maxOutputTokenParameter: "max_tokens",
             reasoningEffort: null,
             temperature: 0.1);
@@ -136,6 +136,7 @@ public static class OpenAiChatHelper
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "The provider");
 
         if (root.ValueKind == JsonValueKind.Object
             && root.TryGetProperty("choices", out var choices)

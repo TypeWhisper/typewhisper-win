@@ -6,6 +6,7 @@ using LLama;
 using LLama.Common;
 using LLama.Sampling;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.GemmaLocal;
@@ -135,7 +136,7 @@ public sealed class GemmaLocalPlugin : ILlmProviderPlugin
             var executor = new StatelessExecutor(_weights, _context.Params);
             var inferenceParams = new InferenceParams
             {
-                MaxTokens = 2048,
+                MaxTokens = LlmOutputTokenBudget.Calculate(systemPrompt, userText),
                 AntiPrompts = ["<end_of_turn>", "<eos>"],
                 SamplingPipeline = new DefaultSamplingPipeline { Temperature = 0.3f },
             };

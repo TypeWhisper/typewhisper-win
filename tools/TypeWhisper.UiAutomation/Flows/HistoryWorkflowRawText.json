@@ -1,0 +1,25 @@
+{
+  "steps": [
+    {
+      "action": "invoke",
+      "automationId": "History"
+    },
+    {
+      "action": "wait",
+      "automationId": "SettingsSection.History"
+    },
+    {
+      "action": "invoke",
+      "automationId": "HistoryToggle.dev-history-092"
+    },
+    {
+      "action": "wait",
+      "automationId": "HistorySuccessfulRawText.dev-history-092"
+    },
+    {
+      "action": "capture",
+      "automationId": "SettingsWindow",
+      "file": "history-workflow-raw-text.png"
+    }
+  ]
+}

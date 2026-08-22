@@ -107,6 +107,7 @@ internal sealed class OpenAiChatGptClient
 
             using var doc = JsonDocument.Parse(payload);
             var root = doc.RootElement;
+            LlmResponseTruncationGuard.ThrowIfResponsesApiIncomplete(root, "ChatGPT");
             if (!root.TryGetProperty("type", out var typeEl))
                 continue;
 
@@ -143,6 +144,7 @@ internal sealed class OpenAiChatGptClient
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            LlmResponseTruncationGuard.ThrowIfResponsesApiIncomplete(root, "ChatGPT");
 
             if (GetString(root, "output_text") is { Length: > 0 } outputText)
                 return outputText.Trim();

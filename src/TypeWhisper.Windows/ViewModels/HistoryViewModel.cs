@@ -377,6 +377,15 @@ public partial class HistoryEntryViewModel : ObservableObject
     /// Gets whether post-processing failed for this entry.
     /// </summary>
     public bool IsWorkflowFailed => Record.Status == TranscriptionRecordStatus.WorkflowPostProcessingFailed;
+    /// <summary>
+    /// Gets whether a successful workflow entry has a distinct raw transcription to recover.
+    /// </summary>
+    public bool HasDistinctWorkflowRawText =>
+        !IsWorkflowFailed
+        && (!string.IsNullOrWhiteSpace(Record.WorkflowId)
+            || !string.IsNullOrWhiteSpace(Record.ProfileName))
+        && !string.IsNullOrWhiteSpace(Record.RawText)
+        && !string.Equals(Record.RawText.Trim(), Record.FinalText.Trim(), StringComparison.Ordinal);
 
     /// <summary>
     /// Initializes a new instance of the HistoryEntryViewModel class.
@@ -419,6 +428,7 @@ public partial class HistoryEntryViewModel : ObservableObject
         Record = Record with { FinalText = EditText };
         IsEditing = false;
         OnPropertyChanged(nameof(Record));
+        OnPropertyChanged(nameof(HasDistinctWorkflowRawText));
     }
 
     [RelayCommand]

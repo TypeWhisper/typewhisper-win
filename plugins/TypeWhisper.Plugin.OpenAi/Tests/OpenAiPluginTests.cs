@@ -214,6 +214,23 @@ public class OpenAiPluginTests
     }
 
     [Fact]
+    public void ResponsesParser_RejectsIncompleteTokenLimitedOutput()
+    {
+        var json = """
+        {
+          "id": "resp_123",
+          "status": "incomplete",
+          "incomplete_details": { "reason": "max_output_tokens" },
+          "output_text": "Partial workflow result"
+        }
+        """;
+
+        var error = Assert.Throws<PluginRequestException>(() => OpenAiResponsesClient.ParseResponse(json));
+
+        Assert.Equal(PluginRequestFailureKind.OutputTruncated, error.FailureKind);
+    }
+
+    [Fact]
     public void RealtimeUri_UsesGAEndpointWithoutBetaHeader()
     {
         var headers = OpenAiRealtimeStreamingSession.CreateRealtimeHeaders("sk-test");
@@ -954,6 +971,23 @@ public class OpenAiPluginTests
         """;
 
         Assert.Equal("Hello world", OpenAiChatGptClient.ParseResponseText(stream));
+    }
+
+    [Fact]
+    public void ChatGptResponseParser_RejectsIncompleteEventAfterPartialText()
+    {
+        var stream = """
+        event: response.output_text.delta
+        data: {"type":"response.output_text.delta","delta":"Partial workflow result"}
+        event: response.incomplete
+        data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}
+
+        """;
+
+        var error = Assert.Throws<PluginRequestException>(() =>
+            OpenAiChatGptClient.ParseResponseText(stream));
+
+        Assert.Equal(PluginRequestFailureKind.OutputTruncated, error.FailureKind);
     }
 
     [Fact]

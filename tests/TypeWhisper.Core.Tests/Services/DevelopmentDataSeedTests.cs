@@ -66,6 +66,9 @@ public sealed class DevelopmentDataSeedTests : IDisposable
         Assert.True(seed.HistoryRecords.Sum(record => record.WordCount) > 1_200);
         Assert.Contains(seed.HistoryRecords, record => record.AppProcessName == "outlook");
         Assert.Contains(seed.HistoryRecords, record => record.AppProcessName == "obsidian");
+        Assert.Contains(seed.HistoryRecords, record =>
+            record.WorkflowId == "dev-workflow-meeting-notes"
+            && record.RawText != record.FinalText);
         Assert.Equal(
             seed.HistoryRecords.Select(record => new
             {

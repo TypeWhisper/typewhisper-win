@@ -183,6 +183,7 @@ public sealed class HistoryWorkflowRetryService
                 PluginRequestFailureKind.RateLimit => "The workflow provider rate limit was reached.",
                 PluginRequestFailureKind.ServerError => "The workflow provider returned a server error.",
                 PluginRequestFailureKind.EmptyResponse => "The workflow provider returned an empty response.",
+                PluginRequestFailureKind.OutputTruncated => "The workflow provider stopped at its output token limit.",
                 PluginRequestFailureKind.Authentication => "Workflow provider authentication failed.",
                 PluginRequestFailureKind.Permission => "The workflow provider denied this request.",
                 PluginRequestFailureKind.Configuration => "The workflow provider is not configured correctly.",

@@ -511,7 +511,7 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = userText }
             },
-            ["max_tokens"] = 2048
+            ["max_tokens"] = LlmOutputTokenBudget.Calculate(systemPrompt, userText)
         };
 
         if (_temperatureMode == TemperatureModeCustom)
@@ -565,6 +565,7 @@ public sealed class OpenRouterPlugin : ITranscriptionEnginePlugin, ILlmProviderP
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        LlmResponseTruncationGuard.ThrowIfOpenAiChatCompletionTruncated(root, "OpenRouter");
 
         if (root.ValueKind == JsonValueKind.Object
             && root.TryGetProperty("choices", out var choices)
