@@ -214,22 +214,20 @@
   {
     "id": "com.typewhisper.gemma-local",
     "name": "Gemma 4 (Local)",
-    "version": "1.0.0",
-    "minHostVersion": null,
+    "version": "1.0.1",
+    "minHostVersion": "1.0.9",
     "author": "TypeWhisper",
-    "description": "Run Google Gemma 4 locally via LLamaSharp - no cloud, no Ollama required",
+    "description": "Run Google Gemma 4 locally via Ollama or any OpenAI-compatible server",
     "category": "llm",
-    "size": 31867021,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.gemma-local-1.0.0.zip",
+    "size": 7240765,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.gemma-local-1.0.1.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
-    "descriptions": {
-      "de": "Google Gemma 4 lokal ausfuehren mit LLamaSharp - keine Cloud, kein Ollama noetig"
-    },
+    "descriptions": null,
     "categories": [
       "llm"
     ],
-    "sha256": "a9170b43eca2fe642e2d6108f7d2228902901b9389fd088fdde904d7280da33b"
+    "sha256": "9abe64635f5cc74e41bc4e34c25e2f5726039853598d701d574d398b65be1382"
   },
   {
     "id": "com.typewhisper.claude",
