@@ -38,18 +38,12 @@ public sealed class WorkflowProviderReleaseMetadataTests
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         var plugin = CreatePlugin(projectName);
+        using var disposablePlugin = plugin as IDisposable;
 
-        try
-        {
-            Assert.NotNull(manifest);
-            Assert.Equal(expectedVersion, manifest.Version);
-            Assert.Equal(expectedVersion, plugin.PluginVersion);
-            Assert.Equal("1.0.9", manifest.MinHostVersion);
-        }
-        finally
-        {
-            (plugin as IDisposable)?.Dispose();
-        }
+        Assert.NotNull(manifest);
+        Assert.Equal(expectedVersion, manifest.Version);
+        Assert.Equal(expectedVersion, plugin.PluginVersion);
+        Assert.Equal("1.0.9", manifest.MinHostVersion);
     }
 
     private static ITypeWhisperPlugin CreatePlugin(string projectName) => projectName switch
@@ -65,7 +59,7 @@ public sealed class WorkflowProviderReleaseMetadataTests
         _ => throw new ArgumentOutOfRangeException(nameof(projectName), projectName, null),
     };
 
-    private static string RepositoryRoot() => Path.GetFullPath(Path.Combine(
+    private static string RepositoryRoot() => Path.GetFullPath(Path.Join(
         AppContext.BaseDirectory,
         "..", "..", "..", "..", ".."));
 }
