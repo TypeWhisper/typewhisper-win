@@ -2,13 +2,13 @@
   {
     "id": "com.typewhisper.openai",
     "name": "OpenAI / ChatGPT",
-    "version": "1.1.1",
-    "minHostVersion": "1.0.0",
+    "version": "1.1.2",
+    "minHostVersion": "1.0.9",
     "author": "TypeWhisper",
     "description": "OpenAI transcription, prompt processing, and text-to-speech with dynamic API and ChatGPT model catalogs. STT/TTS require an API key; prompts can use ChatGPT login.",
     "category": "transcription",
-    "size": 62141,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.1.1.zip",
+    "size": 62829,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-1.1.2.zip",
     "iconSystemName": null,
     "requiresApiKey": true,
     "descriptions": {
@@ -19,7 +19,7 @@
       "llm",
       "tts"
     ],
-    "sha256": "6f82f8e2061860aeb7841b613aaa43b93386d426e877f8862196dbc413942299"
+    "sha256": "f539b088d5fe113d254734095179950ba153473e4115f63c4d099db84bb2a6f9"
   },
   {
     "id": "com.typewhisper.groq",
@@ -81,13 +81,13 @@
   {
     "id": "com.typewhisper.openai-compatible",
     "name": "OpenAI Compatible",
-    "version": "1.0.5",
-    "minHostVersion": null,
+    "version": "1.0.6",
+    "minHostVersion": "1.0.9",
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible server (Ollama, LM Studio, vLLM, etc.)",
     "category": "transcription",
-    "size": 27621,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-compatible-1.0.5.zip",
+    "size": 30522,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openai-compatible-1.0.6.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
@@ -95,7 +95,7 @@
       "transcription",
       "llm"
     ],
-    "sha256": "1cddf4adf80649827a6541b34d8511686bf69a17e390bd95b85e64ca5e9482af"
+    "sha256": "3d4b5b6fd671d78b6f48b78b0fadcec2c4b03bc073434518288c7a1aa558ad67"
   },
   {
     "id": "com.typewhisper.gemini",
@@ -232,38 +232,39 @@
   {
     "id": "com.typewhisper.claude",
     "name": "Claude",
-    "version": "1.0.0",
+    "version": "1.0.1",
+    "minHostVersion": "1.0.9",
     "author": "TypeWhisper",
     "description": "Anthropic Claude LLM for prompt processing",
     "category": "llm",
     "requiresApiKey": true,
-    "size": 10616,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.claude-1.0.0.zip",
+    "size": 10988,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.claude-1.0.1.zip",
     "categories": [
       "llm"
     ],
-    "sha256": "077b0a209c46b860354b42bd2bbbb84fa3772123b5ad97a2ebe2ab0510abfa77"
+    "sha256": "32236abc158173df91bd9f514b8a0844c754b715ddc42f765f6d1397c21b66ed"
   },
   {
     "id": "com.typewhisper.openrouter",
     "name": "OpenRouter",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "author": "TypeWhisper",
     "description": "Access LLMs and speech-to-text models from OpenAI, Anthropic, Meta, Google and more via OpenRouter. Shows model pricing and account balance. Requires API key.",
     "category": "llm",
     "requiresApiKey": true,
-    "size": 29194,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openrouter-1.1.0.zip",
+    "size": 29851,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.openrouter-1.1.1.zip",
     "categories": [
       "llm",
       "transcription"
     ],
-    "minHostVersion": null,
+    "minHostVersion": "1.0.9",
     "iconSystemName": "globe",
     "descriptions": {
       "de": "Zugriff auf LLMs und Speech-to-Text-Modelle von OpenAI, Anthropic, Meta, Google und mehr ueber OpenRouter. Zeigt Modellpreise und Kontoguthaben. Erfordert einen API-Key."
     },
-    "sha256": "4e4bba8fbddbb4bd311f66dcd4427d2cb2a2e9c88eb7cd060f90845825b12116"
+    "sha256": "68a9d1539b7b7f318f6f452a809489a949894a49d7d45e4189e089328e9102af"
   },
   {
     "id": "com.typewhisper.cerebras",
