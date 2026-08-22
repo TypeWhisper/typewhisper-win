@@ -46,8 +46,14 @@ public sealed class StreamingHandler : IDisposable
     private const int MinimumRollingWindowOverlapWords = 3;
     private static readonly TimeSpan LocalPollingInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan OnlineBatchPollingInterval = TimeSpan.FromSeconds(5);
+    private const string RollingWindowCjkCharacterClass =
+        @"\u1100-\u11FF\u2E80-\u2FFF\u3040-\u30FF\u3100-\u318F\u31A0-\u31BF" +
+        @"\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uA960-\uA97F\uAC00-\uD7AF" +
+        @"\uD7B0-\uD7FF\uF900-\uFAFF\uFF66-\uFF9D";
     private static readonly Regex RollingWindowWordRegex = new(
-        @"[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*",
+        $@"[{RollingWindowCjkCharacterClass}]|" +
+        $@"[\p{{L}}\p{{N}}-[{RollingWindowCjkCharacterClass}]]+" +
+        $@"(?:['’][\p{{L}}\p{{N}}-[{RollingWindowCjkCharacterClass}]]+)*",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>

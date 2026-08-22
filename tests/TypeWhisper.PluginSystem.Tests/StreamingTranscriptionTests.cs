@@ -1065,6 +1065,29 @@ public class StabilizeTextTests
         Assert.Equal("Alpha bravo charlie delta.", result);
     }
 
+    [Theory]
+    [InlineData(
+        "今天我们测试长时间语音转写是否稳定。",
+        "语音转写是否稳定。然后继续说话。",
+        "今天我们测试长时间语音转写是否稳定。然后继续说话。")]
+    [InlineData(
+        "これは長い音声入力のテストです。",
+        "音声入力のテストです。そして続けます。",
+        "これは長い音声入力のテストです。そして続けます。")]
+    [InlineData(
+        "이것은긴음성입력테스트입니다.",
+        "음성입력테스트입니다.계속말합니다.",
+        "이것은긴음성입력테스트입니다.계속말합니다.")]
+    public void RollingWindow_MergesTruncatedUnspacedCjkWindows(
+        string confirmed,
+        string windowText,
+        string expected)
+    {
+        var result = StreamingHandler.MergeRollingText(confirmed, windowText);
+
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void RollingWindow_WithoutSafeOverlapKeepsConfirmedText()
     {
