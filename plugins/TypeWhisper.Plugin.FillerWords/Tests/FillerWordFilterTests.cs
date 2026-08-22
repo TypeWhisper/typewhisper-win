@@ -38,6 +38,32 @@ public sealed class FillerWordFilterTests
     public void Remove_PreservesLeadingWhitespaceFromTheOriginal(string input, string expected) =>
         Assert.Equal(expected, FillerWordFilter.Remove(input));
 
+    [Theory]
+    [InlineData("um Intro\n  code  block", "Intro\n  code  block")]
+    [InlineData("Intro  spaced um text", "Intro  spaced text")]
+    [InlineData("hello\n  um there", "hello\n  there")]
+    [InlineData("hello um\nworld", "hello\nworld")]
+    [InlineData("  indented um line", "  indented line")]
+    public void Remove_LeavesWhitespaceOutsideTheMatchUntouched(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input));
+
+    [Theory]
+    [InlineData("Um... hello", "hello")]
+    [InlineData("Um… hello", "hello")]
+    [InlineData("I said um... then", "I said then")]
+    [InlineData("I said um…, then", "I said then")]
+    [InlineData("Right?! um yes", "Right?! yes")]
+    public void Remove_ConsumesPunctuationAttachedToTheFiller(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input));
+
+    [Theory]
+    [InlineData("Wait... um, no", "Wait... no")]
+    [InlineData("Wait… um, no", "Wait… no")]
+    [InlineData("Well!!! um okay", "Well!!! okay")]
+    [InlineData("Done. um Next.", "Done. Next.")]
+    public void Remove_KeepsPunctuationBelongingToSurroundingText(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input));
+
     [Fact]
     public void Remove_DropsLeadingWhitespace_WhenEverythingElseWasFiller() =>
         Assert.Equal(string.Empty, FillerWordFilter.Remove(" um "));
