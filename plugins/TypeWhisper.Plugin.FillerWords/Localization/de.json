@@ -1,0 +1,7 @@
+{
+  "Settings.Title": "Füllwörter",
+  "Settings.Hint": "Ein Wort pro Zeile. Kommas und Semikolons sind ebenfalls erlaubt.",
+  "Settings.WordCount": "{0} Wörter",
+  "Settings.WordCountOne": "1 Wort",
+  "Settings.ResetDefaults": "Standard wiederherstellen"
+}
