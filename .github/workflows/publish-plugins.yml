@@ -14,6 +14,7 @@ jobs:
     concurrency:
       group: plugin-release-gh-pages
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Parse tag
         shell: pwsh
@@ -221,13 +222,19 @@ jobs:
         run: |
           $downloadUrl = "https://typewhisper.github.io/typewhisper-win/plugins/$env:ZIP_NAME"
 
-          git fetch origin gh-pages
-          git worktree add -B gh-pages gh-pages-work origin/gh-pages
-
           $maxRetries = 5
           for ($i = 1; $i -le $maxRetries; $i++) {
+            $locationPushed = $false
             try {
+              if (-not (Test-Path -LiteralPath gh-pages-work)) {
+                git fetch origin gh-pages
+                if ($LASTEXITCODE -ne 0) { throw "Fetching gh-pages for worktree setup failed with exit code $LASTEXITCODE" }
+                git worktree add -B gh-pages gh-pages-work origin/gh-pages
+                if ($LASTEXITCODE -ne 0) { throw "Adding gh-pages worktree failed with exit code $LASTEXITCODE" }
+              }
+
               Push-Location gh-pages-work
+              $locationPushed = $true
               git fetch origin gh-pages
               if ($LASTEXITCODE -ne 0) { throw "Fetching gh-pages failed with exit code $LASTEXITCODE" }
               git reset --hard origin/gh-pages
@@ -330,6 +337,7 @@ jobs:
               Copy-Item (Join-Path .. $env:ZIP_NAME) "plugins/$env:ZIP_NAME" -Force
 
               git add -A
+              if ($LASTEXITCODE -ne 0) { throw "Staging gh-pages changes failed with exit code $LASTEXITCODE" }
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -344,12 +352,14 @@ jobs:
                 Write-Host "No changes to deploy"
               }
 
-              Pop-Location
               break
             } catch {
-              Pop-Location
               if ($i -eq $maxRetries) { throw }
-              Write-Host "Push failed (attempt $i), retrying in ${i}s..."
+              Write-Host "Publishing failed (attempt $i), retrying in ${i}s..."
               Start-Sleep -Seconds $i
+            } finally {
+              if ($locationPushed) {
+                Pop-Location
+              }
             }
           }
