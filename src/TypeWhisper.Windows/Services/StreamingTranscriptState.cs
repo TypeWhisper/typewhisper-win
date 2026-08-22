@@ -116,6 +116,67 @@ internal sealed class StreamingTranscriptState
         return true;
     }
 
+    /// <summary>
+    /// Applies a complete, growing transcript snapshot from an online batch provider.
+    /// </summary>
+    public bool TryApplySnapshotPolling(
+        int sessionVersion,
+        string rawText,
+        Func<string, string> corrector,
+        out string displayText)
+    {
+        displayText = "";
+        if (!IsCurrentSession(sessionVersion))
+            return false;
+
+        var text = rawText.Trim();
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        text = corrector(text);
+        if (string.IsNullOrEmpty(text)
+            || string.Equals(text, _confirmedText, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _confirmedText = text;
+        _lastDisplayedText = text;
+        displayText = text;
+        return true;
+    }
+
+    /// <summary>
+    /// Applies an overlapping rolling-window transcript without regressing prior preview text.
+    /// </summary>
+    public bool TryApplyRollingPolling(
+        int sessionVersion,
+        string rawText,
+        Func<string, string> corrector,
+        out string displayText)
+    {
+        displayText = "";
+        if (!IsCurrentSession(sessionVersion))
+            return false;
+
+        var text = rawText.Trim();
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        text = corrector(text);
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        var merged = StreamingHandler.MergeRollingText(_confirmedText, text);
+        if (string.Equals(merged, _confirmedText, StringComparison.Ordinal))
+            return false;
+
+        _confirmedText = merged;
+        _lastDisplayedText = merged;
+        displayText = merged;
+        return true;
+    }
+
     private static string MergeFinalSegment(string confirmedText, string lastFinalSegment, string newText)
     {
         if (string.IsNullOrEmpty(confirmedText))
