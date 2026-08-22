@@ -40,7 +40,11 @@ public partial class FillerWordsSettingsView : UserControl
         WordsBox.Text = _store.WordsText;
     }
 
-    private void UpdateCount() => CountText.Text = L("Settings.WordCount", _store.WordCount);
+    private void UpdateCount()
+    {
+        var count = _store.WordCount;
+        CountText.Text = count == 1 ? L("Settings.WordCountOne") : L("Settings.WordCount", count);
+    }
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
     private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;
