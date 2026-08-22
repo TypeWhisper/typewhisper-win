@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\TypeWhisper.Plugin.OpenAi.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Claude\TypeWhisper.Plugin.Claude.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.GemmaLocal\TypeWhisper.Plugin.GemmaLocal.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAiCompatible\TypeWhisper.Plugin.OpenAiCompatible.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.AuthenticatedCli\TypeWhisper.Plugin.AuthenticatedCli.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\TypeWhisper.Plugin.OpenRouter.csproj" />

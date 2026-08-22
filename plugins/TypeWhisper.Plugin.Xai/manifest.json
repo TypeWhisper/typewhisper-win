@@ -1,7 +1,8 @@
 {
   "id": "com.typewhisper.xai",
   "name": "xAI / Grok",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "minHostVersion": "1.0.9",
   "author": "TypeWhisper",
   "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
   "descriptions": {

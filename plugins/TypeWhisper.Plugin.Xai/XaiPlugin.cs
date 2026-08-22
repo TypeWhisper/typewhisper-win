@@ -88,7 +88,7 @@ public sealed class XaiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, 
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
