@@ -5,10 +5,14 @@ namespace TypeWhisper.Windows.Services;
 
 internal sealed class StreamingTranscriptState
 {
+    private const int RollingMergeFailuresBeforeRecovery = 2;
+
     private int _sessionVersion;
     private string _confirmedText = "";
     private string _lastDisplayedText = "";
     private string _lastFinalSegment = "";
+    private string _lastRollingPollingText = "";
+    private int _rollingMergeFailureCount;
 
     /// <summary>
     /// Starts a new streaming transcript session and returns its version token.
@@ -18,6 +22,8 @@ internal sealed class StreamingTranscriptState
         _confirmedText = "";
         _lastDisplayedText = "";
         _lastFinalSegment = "";
+        _lastRollingPollingText = "";
+        _rollingMergeFailureCount = 0;
         return Interlocked.Increment(ref _sessionVersion);
     }
 
@@ -33,6 +39,8 @@ internal sealed class StreamingTranscriptState
         _confirmedText = "";
         _lastDisplayedText = "";
         _lastFinalSegment = "";
+        _lastRollingPollingText = "";
+        _rollingMergeFailureCount = 0;
         return finalText;
     }
 
@@ -112,7 +120,84 @@ internal sealed class StreamingTranscriptState
         var stable = StreamingHandler.StabilizeText(_confirmedText, text);
         _confirmedText = stable;
         _lastDisplayedText = stable;
+        _lastRollingPollingText = "";
+        _rollingMergeFailureCount = 0;
         displayText = stable;
+        return true;
+    }
+
+    /// <summary>
+    /// Applies a complete, growing transcript snapshot from an online batch provider.
+    /// </summary>
+    public bool TryApplySnapshotPolling(
+        int sessionVersion,
+        string rawText,
+        Func<string, string> corrector,
+        out string displayText)
+    {
+        displayText = "";
+        if (!IsCurrentSession(sessionVersion))
+            return false;
+
+        var text = rawText.Trim();
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        text = corrector(text);
+        if (string.IsNullOrEmpty(text)
+            || string.Equals(text, _confirmedText, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _confirmedText = text;
+        _lastDisplayedText = text;
+        _lastRollingPollingText = "";
+        _rollingMergeFailureCount = 0;
+        displayText = text;
+        return true;
+    }
+
+    /// <summary>
+    /// Applies an overlapping rolling-window transcript without regressing prior preview text.
+    /// </summary>
+    public bool TryApplyRollingPolling(
+        int sessionVersion,
+        string rawText,
+        Func<string, string> corrector,
+        out string displayText)
+    {
+        displayText = "";
+        if (!IsCurrentSession(sessionVersion))
+            return false;
+
+        var text = rawText.Trim();
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        text = corrector(text);
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        var merged = StreamingHandler.MergeRollingText(_confirmedText, text);
+        if (string.Equals(merged, _confirmedText, StringComparison.Ordinal))
+        {
+            if (string.Equals(text, _lastRollingPollingText, StringComparison.Ordinal))
+                return false;
+
+            _lastRollingPollingText = text;
+            _rollingMergeFailureCount++;
+            if (_rollingMergeFailureCount < RollingMergeFailuresBeforeRecovery)
+                return false;
+
+            merged = _confirmedText.TrimEnd() + " " + text;
+        }
+
+        _confirmedText = merged;
+        _lastDisplayedText = merged;
+        _lastRollingPollingText = text;
+        _rollingMergeFailureCount = 0;
+        displayText = merged;
         return true;
     }
 

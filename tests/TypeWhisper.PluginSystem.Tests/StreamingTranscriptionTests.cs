@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using Moq;
 using NAudio.Wave;
@@ -427,14 +428,109 @@ public class StreamingTranscriptionTests
         Assert.Equal(0, (int)GetPrivateField(handler, "_pendingStreamingAudioBytes")!);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    [Fact]
+    public async Task StreamingHandler_OnlineBatchPollingBoundsGrowingAudioRequests()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new CapturingPollingPlugin();
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "batch");
+        await modelManager.LoadModelAsync(fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            Task.FromResult(CreateReadyPreparation(modelManager, fullModelId)),
+            allowOnlineBatchPolling: true);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData(BuildPcm16Chunk(TimeSpan.FromSeconds(45)), 45 * 16000 * 2);
+
+        await WaitUntilAsync(() => plugin.RequestDurations.Count == 1, TimeSpan.FromSeconds(8));
+
+        Assert.InRange(plugin.RequestDurations.Single().TotalSeconds, 29.9, 30.1);
+    }
+
+    [Fact]
+    public void StreamingHandler_OnlineBatchPollingLeavesCapacityForFinalRequest()
+    {
+        var interval = StreamingHandler.GetPollingInterval(useOnlineBatchWindow: true);
+        var previewRequestsPerMinute = TimeSpan.FromMinutes(1).TotalSeconds / interval.TotalSeconds;
+
+        Assert.Equal(TimeSpan.FromSeconds(5), interval);
+        Assert.True(previewRequestsPerMinute + 1 <= 20);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_OnlineBatchNoSpeechStillWaitsBetweenRequests()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var plugin = new CapturingPollingPlugin { NoSpeechProbability = 1f };
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        var fullModelId = ModelManagerService.GetPluginModelId(plugin.PluginId, "batch");
+        await modelManager.LoadModelAsync(fullModelId);
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(modelManager, audio, new PassthroughDictionaryService());
+
+        handler.StartWhenReadyWithLanguageHints(
+            ["en"],
+            TranscriptionTask.Transcribe,
+            () => audio.IsRecording,
+            Task.FromResult(CreateReadyPreparation(modelManager, fullModelId)),
+            allowOnlineBatchPolling: true);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData(BuildPcm16Chunk(TimeSpan.FromSeconds(45)), 45 * 16000 * 2);
+
+        await WaitUntilAsync(() => plugin.RequestDurations.Count == 1, TimeSpan.FromSeconds(8));
+        await Task.Delay(TimeSpan.FromSeconds(4));
+
+        Assert.Single(plugin.RequestDurations);
+        await WaitUntilAsync(() => plugin.RequestDurations.Count == 2, TimeSpan.FromSeconds(2));
+        Assert.Equal(2, plugin.RequestDurations.Count);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? waitTimeout = null)
+    {
+        using var timeout = new CancellationTokenSource(waitTimeout ?? TimeSpan.FromSeconds(3));
         while (!condition())
         {
             timeout.Token.ThrowIfCancellationRequested();
             await Task.Delay(20, timeout.Token);
         }
+    }
+
+    private static byte[] BuildPcm16Chunk(TimeSpan duration)
+    {
+        var bytes = new byte[(int)(duration.TotalSeconds * 16000 * 2)];
+        for (var i = 0; i < bytes.Length; i += 2)
+        {
+            bytes[i] = 0x00;
+            bytes[i + 1] = 0x20;
+        }
+
+        return bytes;
     }
 
     private static async Task<bool> CompletesWithinAsync(Task task, TimeSpan timeout)
@@ -611,6 +707,56 @@ public class StreamingTranscriptionTests
         public Task FinalizeAsync(CancellationToken ct) => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
+    }
+
+    private sealed class CapturingPollingPlugin : ITranscriptionEnginePlugin
+    {
+        private readonly List<TimeSpan> _requestDurations = [];
+
+        public string PluginId => "com.test.polling";
+        public string PluginName => "Polling";
+        public string PluginVersion => "1.0.0";
+        public string ProviderId => "polling";
+        public string ProviderDisplayName => "Polling";
+        public bool IsConfigured => true;
+        public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
+            [new PluginModelInfo("batch", "Batch")];
+        public string? SelectedModelId { get; private set; }
+        public bool SupportsTranslation => false;
+        public float? NoSpeechProbability { get; init; }
+        public IReadOnlyList<TimeSpan> RequestDurations
+        {
+            get
+            {
+                lock (_requestDurations)
+                    return [.. _requestDurations];
+            }
+        }
+
+        public Task ActivateAsync(IPluginHostServices host) => Task.CompletedTask;
+        public Task DeactivateAsync() => Task.CompletedTask;
+        public System.Windows.Controls.UserControl? CreateSettingsView() => null;
+        public void Dispose() { }
+        public void SelectModel(string modelId) => SelectedModelId = modelId;
+
+        public Task<PluginTranscriptionResult> TranscribeAsync(
+            byte[] wavAudio,
+            string? language,
+            bool translate,
+            string? prompt,
+            CancellationToken ct)
+        {
+            using var stream = new MemoryStream(wavAudio, writable: false);
+            using var reader = new WaveFileReader(stream);
+            lock (_requestDurations)
+                _requestDurations.Add(reader.TotalTime);
+
+            return Task.FromResult(new PluginTranscriptionResult(
+                "preview",
+                language ?? "en",
+                reader.TotalTime.TotalSeconds,
+                NoSpeechProbability));
+        }
     }
 
     private sealed class PassthroughDictionaryService : IDictionaryService
@@ -852,10 +998,188 @@ public class StabilizeTextTests
         var result = StreamingHandler.StabilizeText("", "  Hello  ");
         Assert.Equal("Hello", result);
     }
+
+    [Fact]
+    public void RollingWindow_AppendsOnlyWordsAfterOverlap()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta echo foxtrot golf hotel",
+            "echo foxtrot golf hotel india juliet");
+
+        Assert.Equal(
+            "Alpha bravo charlie delta echo foxtrot golf hotel india juliet",
+            result);
+    }
+
+    [Fact]
+    public void RollingWindow_ToleratesChangedLeadingWordsAndPunctuation()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo Charlie, delta echo foxtrot golf hotel.",
+            "uncertain boundary CHARLIE delta echo foxtrot golf hotel, india juliet");
+
+        Assert.Equal(
+            "Alpha bravo Charlie, delta echo foxtrot golf hotel. india juliet",
+            result);
+    }
+
+    [Fact]
+    public void RollingWindow_ReplacesUnstableTrailingBoundaryWords()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta echo foxtrot mistaken ending",
+            "uncertain boundary charlie delta echo foxtrot corrected ending and tail");
+
+        Assert.Equal(
+            "Alpha bravo charlie delta echo foxtrot corrected ending and tail",
+            result);
+    }
+
+    [Fact]
+    public void RollingWindow_PreservesPunctuationAfterOverlap()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta",
+            "bravo charlie delta. Echo foxtrot");
+
+        Assert.Equal("Alpha bravo charlie delta. Echo foxtrot", result);
+    }
+
+    [Fact]
+    public void RollingWindow_DoesNotDuplicateExistingBoundaryPunctuation()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta.",
+            "BRAVO CHARLIE DELTA. Echo foxtrot");
+
+        Assert.Equal("Alpha bravo charlie delta. Echo foxtrot", result);
+    }
+
+    [Fact]
+    public void RollingWindow_PreservesTrailingPunctuationAfterNormalizedOverlap()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta",
+            "BRAVO CHARLIE DELTA.");
+
+        Assert.Equal("Alpha bravo charlie delta.", result);
+    }
+
+    [Theory]
+    [InlineData(
+        "今天我们测试长时间语音转写是否稳定。",
+        "语音转写是否稳定。然后继续说话。",
+        "今天我们测试长时间语音转写是否稳定。然后继续说话。")]
+    [InlineData(
+        "これは長い音声入力のテストです。",
+        "音声入力のテストです。そして続けます。",
+        "これは長い音声入力のテストです。そして続けます。")]
+    [InlineData(
+        "이것은긴음성입력테스트입니다.",
+        "음성입력테스트입니다.계속말합니다.",
+        "이것은긴음성입력테스트입니다.계속말합니다.")]
+    public void RollingWindow_MergesTruncatedUnspacedCjkWindows(
+        string confirmed,
+        string windowText,
+        string expected)
+    {
+        var result = StreamingHandler.MergeRollingText(confirmed, windowText);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void RollingWindow_WithoutSafeOverlapKeepsConfirmedText()
+    {
+        var result = StreamingHandler.MergeRollingText(
+            "Alpha bravo charlie delta",
+            "Completely unrelated words appear here");
+
+        Assert.Equal("Alpha bravo charlie delta", result);
+    }
 }
 
 public class StreamingTranscriptStateTests
 {
+    [Fact]
+    public void SnapshotPolling_ReplacesRewrittenGrowingHypothesis()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplySnapshotPolling(
+            sessionVersion,
+            "At the beginning we are checking a long-term",
+            text => text,
+            out _));
+        Assert.True(sut.TryApplySnapshotPolling(
+            sessionVersion,
+            "At the beginning we are checking whether a long transcription remains complete",
+            text => text,
+            out var display));
+
+        Assert.Equal(
+            "At the beginning we are checking whether a long transcription remains complete",
+            display);
+        Assert.Equal(display, sut.StopSession());
+    }
+
+    [Fact]
+    public void RollingPolling_PreservesFullPreviewAcrossOverlappingWindows()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplyPolling(
+            sessionVersion,
+            "Alpha bravo charlie delta echo foxtrot golf hotel",
+            text => text,
+            out _));
+        Assert.True(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "echo foxtrot golf hotel india juliet",
+            text => text,
+            out var mergedDisplay));
+
+        Assert.Equal(
+            "Alpha bravo charlie delta echo foxtrot golf hotel india juliet",
+            mergedDisplay);
+        Assert.Equal(mergedDisplay, sut.StopSession());
+    }
+
+    [Fact]
+    public void RollingPolling_RecoversAfterConsecutiveUnmatchedWindows()
+    {
+        var sut = new StreamingTranscriptState();
+        var sessionVersion = sut.StartSession();
+
+        Assert.True(sut.TryApplySnapshotPolling(
+            sessionVersion,
+            "Confirmed text before a long pause",
+            text => text,
+            out _));
+        Assert.False(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause",
+            text => text,
+            out _));
+        Assert.False(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause",
+            text => text,
+            out _));
+        Assert.True(sut.TryApplyRollingPolling(
+            sessionVersion,
+            "A new topic starts after the pause and continues",
+            text => text,
+            out var recoveredDisplay));
+
+        Assert.Equal(
+            "Confirmed text before a long pause A new topic starts after the pause and continues",
+            recoveredDisplay);
+        Assert.Equal(recoveredDisplay, sut.StopSession());
+    }
+
     [Fact]
     public void StopSession_FallsBackToOnlyInterimRealtimeText()
     {

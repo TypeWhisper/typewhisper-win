@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.WebSockets;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.PluginSDK;
@@ -38,6 +39,22 @@ public sealed class StreamingHandler : IDisposable
 
     private const int MaxPendingStreamingAudioBytes = 1024 * 1024;
     private const int StreamingAudioChannelCapacity = 128;
+    private const int SampleRate = 16000;
+    private const int OnlineBatchPollingWindowSeconds = 30;
+    private const int MaximumRollingWindowLeadingTokensToSkip = 12;
+    private const int MaximumRollingWindowTrailingTokensToReplace = 12;
+    private const int MinimumRollingWindowOverlapWords = 3;
+    private static readonly TimeSpan LocalPollingInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan OnlineBatchPollingInterval = TimeSpan.FromSeconds(5);
+    private const string RollingWindowCjkCharacterClass =
+        @"\u1100-\u11FF\u2E80-\u2FFF\u3040-\u30FF\u3100-\u318F\u31A0-\u31BF" +
+        @"\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uA960-\uA97F\uAC00-\uD7AF" +
+        @"\uD7B0-\uD7FF\uF900-\uFAFF\uFF66-\uFF9D";
+    private static readonly Regex RollingWindowWordRegex = new(
+        $@"[{RollingWindowCjkCharacterClass}]|" +
+        $@"[\p{{L}}\p{{N}}-[{RollingWindowCjkCharacterClass}]]+" +
+        $@"(?:['’][\p{{L}}\p{{N}}-[{RollingWindowCjkCharacterClass}]]+)*",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Gets or sets the on partial text update value.
@@ -96,7 +113,13 @@ public sealed class StreamingHandler : IDisposable
         }
         else
         {
-            _streamingTask = RunPollingFallbackAsync(languageHints, task, isStillRecording, sessionVersion, ct);
+            _streamingTask = RunPollingFallbackAsync(
+                languageHints,
+                task,
+                isStillRecording,
+                sessionVersion,
+                ct,
+                useOnlineBatchWindow: plugin is { SupportsModelDownload: false });
         }
     }
 
@@ -224,7 +247,8 @@ public sealed class StreamingHandler : IDisposable
                     isStillRecording,
                     sessionVersion,
                     ct,
-                    preparation.Engine);
+                    preparation.Engine,
+                    useOnlineBatchWindow: !plugin.SupportsModelDownload);
             }
         }
         catch (OperationCanceledException)
@@ -476,14 +500,16 @@ public sealed class StreamingHandler : IDisposable
     private async Task RunPollingFallbackAsync(
         IReadOnlyList<string> languageHints, TranscriptionTask task,
         Func<bool> isStillRecording, int sessionVersion, CancellationToken ct,
-        ITranscriptionEngine? preparedEngine = null)
+        ITranscriptionEngine? preparedEngine = null,
+        bool useOnlineBatchWindow = false)
     {
         var engine = preparedEngine ?? _modelManager.Engine;
-        var pollInterval = TimeSpan.FromSeconds(3.0);
+        var pollInterval = GetPollingInterval(useOnlineBatchWindow);
 
         try
         {
-            await Task.Delay(pollInterval, ct);
+            // Keep the first preview responsive, then use the provider-safe repeat cadence.
+            await Task.Delay(LocalPollingInterval, ct);
 
             while (!ct.IsCancellationRequested && isStillRecording())
             {
@@ -495,20 +521,46 @@ public sealed class StreamingHandler : IDisposable
                 {
                     try
                     {
-                        var result = await engine.TranscribeWithLanguageHintsAsync(buffer, languageHints, task, ct);
+                        var pollingBuffer = SelectPollingBuffer(buffer, useOnlineBatchWindow);
+                        var isRollingSnapshot = pollingBuffer.Length < buffer.Length;
+                        var result = await engine.TranscribeWithLanguageHintsAsync(
+                            pollingBuffer,
+                            languageHints,
+                            task,
+                            ct);
 
-                        if (result.NoSpeechProbability is > 0.8f)
-                            continue;
-
-                        var text = result.Text?.Trim() ?? "";
+                        var text = result.NoSpeechProbability is > 0.8f
+                            ? ""
+                            : result.Text?.Trim() ?? "";
 
                         if (!string.IsNullOrEmpty(text))
                         {
-                            if (_transcriptState.TryApplyPolling(
-                                sessionVersion,
-                                text,
-                                _dictionary.ApplyCorrections,
-                                out var stable))
+                            bool applied;
+                            string stable;
+                            if (useOnlineBatchWindow)
+                            {
+                                applied = isRollingSnapshot
+                                    ? _transcriptState.TryApplyRollingPolling(
+                                        sessionVersion,
+                                        text,
+                                        _dictionary.ApplyCorrections,
+                                        out stable)
+                                    : _transcriptState.TryApplySnapshotPolling(
+                                        sessionVersion,
+                                        text,
+                                        _dictionary.ApplyCorrections,
+                                        out stable);
+                            }
+                            else
+                            {
+                                applied = _transcriptState.TryApplyPolling(
+                                    sessionVersion,
+                                    text,
+                                    _dictionary.ApplyCorrections,
+                                    out stable);
+                            }
+
+                            if (applied)
                             {
                                 OnPartialTextUpdate?.Invoke(stable);
                             }
@@ -525,6 +577,20 @@ public sealed class StreamingHandler : IDisposable
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    internal static TimeSpan GetPollingInterval(bool useOnlineBatchWindow) =>
+        useOnlineBatchWindow ? OnlineBatchPollingInterval : LocalPollingInterval;
+
+    internal static float[] SelectPollingBuffer(float[] buffer, bool useOnlineBatchWindow)
+    {
+        if (!useOnlineBatchWindow)
+            return buffer;
+
+        var maximumSamples = OnlineBatchPollingWindowSeconds * SampleRate;
+        return buffer.Length <= maximumSamples
+            ? buffer
+            : buffer[^maximumSamples..];
     }
 
     // ── Helpers ──
@@ -591,6 +657,158 @@ public sealed class StreamingHandler : IDisposable
 
         return newText;
     }
+
+    /// <summary>
+    /// Appends the new tail from an overlapping rolling transcription window.
+    /// </summary>
+    internal static string MergeRollingText(string confirmed, string windowText)
+    {
+        confirmed = confirmed.Trim();
+        windowText = windowText.Trim();
+        if (string.IsNullOrEmpty(confirmed))
+            return windowText;
+        if (string.IsNullOrEmpty(windowText))
+            return confirmed;
+        if (windowText.StartsWith(confirmed, StringComparison.Ordinal))
+            return windowText;
+        if (confirmed.EndsWith(windowText, StringComparison.Ordinal))
+            return confirmed;
+
+        var confirmedWords = TokenizeRollingWindowWords(confirmed);
+        var windowWords = TokenizeRollingWindowWords(windowText);
+        if (confirmedWords.Count < MinimumRollingWindowOverlapWords
+            || windowWords.Count < MinimumRollingWindowOverlapWords)
+        {
+            return confirmed;
+        }
+
+        var bestOverlapLength = 0;
+        var bestConfirmedTrailingTokensToReplace = 0;
+        var bestWindowTailStart = windowText.Length;
+        var maximumWindowStart = Math.Min(
+            MaximumRollingWindowLeadingTokensToSkip,
+            windowWords.Count - MinimumRollingWindowOverlapWords);
+        var maximumConfirmedTrailingTokensToReplace = Math.Min(
+            MaximumRollingWindowTrailingTokensToReplace,
+            confirmedWords.Count - MinimumRollingWindowOverlapWords);
+
+        for (var confirmedTrailingTokensToReplace = 0;
+             confirmedTrailingTokensToReplace <= maximumConfirmedTrailingTokensToReplace;
+             confirmedTrailingTokensToReplace++)
+        {
+            var confirmedEnd = confirmedWords.Count - confirmedTrailingTokensToReplace;
+            for (var windowStart = 0; windowStart <= maximumWindowStart; windowStart++)
+            {
+                var maximumOverlap = Math.Min(confirmedEnd, windowWords.Count - windowStart);
+                for (var overlapLength = maximumOverlap;
+                     overlapLength >= MinimumRollingWindowOverlapWords;
+                     overlapLength--)
+                {
+                    var confirmedStart = confirmedEnd - overlapLength;
+                    if (!RollingWindowWordsEqual(
+                            confirmedWords,
+                            confirmedStart,
+                            windowWords,
+                            windowStart,
+                            overlapLength))
+                    {
+                        continue;
+                    }
+
+                    if (overlapLength > bestOverlapLength)
+                    {
+                        bestOverlapLength = overlapLength;
+                        bestConfirmedTrailingTokensToReplace = confirmedTrailingTokensToReplace;
+                        bestWindowTailStart = windowWords[windowStart + overlapLength - 1].End;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        if (bestOverlapLength == 0)
+            return confirmed;
+
+        var tail = windowText[bestWindowTailStart..];
+        if (string.IsNullOrEmpty(tail))
+            return confirmed;
+
+        var stablePrefix = bestConfirmedTrailingTokensToReplace == 0
+            ? confirmed
+            : confirmed[..confirmedWords[^bestConfirmedTrailingTokensToReplace].Start].TrimEnd();
+        return AppendRollingTail(stablePrefix, tail);
+    }
+
+    private static string AppendRollingTail(string prefix, string tail)
+    {
+        prefix = prefix.TrimEnd();
+        tail = tail.TrimStart();
+        if (string.IsNullOrEmpty(prefix))
+            return tail;
+        if (string.IsNullOrEmpty(tail))
+            return prefix;
+
+        var firstWordCharacter = 0;
+        while (firstWordCharacter < tail.Length
+               && !char.IsLetterOrDigit(tail[firstWordCharacter]))
+        {
+            firstWordCharacter++;
+        }
+
+        var boundary = tail[..firstWordCharacter];
+        var remainingTail = tail[firstWordCharacter..].TrimStart();
+        var punctuationLength = boundary.Length;
+        while (punctuationLength > 0 && char.IsWhiteSpace(boundary[punctuationLength - 1]))
+            punctuationLength--;
+
+        var punctuation = boundary[..punctuationLength];
+        var boundaryToAppend = !string.IsNullOrEmpty(punctuation)
+            && (prefix.EndsWith(punctuation, StringComparison.Ordinal)
+                || HasRollingBoundaryPunctuation(prefix[^1]))
+                ? boundary[punctuationLength..]
+                : boundary;
+        if (string.IsNullOrEmpty(boundaryToAppend) && string.IsNullOrEmpty(boundary))
+        {
+            boundaryToAppend = " ";
+        }
+
+        return prefix + boundaryToAppend + remainingTail;
+    }
+
+    private static bool HasRollingBoundaryPunctuation(char value) =>
+        ".,!?;:…。！？、，；：".Contains(value);
+
+    private static List<RollingWindowWord> TokenizeRollingWindowWords(string text) =>
+        RollingWindowWordRegex.Matches(text)
+            .Select(match => new RollingWindowWord(
+                match.Value.Replace('’', '\'').ToUpperInvariant(),
+                match.Index,
+                match.Index + match.Length))
+            .ToList();
+
+    private static bool RollingWindowWordsEqual(
+        IReadOnlyList<RollingWindowWord> first,
+        int firstStart,
+        IReadOnlyList<RollingWindowWord> second,
+        int secondStart,
+        int length)
+    {
+        for (var i = 0; i < length; i++)
+        {
+            if (!string.Equals(
+                    first[firstStart + i].Normalized,
+                    second[secondStart + i].Normalized,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private sealed record RollingWindowWord(string Normalized, int Start, int End);
 
     /// <summary>
     /// Releases resources held by the instance.
