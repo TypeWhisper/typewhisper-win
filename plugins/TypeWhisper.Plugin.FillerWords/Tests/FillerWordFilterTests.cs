@@ -121,6 +121,17 @@ public sealed class FillerWordFilterTests
     }
 
     [Fact]
+    public void Remove_DoesNotReuseAMatcherBuiltForADifferentWordList()
+    {
+        // Both lists hold the same words separated differently, so a cache key that
+        // simply joins the entries cannot tell them apart.
+        const string Input = "you um actually";
+
+        Assert.Equal("you actually", FillerWordFilter.Remove(Input, ["actually you", "um"]));
+        Assert.Equal(string.Empty, FillerWordFilter.Remove(Input, ["actually", "you um"]));
+    }
+
+    [Fact]
     public void Remove_PrefersTheLongestMatchingFiller() =>
         Assert.Equal("well then", FillerWordFilter.Remove("well umm then", ["um", "umm"]));
 

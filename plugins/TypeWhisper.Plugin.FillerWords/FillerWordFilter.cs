@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 
 namespace TypeWhisper.Plugin.FillerWords;
 
@@ -124,7 +125,7 @@ public static class FillerWordFilter
 
     private static FillerWordMatcher GetMatcher(IReadOnlyList<string> normalizedWords)
     {
-        var key = string.Join(' ', normalizedWords);
+        var key = BuildCacheKey(normalizedWords);
         if (MatcherCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -132,5 +133,19 @@ public static class FillerWordFilter
             MatcherCache.Clear();
 
         return MatcherCache.GetOrAdd(key, _ => new FillerWordMatcher(normalizedWords));
+    }
+
+    /// <summary>
+    /// Builds a cache key that no other word list can produce. Entries carry their own
+    /// length because a filler word may contain spaces, which would make a plain
+    /// separator ambiguous.
+    /// </summary>
+    private static string BuildCacheKey(IReadOnlyList<string> words)
+    {
+        var key = new StringBuilder();
+        foreach (var word in words)
+            key.Append(word.Length).Append(':').Append(word);
+
+        return key.ToString();
     }
 }
