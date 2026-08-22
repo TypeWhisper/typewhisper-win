@@ -80,7 +80,7 @@ public sealed class GeminiPlugin : ILlmProviderPlugin, ILlmRequestHedgingSupport
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.2.0";
+    public string PluginVersion => "1.2.1";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
