@@ -625,5 +625,25 @@
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null
+  },
+  {
+    "id": "com.typewhisper.filler-words",
+    "name": "Filler Words",
+    "version": "1.0.0",
+    "minHostVersion": "1.0.0",
+    "author": "TypeWhisper",
+    "description": "Removes filler words like \"um\" and \"uh\" from transcribed text",
+    "category": "post-processor",
+    "categories": [
+      "post-processor"
+    ],
+    "size": 11682,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.filler-words-1.0.0.zip",
+    "sha256": "7795641bc995bd1feeb5d83521c6575386242f0c2c6b93252c3945b807120693",
+    "iconSystemName": "text.badge.minus",
+    "requiresApiKey": false,
+    "descriptions": {
+      "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text."
+    }
   }
 ]
