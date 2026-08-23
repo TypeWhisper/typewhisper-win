@@ -13,6 +13,7 @@ public static class FillerWordFilter
     private const int MatcherCacheLimit = 8;
 
     private static readonly ConcurrentDictionary<string, FillerWordMatcher> MatcherCache = new(StringComparer.Ordinal);
+    private static readonly object MatcherCacheGate = new();
 
     private static readonly char[] WordSeparators = [',', ';'];
 
@@ -129,10 +130,18 @@ public static class FillerWordFilter
         if (MatcherCache.TryGetValue(key, out var cached))
             return cached;
 
-        if (MatcherCache.Count >= MatcherCacheLimit)
-            MatcherCache.Clear();
+        lock (MatcherCacheGate)
+        {
+            if (MatcherCache.TryGetValue(key, out cached))
+                return cached;
 
-        return MatcherCache.GetOrAdd(key, _ => new FillerWordMatcher(normalizedWords));
+            if (MatcherCache.Count >= MatcherCacheLimit)
+                MatcherCache.Clear();
+
+            var matcher = new FillerWordMatcher(normalizedWords);
+            MatcherCache[key] = matcher;
+            return matcher;
+        }
     }
 
     /// <summary>
