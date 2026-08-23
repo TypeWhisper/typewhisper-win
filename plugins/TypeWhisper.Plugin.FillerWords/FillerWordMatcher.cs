@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TypeWhisper.Plugin.FillerWords;
@@ -28,9 +29,52 @@ internal sealed class FillerWordMatcher
     /// <summary>Strips the matcher's filler words from <paramref name="text"/>.</summary>
     internal string Apply(string text)
     {
-        var result = _latin is null ? text : _latin.Replace(text, match => LatinReplacement(match, text));
+        var result = _latin is null ? text : ApplyLatin(text);
 
-        return _japanese is null ? result : _japanese.Replace(result, match => JapaneseReplacement(match, result));
+        if (_japanese is null)
+            return result;
+
+        while (_japanese.IsMatch(result))
+        {
+            var input = result;
+            result = _japanese.Replace(input, match => JapaneseReplacement(match, input));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Replaces adjacent Latin matches as one run, so separators consumed between
+    /// consecutive fillers do not reappear as leading, doubled or trailing whitespace.
+    /// </summary>
+    private string ApplyLatin(string text)
+    {
+        var matches = _latin!.Matches(text);
+        if (matches.Count == 0)
+            return text;
+
+        var result = new StringBuilder(text.Length);
+        var sourceIndex = 0;
+
+        for (var matchIndex = 0; matchIndex < matches.Count; matchIndex++)
+        {
+            var firstMatch = matches[matchIndex];
+            var runEnd = firstMatch.Index + firstMatch.Length;
+
+            while (matchIndex + 1 < matches.Count && matches[matchIndex + 1].Index == runEnd)
+            {
+                matchIndex++;
+                var nextMatch = matches[matchIndex];
+                runEnd = nextMatch.Index + nextMatch.Length;
+            }
+
+            result.Append(text, sourceIndex, firstMatch.Index - sourceIndex);
+            result.Append(LatinReplacement(firstMatch, runEnd, text));
+            sourceIndex = runEnd;
+        }
+
+        result.Append(text, sourceIndex, text.Length - sourceIndex);
+        return result.ToString();
     }
 
     private static Regex BuildLatinPattern(IReadOnlyList<string> words)
@@ -68,15 +112,15 @@ internal sealed class FillerWordMatcher
     }
 
     /// <summary>
-    /// Rebuilds the separator for one removed Latin filler from the whitespace the match
-    /// consumed, so surrounding indentation and spacing survive untouched.
+    /// Rebuilds the separator for one or more adjacent removed Latin fillers from the
+    /// whitespace the first match consumed, so surrounding formatting survives untouched.
     /// </summary>
-    private static string LatinReplacement(Match match, string input)
+    private static string LatinReplacement(Match match, int runEnd, string input)
     {
         var lead = match.Groups["lead"].Value;
 
         // Nothing follows on this line, so the filler's whitespace goes with it.
-        if (!HasTextAfter(match, input))
+        if (!HasTextAfter(runEnd, input))
             return string.Empty;
 
         // The filler opened the line: keep only whitespace that was already there.
@@ -108,8 +152,11 @@ internal sealed class FillerWordMatcher
     {
         var end = match.Index + match.Length;
 
-        return end < input.Length && !IsLineBreak(input[end]);
+        return HasTextAfter(end, input);
     }
+
+    private static bool HasTextAfter(int end, string input) =>
+        end < input.Length && !IsLineBreak(input[end]);
 
     private static bool IsLineBreak(char c) => c is '\n' or '\r';
 }

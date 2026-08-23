@@ -57,6 +57,17 @@ public sealed class FillerWordFilterTests
         Assert.Equal(expected, FillerWordFilter.Remove(input));
 
     [Theory]
+    [InlineData("um uh hello", "hello")]
+    [InlineData("hello um uh there", "hello there")]
+    [InlineData("Ähm, um uh hello?", "hello?")]
+    [InlineData("um um um hello", "hello")]
+    [InlineData("hello um um um", "hello")]
+    [InlineData("  um uh hello", "  hello")]
+    [InlineData(" um uh ", "")]
+    public void Remove_StripsConsecutiveLatinFillerWords(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input));
+
+    [Theory]
     [InlineData("Wait... um, no", "Wait... no")]
     [InlineData("Wait… um, no", "Wait… no")]
     [InlineData("Well!!! um okay", "Well!!! okay")]
@@ -87,6 +98,14 @@ public sealed class FillerWordFilterTests
     [Fact]
     public void Remove_StripsJapaneseFillerWordsMidSentence() =>
         Assert.Equal("それは、いいですね", FillerWordFilter.Remove("それは、なんかいいですね"));
+
+    [Theory]
+    [InlineData("えっと、なんかこれはテストです。", "これはテストです。")]
+    [InlineData("なんか えっと、これはテストです。", "これはテストです。")]
+    [InlineData("えっと、そのー、これはテストです。", "これはテストです。")]
+    [InlineData("それは、なんか えっと、いいですね", "それは、いいですね")]
+    public void Remove_StripsConsecutiveJapaneseFillerWords(string input, string expected) =>
+        Assert.Equal(expected, FillerWordFilter.Remove(input));
 
     [Fact]
     public void Remove_KeepsRepeatedMaaDrawl() =>
