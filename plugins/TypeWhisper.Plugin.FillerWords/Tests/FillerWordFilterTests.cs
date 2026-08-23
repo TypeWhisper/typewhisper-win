@@ -30,6 +30,14 @@ public sealed class FillerWordFilterTests
     public void Remove_ReturnsInputUnchanged_WhenTextIsEmpty() =>
         Assert.Equal(string.Empty, FillerWordFilter.Remove(string.Empty));
 
+    [Fact]
+    public void Remove_ReturnsLongWhitespaceOnlyInputUnchanged()
+    {
+        var input = new string(' ', 10_000);
+
+        Assert.Equal(input, FillerWordFilter.Remove(input));
+    }
+
     [Theory]
     [InlineData(" um hello", " hello")]
     [InlineData("  um hello", "  hello")]

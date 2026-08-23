@@ -53,7 +53,7 @@ public static class FillerWordFilter
     /// <summary>Removes the given filler words from <paramref name="text"/>.</summary>
     public static string Remove(string text, IReadOnlyList<string> words)
     {
-        if (string.IsNullOrEmpty(text))
+        if (string.IsNullOrWhiteSpace(text))
             return text;
 
         var normalized = NormalizeWords(words);

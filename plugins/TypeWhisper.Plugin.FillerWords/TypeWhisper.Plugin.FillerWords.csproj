@@ -6,6 +6,9 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.FillerWords</RootNamespace>
+    <PluginVersion Condition="'$(PluginVersion)' == ''">1.0.0</PluginVersion>
+    <Version>$(PluginVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />

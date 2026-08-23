@@ -14,6 +14,8 @@ internal sealed class FillerWordMatcher
     /// <summary>Punctuation that a spoken filler can carry, including the Unicode ellipsis.</summary>
     private const string AttachedPunctuation = @"[,.!?…]";
 
+    private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(250);
+
     private readonly Regex? _latin;
     private readonly Regex? _japanese;
 
@@ -29,15 +31,34 @@ internal sealed class FillerWordMatcher
     /// <summary>Strips the matcher's filler words from <paramref name="text"/>.</summary>
     internal string Apply(string text)
     {
-        var result = _latin is null ? text : ApplyLatin(text);
+        var result = text;
+
+        if (_latin is not null)
+        {
+            try
+            {
+                result = ApplyLatin(text);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // A pathological input must not block later post-processing.
+            }
+        }
 
         if (_japanese is null)
             return result;
 
-        while (_japanese.IsMatch(result))
+        try
         {
-            var input = result;
-            result = _japanese.Replace(input, match => JapaneseReplacement(match, input));
+            while (_japanese.IsMatch(result))
+            {
+                var input = result;
+                result = _japanese.Replace(input, match => JapaneseReplacement(match, input));
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Keep the successful Latin result if Japanese matching exceeds its bound.
         }
 
         return result;
@@ -84,14 +105,16 @@ internal sealed class FillerWordMatcher
         // Leading punctuation is only taken as a whole run that is not itself attached to
         // surrounding text, so an ellipsis before the filler is never left half-eaten.
         var pattern =
-            @"(?<lead>[ \t]*)" +
-            @"(?:(?<![\p{L}\p{N}_,.!?…])" + AttachedPunctuation + @"+)?" +
-            @"(?<gap>[ \t]*)" +
+            @"(?<lead>(?>[ \t]*))" +
+            @"(?:(?<![\p{L}\p{N}_,.!?…])" + AttachedPunctuation + @"+(?<gap>(?>[ \t]*)))?" +
             @"(?<![\p{L}\p{N}_])(?:" + alternation + @")(?![\p{L}\p{N}_])" +
             AttachedPunctuation + @"*" +
-            @"(?<trail>[ \t]*)";
+            @"(?<trail>(?>[ \t]*))";
 
-        return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        return new Regex(
+            pattern,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+            MatchTimeout);
     }
 
     private static Regex BuildJapanesePattern(IReadOnlyList<string> words)
@@ -108,7 +131,7 @@ internal sealed class FillerWordMatcher
         const string TrailingSeparator = @"(?:[ \t]*[、,][ \t]*|[ \t]+)?";
         var pattern = Boundary + @"[ \t]*(?:" + alternation + ")" + TrailingSeparator;
 
-        return new Regex(pattern, RegexOptions.Compiled);
+        return new Regex(pattern, RegexOptions.Compiled, MatchTimeout);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows.Controls;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -9,6 +10,12 @@ namespace TypeWhisper.Plugin.FillerWords;
 /// </summary>
 public sealed class FillerWordsPlugin : IPostProcessorPlugin
 {
+    private static readonly string BuildVersion =
+        typeof(FillerWordsPlugin).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion
+        ?? throw new InvalidOperationException("Plugin assembly does not define an informational version.");
+
     private IPluginHostServices? _host;
 
     /// <summary>Gets the stable plugin identifier used by the host.</summary>
@@ -18,7 +25,7 @@ public sealed class FillerWordsPlugin : IPostProcessorPlugin
     public string PluginName => "Filler Words";
 
     /// <summary>Gets the plugin version reported to the host.</summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => BuildVersion;
 
     /// <summary>Gets the processor name shown in the post-processing pipeline.</summary>
     public string ProcessorName => "Filler Words";
