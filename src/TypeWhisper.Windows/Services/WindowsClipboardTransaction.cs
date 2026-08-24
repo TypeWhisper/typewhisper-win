@@ -285,7 +285,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
             foreach (var unavailableFormat in unavailableFormats)
             {
-                if (CanSkipUnavailableBitmapFormat(unavailableFormat.Format))
+                if (CanSkipUnavailableFormat(unavailableFormat.Format))
                     continue;
 
                 throw ClipboardError(
@@ -351,7 +351,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return length > 0 ? $"{format} ('{name}')" : format.ToString();
     }
 
-    private static bool CanSkipUnavailableBitmapFormat(uint unavailableFormat)
+    private static bool CanSkipUnavailableFormat(uint unavailableFormat)
     {
         // Some clipboard owners advertise delayed bitmap formats but fail to render them.
         // Drop those unusable representations instead of blocking dictated text insertion.
@@ -369,12 +369,15 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             name,
             name.Capacity);
 
-        // OLE image providers can advertise this managed bitmap alias without exposing a
-        // native handle.
-        return length > 0 && string.Equals(
-            name.ToString(),
-            "System.Drawing.Bitmap",
-            StringComparison.Ordinal);
+        if (length <= 0)
+            return false;
+
+        // OLE providers can advertise managed bitmap or virtual-file representations
+        // without exposing a materializable Win32 clipboard handle.
+        return name.ToString() is
+            "System.Drawing.Bitmap" or
+            "FileContents" or
+            "FileName";
     }
 
     private static IntPtr DuplicateClipboardHandle(uint format, IntPtr sourceHandle)

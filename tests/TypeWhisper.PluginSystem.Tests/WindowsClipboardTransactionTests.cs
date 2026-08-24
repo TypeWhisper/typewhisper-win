@@ -349,6 +349,49 @@ public sealed class WindowsClipboardTransactionTests
         }
     }
 
+    [Theory]
+    [InlineData("FileContents")]
+    [InlineData("FileName")]
+    public void UnavailableShellTransferFormat_DoesNotBlockTemporaryTextAndRestoresRemainingFormats(
+        string formatName)
+    {
+        lock (ClipboardTestLock)
+        {
+            RunOnStaThread(() =>
+            {
+                using var transaction = new WindowsClipboardTransaction(Dispatcher.CurrentDispatcher);
+                var originalClipboard = BackupClipboard(transaction);
+                try
+                {
+                    using var owner = SeedTextWithUnavailableRegisteredFormat(
+                        formatName,
+                        out var unavailableFormat);
+                    Assert.Contains(unavailableFormat, EnumerateClipboardFormats());
+                    Assert.Equal(IntPtr.Zero, ReadClipboardHandle(unavailableFormat));
+
+                    using var lease = transaction.BeginTemporaryTextAsync(
+                            "dictated",
+                            CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    Assert.Equal("dictated", Clipboard.GetText());
+
+                    var result = transaction.RestoreAsync(lease, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    Assert.Equal(ClipboardRestoreResult.Restored, result);
+                    Assert.Equal("previous", Clipboard.GetText());
+                    Assert.DoesNotContain(unavailableFormat, EnumerateClipboardFormats());
+                }
+                finally
+                {
+                    RestoreClipboardBackup(transaction, originalClipboard);
+                }
+            });
+        }
+    }
+
     [Fact]
     public void UnavailableUniqueFormat_AbortsBeforeClearingAndReleasesCapturedHandles()
     {
@@ -536,6 +579,40 @@ public sealed class WindowsClipboardTransactionTests
             Assert.Equal(
                 IntPtr.Zero,
                 NativeMethods.SetClipboardData(NativeMethods.CF_DIB, IntPtr.Zero));
+            Assert.Equal(0, Marshal.GetLastPInvokeError());
+        }
+        finally
+        {
+            NativeMethods.CloseClipboard();
+        }
+
+        return owner;
+    }
+
+    private static HwndSource SeedTextWithUnavailableRegisteredFormat(
+        string formatName,
+        out uint unavailableFormat)
+    {
+        unavailableFormat = NativeMethods.RegisterClipboardFormat(formatName);
+        Assert.NotEqual(0u, unavailableFormat);
+        var owner = new HwndSource(new HwndSourceParameters(
+            $"TypeWhisper unavailable {formatName} owner")
+        {
+            ParentWindow = new IntPtr(-3),
+            WindowStyle = 0
+        });
+
+        Assert.True(NativeMethods.OpenClipboard(owner.Handle));
+        try
+        {
+            Assert.True(NativeMethods.EmptyClipboard());
+            SetGlobalData(
+                NativeMethods.CF_UNICODETEXT,
+                Encoding.Unicode.GetBytes("previous\0"));
+            Marshal.SetLastPInvokeError(0);
+            Assert.Equal(
+                IntPtr.Zero,
+                NativeMethods.SetClipboardData(unavailableFormat, IntPtr.Zero));
             Assert.Equal(0, Marshal.GetLastPInvokeError());
         }
         finally
