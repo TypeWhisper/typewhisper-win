@@ -8,6 +8,7 @@
     <RootNamespace>TypeWhisper.Plugin.FillerWords</RootNamespace>
     <PluginVersion Condition="'$(PluginVersion)' == ''">1.0.0</PluginVersion>
     <Version>$(PluginVersion)</Version>
+    <InformationalVersion>$(PluginVersion)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>

@@ -139,6 +139,20 @@ public sealed class PluginPackagingWorkflowTests
     }
 
     [Fact]
+    public void FillerWordsProject_PreservesPluginVersionWhenAppVersionIsOverridden()
+    {
+        var project = TestFile.ReadProjectFile(
+            "plugins",
+            "TypeWhisper.Plugin.FillerWords",
+            "TypeWhisper.Plugin.FillerWords.csproj");
+
+        Assert.Contains(
+            "<InformationalVersion>$(PluginVersion)</InformationalVersion>",
+            project,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PluginReleaseWorkflow_SerializesRegistryPublishingAndChecksGitFailures()
     {
         var workflow = TestFile.ReadProjectFile(".github", "workflows", "publish-plugins.yml");
