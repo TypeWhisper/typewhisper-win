@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
+using TypeWhisper.PluginSystem.Tests;
 
 namespace TypeWhisper.Plugin.FillerWords.Tests;
 
@@ -12,10 +13,8 @@ public sealed class FillerWordsPluginTests
     [Fact]
     public void PluginVersion_MatchesManifestVersion()
     {
-        var manifestPath = Path.GetFullPath(Path.Join(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
-            "plugins", "TypeWhisper.Plugin.FillerWords", "manifest.json"));
+        var manifestPath = TestFile.ProjectFile(
+            "plugins", "TypeWhisper.Plugin.FillerWords", "manifest.json");
         var manifest = JsonSerializer.Deserialize<PluginManifest>(
             File.ReadAllText(manifestPath),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
