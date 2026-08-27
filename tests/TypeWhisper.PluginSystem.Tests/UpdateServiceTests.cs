@@ -22,8 +22,8 @@ public class UpdateServiceTests
     [Fact]
     public void ResolveShellVisiblePath_DirectDistributionKeepsLocalAppDataPath()
     {
-        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
-        var pluginPath = Path.Combine(localAppDataPath, "TypeWhisper-UserData", "Plugins");
+        var localAppDataPath = Path.Join(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Join(localAppDataPath, "TypeWhisper-UserData", "Plugins");
 
         var resolved = AppDistribution.ResolveShellVisiblePath(
             pluginPath,
@@ -37,9 +37,9 @@ public class UpdateServiceTests
     [Fact]
     public void ResolveShellVisiblePath_StoreDistributionUsesPhysicalPackageCache()
     {
-        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
-        var pluginPath = Path.Combine(localAppDataPath, "TypeWhisper-UserData", "Plugins");
-        var expected = Path.Combine(
+        var localAppDataPath = Path.Join(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Join(localAppDataPath, "TypeWhisper-UserData", "Plugins");
+        var expected = Path.Join(
             localAppDataPath,
             "Packages",
             AppDistribution.StoreIdentity.PackageFamilyName,
@@ -60,8 +60,8 @@ public class UpdateServiceTests
     [Fact]
     public void ResolveShellVisiblePath_StoreDistributionKeepsPathsOutsideLocalAppData()
     {
-        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
-        var pluginPath = Path.Combine(@"D:\", "TypeWhisper", "Plugins");
+        var localAppDataPath = Path.Join(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Join(@"D:\", "TypeWhisper", "Plugins");
 
         var resolved = AppDistribution.ResolveShellVisiblePath(
             pluginPath,
