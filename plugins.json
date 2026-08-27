@@ -24,13 +24,13 @@
   {
     "id": "com.typewhisper.groq",
     "name": "Groq",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "minHostVersion": "1.0.9",
     "author": "TypeWhisper",
     "description": "Groq Whisper transcription and Llama translation",
     "category": "transcription",
-    "size": 266211,
-    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.groq-1.0.5.zip",
+    "size": 267393,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.groq-1.0.6.zip",
     "iconSystemName": null,
     "requiresApiKey": false,
     "descriptions": null,
@@ -38,7 +38,7 @@
       "transcription",
       "llm"
     ],
-    "sha256": "d3b6a8da2cac4e5f33962803bbf329f186728f0628748962d7ac710d56513946"
+    "sha256": "2478edfd67a63087fa015df5afd3cd79f8a43ff2616920585a4cf69b39416cfd"
   },
   {
     "id": "com.typewhisper.webhook",
