@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using TypeWhisper.Windows.Services;
 
@@ -16,6 +17,59 @@ public class UpdateServiceTests
         Assert.Equal("TypeWhisper.TypeWhisper_51tqb5623pxja", identity.PackageFamilyName);
         Assert.Equal("9PF42ZCR0JR0", identity.StoreProductId);
         Assert.Equal("ms-windows-store://pdp/?productid=9PF42ZCR0JR0", identity.StoreProtocolLink);
+    }
+
+    [Fact]
+    public void ResolveShellVisiblePath_DirectDistributionKeepsLocalAppDataPath()
+    {
+        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Combine(localAppDataPath, "TypeWhisper-UserData", "Plugins");
+
+        var resolved = AppDistribution.ResolveShellVisiblePath(
+            pluginPath,
+            AppDistributionKind.Direct,
+            localAppDataPath,
+            AppDistribution.StoreIdentity.PackageFamilyName);
+
+        Assert.Equal(Path.GetFullPath(pluginPath), resolved);
+    }
+
+    [Fact]
+    public void ResolveShellVisiblePath_StoreDistributionUsesPhysicalPackageCache()
+    {
+        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Combine(localAppDataPath, "TypeWhisper-UserData", "Plugins");
+        var expected = Path.Combine(
+            localAppDataPath,
+            "Packages",
+            AppDistribution.StoreIdentity.PackageFamilyName,
+            "LocalCache",
+            "Local",
+            "TypeWhisper-UserData",
+            "Plugins");
+
+        var resolved = AppDistribution.ResolveShellVisiblePath(
+            pluginPath,
+            AppDistributionKind.Store,
+            localAppDataPath,
+            AppDistribution.StoreIdentity.PackageFamilyName);
+
+        Assert.Equal(Path.GetFullPath(expected), resolved);
+    }
+
+    [Fact]
+    public void ResolveShellVisiblePath_StoreDistributionKeepsPathsOutsideLocalAppData()
+    {
+        var localAppDataPath = Path.Combine(@"C:\", "Users", "test", "AppData", "Local");
+        var pluginPath = Path.Combine(@"D:\", "TypeWhisper", "Plugins");
+
+        var resolved = AppDistribution.ResolveShellVisiblePath(
+            pluginPath,
+            AppDistributionKind.Store,
+            localAppDataPath,
+            AppDistribution.StoreIdentity.PackageFamilyName);
+
+        Assert.Equal(Path.GetFullPath(pluginPath), resolved);
     }
 
     [Fact]

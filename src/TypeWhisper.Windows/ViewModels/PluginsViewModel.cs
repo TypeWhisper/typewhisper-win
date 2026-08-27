@@ -111,7 +111,8 @@ public partial class PluginsViewModel : ObservableObject
     /// <summary>
     /// Gets the folder where manually installed plugins are discovered.
     /// </summary>
-    public string ManualPluginFolderPath => _registryService.PluginsPath;
+    public string ManualPluginFolderPath =>
+        AppDistribution.ResolveShellVisiblePath(_registryService.PluginsPath);
 
     [ObservableProperty] private bool _isLoadingRegistry;
     [ObservableProperty] private bool _isMarketplaceSelected;
