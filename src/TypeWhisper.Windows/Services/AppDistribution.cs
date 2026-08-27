@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace TypeWhisper.Windows.Services;
 
 /// <summary>
@@ -41,6 +43,47 @@ public static class AppDistribution
         "TypeWhisper.TypeWhisper_51tqb5623pxja",
         "9PF42ZCR0JR0",
         "ms-windows-store://pdp/?productid=9PF42ZCR0JR0");
+
+    internal static string ResolveShellVisiblePath(string path) =>
+        ResolveShellVisiblePath(
+            path,
+            Current,
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            StoreIdentity.PackageFamilyName);
+
+    internal static string ResolveShellVisiblePath(
+        string path,
+        AppDistributionKind distributionKind,
+        string localAppDataPath,
+        string packageFamilyName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localAppDataPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageFamilyName);
+
+        var fullPath = Path.GetFullPath(path);
+        if (distributionKind != AppDistributionKind.Store)
+            return fullPath;
+
+        var localAppDataRoot = Path.GetFullPath(localAppDataPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!fullPath.Equals(localAppDataRoot, StringComparison.OrdinalIgnoreCase)
+            && !fullPath.StartsWith(
+                localAppDataRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return fullPath;
+        }
+
+        var relativePath = Path.GetRelativePath(localAppDataRoot, fullPath);
+        return Path.GetFullPath(Path.Join(
+            localAppDataRoot,
+            "Packages",
+            packageFamilyName,
+            "LocalCache",
+            "Local",
+            relativePath));
+    }
 }
 
 /// <summary>
