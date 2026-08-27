@@ -182,6 +182,120 @@ public class GroqPluginTests
         Assert.Equal("ok", result.Text);
     }
 
+    [Fact]
+    public async Task TranscribeAsync_RemovesHighNoSpeechTerminalThankYouSegment()
+    {
+        var result = await TranscribeResponseAsync("""
+            {
+              "text": "Please send the updated draft. Thank you.",
+              "language": "en",
+              "duration": 8.0,
+              "segments": [
+                {
+                  "text": " Please send the updated draft.",
+                  "start": 0.0,
+                  "end": 5.0,
+                  "no_speech_prob": 0.02
+                },
+                {
+                  "text": " Thank you.",
+                  "start": 5.0,
+                  "end": 8.0,
+                  "no_speech_prob": 0.95
+                }
+              ]
+            }
+            """);
+
+        Assert.Equal("Please send the updated draft.", result.Text);
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal(" Please send the updated draft.", segment.Text);
+        Assert.Equal(0.02f, result.NoSpeechProbability);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_PreservesConfidentTerminalThankYouSegment()
+    {
+        var result = await TranscribeResponseAsync("""
+            {
+              "text": "Please send the updated draft. Thank you.",
+              "language": "en",
+              "duration": 8.0,
+              "segments": [
+                {
+                  "text": " Please send the updated draft.",
+                  "start": 0.0,
+                  "end": 5.0,
+                  "no_speech_prob": 0.02
+                },
+                {
+                  "text": " Thank you.",
+                  "start": 5.0,
+                  "end": 8.0,
+                  "no_speech_prob": 0.05
+                }
+              ]
+            }
+            """);
+
+        Assert.Equal("Please send the updated draft. Thank you.", result.Text);
+        Assert.Equal(2, result.Segments.Count);
+        Assert.Equal(0.02f, result.NoSpeechProbability);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_PreservesHighNoSpeechTerminalContentThatIsNotKnownHallucination()
+    {
+        var result = await TranscribeResponseAsync("""
+            {
+              "text": "Please send the updated draft. Tomorrow morning.",
+              "language": "en",
+              "duration": 8.0,
+              "segments": [
+                {
+                  "text": " Please send the updated draft.",
+                  "start": 0.0,
+                  "end": 5.0,
+                  "no_speech_prob": 0.02
+                },
+                {
+                  "text": " Tomorrow morning.",
+                  "start": 5.0,
+                  "end": 8.0,
+                  "no_speech_prob": 0.95
+                }
+              ]
+            }
+            """);
+
+        Assert.Equal("Please send the updated draft. Tomorrow morning.", result.Text);
+        Assert.Equal(2, result.Segments.Count);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_PreservesStandaloneThankYouForNoSpeechPolicy()
+    {
+        var result = await TranscribeResponseAsync("""
+            {
+              "text": "Thank you.",
+              "language": "en",
+              "duration": 3.0,
+              "segments": [
+                {
+                  "text": " Thank you.",
+                  "start": 0.0,
+                  "end": 3.0,
+                  "no_speech_prob": 0.95
+                }
+              ]
+            }
+            """);
+
+        Assert.Equal("Thank you.", result.Text);
+        Assert.Single(result.Segments);
+        Assert.Equal(0.95f, result.NoSpeechProbability);
+    }
+
     [Theory]
     [InlineData(typeof(IOException))]
     [InlineData(typeof(InvalidOperationException))]
@@ -387,6 +501,25 @@ public class GroqPluginTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+
+    private static async Task<PluginTranscriptionResult> TranscribeResponseAsync(string responseJson)
+    {
+        var normalHandler = new CapturingHandler((_, _) =>
+            throw new InvalidOperationException("Normal HTTP client should not be used for transcription."));
+        var transcriptionHandler = new CapturingHandler((_, _) => JsonResponse(responseJson));
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "groq-key";
+
+        using var normalHttpClient = new HttpClient(normalHandler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var transcriptionHttpClient = GroqPlugin.CreateTranscriptionHttpClient(transcriptionHandler);
+        using var sut = new GroqPlugin(
+            normalHttpClient,
+            transcriptionHttpClient,
+            _ => new GroqTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        return await sut.TranscribeAsync([4, 5, 6], "en", false, null, CancellationToken.None);
+    }
 
     private static Exception CreateCompressionFailure(Type exceptionType)
     {

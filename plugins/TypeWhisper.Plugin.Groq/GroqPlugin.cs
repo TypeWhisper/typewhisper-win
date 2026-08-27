@@ -18,6 +18,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 {
     private const string BaseUrl = "https://api.groq.com/openai";
     private const int TranscriptionUploadBitRate = 48_000;
+    private const float TerminalHallucinationNoSpeechThreshold = 0.8f;
     private static readonly TimeSpan DefaultHttpTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DefaultTranscriptionHttpTimeout = TimeSpan.FromMinutes(10);
     private readonly HttpClient _httpClient;
@@ -84,7 +85,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.5";
+    public string PluginVersion => "1.0.6";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -476,8 +477,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         var language = root.TryGetProperty("language", out var langEl) ? langEl.GetString() : null;
         var duration = root.TryGetProperty("duration", out var durEl) ? durEl.GetDouble() : 0;
 
-        var segments = new List<PluginTranscriptionSegment>();
-        float? minNoSpeechProb = null;
+        var parsedSegments = new List<ParsedTranscriptionSegment>();
         if (root.TryGetProperty("segments", out var segmentsEl)
             && segmentsEl.ValueKind == JsonValueKind.Array)
         {
@@ -492,22 +492,87 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
                 var end = seg.TryGetProperty("end", out var endEl)
                     ? endEl.GetDouble()
                     : 0;
-                segments.Add(new PluginTranscriptionSegment(segmentText, start, end));
-
-                if (seg.TryGetProperty("no_speech_prob", out var nspEl))
-                {
-                    var prob = (float)nspEl.GetDouble();
-                    minNoSpeechProb = minNoSpeechProb is null
-                        ? prob
-                        : Math.Min(minNoSpeechProb.Value, prob);
-                }
+                var noSpeechProbability = seg.TryGetProperty("no_speech_prob", out var nspEl)
+                    && nspEl.ValueKind == JsonValueKind.Number
+                    ? (float?)nspEl.GetDouble()
+                    : null;
+                parsedSegments.Add(new ParsedTranscriptionSegment(
+                    new PluginTranscriptionSegment(segmentText, start, end),
+                    noSpeechProbability));
             }
         }
 
-        return new PluginTranscriptionResult(text.Trim(), language, duration, minNoSpeechProb)
+        text = RemoveTerminalThankYouHallucination(text, parsedSegments);
+        float? minNoSpeechProb = null;
+        foreach (var segment in parsedSegments)
         {
-            Segments = segments
+            if (segment.NoSpeechProbability is not { } probability)
+                continue;
+
+            minNoSpeechProb = minNoSpeechProb is null
+                ? probability
+                : Math.Min(minNoSpeechProb.Value, probability);
+        }
+
+        return new PluginTranscriptionResult(
+            text.Trim(),
+            language,
+            duration,
+            minNoSpeechProb)
+        {
+            Segments = parsedSegments.Select(segment => segment.Segment).ToList()
         };
+    }
+
+    private static string RemoveTerminalThankYouHallucination(
+        string text,
+        List<ParsedTranscriptionSegment> segments)
+    {
+        if (segments.Count == 0)
+            return text;
+
+        var terminalSegment = segments[^1];
+        if (terminalSegment.NoSpeechProbability is not > TerminalHallucinationNoSpeechThreshold
+            || !IsThankYouOnly(terminalSegment.Segment.Text))
+        {
+            return text;
+        }
+
+        var trimmedText = text.Trim();
+        var segmentText = terminalSegment.Segment.Text.Trim();
+        if (segmentText.Length == 0
+            || !trimmedText.EndsWith(segmentText, StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        var textWithoutSegment = trimmedText[..^segmentText.Length].TrimEnd();
+        if (textWithoutSegment.Length == 0)
+            return text;
+
+        segments.RemoveAt(segments.Count - 1);
+        return textWithoutSegment;
+    }
+
+    private static bool IsThankYouOnly(string text)
+    {
+        const string expected = "thankyou";
+        var index = 0;
+        foreach (var ch in text)
+        {
+            if (!char.IsLetterOrDigit(ch))
+                continue;
+
+            if (index >= expected.Length
+                || char.ToLowerInvariant(ch) != expected[index])
+            {
+                return false;
+            }
+
+            index++;
+        }
+
+        return index == expected.Length;
     }
 
     /// <summary>
@@ -522,6 +587,10 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
     private sealed record TranscriptionModelEntry(
         string Id, string DisplayName, string ApiModelName, bool SupportsTranslation);
+
+    private sealed record ParsedTranscriptionSegment(
+        PluginTranscriptionSegment Segment,
+        float? NoSpeechProbability);
 }
 
 internal sealed record GroqTranscriptionUpload(byte[] Data, string FileName, string ContentType);

@@ -20,7 +20,7 @@ public sealed class WorkflowProviderReleaseMetadataTests
         { "TypeWhisper.Plugin.Claude", "1.0.1" },
         { "TypeWhisper.Plugin.Gemini", "1.2.1" },
         { "TypeWhisper.Plugin.GemmaLocal", "1.0.1" },
-        { "TypeWhisper.Plugin.Groq", "1.0.5" },
+        { "TypeWhisper.Plugin.Groq", "1.0.6" },
         { "TypeWhisper.Plugin.OpenAi", "1.1.2" },
         { "TypeWhisper.Plugin.OpenAiCompatible", "1.0.6" },
         { "TypeWhisper.Plugin.OpenRouter", "1.1.1" },

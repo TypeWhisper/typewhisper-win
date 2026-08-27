@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.groq",
   "name": "Groq",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minHostVersion": "1.0.9",
   "author": "TypeWhisper",
   "description": "Groq Whisper transcription and Llama translation",
