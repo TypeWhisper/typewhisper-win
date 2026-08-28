@@ -579,6 +579,7 @@ public sealed class GeminiPluginTests
                 """).Transcript);
 
         Assert.False(GeminiStreamingSession.TryApplyEvent(collector, "not json", out _));
+        Assert.False(GeminiStreamingSession.TryApplyEvent(collector, "[]", out _));
         Assert.True(GeminiStreamingSession.TryApplyEvent(
             collector,
             """{"serverContent":{"inputTranscription":{"text":"Still running"}}}""",

@@ -45,24 +45,27 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         CancellationToken ct)
     {
         var webSocket = new ClientWebSocket();
-        await webSocket.ConnectAsync(BuildWebSocketUri(apiKey), ct);
-
-        var session = new GeminiStreamingSession(
-            webSocket,
-            new GeminiStreamingTranscriptCollector());
-        session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
-        await session.SendTextAsync(
-            CreateSetupPayload(modelId, languageHints, customVocabulary, mode),
-            ct);
-
+        GeminiStreamingSession? session = null;
         try
         {
+            await webSocket.ConnectAsync(BuildWebSocketUri(apiKey), ct);
+
+            session = new GeminiStreamingSession(
+                webSocket,
+                new GeminiStreamingTranscriptCollector());
+            session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
+            await session.SendTextAsync(
+                CreateSetupPayload(modelId, languageHints, customVocabulary, mode),
+                ct);
             await session._setupCompleted.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
             return session;
         }
         catch
         {
-            await session.DisposeAsync();
+            if (session is null)
+                webSocket.Dispose();
+            else
+                await session.DisposeAsync();
             throw;
         }
     }
@@ -220,7 +223,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
             update = collector.ApplyEvent(json);
             return true;
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             Debug.WriteLine($"Gemini Live event parse error: {ex.Message}");
             update = GeminiStreamingUpdate.Empty;

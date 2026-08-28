@@ -184,7 +184,7 @@ internal static class GeminiTranscriptionClient
 
         var byteRate = 0;
         var dataSize = 0;
-        for (var offset = 12; offset + 8 <= wavAudio.Length;)
+        for (var offset = 12; offset <= wavAudio.Length - 8;)
         {
             var chunkId = Encoding.ASCII.GetString(wavAudio, offset, 4);
             var chunkSize = BinaryPrimitives.ReadInt32LittleEndian(wavAudio.AsSpan(offset + 4, 4));
@@ -192,7 +192,7 @@ internal static class GeminiTranscriptionClient
                 break;
 
             var dataStart = offset + 8;
-            if (chunkId == "fmt " && chunkSize >= 12 && dataStart + 12 <= wavAudio.Length)
+            if (chunkId == "fmt " && chunkSize >= 12 && dataStart <= wavAudio.Length - 12)
                 byteRate = BinaryPrimitives.ReadInt32LittleEndian(wavAudio.AsSpan(dataStart + 8, 4));
             else if (chunkId == "data")
                 dataSize = Math.Min(chunkSize, Math.Max(0, wavAudio.Length - dataStart));
