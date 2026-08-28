@@ -39,6 +39,55 @@ public sealed class SettingsNavigationBadgeTests
     }
 
     [Fact]
+    public void SettingsWindow_ShowsProductLogoInSidebarHeader()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "SettingsWindow.xaml");
+        var logoXaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "WaveformLogo.xaml");
+        var logoCodeBehind = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "WaveformLogo.xaml.cs");
+
+        Assert.Contains("x:Name=\"SidebarLogo\"", xaml);
+        Assert.Contains("controls:WaveformLogo", xaml);
+        Assert.Contains("AutomationProperties.Name=\"TypeWhisper\"", xaml);
+        Assert.Contains("x:Name=\"LogoBar3\"", logoXaml);
+        Assert.Contains("MouseEnter=\"OnMouseEnter\"", logoXaml);
+        Assert.Contains("MouseLeave=\"OnMouseLeave\"", logoXaml);
+        Assert.Contains("SystemParameters.ClientAreaAnimation", logoCodeBehind);
+        Assert.Contains("Program.UiAutomation.IsEnabled", logoCodeBehind);
+    }
+
+    [Fact]
+    public void SettingsWindow_BouncesSidebarIconsOnSelection()
+    {
+        var xaml = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Views",
+            "SettingsWindow.xaml");
+        var iconCode = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Controls",
+            "BouncyNavigationIcon.cs");
+
+        Assert.Contains("controls:BouncyNavigationIcon", xaml);
+        Assert.Contains("IsSelected=\"{Binding IsSelected}\"", xaml);
+        Assert.Contains("SystemParameters.ClientAreaAnimation", iconCode);
+        Assert.Contains("Program.UiAutomation.IsEnabled", iconCode);
+    }
+
+    [Fact]
     public void SettingsWindow_ExposesStableAutomationIdentifiers()
     {
         var xaml = TestFile.ReadProjectFile(

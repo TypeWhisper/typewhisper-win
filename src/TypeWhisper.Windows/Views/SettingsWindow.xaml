@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels"
+        xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
         xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
         xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
         Title="{loc:Str Settings.WindowTitle}"
@@ -53,14 +54,22 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0" Margin="2,8,14,8">
-                        <TextBlock Text="TypeWhisper"
-                                   FontSize="15"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextBrush}"/>
                         <TextBlock DockPanel.Dock="Right"
                                    Text="{Binding CurrentAppVersion}"
                                    Style="{StaticResource SettingsValueTextStyle}"
                                    Foreground="{StaticResource HintBrush}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <controls:WaveformLogo x:Name="SidebarLogo"
+                                                   Width="22"
+                                                   Height="22"
+                                                   Margin="0,0,8,0"
+                                                   AutomationProperties.Name="TypeWhisper"/>
+                            <TextBlock Text="TypeWhisper"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
                     </DockPanel>
 
                     <ScrollViewer Grid.Row="1"
@@ -87,11 +96,12 @@
                                                                 <ColumnDefinition Width="*"/>
                                                                 <ColumnDefinition Width="Auto"/>
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock Text="{Binding IconGlyph}"
-                                                                       FontFamily="Segoe MDL2 Assets"
-                                                                       FontSize="12"
-                                                                       VerticalAlignment="Center"
-                                                                       Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
+                                                            <controls:BouncyNavigationIcon Text="{Binding IconGlyph}"
+                                                                                           IsSelected="{Binding IsSelected}"
+                                                                                           FontFamily="Segoe MDL2 Assets"
+                                                                                           FontSize="12"
+                                                                                           VerticalAlignment="Center"
+                                                                                           Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
                                                             <TextBlock Grid.Column="1"
                                                                        Text="{Binding Title}"
                                                                        Margin="8,0,0,0"

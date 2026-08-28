@@ -98,7 +98,7 @@ The complete set of 32 Windows plugin settings dialogs is available in [`docs/sc
 
 - **Fluent Design:** WPF-UI with Mica backdrop, native title bar, and Fluent controls.
 - **Dynamic Island overlay:** Configurable widgets for LED, timer, waveform, active workflow, and microphone level.
-- **Home dashboard:** Usage statistics, words per minute, app activity, time saved, and onboarding.
+- **Home dashboard:** Quick access to dictation setup, shortcuts, history, and workflows; detailed usage metrics live on the Statistics page.
 - **Welcome wizard:** Guided setup for extension installation, model download, microphone test, and hotkeys.
 - **Release channels:** Velopack-powered delivery for stable, release-candidate, and daily builds.
 - **Windows autostart:** Optional start with Windows.
