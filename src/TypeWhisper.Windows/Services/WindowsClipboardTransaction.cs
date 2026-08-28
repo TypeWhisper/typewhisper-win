@@ -182,7 +182,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         if (enterpriseFormat == 0)
             throw LastClipboardError("Could not register the enterprise clipboard metadata format.");
 
-        var snapshot = CaptureSnapshotCore(enterpriseFormat);
+        var snapshot = CaptureSnapshotOrEmptyCore(enterpriseFormat);
         var clipboardCleared = false;
         try
         {
@@ -214,6 +214,20 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
             snapshot.Dispose();
             throw;
+        }
+    }
+
+    private WindowsClipboardSnapshot CaptureSnapshotOrEmptyCore(uint enterpriseFormat)
+    {
+        try
+        {
+            return CaptureSnapshotCore(enterpriseFormat);
+        }
+        catch (Exception exception) when (exception is ExternalException or InvalidOperationException)
+        {
+            // If the current clipboard cannot be preserved, prefer clearing it over
+            // blocking dictated text insertion.
+            return new WindowsClipboardSnapshot([]);
         }
     }
 
