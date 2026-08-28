@@ -7,10 +7,14 @@
   "Settings.RefreshingModels": "Refreshing models...",
   "Settings.ApiKeyValid": "API key valid!",
   "Settings.ApiKeyInvalid": "Invalid API key",
-  "Settings.ModelCatalog": "Available LLM models",
-  "Settings.DefaultModelsHint": "Using the built-in Gemini aliases. Refresh to fetch the Gemini and Gemma chat models available to this API key.",
-  "Settings.ModelsFetched": "Compatible Gemini and Gemma models fetched: {0}.",
-  "Settings.ModelsFetchedHint": "Compatible Gemini and Gemma models loaded from the API: {0}.",
+  "Settings.ModelCatalog": "Available models",
+  "Settings.DefaultModelsHint": "Using the built-in Gemini chat and transcription models. Refresh to fetch the models available to this API key.",
+  "Settings.ModelsFetched": "Models fetched: {0} chat, {1} transcription.",
+  "Settings.ModelsFetchedHint": "Models loaded from the Gemini API: {0} chat, {1} transcription. The catalog refreshes automatically after 24 hours.",
   "Settings.RefreshFailed": "Could not refresh models. Keeping the saved or built-in list.",
+  "Settings.TranscriptionMode": "Transcription style",
+  "Settings.TranscriptionModeHint": "Smart removes filler words, applies spoken corrections, and formats dictated text. Verbatim preserves the words as spoken.",
+  "Settings.ModeSmart": "Smart",
+  "Settings.ModeVerbatim": "Verbatim",
   "Settings.Error": "Error: {0}"
 }

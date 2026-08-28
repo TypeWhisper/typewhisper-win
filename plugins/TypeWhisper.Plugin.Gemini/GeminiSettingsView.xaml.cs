@@ -11,7 +11,9 @@ public partial class GeminiSettingsView : UserControl
 {
     private readonly GeminiPlugin _plugin;
     private readonly bool _suppressPasswordChanged;
+    private bool _suppressControlChanged;
     private bool _autoRefreshStarted;
+    private CancellationTokenSource? _apiKeyRefreshDebounce;
 
     /// <summary>
     /// Initializes a new instance of the GeminiSettingsView class.
@@ -23,6 +25,8 @@ public partial class GeminiSettingsView : UserControl
         TestButton.Content = L("Settings.Test");
         RefreshButton.Content = L("Settings.Refresh");
         ModelCatalogLabel.Text = L("Settings.ModelCatalog");
+        TranscriptionModeLabel.Text = L("Settings.TranscriptionMode");
+        TranscriptionModeHintText.Text = L("Settings.TranscriptionModeHint");
 
         // Pre-fill password box if API key is already set
         if (!string.IsNullOrEmpty(plugin.ApiKey))
@@ -33,12 +37,14 @@ public partial class GeminiSettingsView : UserControl
         }
 
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        PopulateTranscriptionModePicker();
         UpdateModelsSection();
-        if (_autoRefreshStarted || !_plugin.IsAvailable || _plugin.FetchedLlmModels.Count > 0)
+        if (_autoRefreshStarted || !_plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow))
             return;
 
         _autoRefreshStarted = true;
@@ -55,6 +61,55 @@ public partial class GeminiSettingsView : UserControl
         StatusText.Text = string.IsNullOrWhiteSpace(key) ? "" : L("Settings.Saved");
         StatusText.Foreground = Brushes.Gray;
         UpdateModelsSection();
+        ScheduleCatalogRefreshAfterApiKeyChange();
+    }
+
+    private void ScheduleCatalogRefreshAfterApiKeyChange()
+    {
+        _apiKeyRefreshDebounce?.Cancel();
+        if (!_plugin.IsAvailable)
+        {
+            _apiKeyRefreshDebounce = null;
+            return;
+        }
+
+        var debounce = new CancellationTokenSource();
+        _apiKeyRefreshDebounce = debounce;
+        _ = RefreshCatalogAfterDelayAsync(debounce);
+    }
+
+    private async Task RefreshCatalogAfterDelayAsync(CancellationTokenSource debounce)
+    {
+        using (debounce)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(750), debounce.Token);
+                if (!ReferenceEquals(_apiKeyRefreshDebounce, debounce)
+                    || !_plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow))
+                {
+                    return;
+                }
+
+                _autoRefreshStarted = true;
+                await RefreshModelsAsync(showSuccess: false);
+            }
+            catch (OperationCanceledException) when (debounce.IsCancellationRequested)
+            {
+                return;
+            }
+            finally
+            {
+                if (ReferenceEquals(_apiKeyRefreshDebounce, debounce))
+                    _apiKeyRefreshDebounce = null;
+            }
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _apiKeyRefreshDebounce?.Cancel();
+        _apiKeyRefreshDebounce = null;
     }
 
     private async void OnTestClick(object sender, RoutedEventArgs e)
@@ -77,9 +132,9 @@ public partial class GeminiSettingsView : UserControl
             if (valid)
             {
                 var catalogKey = _plugin.ApiKey;
-                var models = await _plugin.FetchLlmModelsAsync();
-                if (models is { Count: > 0 } && catalogKey is not null)
-                    await _plugin.SetFetchedLlmModelsAsync(models, catalogKey);
+                var catalog = await _plugin.FetchModelCatalogAsync();
+                if (catalog is not null && catalogKey is not null)
+                    await _plugin.SetFetchedModelCatalogAsync(catalog, catalogKey);
 
                 StatusText.Text = L("Settings.ApiKeyValid");
                 StatusText.Foreground = Brushes.Green;
@@ -124,10 +179,10 @@ public partial class GeminiSettingsView : UserControl
         try
         {
             var catalogKey = _plugin.ApiKey;
-            var models = await _plugin.FetchLlmModelsAsync();
-            if (models is not { Count: > 0 }
+            var catalog = await _plugin.FetchModelCatalogAsync();
+            if (catalog is null
                 || catalogKey is null
-                || !await _plugin.SetFetchedLlmModelsAsync(models, catalogKey))
+                || !await _plugin.SetFetchedModelCatalogAsync(catalog, catalogKey))
             {
                 if (showSuccess)
                 {
@@ -139,7 +194,10 @@ public partial class GeminiSettingsView : UserControl
 
             if (showSuccess)
             {
-                StatusText.Text = L("Settings.ModelsFetched", models.Count);
+                StatusText.Text = L(
+                    "Settings.ModelsFetched",
+                    catalog.LlmModels.Count,
+                    catalog.TranscriptionModels.Count);
                 StatusText.Foreground = Brushes.Green;
             }
         }
@@ -170,10 +228,41 @@ public partial class GeminiSettingsView : UserControl
     {
         ModelsSection.Visibility = _plugin.IsAvailable ? Visibility.Visible : Visibility.Collapsed;
         ModelCatalogHintText.Text = _plugin.FetchedLlmModels.Count > 0
-            ? L("Settings.ModelsFetchedHint", _plugin.FetchedLlmModels.Count)
+            || _plugin.FetchedTranscriptionModels.Count > 0
+            ? L(
+                "Settings.ModelsFetchedHint",
+                _plugin.FetchedLlmModels.Count,
+                _plugin.FetchedTranscriptionModels.Count)
             : L("Settings.DefaultModelsHint");
+    }
+
+    private void OnTranscriptionModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_suppressControlChanged
+            && TranscriptionModePicker.SelectedItem is TranscriptionModeOption option)
+        {
+            _plugin.SetTranscriptionMode(option.Mode);
+        }
+    }
+
+    private void PopulateTranscriptionModePicker()
+    {
+        _suppressControlChanged = true;
+        var options = new List<TranscriptionModeOption>
+        {
+            new(GeminiTranscriptionMode.Smart, L("Settings.ModeSmart")),
+            new(GeminiTranscriptionMode.Verbatim, L("Settings.ModeVerbatim")),
+        };
+        TranscriptionModePicker.ItemsSource = options;
+        TranscriptionModePicker.SelectedItem = options.First(option =>
+            option.Mode == _plugin.TranscriptionMode);
+        _suppressControlChanged = false;
     }
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;
     private string L(string key, params object[] args) => _plugin.Loc?.GetString(key, args) ?? key;
+
+    private sealed record TranscriptionModeOption(
+        GeminiTranscriptionMode Mode,
+        string DisplayName);
 }

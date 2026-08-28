@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using TypeWhisper.Plugin.Gemini;
@@ -41,6 +42,40 @@ public sealed class GeminiPluginTests
         Assert.Equal(GeminiPlugin.DefaultModel, Assert.Single(sut.SupportedModels, model => model.IsRecommended).Id);
     }
 
+    [Fact]
+    public void TranscriptionCapability_UsesGeminiTranscribeWithLiveAndDictionarySupport()
+    {
+        using var sut = new GeminiPlugin();
+
+        Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(sut);
+        Assert.Equal(
+            [GeminiPlugin.DefaultTranscriptionModel],
+            sut.TranscriptionModels.Select(model => model.Id).ToArray());
+        Assert.Equal(GeminiPlugin.DefaultTranscriptionModel, sut.SelectedModelId);
+        Assert.True(sut.TranscriptionModels[0].IsRecommended);
+        Assert.True(sut.SupportsStreaming);
+        Assert.True(sut.SupportsDictionaryTerms);
+        Assert.False(sut.SupportsTranslation);
+        Assert.Equal(100, sut.DictionaryTermsBudget.MaxTerms);
+        Assert.Equal(4_000, sut.DictionaryTermsBudget.MaxTotalChars);
+        Assert.True(sut.SupportsStreamingForPrompt(null));
+        Assert.False(sut.SupportsStreamingForPrompt("TypeWhisper"));
+    }
+
+    [Fact]
+    public async Task FetchedTranscriptionCatalog_DoesNotInventUnavailableLiveSibling()
+    {
+        using var sut = new GeminiPlugin();
+
+        await sut.SetFetchedModelCatalogAsync(new GeminiModelCatalog(
+            [],
+            [new("gemini-3.5-transcribe", "Gemini 3.5 Transcribe", LiveModelId: null)],
+            DateTimeOffset.UtcNow));
+
+        Assert.False(sut.SupportsStreaming);
+        Assert.False(sut.SupportsStreamingForPrompt(null));
+    }
+
     [Theory]
     [InlineData("models/gemini-3.7-flash", true)]
     [InlineData("gemini-3.1-pro-preview", true)]
@@ -49,6 +84,8 @@ public sealed class GeminiPluginTests
     [InlineData("gemini-embedding-2", false)]
     [InlineData("gemini-3.1-flash-tts-preview", false)]
     [InlineData("gemini-3.1-flash-live-preview", false)]
+    [InlineData("gemini-3.5-transcribe", false)]
+    [InlineData("gemini-3.5-transcribe-live", false)]
     [InlineData("gemini-omni-flash", false)]
     [InlineData("gemini-omni-flash-preview", false)]
     [InlineData("gemini-robotics-er-2-preview", false)]
@@ -57,6 +94,16 @@ public sealed class GeminiPluginTests
     public void IsCompatibleChatModelId_FiltersCatalog(string modelId, bool expected)
     {
         Assert.Equal(expected, GeminiPlugin.IsCompatibleChatModelId(modelId));
+    }
+
+    [Theory]
+    [InlineData("models/gemini-3.5-transcribe", true)]
+    [InlineData("gemini-3.5-transcribe-preview", true)]
+    [InlineData("gemini-3.5-transcribe-live", false)]
+    [InlineData("gemini-3.7-flash", false)]
+    public void IsCompatibleTranscriptionModelId_FiltersCatalog(string modelId, bool expected)
+    {
+        Assert.Equal(expected, GeminiPlugin.IsCompatibleTranscriptionModelId(modelId));
     }
 
     [Fact]
@@ -82,7 +129,7 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
-    public async Task FetchLlmModelsAsync_UsesCompatibleEndpointAndFiltersSparseResults()
+    public async Task FetchModelCatalogAsync_UsesNativeEndpointAndSeparatesCapabilities()
     {
         HttpRequestMessage? capturedRequest = null;
         var handler = new CapturingHandler((request, _) =>
@@ -90,17 +137,17 @@ public sealed class GeminiPluginTests
             capturedRequest = request;
             return JsonResponse("""
                 {
-                  "object": "list",
-                  "data": [
+                  "models": [
                     null,
-                    { "id": null, "display_name": "Missing ID" },
-                    { "object": "model", "display_name": "No ID" },
-                    { "id": "models/gemini-3.7-flash", "display_name": "Gemini 3.7 Flash" },
-                    { "id": "models/gemma-4-31b-it", "display_name": "Gemma 4 31B IT" },
-                    { "id": "gemini-3.7-flash", "display_name": "Duplicate" },
-                    { "id": "models/gemini-3.1-flash-image", "display_name": "Nano Banana" },
-                    { "id": "models/gemini-embedding-2", "display_name": "Embedding" },
-                    { "id": "models/veo-3.1-generate-preview", "display_name": "Veo" }
+                    { "name": null, "displayName": "Missing ID" },
+                    { "name": "models/gemini-3.7-flash", "baseModelId": "gemini-3.7-flash", "displayName": "Gemini 3.7 Flash" },
+                    { "name": "models/gemma-4-31b-it", "displayName": "Gemma 4 31B IT" },
+                    { "name": "models/gemini-3.7-flash", "displayName": "Duplicate" },
+                    { "name": "models/gemini-3.5-transcribe", "baseModelId": "gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
+                    { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" },
+                    { "name": "models/gemini-3.1-flash-image", "displayName": "Nano Banana" },
+                    { "name": "models/gemini-embedding-2", "displayName": "Embedding" },
+                    { "name": "models/veo-3.1-generate-preview", "displayName": "Veo" }
                   ]
                 }
                 """);
@@ -111,20 +158,123 @@ public sealed class GeminiPluginTests
         using var sut = new GeminiPlugin(httpClient);
         await sut.ActivateAsync(host);
 
-        var models = await sut.FetchLlmModelsAsync();
+        var catalog = await sut.FetchModelCatalogAsync();
 
-        Assert.NotNull(models);
+        Assert.NotNull(catalog);
         Assert.Equal(
             ["gemini-3.7-flash", "gemma-4-31b-it"],
-            models!.Select(model => model.Id).ToArray());
-        Assert.Equal("https://generativelanguage.googleapis.com/v1beta/openai/models", capturedRequest?.RequestUri?.ToString());
-        Assert.Equal("Bearer gemini-key", capturedRequest?.Headers.Authorization?.ToString());
+            catalog!.LlmModels.Select(model => model.Id).ToArray());
+        var transcriptionModel = Assert.Single(catalog.TranscriptionModels);
+        Assert.Equal("gemini-3.5-transcribe", transcriptionModel.Id);
+        Assert.Equal("gemini-3.5-transcribe-live", transcriptionModel.LiveModelId);
+        Assert.Equal(
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+            capturedRequest?.RequestUri?.ToString());
+        Assert.Null(capturedRequest?.Headers.Authorization);
+        Assert.Equal(
+            "gemini-key",
+            Assert.Single(capturedRequest!.Headers.GetValues("x-goog-api-key")));
+    }
+
+    [Fact]
+    public async Task FetchModelCatalogAsync_FollowsNativePagination()
+    {
+        var requestedUris = new List<string>();
+        var handler = new CapturingHandler((request, _) =>
+        {
+            var uri = request.RequestUri!.ToString();
+            requestedUris.Add(uri);
+            return uri.Contains("pageToken=second%2Bpage", StringComparison.Ordinal)
+                ? JsonResponse("""
+                    {"models":[{"name":"models/gemini-3.5-transcribe-live"}]}
+                    """)
+                : JsonResponse("""
+                    {
+                      "models":[
+                        {"name":"models/gemini-3.7-flash"},
+                        {"name":"models/gemini-3.5-transcribe"}
+                      ],
+                      "nextPageToken":"second+page"
+                    }
+                    """);
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var catalog = await sut.FetchModelCatalogAsync();
+
+        Assert.NotNull(catalog);
+        Assert.Equal(2, requestedUris.Count);
+        Assert.Contains("pageToken=second%2Bpage", requestedUris[1], StringComparison.Ordinal);
+        Assert.Equal("gemini-3.7-flash", Assert.Single(catalog!.LlmModels).Id);
+        Assert.Equal(
+            "gemini-3.5-transcribe-live",
+            Assert.Single(catalog.TranscriptionModels).LiveModelId);
+    }
+
+    [Fact]
+    public async Task FetchModelCatalogAsync_StopsWhenPageTokenRepeats()
+    {
+        var requestCount = 0;
+        var handler = new CapturingHandler((_, _) =>
+        {
+            requestCount++;
+            return JsonResponse("""
+                {
+                  "models":[{"name":"models/gemini-3.7-flash"}],
+                  "nextPageToken":"repeated-page"
+                }
+                """);
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var catalog = await sut.FetchModelCatalogAsync();
+
+        Assert.NotNull(catalog);
+        Assert.Equal(2, requestCount);
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Warning
+            && entry.Message.Contains("repeated page token", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ShouldRefreshModelCatalog_UsesTwentyFourHourTtlAndRequiresBothCapabilities()
+    {
+        var fetchedAt = new DateTimeOffset(2026, 8, 28, 10, 0, 0, TimeSpan.Zero);
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        host.SetSetting("fetchedLlmModels.v2", new List<GeminiFetchedModel>
+        {
+            new("gemini-3.7-flash", "Gemini 3.7 Flash"),
+        });
+        host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>
+        {
+            new("gemini-3.5-transcribe", "Gemini 3.5 Transcribe", "gemini-3.5-transcribe-live"),
+        });
+        host.SetSetting("modelCatalogFetchedAtUtc", fetchedAt);
+        using var sut = new GeminiPlugin();
+        await sut.ActivateAsync(host);
+
+        Assert.False(sut.ShouldRefreshModelCatalog(fetchedAt.AddHours(23)));
+        Assert.True(sut.ShouldRefreshModelCatalog(fetchedAt.AddHours(24)));
+
+        host.SetSetting("fetchedTranscriptionModels.v1", new List<GeminiFetchedTranscriptionModel>());
+        using var incompleteCatalog = new GeminiPlugin();
+        await incompleteCatalog.ActivateAsync(host);
+        Assert.True(incompleteCatalog.ShouldRefreshModelCatalog(fetchedAt.AddMinutes(1)));
     }
 
     [Theory]
     [InlineData("{}")]
     [InlineData("null")]
-    public async Task FetchLlmModelsAsync_RejectsCatalogWithoutDataArray(string json)
+    public async Task FetchLlmModelsAsync_RejectsCatalogWithoutModelsArray(string json)
     {
         var handler = new CapturingHandler((_, _) => JsonResponse(json));
         var host = new TestPluginHostServices();
@@ -143,13 +293,13 @@ public sealed class GeminiPluginTests
         Assert.Contains(sut.FetchedLlmModels, model => model.Id == "gemini-3.7-flash");
         Assert.Contains(host.Logs, entry =>
             entry.Level == PluginLogLevel.Warning
-            && entry.Message.Contains("data array", StringComparison.OrdinalIgnoreCase));
+            && entry.Message.Contains("models array", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public async Task FetchLlmModelsAsync_AcceptsExplicitEmptyCatalog()
     {
-        var handler = new CapturingHandler((_, _) => JsonResponse("""{"data":[]}"""));
+        var handler = new CapturingHandler((_, _) => JsonResponse("""{"models":[]}"""));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
         using var httpClient = new HttpClient(handler);
@@ -189,7 +339,7 @@ public sealed class GeminiPluginTests
     }
 
     [Fact]
-    public async Task SetFetchedLlmModels_DoesNotPersistOrNotifyForUnchangedCatalog()
+    public async Task SetFetchedLlmModels_RefreshesTimestampWithoutNotifyingForUnchangedCatalog()
     {
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
@@ -197,10 +347,13 @@ public sealed class GeminiPluginTests
         await sut.ActivateAsync(host);
 
         await sut.SetFetchedLlmModelsAsync([new("gemini-3.7-flash", "Gemini 3.7 Flash")]);
+        var firstFetchedAt = sut.ModelCatalogFetchedAt;
+        host.ResetTracking();
         await sut.SetFetchedLlmModelsAsync([new("models/gemini-3.7-flash", "Gemini 3.7 Flash")]);
 
-        Assert.Equal(1, host.SetSettingCount);
-        Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
+        Assert.Equal(3, host.SetSettingCount);
+        Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+        Assert.True(sut.ModelCatalogFetchedAt >= firstFetchedAt);
     }
 
     [Fact]
@@ -223,7 +376,7 @@ public sealed class GeminiPluginTests
             ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-pro-latest"],
             sut.SupportedModels.Select(model => model.Id).ToArray());
         Assert.Empty(host.GetSetting<List<GeminiFetchedModel>>("fetchedLlmModels.v2")!);
-        Assert.Equal(1, host.SetSettingCount);
+        Assert.Equal(3, host.SetSettingCount);
         Assert.Equal(1, host.NotifyCapabilitiesChangedCount);
     }
 
@@ -289,6 +442,219 @@ public sealed class GeminiPluginTests
         Assert.Empty(sut.FetchedLlmModels);
         Assert.Equal(GeminiPlugin.DefaultModel, sut.SupportedModels[0].Id);
         Assert.Equal(0, host.NotifyCapabilitiesChangedCount);
+    }
+
+    [Fact]
+    public async Task TranscribeWithLanguageHintsAsync_UploadsInteractionAndDeletesTemporaryAudio()
+    {
+        string? interactionBody = null;
+        var requests = new List<(HttpMethod Method, string Uri)>();
+        var handler = new CapturingHandler((request, body) =>
+        {
+            var uri = request.RequestUri!.ToString();
+            requests.Add((request.Method, uri));
+            if (uri.EndsWith("/upload/v1beta/files", StringComparison.Ordinal))
+            {
+                Assert.Equal("gemini-key", Assert.Single(request.Headers.GetValues("x-goog-api-key")));
+                var response = new HttpResponseMessage(HttpStatusCode.OK);
+                response.Headers.TryAddWithoutValidation(
+                    "X-Goog-Upload-URL",
+                    "https://upload.example/session-1");
+                return response;
+            }
+
+            if (uri == "https://upload.example/session-1")
+            {
+                Assert.Equal("upload, finalize", Assert.Single(request.Headers.GetValues("X-Goog-Upload-Command")));
+                return JsonResponse("""
+                    {
+                      "file": {
+                        "name": "files/audio-123",
+                        "uri": "https://generativelanguage.googleapis.com/v1beta/files/audio-123"
+                      }
+                    }
+                    """);
+            }
+
+            if (uri.EndsWith("/v1beta/interactions", StringComparison.Ordinal))
+            {
+                interactionBody = body;
+                return JsonResponse("""
+                    {
+                      "status": "completed",
+                      "steps": [{
+                        "type": "model_output",
+                        "content": [
+                          {"type":"text","text":"Hallo "},
+                          {"type":"text","text":"Welt"}
+                        ]
+                      }]
+                    }
+                    """);
+            }
+
+            if (request.Method == HttpMethod.Delete
+                && uri.EndsWith("/v1beta/files/audio-123", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {uri}");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var result = await sut.TranscribeWithLanguageHintsAsync(
+            CreatePcm16Wav(),
+            [" de ", "auto", "en", "DE"],
+            translate: false,
+            prompt: "TypeWhisper, Gemini",
+            CancellationToken.None);
+
+        Assert.Equal("Hallo Welt", result.Text);
+        Assert.Equal("de", result.DetectedLanguage);
+        Assert.Equal(1, result.DurationSeconds, precision: 3);
+        Assert.Equal(4, requests.Count);
+        Assert.Equal(HttpMethod.Delete, requests[^1].Method);
+
+        using var payload = JsonDocument.Parse(Assert.IsType<string>(interactionBody));
+        var root = payload.RootElement;
+        Assert.Equal("gemini-3.5-transcribe", root.GetProperty("model").GetString());
+        Assert.False(root.GetProperty("store").GetBoolean());
+        Assert.Equal(
+            "https://generativelanguage.googleapis.com/v1beta/files/audio-123",
+            root.GetProperty("input")[0].GetProperty("uri").GetString());
+        var transcriptionConfig = root
+            .GetProperty("generation_config")
+            .GetProperty("transcription_config");
+        Assert.Equal("smart", transcriptionConfig.GetProperty("mode").GetString());
+        Assert.Equal(
+            ["de", "en"],
+            transcriptionConfig.GetProperty("language_codes")
+                .EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray());
+        Assert.Equal(
+            ["TypeWhisper", "Gemini"],
+            transcriptionConfig.GetProperty("custom_vocabulary")
+                .EnumerateArray()
+                .Select(value => value.GetString()!)
+                .ToArray());
+    }
+
+    [Fact]
+    public void StreamingPayloadAndCollector_UseLiveTranscriptionProtocol()
+    {
+        var setupJson = GeminiStreamingSession.CreateSetupPayload(
+            "gemini-3.5-transcribe-live",
+            ["de", "en"],
+            ["TypeWhisper"],
+            GeminiTranscriptionMode.Verbatim);
+        using var setup = JsonDocument.Parse(setupJson);
+        var setupRoot = setup.RootElement.GetProperty("setup");
+        Assert.Equal("models/gemini-3.5-transcribe-live", setupRoot.GetProperty("model").GetString());
+        var transcription = setupRoot.GetProperty("inputAudioTranscription");
+        Assert.Equal("VERBATIM", transcription.GetProperty("mode").GetString());
+        Assert.Equal("TypeWhisper", transcription.GetProperty("customVocabulary")[0].GetString());
+
+        using var audio = JsonDocument.Parse(GeminiStreamingSession.CreateAudioPayload([1, 2, 3, 4]));
+        var audioPart = audio.RootElement.GetProperty("realtimeInput").GetProperty("audio");
+        Assert.Equal("AQIDBA==", audioPart.GetProperty("data").GetString());
+        Assert.Equal("audio/pcm;rate=16000", audioPart.GetProperty("mimeType").GetString());
+
+        var collector = new GeminiStreamingTranscriptCollector();
+        Assert.True(collector.ApplyEvent("""{"setup_complete":{}}""").SetupCompleted);
+        Assert.Equal(
+            new StreamingTranscriptEvent("Hallo", false),
+            collector.ApplyEvent("""
+                {"server_content":{"interim_input_transcription":{"text":" Hallo "}}}
+                """).Transcript);
+        Assert.Equal(
+            new StreamingTranscriptEvent("Hallo Welt", true),
+            collector.ApplyEvent("""
+                {"serverContent":{"inputTranscription":{"text":" Hallo Welt "}}}
+                """).Transcript);
+
+        Assert.False(GeminiStreamingSession.TryApplyEvent(collector, "not json", out _));
+        Assert.False(GeminiStreamingSession.TryApplyEvent(collector, "[]", out _));
+        Assert.True(GeminiStreamingSession.TryApplyEvent(
+            collector,
+            """{"serverContent":{"inputTranscription":{"text":"Still running"}}}""",
+            out var recoveredUpdate));
+        Assert.Equal("Still running", recoveredUpdate.Transcript?.Text);
+    }
+
+    [Fact]
+    public void StreamingSession_IsolatesTranscriptHandlerFailures()
+    {
+        var delivered = 0;
+        Action<StreamingTranscriptEvent> handlers = _ => throw new InvalidOperationException("boom");
+        handlers += _ => delivered++;
+
+        GeminiStreamingSession.NotifyTranscriptHandlers(
+            handlers,
+            new StreamingTranscriptEvent("Hello", false));
+
+        Assert.Equal(1, delivered);
+    }
+
+    [Fact]
+    public void CalculateWavDurationSeconds_RejectsOverflowingChunkSize()
+    {
+        var wav = new byte[20];
+        Encoding.ASCII.GetBytes("RIFF").CopyTo(wav, 0);
+        Encoding.ASCII.GetBytes("WAVE").CopyTo(wav, 8);
+        Encoding.ASCII.GetBytes("JUNK").CopyTo(wav, 12);
+        BitConverter.GetBytes(int.MaxValue).CopyTo(wav, 16);
+
+        Assert.Equal(0, GeminiTranscriptionClient.CalculateWavDurationSeconds(wav));
+    }
+
+    [Theory]
+    [InlineData(WebSocketMessageType.Text, true)]
+    [InlineData(WebSocketMessageType.Binary, true)]
+    [InlineData(WebSocketMessageType.Close, false)]
+    public void StreamingSession_AcceptsJsonFromTextAndBinaryFrames(
+        WebSocketMessageType messageType,
+        bool expected)
+    {
+        Assert.Equal(expected, GeminiStreamingSession.IsJsonMessageType(messageType));
+    }
+
+    [Fact]
+    public void InteractionPayload_UsesDocumentedSmartAndVerbatimModeShapes()
+    {
+        using var smart = JsonDocument.Parse(GeminiTranscriptionClient.CreateInteractionPayload(
+            "gemini-3.5-transcribe",
+            "https://example.test/audio",
+            [],
+            [],
+            GeminiTranscriptionMode.Smart));
+        using var verbatim = JsonDocument.Parse(GeminiTranscriptionClient.CreateInteractionPayload(
+            "gemini-3.5-transcribe",
+            "https://example.test/audio",
+            [],
+            [],
+            GeminiTranscriptionMode.Verbatim));
+
+        Assert.Equal(
+            "smart",
+            smart.RootElement
+                .GetProperty("generation_config")
+                .GetProperty("transcription_config")
+                .GetProperty("mode")
+                .GetString());
+        Assert.Equal(
+            "verbatim",
+            verbatim.RootElement
+                .GetProperty("generation_config")
+                .GetProperty("transcription_config")
+                .GetProperty("mode")
+                .GetProperty("type")
+                .GetString());
     }
 
     [Fact]
@@ -537,7 +903,7 @@ public sealed class GeminiPluginTests
     [Fact]
     public async Task FetchLlmModelsAsync_RethrowsCallerCancellation()
     {
-        using var response = JsonResponse("""{"data":[]}""");
+        using var response = JsonResponse("""{"models":[]}""");
         var handler = new BlockingHandler(response);
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "gemini-key";
@@ -561,7 +927,7 @@ public sealed class GeminiPluginTests
     public async Task FetchLlmModelsAsync_DiscardsCatalogWhenApiKeyChangesInFlight()
     {
         var handler = new BlockingHandler(JsonResponse("""
-            {"data":[{"id":"gemini-3.7-flash","display_name":"Gemini 3.7 Flash"}]}
+            {"models":[{"name":"models/gemini-3.7-flash","displayName":"Gemini 3.7 Flash"}]}
             """));
         var host = new TestPluginHostServices();
         host.Secrets["api-key"] = "first-key";
@@ -621,6 +987,31 @@ public sealed class GeminiPluginTests
 
         Assert.Equal(2, host.NotifyCapabilitiesChangedCount);
         Assert.DoesNotContain("api-key", host.Secrets.Keys);
+    }
+
+    private static byte[] CreatePcm16Wav(int sampleRate = 16_000, int sampleCount = 16_000)
+    {
+        const short channelCount = 1;
+        const short bitsPerSample = 16;
+        var dataSize = sampleCount * sizeof(short);
+        using var stream = new MemoryStream(44 + dataSize);
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
+        writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+        writer.Write(36 + dataSize);
+        writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+        writer.Write(Encoding.ASCII.GetBytes("fmt "));
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write(channelCount);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * channelCount * bitsPerSample / 8);
+        writer.Write((short)(channelCount * bitsPerSample / 8));
+        writer.Write(bitsPerSample);
+        writer.Write(Encoding.ASCII.GetBytes("data"));
+        writer.Write(dataSize);
+        writer.Write(new byte[dataSize]);
+        writer.Flush();
+        return stream.ToArray();
     }
 
     private static HttpResponseMessage JsonResponse(string json) =>
