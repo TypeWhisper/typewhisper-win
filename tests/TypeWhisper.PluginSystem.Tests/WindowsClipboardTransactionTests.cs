@@ -393,7 +393,7 @@ public sealed class WindowsClipboardTransactionTests
     }
 
     [Fact]
-    public void UnavailableUniqueFormat_AbortsBeforeClearingAndReleasesCapturedHandles()
+    public void UnavailableUniqueFormat_ClearsClipboardAndAllowsTemporaryText()
     {
         lock (ClipboardTestLock)
         {
@@ -409,13 +409,21 @@ public sealed class WindowsClipboardTransactionTests
                     using var owner = SeedUnavailableUniqueFormat();
                     releasedFormats.Clear();
 
-                    Assert.Throws<COMException>(() =>
-                        transaction.BeginTemporaryTextAsync("dictated", CancellationToken.None)
-                            .GetAwaiter()
-                            .GetResult());
+                    using var lease = transaction.BeginTemporaryTextAsync(
+                            "dictated",
+                            CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
 
-                    Assert.Equal("previous", Clipboard.GetText());
+                    Assert.Equal("dictated", Clipboard.GetText());
                     Assert.NotEmpty(releasedFormats);
+
+                    var result = transaction.RestoreAsync(lease, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+
+                    Assert.Equal(ClipboardRestoreResult.Restored, result);
+                    Assert.Empty(EnumerateClipboardFormats());
                 }
                 finally
                 {
