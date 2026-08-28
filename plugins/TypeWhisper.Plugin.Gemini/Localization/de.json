@@ -7,10 +7,14 @@
   "Settings.RefreshingModels": "Modelle werden aktualisiert...",
   "Settings.ApiKeyValid": "API-Key gültig!",
   "Settings.ApiKeyInvalid": "Ungültiger API-Key",
-  "Settings.ModelCatalog": "Verfügbare LLM-Modelle",
-  "Settings.DefaultModelsHint": "Die integrierten Gemini-Aliasse werden verwendet. Mit \"Aktualisieren\" werden die für diesen API-Key verfügbaren Gemini- und Gemma-Chatmodelle geladen.",
-  "Settings.ModelsFetched": "Kompatible Gemini- und Gemma-Modelle geladen: {0}.",
-  "Settings.ModelsFetchedHint": "Kompatible Gemini- und Gemma-Modelle aus der API: {0}.",
+  "Settings.ModelCatalog": "Verfügbare Modelle",
+  "Settings.DefaultModelsHint": "Die integrierten Gemini-Modelle für Chat und Transkription werden verwendet. Mit \"Aktualisieren\" werden die für diesen API-Key verfügbaren Modelle geladen.",
+  "Settings.ModelsFetched": "Modelle geladen: {0} Chat, {1} Transkription.",
+  "Settings.ModelsFetchedHint": "Modelle aus der Gemini API: {0} Chat, {1} Transkription. Der Katalog wird nach 24 Stunden automatisch aktualisiert.",
   "Settings.RefreshFailed": "Modelle konnten nicht aktualisiert werden. Die gespeicherte oder integrierte Liste bleibt aktiv.",
+  "Settings.TranscriptionMode": "Transkriptionsstil",
+  "Settings.TranscriptionModeHint": "Smart entfernt Füllwörter, übernimmt gesprochene Korrekturen und formatiert diktierten Text. Wortgetreu erhält die gesprochenen Wörter.",
+  "Settings.ModeSmart": "Smart",
+  "Settings.ModeVerbatim": "Wortgetreu",
   "Settings.Error": "Fehler: {0}"
 }
