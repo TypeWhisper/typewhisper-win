@@ -731,7 +731,6 @@ public partial class App : Application
         services.AddSingleton<SettingsWindowViewModel>();
         services.AddSingleton<FileTranscriptionViewModel>();
         services.AddSingleton<RecoveryViewModel>();
-        services.AddSingleton<DashboardViewModel>();
         services.AddTransient<WelcomeViewModel>();
 
         // Views

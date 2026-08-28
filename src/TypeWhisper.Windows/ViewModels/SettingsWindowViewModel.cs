@@ -60,10 +60,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// </summary>
     public WorkflowsViewModel Workflows { get; }
     /// <summary>
-    /// Gets the dashboard.
-    /// </summary>
-    public DashboardViewModel Dashboard { get; }
-    /// <summary>
     /// Gets the retention-independent usage statistics.
     /// </summary>
     public StatisticsViewModel Statistics { get; }
@@ -310,7 +306,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         DictionaryViewModel dictionary,
         SnippetsViewModel snippets,
         WorkflowsViewModel workflows,
-        DashboardViewModel dashboard,
         StatisticsViewModel statistics,
         PluginsViewModel plugins,
         CloudFolderSyncViewModel cloudFolderSync,
@@ -331,7 +326,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Dictionary = dictionary;
         Snippets = snippets;
         Workflows = workflows;
-        Dashboard = dashboard;
         Statistics = statistics;
         Plugins = plugins;
         CloudFolderSync = cloudFolderSync;
@@ -624,7 +618,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
                 ? Loc.Instance["Dashboard.DevSeedSuccess"]
                 : Loc.Instance["Dashboard.DevSeedUnavailable"];
             IsDevelopmentSeedFailure = false;
-            Dashboard.Refresh();
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {

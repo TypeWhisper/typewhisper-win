@@ -1,0 +1,45 @@
+<UserControl x:Class="TypeWhisper.Windows.Controls.WaveformLogo"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             MouseEnter="OnMouseEnter"
+             MouseLeave="OnMouseLeave"
+             Unloaded="OnUnloaded">
+    <Viewbox Stretch="Uniform">
+        <Grid Width="100" Height="100" Background="Transparent">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <Border x:Name="LogoBar1"
+                        Width="12.1"
+                        Height="37.1"
+                        Margin="0,0,6.6,0"
+                        CornerRadius="6.05"
+                        Background="{DynamicResource AccentBrush}"/>
+                <Border x:Name="LogoBar2"
+                        Width="12.1"
+                        Height="62.1"
+                        Margin="0,0,6.6,0"
+                        CornerRadius="6.05"
+                        Background="{DynamicResource AccentBrush}"/>
+                <Border x:Name="LogoBar3"
+                        Width="12.1"
+                        Height="87.1"
+                        Margin="0,0,6.6,0"
+                        CornerRadius="6.05"
+                        Background="{DynamicResource AccentBrush}"/>
+                <Border x:Name="LogoBar4"
+                        Width="12.1"
+                        Height="62.1"
+                        Margin="0,0,6.6,0"
+                        CornerRadius="6.05"
+                        Background="{DynamicResource AccentBrush}"/>
+                <Border x:Name="LogoBar5"
+                        Width="12.1"
+                        Height="37.1"
+                        CornerRadius="6.05"
+                        Background="{DynamicResource AccentBrush}"/>
+            </StackPanel>
+        </Grid>
+    </Viewbox>
+</UserControl>

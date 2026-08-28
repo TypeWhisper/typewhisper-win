@@ -3,294 +3,277 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:TypeWhisper.Windows.Converters"
-             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization">
+             xmlns:controls="clr-namespace:TypeWhisper.Windows.Controls"
+             xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
+             xmlns:vm="clr-namespace:TypeWhisper.Windows.ViewModels">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <conv:BarHeightConverter x:Key="BarHeightConverter"/>
-            <conv:DayLabelConverter x:Key="DayLabelConverter"/>
-            <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
             <conv:InvertBoolConverter x:Key="InvertBoolConverter"/>
             <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+            <Style x:Key="DashboardNavigationTileStyle" TargetType="Button">
+                <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource SurfaceStrokeBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="18"/>
+                <Setter Property="Height" Value="132"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Tile"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="14"
+                                    Padding="{TemplateBinding Padding}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <TranslateTransform/>
+                                </Border.RenderTransform>
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Tile" Property="Background" Value="{StaticResource CardAltBrush}"/>
+                                    <Setter TargetName="Tile" Property="BorderBrush" Value="#660078D4"/>
+                                    <Setter TargetName="Tile" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TranslateTransform Y="-2"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Tile" Property="Background" Value="{StaticResource SecondaryPressedBrush}"/>
+                                    <Setter TargetName="Tile" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TranslateTransform Y="0"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True">
+                                    <Setter TargetName="Tile" Property="BorderBrush" Value="{StaticResource TextBrush}"/>
+                                    <Setter TargetName="Tile" Property="BorderThickness" Value="2"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="860" Margin="28">
+        <StackPanel MaxWidth="980" Margin="28">
 
-            <Grid Margin="0,0,0,20">
+            <StackPanel Margin="0,0,0,22">
+                <TextBlock Text="{loc:Str Dashboard.Title}" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Text="{loc:Str Dashboard.Subtitle}"
+                           Style="{StaticResource PageSubtitleStyle}"
+                           Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- Statistics is the single source of truth for usage data. -->
+            <Border Style="{StaticResource SettingsHeroCardStyle}"
+                    Padding="22"
+                    Margin="0,0,0,24">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="210"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock Text="{loc:Str Dashboard.Title}" Style="{StaticResource PageTitleStyle}"/>
-                        <TextBlock Text="{loc:Str Dashboard.Subtitle}"
-                                   Style="{StaticResource PageSubtitleStyle}" Margin="0,8,0,0"/>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str Dashboard.Statistics}"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str Statistics.Subtitle}"
+                                   Style="{StaticResource PageSubtitleStyle}"
+                                   MaxWidth="520"
+                                   HorizontalAlignment="Left"
+                                   Margin="0,7,0,16"/>
+                        <Button Content="{loc:Str Dashboard.OpenStatistics}"
+                                AutomationProperties.AutomationId="DashboardOpenStatistics"
+                                Command="{Binding NavigateToRouteCommand}"
+                                CommandParameter="{x:Static vm:SettingsRoute.Statistics}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Padding="14,7"/>
                     </StackPanel>
+
+                    <!-- A quiet speech waveform makes the destination recognizable without showing stale metrics. -->
+                    <Border Grid.Column="1"
+                            Width="176"
+                            Height="92"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="#141D29"
+                            BorderBrush="#33476A8E"
+                            BorderThickness="1"
+                            CornerRadius="46">
+                        <controls:WaveformLogo Width="112"
+                                               Height="76"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.Name="TypeWhisper"/>
+                    </Border>
                 </Grid>
+            </Border>
+
+            <TextBlock Text="{loc:Str Dashboard.QuickAccess}"
+                       Style="{StaticResource SettingsGroupTitleStyle}"
+                       Margin="0,0,0,12"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0"
+                        Margin="0,0,7,14"
+                        Style="{StaticResource DashboardNavigationTileStyle}"
+                        AutomationProperties.AutomationId="DashboardOpenDictation"
+                        Command="{Binding NavigateToRouteCommand}"
+                        CommandParameter="{x:Static vm:SettingsRoute.Dictation}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="&#xE720;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="20" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+                            <TextBlock Text="{loc:Str Nav.Dictation}" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str Page.DictationSubtitle}"
+                                       Style="{StaticResource PageSubtitleStyle}" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Grid.Row="0" Grid.Column="1"
+                        Margin="7,0,0,14"
+                        Style="{StaticResource DashboardNavigationTileStyle}"
+                        AutomationProperties.AutomationId="DashboardOpenShortcuts"
+                        Command="{Binding NavigateToRouteCommand}"
+                        CommandParameter="{x:Static vm:SettingsRoute.Shortcuts}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="&#xE765;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="20" Foreground="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+                            <TextBlock Text="{loc:Str Nav.Shortcuts}" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str Page.ShortcutsSubtitle}"
+                                       Style="{StaticResource PageSubtitleStyle}" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Grid.Row="1" Grid.Column="0"
+                        Margin="0,0,7,0"
+                        Style="{StaticResource DashboardNavigationTileStyle}"
+                        AutomationProperties.AutomationId="DashboardOpenHistory"
+                        Command="{Binding NavigateToRouteCommand}"
+                        CommandParameter="{x:Static vm:SettingsRoute.History}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="20" Foreground="{StaticResource ActiveIndicatorBrush}"/>
+                            <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+                            <TextBlock Text="{loc:Str Nav.History}" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str Page.HistorySubtitle}"
+                                       Style="{StaticResource PageSubtitleStyle}" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Grid.Row="1" Grid.Column="1"
+                        Margin="7,0,0,0"
+                        Style="{StaticResource DashboardNavigationTileStyle}"
+                        AutomationProperties.AutomationId="DashboardOpenWorkflows"
+                        Command="{Binding NavigateToRouteCommand}"
+                        CommandParameter="{x:Static vm:SettingsRoute.Workflows}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="&#xE8F1;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="20" Foreground="{StaticResource ActiveIndicatorBrush}"/>
+                            <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12" Foreground="{StaticResource HintBrush}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Bottom">
+                            <TextBlock Text="{loc:Str Nav.Workflows}" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str Page.WorkflowsSubtitle}"
+                                       Style="{StaticResource PageSubtitleStyle}" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Button>
             </Grid>
 
-            <Border Style="{StaticResource SettingsSummaryBarStyle}" Margin="0,0,0,18">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock Text="{loc:Str Dashboard.Statistics}" FontSize="16" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextBrush}"/>
-                        <TextBlock Text="{loc:Str Dashboard.StatisticsHint}"
-                                   Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,4,0,0"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center">
-                        <RadioButton Content="{loc:Str Dashboard.Weekly}" Style="{StaticResource TabRadioStyle}"
-                                     AutomationProperties.AutomationId="DashboardRangeWeekly"
-                                     IsChecked="True" Checked="WeekChecked"/>
-                        <RadioButton Content="{loc:Str Dashboard.Month}" Style="{StaticResource TabRadioStyle}"
-                                     AutomationProperties.AutomationId="DashboardRangeMonth"
-                                     Checked="MonthChecked"/>
-                        <RadioButton Content="{loc:Str Dashboard.AllTime}" Style="{StaticResource TabRadioStyle}"
-                                     AutomationProperties.AutomationId="DashboardRangeAllTime"
-                                     Checked="AllTimeChecked"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- 4 Stat Cards -->
-            <UniformGrid Rows="1" Columns="4" Margin="0,0,0,24">
-                <!-- Words -->
-                <Border Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="&#x270D;" FontSize="18" Foreground="{StaticResource AccentBrush}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="{Binding Dashboard.WordsCount}" FontSize="32" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{loc:Str Dashboard.Words}" Foreground="{StaticResource HintBrush}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding Dashboard.WordsTrend}" FontSize="11"
-                                   HorizontalAlignment="Center" Margin="0,2,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#FF66BB6A"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Dashboard.WordsTrend[0]}" Value="-">
-                                            <Setter Property="Foreground" Value="#FFEF5350"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
-                <!-- WPM -->
-                <Border Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="&#x26A1;" FontSize="18" Foreground="{StaticResource AccentBrush}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="{Binding Dashboard.AverageWpm}" FontSize="32" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="&#x00D8; WPM" Foreground="{StaticResource HintBrush}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding Dashboard.WpmTrend}" FontSize="11"
-                                   HorizontalAlignment="Center" Margin="0,2,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#FF66BB6A"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Dashboard.WpmTrend[0]}" Value="-">
-                                            <Setter Property="Foreground" Value="#FFEF5350"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
-                <!-- Apps -->
-                <Border Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="16,20" Margin="0,0,8,0">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="&#x2B1A;" FontSize="18" Foreground="{StaticResource AccentBrush}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="{Binding Dashboard.AppsUsed}" FontSize="32" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{loc:Str Dashboard.Apps}" Foreground="{StaticResource HintBrush}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding Dashboard.AppsTrend}" FontSize="11"
-                                   HorizontalAlignment="Center" Margin="0,2,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#FF66BB6A"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Dashboard.AppsTrend[0]}" Value="-">
-                                            <Setter Property="Foreground" Value="#FFEF5350"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
-                <!-- Time Saved -->
-                <Border Background="{StaticResource InputBackgroundBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="16,20">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="&#x23F1;" FontSize="18" Foreground="{StaticResource AccentBrush}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                        <TextBlock Text="{Binding Dashboard.TimeSaved}" FontSize="32" FontWeight="Bold"
-                                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{loc:Str Dashboard.TimeSaved}" Foreground="{StaticResource HintBrush}"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding Dashboard.TimeTrend}" FontSize="11"
-                                   HorizontalAlignment="Center" Margin="0,2,0,0">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#FF66BB6A"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Dashboard.TimeTrend[0]}" Value="-">
-                                            <Setter Property="Foreground" Value="#FFEF5350"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
-            </UniformGrid>
-
-            <!-- Activity Header -->
-            <TextBlock Text="{loc:Str Dashboard.Activity}" FontSize="16" FontWeight="SemiBold"
-                       Foreground="{StaticResource TextBrush}" Margin="0,0,0,12"/>
-
-            <!-- Empty State -->
-            <TextBlock Text="{loc:Str Dashboard.NoActivity}"
-                       Foreground="{StaticResource HintBrush}" FontSize="14"
-                       HorizontalAlignment="Center" Margin="0,40,0,40"
-                       Visibility="{Binding Dashboard.WordsCount, Converter={StaticResource ZeroToVisibility}}"/>
-
-            <!-- Bar Chart -->
-            <Border Background="{StaticResource InputBackgroundBrush}"
-                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                    CornerRadius="8" Padding="16" MinHeight="220"
-                    Visibility="{Binding Dashboard.WordsCount, Converter={StaticResource ZeroToVisibility}, ConverterParameter=invert}">
-                <ItemsControl ItemsSource="{Binding Dashboard.ChartData}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Rows="1"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="2,0"
-                                  ToolTipService.ShowDuration="60000"
-                                  Cursor="Hand"
-                                  Background="Transparent">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ToolTip>
-                                    <ToolTip Background="{StaticResource SidebarBrush}"
-                                             BorderBrush="{StaticResource BorderBrush}"
-                                             Foreground="{StaticResource TextBrush}"
-                                             Padding="10,8">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding WordCount}"
-                                                       FontSize="15" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{loc:Str Dashboard.Words}"
-                                                       FontSize="11" Foreground="{StaticResource HintBrush}"
-                                                       Margin="0,2,0,0"/>
-                                            <TextBlock Text="{Binding Date, StringFormat={}{0:dd.MM.yyyy}}"
-                                                       FontSize="11" Foreground="{StaticResource HintBrush}"/>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </Grid.ToolTip>
-                                <Border Grid.Row="0"
-                                        VerticalAlignment="Bottom"
-                                        HorizontalAlignment="Stretch"
-                                        CornerRadius="3,3,0,0"
-                                        Margin="3,0">
-                                    <Border.Background>
-                                        <SolidColorBrush Color="{StaticResource AccentColor}"/>
-                                    </Border.Background>
-                                    <Border.Height>
-                                        <MultiBinding Converter="{StaticResource BarHeightConverter}" ConverterParameter="160">
-                                            <Binding Path="WordCount"/>
-                                            <Binding Path="DataContext.Dashboard.ChartMaxValue"
-                                                     RelativeSource="{RelativeSource AncestorType=UserControl}"/>
-                                        </MultiBinding>
-                                    </Border.Height>
-                                </Border>
-                                <TextBlock Grid.Row="1"
-                                           Text="{Binding Date, Converter={StaticResource DayLabelConverter}}"
-                                           Foreground="{StaticResource HintBrush}"
-                                           FontSize="10"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,6,0,0"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
-
-            <!-- Setup Wizard shortcut -->
-            <Border Style="{StaticResource SettingsCardStyle}" Margin="0,24,0,0">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Right"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Center">
-                        <Button Content="{loc:Str Dashboard.RunWizard}"
-                                AutomationProperties.AutomationId="DashboardOpenWizard"
-                                Command="{Binding OpenSetupWizardCommand}"
-                                Style="{StaticResource PrimaryButtonStyle}"
-                                Padding="12,6"/>
-                    </StackPanel>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str Dashboard.WizardTitle}" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextBrush}"/>
-                        <TextBlock Text="{loc:Str Dashboard.WizardDesc}"
-                                   Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </DockPanel>
-            </Border>
-
-            <!-- Development seed tools -->
-            <Border Style="{StaticResource SettingsCardStyle}"
-                    Margin="0,16,0,0"
+            <!-- Development seed tools stay available without dominating the real dashboard. -->
+            <Border Style="{StaticResource SettingsActionBarStyle}"
+                    Margin="0,22,0,0"
                     Visibility="{Binding IsDevelopmentBuild, Converter={StaticResource BoolToVis}}">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Right"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Center">
-                        <Button Content="{loc:Str Dashboard.ClearAndSeed}"
-                                AutomationProperties.AutomationId="DashboardClearAndSeed"
-                                Command="{Binding ClearAndSeedDevelopmentDataCommand}"
-                                IsEnabled="{Binding IsDevelopmentSeeding, Converter={StaticResource InvertBoolConverter}}"
-                                Style="{StaticResource DangerButtonStyle}"
-                                Padding="12,6"/>
-                    </StackPanel>
+                    <Button DockPanel.Dock="Right"
+                            Content="{loc:Str Dashboard.ClearAndSeed}"
+                            AutomationProperties.AutomationId="DashboardClearAndSeed"
+                            Command="{Binding ClearAndSeedDevelopmentDataCommand}"
+                            IsEnabled="{Binding IsDevelopmentSeeding, Converter={StaticResource InvertBoolConverter}}"
+                            Style="{StaticResource DangerButtonStyle}"
+                            Padding="12,6"
+                            VerticalAlignment="Center"/>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str Dashboard.DevSeedTitle}" FontSize="14" FontWeight="SemiBold"
+                        <TextBlock Text="{loc:Str Dashboard.DevSeedTitle}"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
                                    Foreground="{StaticResource TextBrush}"/>
                         <TextBlock Text="{loc:Str Dashboard.DevSeedDescription}"
-                                   Foreground="{StaticResource HintBrush}" FontSize="12" Margin="0,2,0,0"
+                                   Foreground="{StaticResource HintBrush}"
+                                   FontSize="11.5"
+                                   Margin="0,3,18,0"
                                    TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding DevelopmentSeedStatusText}"
-                                   FontSize="12" Margin="0,8,0,0"
+                                   FontSize="11.5"
+                                   Margin="0,7,18,0"
                                    Visibility="{Binding DevelopmentSeedStatusText, Converter={StaticResource NonEmptyToVisibility}}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
