@@ -10,7 +10,7 @@ namespace TypeWhisper.Plugin.Gemini;
 public partial class GeminiSettingsView : UserControl
 {
     private readonly GeminiPlugin _plugin;
-    private bool _suppressPasswordChanged;
+    private readonly bool _suppressPasswordChanged;
     private bool _suppressControlChanged;
     private bool _autoRefreshStarted;
     private CancellationTokenSource? _apiKeyRefreshDebounce;
@@ -80,26 +80,29 @@ public partial class GeminiSettingsView : UserControl
 
     private async Task RefreshCatalogAfterDelayAsync(CancellationTokenSource debounce)
     {
-        try
+        using (debounce)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(750), debounce.Token);
-            if (!ReferenceEquals(_apiKeyRefreshDebounce, debounce)
-                || !_plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow))
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(750), debounce.Token);
+                if (!ReferenceEquals(_apiKeyRefreshDebounce, debounce)
+                    || !_plugin.ShouldRefreshModelCatalog(DateTimeOffset.UtcNow))
+                {
+                    return;
+                }
+
+                _autoRefreshStarted = true;
+                await RefreshModelsAsync(showSuccess: false);
+            }
+            catch (OperationCanceledException) when (debounce.IsCancellationRequested)
             {
                 return;
             }
-
-            _autoRefreshStarted = true;
-            await RefreshModelsAsync(showSuccess: false);
-        }
-        catch (OperationCanceledException) when (debounce.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            if (ReferenceEquals(_apiKeyRefreshDebounce, debounce))
-                _apiKeyRefreshDebounce = null;
-            debounce.Dispose();
+            finally
+            {
+                if (ReferenceEquals(_apiKeyRefreshDebounce, debounce))
+                    _apiKeyRefreshDebounce = null;
+            }
         }
     }
 

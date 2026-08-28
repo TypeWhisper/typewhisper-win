@@ -347,39 +347,34 @@ internal static class GeminiTranscriptionClient
         if (response.IsSuccessStatusCode)
             return response;
 
-        var statusCode = (int)response.StatusCode;
-        var retryAfter = response.Headers.RetryAfter?.Delta;
-        if (retryAfter is null && response.Headers.RetryAfter?.Date is { } retryAt)
-            retryAfter = retryAt - DateTimeOffset.UtcNow;
+        using (response)
+        {
+            var statusCode = (int)response.StatusCode;
+            var retryAfter = response.Headers.RetryAfter?.Delta;
+            if (retryAfter is null && response.Headers.RetryAfter?.Date is { } retryAt)
+                retryAfter = retryAt - DateTimeOffset.UtcNow;
 
-        string errorBody;
-        try
-        {
-            errorBody = await response.Content.ReadAsStringAsync(ct);
-        }
-        finally
-        {
-            response.Dispose();
-        }
+            var errorBody = await response.Content.ReadAsStringAsync(ct);
 
-        var failureKind = statusCode switch
-        {
-            401 => PluginRequestFailureKind.Authentication,
-            403 => PluginRequestFailureKind.Permission,
-            408 => PluginRequestFailureKind.Timeout,
-            413 => PluginRequestFailureKind.RequestTooLarge,
-            429 => PluginRequestFailureKind.RateLimit,
-            >= 500 and <= 599 => PluginRequestFailureKind.ServerError,
-            >= 400 and <= 499 => PluginRequestFailureKind.InvalidRequest,
-            _ => PluginRequestFailureKind.Unknown,
-        };
-        var message = statusCode switch
-        {
-            401 => "Invalid Gemini API key",
-            429 => "Gemini rate limit reached, please wait",
-            _ => $"Gemini API error {statusCode}: {OpenAiApiHelper.ExtractErrorMessage(errorBody)}",
-        };
-        throw new PluginRequestException(message, failureKind, statusCode, retryAfter);
+            var failureKind = statusCode switch
+            {
+                401 => PluginRequestFailureKind.Authentication,
+                403 => PluginRequestFailureKind.Permission,
+                408 => PluginRequestFailureKind.Timeout,
+                413 => PluginRequestFailureKind.RequestTooLarge,
+                429 => PluginRequestFailureKind.RateLimit,
+                >= 500 and <= 599 => PluginRequestFailureKind.ServerError,
+                >= 400 and <= 499 => PluginRequestFailureKind.InvalidRequest,
+                _ => PluginRequestFailureKind.Unknown,
+            };
+            var message = statusCode switch
+            {
+                401 => "Invalid Gemini API key",
+                429 => "Gemini rate limit reached, please wait",
+                _ => $"Gemini API error {statusCode}: {OpenAiApiHelper.ExtractErrorMessage(errorBody)}",
+            };
+            throw new PluginRequestException(message, failureKind, statusCode, retryAfter);
+        }
     }
 
     private static bool TryGetString(JsonElement element, string propertyName, out string value)

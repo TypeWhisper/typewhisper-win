@@ -20,7 +20,7 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     private readonly TaskCompletionSource<bool> _setupCompleted = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
-    private bool _disposed;
+    private int _disposeStarted;
 
     private GeminiStreamingSession(
         ClientWebSocket webSocket,
@@ -114,14 +114,17 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     /// <inheritdoc />
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
-        if (_disposed || _webSocket.State != WebSocketState.Open || pcm16Audio.Length == 0)
+        if (pcm16Audio.Length == 0)
             return;
 
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (!_disposed && _webSocket.State == WebSocketState.Open)
+            if (Volatile.Read(ref _disposeStarted) == 0
+                && _webSocket.State == WebSocketState.Open)
+            {
                 await SendTextAsync(CreateAudioPayload(pcm16Audio.Span), ct);
+            }
         }
         finally
         {
@@ -132,13 +135,11 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     /// <inheritdoc />
     public async Task FinalizeAsync(CancellationToken ct)
     {
-        if (_disposed || _webSocket.State != WebSocketState.Open)
-            return;
-
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (!_disposed && _webSocket.State == WebSocketState.Open)
+            if (Volatile.Read(ref _disposeStarted) == 0
+                && _webSocket.State == WebSocketState.Open)
             {
                 await SendTextAsync(
                     """{"realtimeInput":{"audioStreamEnd":true}}""",
@@ -196,8 +197,9 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     TranscriptReceived?.Invoke(update.Transcript);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            Debug.WriteLine("Gemini Live receive loop canceled.");
         }
         catch (Exception ex) when (ex is WebSocketException or JsonException or InvalidOperationException)
         {
@@ -217,10 +219,9 @@ internal sealed class GeminiStreamingSession : IStreamingSession
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
             return;
 
-        _disposed = true;
         _receiveCts.Cancel();
 
         await _sendLock.WaitAsync(CancellationToken.None);
@@ -247,12 +248,8 @@ internal sealed class GeminiStreamingSession : IStreamingSession
         }
 
         if (_receiveTask is not null)
-        {
-            try { await _receiveTask; }
-            catch (OperationCanceledException) { }
-        }
+            await _receiveTask;
 
-        _sendLock.Dispose();
         _receiveCts.Dispose();
         _webSocket.Dispose();
     }
