@@ -197,10 +197,10 @@ internal static class GeminiTranscriptionClient
             else if (chunkId == "data")
                 dataSize = Math.Min(chunkSize, Math.Max(0, wavAudio.Length - dataStart));
 
-            var paddedChunkSize = chunkSize + (chunkSize & 1);
-            if (paddedChunkSize > wavAudio.Length - dataStart)
+            var paddedChunkSize = (long)chunkSize + (chunkSize & 1);
+            if (paddedChunkSize > wavAudio.Length - (long)dataStart)
                 break;
-            offset = dataStart + paddedChunkSize;
+            offset = dataStart + (int)paddedChunkSize;
         }
 
         return byteRate > 0 && dataSize > 0

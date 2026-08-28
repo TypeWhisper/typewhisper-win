@@ -433,12 +433,20 @@ public sealed class GeminiPlugin :
                                 previousLlmModels,
                                 previousTranscriptionModels,
                                 previousFetchedAt);
-                            if (selectionChanged)
-                            {
-                                _host.SetSetting(
-                                    SelectedTranscriptionModelSettingName,
-                                    previousSelectedModelId);
-                            }
+                        }
+                        catch (Exception rollbackException)
+                        {
+                            rollbackFailures.Add(rollbackException);
+                        }
+                    }
+
+                    if (selectionChanged)
+                    {
+                        try
+                        {
+                            _host.SetSetting(
+                                SelectedTranscriptionModelSettingName,
+                                previousSelectedModelId);
                         }
                         catch (Exception rollbackException)
                         {
@@ -490,9 +498,13 @@ public sealed class GeminiPlugin :
         try
         {
             var nativeModels = new List<GeminiNativeModel>();
+            var seenPageTokens = new HashSet<string>(StringComparer.Ordinal);
             string? pageToken = null;
+            const int maxPageCount = 100;
+            var pageCount = 0;
             do
             {
+                pageCount++;
                 var url = $"{NativeBaseUrl}/models?pageSize=1000";
                 if (!string.IsNullOrWhiteSpace(pageToken))
                     url += $"&pageToken={Uri.EscapeDataString(pageToken)}";
@@ -518,11 +530,28 @@ public sealed class GeminiPlugin :
                 }
 
                 nativeModels.AddRange(page.Models.OfType<GeminiNativeModel>());
-                pageToken = string.IsNullOrWhiteSpace(page.NextPageToken)
+                var nextPageToken = string.IsNullOrWhiteSpace(page.NextPageToken)
                     ? null
                     : page.NextPageToken;
+
+                if (nextPageToken is not null && !seenPageTokens.Add(nextPageToken))
+                {
+                    _host?.Log(
+                        PluginLogLevel.Warning,
+                        "Model catalog pagination returned a repeated page token.");
+                    nextPageToken = null;
+                }
+
+                pageToken = nextPageToken;
             }
-            while (pageToken is not null);
+            while (pageToken is not null && pageCount < maxPageCount);
+
+            if (pageToken is not null)
+            {
+                _host?.Log(
+                    PluginLogLevel.Warning,
+                    $"Model catalog pagination exceeded {maxPageCount} pages.");
+            }
 
             if (!string.Equals(_apiKey, apiKey, StringComparison.Ordinal))
             {
@@ -909,7 +938,7 @@ public sealed class GeminiPlugin :
     {
         var available = models
             .Select(model => new GeminiFetchedModel(
-                ResolveNativeModelId(model),
+                NormalizeModelId(ResolveNativeModelId(model)),
                 model.DisplayName))
             .Where(model => !string.IsNullOrWhiteSpace(model.Id))
             .DistinctBy(model => model.Id, StringComparer.OrdinalIgnoreCase)

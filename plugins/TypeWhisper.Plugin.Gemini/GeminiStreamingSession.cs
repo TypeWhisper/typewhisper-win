@@ -185,7 +185,9 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     messageBuffer.GetBuffer(),
                     0,
                     (int)messageBuffer.Length);
-                var update = _collector.ApplyEvent(json);
+                if (!TryApplyEvent(_collector, json, out var update))
+                    continue;
+
                 if (update.SetupCompleted)
                     _setupCompleted.TrySetResult(true);
                 if (update.ErrorMessage is { } errorMessage)
@@ -194,17 +196,55 @@ internal sealed class GeminiStreamingSession : IStreamingSession
                     Debug.WriteLine($"Gemini Live transcription error: {errorMessage}");
                 }
                 if (update.Transcript is not null)
-                    TranscriptReceived?.Invoke(update.Transcript);
+                    NotifyTranscriptHandlers(TranscriptReceived, update.Transcript);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             Debug.WriteLine("Gemini Live receive loop canceled.");
         }
-        catch (Exception ex) when (ex is WebSocketException or JsonException or InvalidOperationException)
+        catch (Exception ex)
         {
             _setupCompleted.TrySetException(ex);
             Debug.WriteLine($"Gemini Live receive error: {ex.Message}");
+        }
+    }
+
+    internal static bool TryApplyEvent(
+        GeminiStreamingTranscriptCollector collector,
+        string json,
+        out GeminiStreamingUpdate update)
+    {
+        try
+        {
+            update = collector.ApplyEvent(json);
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            Debug.WriteLine($"Gemini Live event parse error: {ex.Message}");
+            update = GeminiStreamingUpdate.Empty;
+            return false;
+        }
+    }
+
+    internal static void NotifyTranscriptHandlers(
+        Action<StreamingTranscriptEvent>? handlers,
+        StreamingTranscriptEvent transcript)
+    {
+        if (handlers is null)
+            return;
+
+        foreach (Action<StreamingTranscriptEvent> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(transcript);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Gemini Live transcript handler error: {ex.Message}");
+            }
         }
     }
 

@@ -144,7 +144,7 @@ public sealed class GeminiPluginTests
                     { "name": "models/gemma-4-31b-it", "displayName": "Gemma 4 31B IT" },
                     { "name": "models/gemini-3.7-flash", "displayName": "Duplicate" },
                     { "name": "models/gemini-3.5-transcribe", "baseModelId": "gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
-                    { "name": "models/gemini-3.5-transcribe-live", "baseModelId": "gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" },
+                    { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" },
                     { "name": "models/gemini-3.1-flash-image", "displayName": "Nano Banana" },
                     { "name": "models/gemini-embedding-2", "displayName": "Embedding" },
                     { "name": "models/veo-3.1-generate-preview", "displayName": "Veo" }
@@ -213,6 +213,35 @@ public sealed class GeminiPluginTests
         Assert.Equal(
             "gemini-3.5-transcribe-live",
             Assert.Single(catalog.TranscriptionModels).LiveModelId);
+    }
+
+    [Fact]
+    public async Task FetchModelCatalogAsync_StopsWhenPageTokenRepeats()
+    {
+        var requestCount = 0;
+        var handler = new CapturingHandler((_, _) =>
+        {
+            requestCount++;
+            return JsonResponse("""
+                {
+                  "models":[{"name":"models/gemini-3.7-flash"}],
+                  "nextPageToken":"repeated-page"
+                }
+                """);
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "gemini-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GeminiPlugin(httpClient);
+        await sut.ActivateAsync(host);
+
+        var catalog = await sut.FetchModelCatalogAsync();
+
+        Assert.NotNull(catalog);
+        Assert.Equal(2, requestCount);
+        Assert.Contains(host.Logs, entry =>
+            entry.Level == PluginLogLevel.Warning
+            && entry.Message.Contains("repeated page token", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -548,6 +577,39 @@ public sealed class GeminiPluginTests
             collector.ApplyEvent("""
                 {"serverContent":{"inputTranscription":{"text":" Hallo Welt "}}}
                 """).Transcript);
+
+        Assert.False(GeminiStreamingSession.TryApplyEvent(collector, "not json", out _));
+        Assert.True(GeminiStreamingSession.TryApplyEvent(
+            collector,
+            """{"serverContent":{"inputTranscription":{"text":"Still running"}}}""",
+            out var recoveredUpdate));
+        Assert.Equal("Still running", recoveredUpdate.Transcript?.Text);
+    }
+
+    [Fact]
+    public void StreamingSession_IsolatesTranscriptHandlerFailures()
+    {
+        var delivered = 0;
+        Action<StreamingTranscriptEvent> handlers = _ => throw new InvalidOperationException("boom");
+        handlers += _ => delivered++;
+
+        GeminiStreamingSession.NotifyTranscriptHandlers(
+            handlers,
+            new StreamingTranscriptEvent("Hello", false));
+
+        Assert.Equal(1, delivered);
+    }
+
+    [Fact]
+    public void CalculateWavDurationSeconds_RejectsOverflowingChunkSize()
+    {
+        var wav = new byte[20];
+        Encoding.ASCII.GetBytes("RIFF").CopyTo(wav, 0);
+        Encoding.ASCII.GetBytes("WAVE").CopyTo(wav, 8);
+        Encoding.ASCII.GetBytes("JUNK").CopyTo(wav, 12);
+        BitConverter.GetBytes(int.MaxValue).CopyTo(wav, 16);
+
+        Assert.Equal(0, GeminiTranscriptionClient.CalculateWavDurationSeconds(wav));
     }
 
     [Theory]
