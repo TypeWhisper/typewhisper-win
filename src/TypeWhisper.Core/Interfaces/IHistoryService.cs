@@ -87,4 +87,9 @@ public interface IHistoryService
     /// Exports the current data as JSON.
     /// </summary>
     string ExportToJson(IReadOnlyList<TranscriptionRecord> records);
+
+    /// <summary>
+    /// Atomically replaces the persisted history collection without deleting audio files.
+    /// </summary>
+    bool TryReplaceAll(IReadOnlyList<TranscriptionRecord> records) => false;
 }

@@ -388,6 +388,26 @@ public sealed class HistoryService : IHistoryService
         return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
     }
 
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<TranscriptionRecord> records)
+    {
+        EnsureCacheLoaded();
+        lock (_gate)
+        {
+            var replacement = records
+                .OrderByDescending(record => record.Timestamp)
+                .ToList();
+            if (!SaveToDisk(replacement))
+                return false;
+
+            _cache = replacement;
+            RebuildStats();
+        }
+
+        RaiseRecordsChanged();
+        return true;
+    }
+
     private void EnsureCacheLoaded()
     {
         if (_cacheLoaded) return;

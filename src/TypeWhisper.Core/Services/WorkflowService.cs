@@ -312,15 +312,26 @@ public sealed class WorkflowService : IWorkflowService
 
     private void SaveToDisk()
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(_cache, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch { }
+        _ = SaveToDisk(_cache);
     }
+
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<Workflow> workflows)
+    {
+        EnsureCacheLoaded();
+        var replacement = workflows.ToList();
+        replacement = replacement
+            .OrderBy(workflow => workflow.SortOrder)
+            .ThenBy(workflow => workflow.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!SaveToDisk(replacement))
+            return false;
+
+        _cache = replacement;
+        WorkflowsChanged?.Invoke();
+        return true;
+    }
+
+    private bool SaveToDisk(IReadOnlyList<Workflow> workflows) =>
+        AtomicFileWriter.TryWriteAllText(_filePath, JsonSerializer.Serialize(workflows, JsonOptions));
 }

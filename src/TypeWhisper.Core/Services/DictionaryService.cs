@@ -749,14 +749,30 @@ public sealed class DictionaryService : IDictionaryService
 
     private void SaveToDisk()
     {
+        _ = SaveToDisk(_cache);
+    }
+
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<DictionaryEntry> entries)
+    {
+        EnsureCacheLoaded();
+        var replacement = entries.Select(BackfillTimestamps).ToList();
+        if (!SaveToDisk(replacement))
+            return false;
+
+        _cache = replacement;
+        NotifyEntriesChanged();
+        return true;
+    }
+
+    private bool SaveToDisk(IReadOnlyList<DictionaryEntry> entries)
+    {
         try
         {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_filePath, json);
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+            if (!AtomicFileWriter.TryWriteAllText(_filePath, json))
+                throw new IOException("The dictionary file could not be replaced atomically.");
+            return true;
         }
         catch (IOException ex)
         {
@@ -782,6 +798,8 @@ public sealed class DictionaryService : IDictionaryService
         {
             LogDictionaryFailure("Saving dictionary failed", ex);
         }
+
+        return false;
     }
 
     private void ResetCacheAfterLoadFailure(Exception ex)

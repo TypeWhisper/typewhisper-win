@@ -662,6 +662,8 @@ public partial class App : Application
             sp.GetRequiredService<ISnippetService>()));
         services.AddSingleton<IWorkflowService>(
             new WorkflowService(Path.Combine(dataPath, "workflows.json")));
+        services.AddSingleton<IBackupPluginHandler, BackupPluginHandler>();
+        services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
         services.AddSingleton<DevelopmentDataSeeder>();
 
         // Post-processing pipeline

@@ -112,4 +112,9 @@ public interface IDictionaryService
     /// Deactivates pack.
     /// </summary>
     void DeactivatePack(string packId);
+
+    /// <summary>
+    /// Atomically replaces the persisted dictionary collection.
+    /// </summary>
+    bool TryReplaceAll(IReadOnlyList<DictionaryEntry> entries) => false;
 }

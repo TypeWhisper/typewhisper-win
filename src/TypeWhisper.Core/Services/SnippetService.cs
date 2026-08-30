@@ -316,17 +316,26 @@ public sealed partial class SnippetService : ISnippetService
 
     private void SaveToDisk()
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_filePath, json);
-        }
-        catch { }
+        _ = SaveToDisk(_cache);
     }
+
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<Snippet> snippets)
+    {
+        EnsureCacheLoaded();
+        var replacement = snippets.Select(BackfillTimestamps).ToList();
+        if (!SaveToDisk(replacement))
+            return false;
+
+        _cache = replacement;
+        SnippetsChanged?.Invoke();
+        return true;
+    }
+
+    private bool SaveToDisk(IReadOnlyList<Snippet> snippets) =>
+        AtomicFileWriter.TryWriteAllText(
+            _filePath,
+            JsonSerializer.Serialize(snippets, new JsonSerializerOptions { WriteIndented = true }));
 
     private static Snippet BackfillTimestamps(Snippet snippet)
     {

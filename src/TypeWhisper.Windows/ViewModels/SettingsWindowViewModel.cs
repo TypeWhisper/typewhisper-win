@@ -87,6 +87,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
     /// Gets dictation recovery settings and recordings.
     /// </summary>
     public RecoveryViewModel Recovery { get; }
+    /// <summary>
+    /// Gets the portable backup and restore dialog state.
+    /// </summary>
+    public BackupRestoreViewModel BackupRestore { get; }
 
     private readonly UpdateService _updateService;
     private readonly ISettingsService _settingsService;
@@ -315,6 +319,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         RecoveryViewModel recovery,
         UpdateService updateService,
         ISettingsService settingsService,
+        IBackupRestoreService backupRestoreService,
         IErrorLogService errorLog,
         DevelopmentDataSeeder developmentDataSeeder,
         TargetAppCorrectionLearningService targetAppCorrectionLearning)
@@ -333,6 +338,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject
         Recorder = recorder;
         FileTranscription = fileTranscription;
         Recovery = recovery;
+        BackupRestore = new BackupRestoreViewModel(backupRestoreService);
         _updateService = updateService;
         _settingsService = settingsService;
         _errorLog = errorLog;
