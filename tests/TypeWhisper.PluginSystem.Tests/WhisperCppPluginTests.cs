@@ -37,6 +37,7 @@ public class WhisperCppPluginTests
 
         Assert.NotNull(manifest);
         Assert.Equal("1.0.3", manifest.Version);
+        Assert.Equal("1.0.7", manifest.MinHostVersion);
         Assert.Equal(manifest.Version, sut.PluginVersion);
     }
 
