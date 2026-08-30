@@ -9,8 +9,8 @@ public sealed class ShellTranscriptionServiceTests
     [Fact]
     public void ParseFilePaths_ReadsAndDeduplicatesPathsFollowingTheShellSwitch()
     {
-        var first = Path.Combine(Path.GetTempPath(), "TypeWhisper shell test", "first clip.webm");
-        var second = Path.Combine(Path.GetTempPath(), "TypeWhisper shell test", "second.mp3");
+        var first = Path.Join(Path.GetTempPath(), "TypeWhisper shell test", "first clip.webm");
+        var second = Path.Join(Path.GetTempPath(), "TypeWhisper shell test", "second.mp3");
 
         var paths = ShellTranscriptionService.ParseFilePaths([
             "--minimized",
@@ -25,20 +25,26 @@ public sealed class ShellTranscriptionServiceTests
     }
 
     [Fact]
-    public void RequestInbox_PreservesConcurrentRequestsUntilTheyAreDrained()
+    public async Task RequestInbox_PreservesConcurrentRequestsUntilTheyAreDrained()
     {
         var requestDirectory = CreateTemporaryDirectory();
         try
         {
-            Assert.True(ShellTranscriptionService.Enqueue([@"C:\media\first.webm"], requestDirectory));
-            Assert.True(ShellTranscriptionService.Enqueue(
-                [@"C:\media\second.mp3", @"C:\media\first.webm"],
-                requestDirectory));
+            var results = await Task.WhenAll(
+                Task.Run(() => ShellTranscriptionService.Enqueue([@"C:\media\first.webm"], requestDirectory)),
+                Task.Run(() => ShellTranscriptionService.Enqueue(
+                    [@"C:\media\second.mp3", @"C:\media\first.webm"],
+                    requestDirectory)));
+
+            Assert.All(results, result => Assert.True(result));
             Assert.True(ShellTranscriptionService.HasPendingRequests(requestDirectory));
 
             var paths = ShellTranscriptionService.Drain(requestDirectory);
+            string[] expectedPaths = [@"C:\media\first.webm", @"C:\media\second.mp3"];
 
-            Assert.Equal([@"C:\media\first.webm", @"C:\media\second.mp3"], paths);
+            Assert.Equal(
+                expectedPaths.Order(StringComparer.OrdinalIgnoreCase),
+                paths.Order(StringComparer.OrdinalIgnoreCase));
             Assert.False(ShellTranscriptionService.HasPendingRequests(requestDirectory));
         }
         finally
@@ -53,7 +59,7 @@ public sealed class ShellTranscriptionServiceTests
         var requestDirectory = CreateTemporaryDirectory();
         try
         {
-            File.WriteAllText(Path.Combine(requestDirectory, "000-invalid.json"), "not json");
+            File.WriteAllText(Path.Join(requestDirectory, "000-invalid.json"), "not json");
             Assert.True(ShellTranscriptionService.Enqueue([@"C:\media\clip.wav"], requestDirectory));
 
             Assert.Equal([@"C:\media\clip.wav"], ShellTranscriptionService.Drain(requestDirectory));
@@ -127,7 +133,7 @@ public sealed class ShellTranscriptionServiceTests
 
     private static string CreateTemporaryDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"TypeWhisper-shell-{Guid.NewGuid():N}");
+        var path = Path.Join(Path.GetTempPath(), $"TypeWhisper-shell-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
     }

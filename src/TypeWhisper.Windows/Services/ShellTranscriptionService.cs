@@ -24,9 +24,10 @@ internal static class ShellTranscriptionService
             if (!string.Equals(args[index], CommandLineSwitch, StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            for (index++; index < args.Count && !args[index].StartsWith("--", StringComparison.Ordinal); index++)
+            var pathIndex = index + 1;
+            for (; pathIndex < args.Count && !args[pathIndex].StartsWith("--", StringComparison.Ordinal); pathIndex++)
             {
-                var path = args[index];
+                var path = args[pathIndex];
                 if (string.IsNullOrWhiteSpace(path))
                     continue;
 
@@ -40,7 +41,7 @@ internal static class ShellTranscriptionService
                 }
             }
 
-            index--;
+            index = pathIndex - 1;
         }
 
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -60,8 +61,8 @@ internal static class ShellTranscriptionService
             var directory = requestDirectory ?? GetRequestDirectory();
             Directory.CreateDirectory(directory);
             var requestName = $"{DateTime.UtcNow:yyyyMMddHHmmssfffffff}-{Guid.NewGuid():N}";
-            var temporaryPath = Path.Combine(directory, $"{requestName}.tmp");
-            var requestPath = Path.Combine(directory, $"{requestName}.json");
+            var temporaryPath = Path.Join(directory, $"{requestName}.tmp");
+            var requestPath = Path.Join(directory, $"{requestName}.json");
             File.WriteAllText(temporaryPath, JsonSerializer.Serialize(normalizedPaths));
             File.Move(temporaryPath, requestPath);
             return true;
@@ -180,7 +181,7 @@ internal static class ShellTranscriptionService
         $"\"{executablePath}\" {CommandLineSwitch} \"%1\"";
 
     private static string GetRequestDirectory() =>
-        Path.Combine(TypeWhisperEnvironment.DataPath, RequestDirectoryName);
+        Path.Join(TypeWhisperEnvironment.DataPath, RequestDirectoryName);
 
     private static string GetVerbRegistryPath(string extension) =>
         $@"Software\Classes\SystemFileAssociations\{extension}\shell\{VerbName}";
