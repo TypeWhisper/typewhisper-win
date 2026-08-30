@@ -93,7 +93,11 @@ static class Program
         {
             return Error("TypeWhisper is not running or API server is disabled.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or JsonException
+            or InvalidDataException
+            or DecoderFallbackException)
         {
             return Error($"Could not export backup: {ex.Message}");
         }
@@ -131,7 +135,11 @@ static class Program
         {
             return Error("TypeWhisper is not running or API server is disabled.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or DecoderFallbackException)
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or JsonException
+            or InvalidDataException
+            or DecoderFallbackException)
         {
             return Error($"Could not import backup: {ex.Message}");
         }

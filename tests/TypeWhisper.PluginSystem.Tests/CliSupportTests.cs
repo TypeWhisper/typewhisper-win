@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -189,6 +190,47 @@ public sealed class CliSupportTests : IDisposable
         await using var oversized = new MemoryStream([1, 2, 3, 4, 5]);
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             CliBackupFile.ReadBoundedUtf8Async(oversized, declaredLength: null, maxBytes: 4));
+
+        await using var invalidUtf8 = new MemoryStream([0xC3, 0x28]);
+        await Assert.ThrowsAsync<DecoderFallbackException>(() =>
+            CliBackupFile.ReadBoundedUtf8Async(invalidUtf8, invalidUtf8.Length, 16));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImportCommand_ReportsInvalidBackupInputAsCliError(bool oversized)
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Join(_root, oversized ? "oversized.json" : "invalid-utf8.json");
+        if (oversized)
+        {
+            await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+            stream.SetLength(CliBackupFile.MaxBackupBytes + 1L);
+        }
+        else
+        {
+            await File.WriteAllBytesAsync(path, [0xC3, 0x28]);
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add(typeof(CliBackupFile).Assembly.Location);
+        startInfo.ArgumentList.Add("import");
+        startInfo.ArgumentList.Add(path);
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the CLI test process.");
+        var standardError = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        Assert.Equal(1, process.ExitCode);
+        Assert.Contains("Error: Could not import backup:", await standardError);
     }
 
     [Theory]
