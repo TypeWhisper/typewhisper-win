@@ -18,6 +18,8 @@ public sealed class AudioFileService
         ".mp4", ".mkv", ".avi", ".mov", ".webm"
     };
 
+    internal static IReadOnlyCollection<string> SupportedFileExtensions => SupportedExtensions;
+
     /// <summary>
     /// Returns whether supported.
     /// </summary>

@@ -7,6 +7,7 @@
   "Nav.Recording": "Запись",
   "Nav.Shortcuts": "Горячие клавиши",
   "Nav.FileTranscription": "Транскрипция файлов",
+  "Shell.TranscribeWithTypeWhisper": "Транскрибировать с помощью TypeWhisper",
   "Nav.Recovery": "Восстановление",
   "Page.RecoverySubtitle": "Восстановление неудачных диктовок и настройка устойчивых запросов транскрипции и рабочих процессов.",
   "Tray.RecoverLastRecording": "Восстановить последнюю запись",

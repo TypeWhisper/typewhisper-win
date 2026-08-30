@@ -7,6 +7,7 @@
   "Nav.Recording": "录音",
   "Nav.Shortcuts": "快捷键",
   "Nav.FileTranscription": "文件转写",
+  "Shell.TranscribeWithTypeWhisper": "使用 TypeWhisper 转录",
   "Nav.Recovery": "恢复",
   "Page.RecoverySubtitle": "恢复失败的听写，并配置更可靠的转写和工作流请求。",
   "Tray.RecoverLastRecording": "恢复上次录音",

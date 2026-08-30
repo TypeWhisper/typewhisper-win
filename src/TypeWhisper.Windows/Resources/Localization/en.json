@@ -7,6 +7,7 @@
   "Nav.Recording": "Recording",
   "Nav.Shortcuts": "Shortcuts",
   "Nav.FileTranscription": "File transcription",
+  "Shell.TranscribeWithTypeWhisper": "Transcribe with TypeWhisper",
   "Nav.Recovery": "Recovery",
   "Page.RecoverySubtitle": "Recover failed dictations and configure resilient transcription and workflow requests.",
   "Tray.RecoverLastRecording": "Recover last recording",
