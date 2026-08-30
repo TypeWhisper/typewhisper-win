@@ -186,6 +186,7 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         ReconcileCommercialPackAccess();
         InitializeIndustryPresets();
         InitializePacks();
+        SynchronizeEnabledPacks();
         _ = LoadRemotePacksAsync();
     }
 
@@ -559,6 +560,23 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         }
 
         InitializeIndustryPresets();
+    }
+
+    private void SynchronizeEnabledPacks()
+    {
+        var enabledIds = _settings.Current.EnabledPackIds
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pack in GetAllPacks())
+        {
+            if (enabledIds.Contains(pack.Id) && CanUsePack(pack))
+                _dictionary.ActivatePack(pack);
+            else
+                _dictionary.DeactivatePack(pack.Id);
+        }
+
+        InitializePacks();
+        RefreshEntries();
     }
 
     private void ShowTrainingResult(string targetWord)

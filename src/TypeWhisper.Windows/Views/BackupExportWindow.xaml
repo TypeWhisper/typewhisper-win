@@ -1,0 +1,169 @@
+<Window x:Class="TypeWhisper.Windows.Views.BackupExportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:converters="clr-namespace:TypeWhisper.Windows.Converters"
+        xmlns:loc="clr-namespace:TypeWhisper.Windows.Services.Localization"
+        Title="{loc:Str Backup.ExportTitle}"
+        Width="680"
+        Height="650"
+        MinWidth="560"
+        MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False"
+        Background="{StaticResource BackgroundBrush}"
+        AutomationProperties.AutomationId="BackupExportDialog">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Styles/UnifiedSettingsStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <converters:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Style="{StaticResource WizardShellStyle}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Margin="0,0,0,18">
+                <TextBlock Text="{loc:Str Backup.ExportTitle}"
+                           Style="{StaticResource SettingsGroupTitleStyle}"
+                           FontSize="22"
+                           Margin="0,0,0,4"/>
+                <TextBlock Text="{loc:Str Backup.ExportSubtitle}"
+                           Style="{StaticResource PageSubtitleStyle}"
+                           Margin="0"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str Backup.CategoriesTitle}"
+                               Style="{StaticResource SettingsGroupTitleStyle}"/>
+
+                    <Border Style="{StaticResource SettingsGroupPanelStyle}">
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource SettingsCollectionRowStyle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                      IsEnabled="{Binding IsAvailable}"
+                                                      VerticalAlignment="Center"
+                                                      AutomationProperties.Name="{Binding DisplayName}"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding DisplayName}"
+                                                       Style="{StaticResource SettingsRowLabelStyle}"
+                                                       Margin="12,0,16,0"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding CountDisplay}"
+                                                       Style="{StaticResource HintStyle}"
+                                                       Margin="0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                        <Button Content="{loc:Str Backup.SelectAll}"
+                                AutomationProperties.AutomationId="BackupExportSelectAll"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Click="SelectAll_Click"
+                                Padding="12,6"
+                                Margin="0,0,8,0"/>
+                        <Button Content="{loc:Str Backup.SelectNone}"
+                                AutomationProperties.AutomationId="BackupExportSelectNone"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Click="SelectNone_Click"
+                                Padding="12,6"/>
+                    </StackPanel>
+
+                    <Border Background="#1AF2A93B"
+                            BorderBrush="#55F2A93B"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="14,12"
+                            Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Backup.SensitiveHistoryHint}"
+                                       Foreground="{StaticResource TextBrush}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock Text="{loc:Str Backup.ExclusionsHint}"
+                                       Style="{StaticResource HintStyle}"
+                                       Margin="0,5,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Visibility="{Binding HasWarnings, Converter={StaticResource BoolToVis}}"
+                            Style="{StaticResource SettingsGroupPanelStyle}"
+                            Padding="14,12">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str Backup.WarningsTitle}"
+                                       Style="{StaticResource SettingsRowLabelStyle}"
+                                       Margin="0,0,0,6"/>
+                            <ItemsControl ItemsSource="{Binding Warnings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding StringFormat=• {0}}"
+                                                   Style="{StaticResource HintStyle}"
+                                                   Margin="0,2,0,0"
+                                                   TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="{Binding ErrorMessage}"
+                               Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}"
+                               Foreground="{StaticResource DangerBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,8"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2" Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding StatusText}"
+                           Style="{StaticResource HintStyle}"
+                           Margin="0"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <Button Grid.Column="1"
+                        Content="{loc:Str Backup.Cancel}"
+                        AutomationProperties.AutomationId="BackupExportCancel"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        IsCancel="True"
+                        Padding="14,8"
+                        Margin="0,0,8,0"/>
+                <Button Grid.Column="2"
+                        Content="{loc:Str Backup.SaveButton}"
+                        AutomationProperties.AutomationId="BackupExportSave"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        IsEnabled="{Binding CanProceed}"
+                        IsDefault="True"
+                        Click="Save_Click"
+                        Padding="14,8"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

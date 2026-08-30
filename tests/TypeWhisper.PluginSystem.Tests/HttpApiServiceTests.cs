@@ -7,6 +7,7 @@ using Moq;
 using TypeWhisper.Core.Audio;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Core.Models.Backup;
 using TypeWhisper.Core.Services;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -23,6 +24,7 @@ public class HttpApiServiceTests : IDisposable
     private readonly Mock<IWorkflowService> _workflows = new();
     private readonly Mock<ISettingsService> _settings = new();
     private readonly Mock<IHistoryService> _history = new();
+    private readonly Mock<IBackupRestoreService> _backupRestore = new();
     private readonly FakeDictationApiController _dictation = new();
     private readonly PluginEventBus _eventBus = new();
     private readonly PluginLoader _loader = new();
@@ -96,6 +98,133 @@ public class HttpApiServiceTests : IDisposable
         Assert.Equal(401, badToken.StatusCode);
         Assert.Equal(200, goodBearer.StatusCode);
         Assert.Equal(200, goodHeader.StatusCode);
+    }
+
+    [Fact]
+    public async Task SettingsBackupEndpoints_AlwaysRequireAuthentication()
+    {
+        var service = CreateService(settings: new AppSettings
+        {
+            ApiServerRequiresAuthentication = false,
+            SaveToHistoryEnabled = true
+        });
+
+        var export = await service.HandleRequestAsync(new HttpApiRequest(
+            "GET",
+            "/v1/settings/export",
+            new NameValueCollection(),
+            new Dictionary<string, string>(),
+            []), CancellationToken.None);
+        var import = await service.HandleRequestAsync(JsonRequest(
+            "POST",
+            "/v1/settings/import",
+            "{}"), CancellationToken.None);
+
+        Assert.Equal(401, export.StatusCode);
+        Assert.Equal(401, import.StatusCode);
+    }
+
+    [Fact]
+    public async Task SettingsExport_ReturnsUncachedBackupDocument()
+    {
+        const string backup = """
+            {"format":"typewhisper-backup","schemaVersion":1,"data":{}}
+            """;
+        _backupRestore
+            .Setup(service => service.ExportAsync(
+                It.IsAny<BackupExportOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(backup);
+        var service = CreateService();
+
+        var response = await service.HandleRequestAsync(
+            RequestWithToken("GET", "/v1/settings/export"),
+            CancellationToken.None);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("application/json", response.ContentType);
+        Assert.Equal(backup, response.Body);
+        Assert.Equal("no-store, max-age=0", response.Headers["Cache-Control"]);
+        Assert.Equal("no-cache", response.Headers["Pragma"]);
+    }
+
+    [Fact]
+    public async Task SettingsImport_ValidatesAndReturnsStructuredResult()
+    {
+        const string backup = """
+            {"format":"typewhisper-backup","schemaVersion":1,"data":{}}
+            """;
+        _backupRestore
+            .Setup(service => service.PreviewImport(backup))
+            .Returns(new BackupImportPreview { IsValid = true });
+        _backupRestore
+            .Setup(service => service.ImportAsync(
+                backup,
+                It.IsAny<BackupImportOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BackupImportResult
+            {
+                Success = true,
+                Categories = new Dictionary<BackupCategory, BackupCategoryImportResult>
+                {
+                    [BackupCategory.Workflows] = new() { Imported = 2, Skipped = 1 }
+                }
+            });
+        var service = CreateService();
+
+        var response = await service.HandleRequestAsync(
+            JsonRequestWithToken("POST", "/v1/settings/import", backup),
+            CancellationToken.None);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal("no-store, max-age=0", response.Headers["Cache-Control"]);
+        using var document = JsonDocument.Parse(response.Body);
+        Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+        var category = document.RootElement.GetProperty("categories").EnumerateObject().Single().Value;
+        Assert.Equal(2, category.GetProperty("imported").GetInt32());
+        Assert.Equal(1, category.GetProperty("skipped").GetInt32());
+    }
+
+    [Fact]
+    public async Task SettingsImport_RejectsInvalidBackupBeforeImport()
+    {
+        const string backup = "{\"format\":\"wrong\"}";
+        _backupRestore
+            .Setup(service => service.PreviewImport(backup))
+            .Returns(new BackupImportPreview { IsValid = false, Error = "Unsupported backup format" });
+        var service = CreateService();
+
+        var response = await service.HandleRequestAsync(
+            JsonRequestWithToken("POST", "/v1/settings/import", backup),
+            CancellationToken.None);
+
+        Assert.Equal(400, response.StatusCode);
+        Assert.Equal("Unsupported backup format", ErrorMessage(response));
+        _backupRestore.Verify(service => service.ImportAsync(
+            It.IsAny<string>(),
+            It.IsAny<BackupImportOptions?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SettingsImport_RejectsOversizedBodyBeforeParsing()
+    {
+        var service = CreateService();
+        var request = new HttpApiRequest(
+            "POST",
+            "/v1/settings/import",
+            new NameValueCollection(),
+            new Dictionary<string, string>
+            {
+                ["content-type"] = "application/json",
+                ["authorization"] = "Bearer test-token"
+            },
+            new byte[HttpApiService.MaxSettingsBackupBytes + 1]);
+
+        var response = await service.HandleRequestAsync(request, CancellationToken.None);
+
+        Assert.Equal(413, response.StatusCode);
+        _backupRestore.Verify(service => service.PreviewImport(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -1276,7 +1405,8 @@ public class HttpApiServiceTests : IDisposable
             apiTokenProvider ?? (() => "test-token"),
             recorder,
             automationController,
-            () => automationEnabled);
+            () => automationEnabled,
+            _backupRestore.Object);
 
         return (service, modelManager);
     }

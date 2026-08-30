@@ -45,4 +45,9 @@ public interface ISnippetService
     /// Imports from json.
     /// </summary>
     int ImportFromJson(string json);
+
+    /// <summary>
+    /// Atomically replaces the persisted snippet collection.
+    /// </summary>
+    bool TryReplaceAll(IReadOnlyList<Snippet> snippets) => false;
 }

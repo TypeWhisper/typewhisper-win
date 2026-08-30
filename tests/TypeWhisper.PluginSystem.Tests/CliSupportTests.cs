@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using TypeWhisper.Cli;
 
@@ -132,6 +134,105 @@ public sealed class CliSupportTests : IDisposable
         Assert.DoesNotContain("distinctive-audio-bytes", body);
     }
 
+    [Fact]
+    public async Task RequestBuilder_BuildsAuthenticatedSettingsImport()
+    {
+        const string backup = "{\"format\":\"typewhisper-backup\"}";
+
+        using var request = CliRequestBuilder.BuildSettingsImport(
+            "http://127.0.0.1:8978",
+            backup,
+            "cli-token");
+
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal(new Uri("http://127.0.0.1:8978/v1/settings/import"), request.RequestUri);
+        Assert.Equal(new AuthenticationHeaderValue("Bearer", "cli-token"), request.Headers.Authorization);
+        Assert.Equal("application/json", request.Content?.Headers.ContentType?.MediaType);
+        Assert.Equal(backup, await request.Content!.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task BackupFile_AtomicallyCreatesAndReplacesTarget()
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Join(_root, "backup.json");
+
+        await CliBackupFile.WriteAtomicAsync(path, "{\"version\":1}");
+        await CliBackupFile.WriteAtomicAsync(path, "{\"version\":2}");
+
+        Assert.Equal("{\"version\":2}", await File.ReadAllTextAsync(path));
+        Assert.Empty(Directory.EnumerateFiles(_root, ".backup.json.*.tmp"));
+    }
+
+    [Fact]
+    public async Task BackupFile_ReadsUtf8AndRejectsOversizedFiles()
+    {
+        Directory.CreateDirectory(_root);
+        var validPath = Path.Join(_root, "valid.json");
+        await File.WriteAllTextAsync(validPath, "{\"text\":\"Grüße\"}");
+
+        Assert.Equal("{\"text\":\"Grüße\"}", await CliBackupFile.ReadAsync(validPath));
+
+        var oversizedPath = Path.Join(_root, "oversized.json");
+        await using (var stream = new FileStream(oversizedPath, FileMode.CreateNew, FileAccess.Write))
+            stream.SetLength(CliBackupFile.MaxBackupBytes + 1L);
+
+        var error = await Assert.ThrowsAsync<InvalidDataException>(() => CliBackupFile.ReadAsync(oversizedPath));
+        Assert.Contains("64 MiB", error.Message);
+    }
+
+    [Fact]
+    public async Task BackupFile_ReadsResponseIncrementallyAndRejectsBeforeLimitIsExceeded()
+    {
+        await using var valid = new MemoryStream(Encoding.UTF8.GetBytes("Grüße"));
+        Assert.Equal("Grüße", await CliBackupFile.ReadBoundedUtf8Async(valid, valid.Length, 16));
+
+        await using var oversized = new MemoryStream([1, 2, 3, 4, 5]);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CliBackupFile.ReadBoundedUtf8Async(oversized, declaredLength: null, maxBytes: 4));
+
+        await using var invalidUtf8 = new MemoryStream([0xC3, 0x28]);
+        await Assert.ThrowsAsync<DecoderFallbackException>(() =>
+            CliBackupFile.ReadBoundedUtf8Async(invalidUtf8, invalidUtf8.Length, 16));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ImportCommand_ReportsInvalidBackupInputAsCliError(bool oversized)
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Join(_root, oversized ? "oversized.json" : "invalid-utf8.json");
+        if (oversized)
+        {
+            await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+            stream.SetLength(CliBackupFile.MaxBackupBytes + 1L);
+        }
+        else
+        {
+            await File.WriteAllBytesAsync(path, [0xC3, 0x28]);
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add(typeof(CliBackupFile).Assembly.Location);
+        startInfo.ArgumentList.Add("import");
+        startInfo.ArgumentList.Add(path);
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start the CLI test process.");
+        var standardError = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        Assert.Equal(1, process.ExitCode);
+        Assert.Contains("Error: Could not import backup:", await standardError);
+    }
+
     [Theory]
     [InlineData(new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E' }, "stdin.wav")]
     [InlineData(new byte[] { (byte)'f', (byte)'L', (byte)'a', (byte)'C' }, "stdin.flac")]
@@ -159,6 +260,18 @@ public sealed class CliSupportTests : IDisposable
         var options = ParseCliOptions("transcribe", "file.wav", "--language", "--json");
 
         Assert.Equal("--language requires a value.", GetOptionValue<string>(options, "Error"));
+    }
+
+    [Theory]
+    [InlineData("export", "backup.json")]
+    [InlineData("import", "backup.json")]
+    public void CliOptions_ParsesSettingsBackupCommands(string command, string path)
+    {
+        var options = ParseCliOptions(command, path, "--json");
+
+        Assert.Equal(command, GetOptionValue<string>(options, "Command"));
+        Assert.Equal([path], GetOptionValue<List<string>>(options, "Positionals"));
+        Assert.True(GetOptionValue<bool>(options, "Json"));
     }
 
     public void Dispose()

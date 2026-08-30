@@ -156,6 +156,17 @@ public static class CliRequestBuilder
     }
 
     /// <summary>
+    /// Builds a settings-backup import request.
+    /// </summary>
+    public static HttpRequestMessage BuildSettingsImport(string baseUrl, string backupJson, string? apiToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildUri(baseUrl, "/v1/settings/import"));
+        ApplyApiToken(request, apiToken);
+        request.Content = new StringContent(backupJson, Encoding.UTF8, "application/json");
+        return request;
+    }
+
+    /// <summary>
     /// Builds transcribe local file.
     /// </summary>
     public static HttpRequestMessage BuildTranscribeLocalFile(
@@ -244,4 +255,127 @@ public static class CliRequestBuilder
 
     private static Uri BuildUri(string baseUrl, string path) =>
         new(new Uri(baseUrl.TrimEnd('/')), path);
+}
+
+/// <summary>
+/// Provides bounded and atomic file operations for settings backups.
+/// </summary>
+public static class CliBackupFile
+{
+    /// <summary>
+    /// Maximum backup size accepted by the CLI and local API.
+    /// </summary>
+    public const int MaxBackupBytes = 64 * 1024 * 1024;
+
+    /// <summary>
+    /// Reads a UTF-8 stream incrementally and rejects it before the configured byte limit is exceeded.
+    /// </summary>
+    public static async Task<string> ReadBoundedUtf8Async(
+        Stream stream,
+        long? declaredLength = null,
+        int maxBytes = MaxBackupBytes,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        if (declaredLength > maxBytes)
+            throw new InvalidDataException($"Backup exceeds the {maxBytes / (1024 * 1024)} MiB size limit.");
+
+        using var buffer = new MemoryStream(
+            declaredLength is >= 0 and <= int.MaxValue
+                ? (int)Math.Min(declaredLength.Value, maxBytes)
+                : 0);
+        var chunk = new byte[(int)Math.Min(81920L, (long)maxBytes + 1)];
+        while (true)
+        {
+            var remaining = maxBytes - checked((int)buffer.Length);
+            var read = await stream.ReadAsync(
+                chunk.AsMemory(0, (int)Math.Min(chunk.Length, (long)remaining + 1)),
+                cancellationToken);
+            if (read == 0)
+                break;
+            if (read > remaining)
+                throw new InvalidDataException($"Backup exceeds the {maxBytes / (1024 * 1024)} MiB size limit.");
+            buffer.Write(chunk, 0, read);
+        }
+
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            .GetString(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+    }
+
+    /// <summary>
+    /// Reads a UTF-8 backup without allowing it to exceed the API request limit.
+    /// </summary>
+    public static async Task<string> ReadAsync(string path, CancellationToken cancellationToken = default)
+    {
+        var fullPath = Path.GetFullPath(path);
+        await using var stream = new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        if (stream.Length > MaxBackupBytes)
+            throw new InvalidDataException($"Backup exceeds the {MaxBackupBytes / (1024 * 1024)} MiB size limit.");
+
+        using var buffer = new MemoryStream((int)Math.Min(stream.Length, MaxBackupBytes));
+        var chunk = new byte[81920];
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, cancellationToken);
+            if (read == 0)
+                break;
+            if (buffer.Length + read > MaxBackupBytes)
+                throw new InvalidDataException($"Backup exceeds the {MaxBackupBytes / (1024 * 1024)} MiB size limit.");
+            buffer.Write(chunk, 0, read);
+        }
+
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            .GetString(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+    }
+
+    /// <summary>
+    /// Writes a backup through a sibling temporary file, then atomically replaces the target.
+    /// </summary>
+    public static async Task WriteAtomicAsync(
+        string path,
+        string contents,
+        CancellationToken cancellationToken = default)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath)
+            ?? throw new IOException("Backup path has no parent directory.");
+        if (!Directory.Exists(directory))
+            throw new DirectoryNotFoundException($"Directory not found: {directory}");
+
+        var tempPath = Path.Join(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(contents);
+            await using (var stream = new FileStream(
+                tempPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(fullPath))
+                File.Replace(tempPath, fullPath, destinationBackupFileName: null);
+            else
+                File.Move(tempPath, fullPath);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
 }

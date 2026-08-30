@@ -179,7 +179,7 @@ The app appears in the system tray, and the welcome wizard guides you through ex
 
 The HTTP API is an advanced local automation surface. It binds to `localhost` and `127.0.0.1`, is configurable in Settings, and uses port `8978` by default. When the server starts it writes discovery files to `%LOCALAPPDATA%\TypeWhisper`: legacy `api-port` and `api-discovery.json` with `{ "version": 1, "port": 8978, "token": "..." }`.
 
-Authentication is off by default for local compatibility. If Settings > Advanced > API Server > Require API Token is enabled, `/v1/status` remains public and all other routes require either `Authorization: Bearer <token>` or `X-TypeWhisper-API-Token: <token>`. `OPTIONS` requests return `204 No Content`.
+Authentication is off by default for local compatibility. If Settings > Advanced > API Server > Require API Token is enabled, `/v1/status` remains public and all other routes require either `Authorization: Bearer <token>` or `X-TypeWhisper-API-Token: <token>`. Settings backup export and import always require a token because backups can contain sensitive transcription text and personal configuration. `OPTIONS` requests return `204 No Content`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -203,6 +203,8 @@ Authentication is off by default for local compatibility. If Settings > Advanced
 | `/v1/dictionary/corrections` | GET | List enabled dictionary corrections |
 | `/v1/dictionary/corrections` | PUT | Upsert a correction |
 | `/v1/dictionary/corrections` | DELETE | Delete a correction |
+| `/v1/settings/export` | GET | Export a portable JSON backup |
+| `/v1/settings/import` | POST | Validate and safely merge a portable JSON backup |
 
 `/v1/transcribe` accepts `multipart/form-data` with a `file` part or a raw audio request body. Multipart fields are:
 
@@ -229,6 +231,8 @@ Raw audio requests can pass the same options with headers: `X-Language`, `X-Lang
 ```
 
 Dictionary terms use `PUT /v1/dictionary/terms` with `{ "terms": ["TypeWhisper"], "replace": false }` and `DELETE /v1/dictionary/terms` with `{ "term": "TypeWhisper" }`. Corrections use literal phrase matching and optional case sensitivity, for example `{ "original": "neuer Absatz", "replacement": "\\n\\n", "caseSensitive": false }`. Replacement values decode `\s`, `\n`, `\r`, `\t`, and `\\` once when applied. Corrections created through the HTTP API remain literal; regular expression matching can be enabled in the Dictionary UI.
+
+`GET /v1/settings/export` returns the versioned backup document directly as JSON. Send that document unchanged as `application/json` to `POST /v1/settings/import`. Import requests are limited to 64 MiB and return per-category imported, skipped, and conflict counts plus warnings and `restart_required`. Backup responses use `Cache-Control: no-store`. Backups exclude credentials, API tokens, license state, audio, hardware selections, and machine-local paths.
 
 ```bash
 curl -X POST http://localhost:8978/v1/transcribe \
@@ -257,7 +261,12 @@ typewhisper transcribe recording.wav --language de --json
 typewhisper transcribe recording.wav --language-hint de --language-hint en
 typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
 typewhisper transcribe - < audio.wav
+typewhisper export typewhisper-backup.json
+typewhisper import typewhisper-backup.json
+typewhisper import typewhisper-backup.json --json
 ```
+
+Backup exports are written through a sibling temporary file and atomically moved into place. Restore uses safe merge semantics; existing conflicting entries are reported instead of silently overwritten.
 
 ### Options
 

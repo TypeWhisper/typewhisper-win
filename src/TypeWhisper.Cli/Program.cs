@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace TypeWhisper.Cli;
@@ -46,9 +47,144 @@ static class Program
             "status" => await StatusAsync(baseUrl, options.Json, connection.ApiToken),
             "models" => await ModelsAsync(baseUrl, options.Json, connection.ApiToken),
             "transcribe" => await TranscribeAsync(baseUrl, options, connection.ApiToken),
+            "export" => await ExportSettingsAsync(baseUrl, options, connection.ApiToken),
+            "import" => await ImportSettingsAsync(baseUrl, options, connection.ApiToken),
             _ => Error($"Unknown command: {options.Command}")
         };
     }
+
+    static async Task<int> ExportSettingsAsync(string baseUrl, CliOptions options, string? apiToken)
+    {
+        if (options.Positionals.Count != 1 || string.IsNullOrWhiteSpace(options.Positionals[0]))
+            return Error("Usage: typewhisper export <path>");
+
+        var path = Path.GetFullPath(options.Positionals[0]);
+        try
+        {
+            using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/settings/export", apiToken);
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var body = await CliBackupFile.ReadBoundedUtf8Async(
+                responseStream,
+                response.Content.Headers.ContentLength);
+            if (!response.IsSuccessStatusCode)
+                return Error($"Backup export failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+
+            using (JsonDocument.Parse(body)) { }
+            await CliBackupFile.WriteAtomicAsync(path, body);
+
+            if (options.Json)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    success = true,
+                    path,
+                    bytes = Encoding.UTF8.GetByteCount(body)
+                }, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            else
+            {
+                Console.WriteLine($"Backup exported to {path}");
+            }
+
+            return 0;
+        }
+        catch (HttpRequestException)
+        {
+            return Error("TypeWhisper is not running or API server is disabled.");
+        }
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or JsonException
+            or InvalidDataException
+            or DecoderFallbackException)
+        {
+            return Error($"Could not export backup: {ex.Message}");
+        }
+    }
+
+    static async Task<int> ImportSettingsAsync(string baseUrl, CliOptions options, string? apiToken)
+    {
+        if (options.Positionals.Count != 1 || string.IsNullOrWhiteSpace(options.Positionals[0]))
+            return Error("Usage: typewhisper import <path> [--json]");
+
+        var path = Path.GetFullPath(options.Positionals[0]);
+        if (!File.Exists(path))
+            return Error($"File not found: {path}");
+
+        try
+        {
+            var backupJson = await CliBackupFile.ReadAsync(path);
+            using (JsonDocument.Parse(backupJson)) { }
+
+            using var request = CliRequestBuilder.BuildSettingsImport(baseUrl, backupJson, apiToken);
+            using var response = await Http.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+                return Error($"Backup import failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
+
+            if (options.Json)
+            {
+                Console.WriteLine(PrettyJson(body));
+                return ImportSucceeded(body) ? 0 : 1;
+            }
+
+            return PrintImportSummary(body);
+        }
+        catch (HttpRequestException)
+        {
+            return Error("TypeWhisper is not running or API server is disabled.");
+        }
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or JsonException
+            or InvalidDataException
+            or DecoderFallbackException)
+        {
+            return Error($"Could not import backup: {ex.Message}");
+        }
+    }
+
+    static bool ImportSucceeded(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        return !doc.RootElement.TryGetProperty("success", out var success) || success.GetBoolean();
+    }
+
+    static int PrintImportSummary(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var success = !root.TryGetProperty("success", out var successElement) || successElement.GetBoolean();
+        Console.WriteLine(success ? "Backup restored." : "Backup restore failed.");
+
+        if (root.TryGetProperty("categories", out var categories) && categories.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var category in categories.EnumerateObject())
+            {
+                var result = category.Value;
+                Console.WriteLine(
+                    $"  {category.Name}: {Count(result, "imported")} imported, " +
+                    $"{Count(result, "skipped")} skipped, {Count(result, "conflicts")} conflicts");
+            }
+        }
+
+        if (root.TryGetProperty("warnings", out var warnings) && warnings.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var warning in warnings.EnumerateArray())
+                Console.WriteLine($"Warning: {warning.GetString()}");
+        }
+
+        if (root.TryGetProperty("restart_required", out var restart) && restart.ValueKind == JsonValueKind.True)
+            Console.WriteLine("Restart TypeWhisper to finish restoring plugins.");
+        if (!success && root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+            Console.Error.WriteLine($"Error: {error.GetString()}");
+
+        return success ? 0 : 1;
+    }
+
+    static int Count(JsonElement result, string name) =>
+        result.TryGetProperty(name, out var value) && value.TryGetInt32(out var count) ? count : 0;
 
     static async Task<int> StatusAsync(string baseUrl, bool json, string? apiToken)
     {
@@ -224,6 +360,8 @@ static class Program
               status                    Show TypeWhisper status
               models                    List available models
               transcribe <file|->       Transcribe an audio file, or - for stdin
+              export <path>             Export a portable settings backup
+              import <path>             Restore a portable settings backup
 
             Global options:
               --port <N>                API server port (default: auto-discover, fallback 8978)
@@ -248,6 +386,9 @@ static class Program
               typewhisper transcribe recording.wav --language-hint de --language-hint en
               typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
               typewhisper transcribe - < audio.wav
+              typewhisper export typewhisper-backup.json
+              typewhisper import typewhisper-backup.json
+              typewhisper import typewhisper-backup.json --json
             """);
     }
 

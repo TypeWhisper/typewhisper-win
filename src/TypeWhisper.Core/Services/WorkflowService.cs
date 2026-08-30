@@ -54,6 +54,7 @@ public sealed class WorkflowService : IWorkflowService
     /// </summary>
     public void AddWorkflow(Workflow workflow)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var created = workflow with
         {
@@ -71,6 +72,7 @@ public sealed class WorkflowService : IWorkflowService
     /// </summary>
     public void UpdateWorkflow(Workflow workflow)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var updated = workflow with { UpdatedAt = DateTime.UtcNow };
         var idx = _cache.FindIndex(w => w.Id == workflow.Id);
@@ -85,6 +87,7 @@ public sealed class WorkflowService : IWorkflowService
     /// </summary>
     public void DeleteWorkflow(string id)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.RemoveAll(w => w.Id == id);
         SaveToDisk();
@@ -96,6 +99,7 @@ public sealed class WorkflowService : IWorkflowService
     /// </summary>
     public void ToggleWorkflow(string id)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(w => w.Id == id);
         if (idx < 0) return;
@@ -114,6 +118,7 @@ public sealed class WorkflowService : IWorkflowService
     /// </summary>
     public void Reorder(IReadOnlyList<string> orderedIds)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         for (var i = 0; i < orderedIds.Count; i++)
         {
@@ -312,15 +317,27 @@ public sealed class WorkflowService : IWorkflowService
 
     private void SaveToDisk()
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(_cache, JsonOptions);
-            File.WriteAllText(_filePath, json);
-        }
-        catch { }
+        _ = SaveToDisk(_cache);
     }
+
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<Workflow> workflows)
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        EnsureCacheLoaded();
+        var replacement = workflows.ToList();
+        replacement = replacement
+            .OrderBy(workflow => workflow.SortOrder)
+            .ThenBy(workflow => workflow.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!SaveToDisk(replacement))
+            return false;
+
+        _cache = replacement;
+        WorkflowsChanged?.Invoke();
+        return true;
+    }
+
+    private bool SaveToDisk(IReadOnlyList<Workflow> workflows) =>
+        AtomicFileWriter.TryWriteAllText(_filePath, JsonSerializer.Serialize(workflows, JsonOptions));
 }

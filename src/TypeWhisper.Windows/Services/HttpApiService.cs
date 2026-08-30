@@ -33,6 +33,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private readonly ITranslationService _translation;
     private readonly IDictationApiController _dictation;
     private readonly IWorkflowService _workflows;
+    private readonly IBackupRestoreService? _backupRestore;
     private readonly IRecorderApiController? _recorder;
     private readonly IDictationAutomationController? _automation;
     private readonly Func<string> _apiTokenProvider;
@@ -44,6 +45,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private Task? _listenTask;
     private int? _runningPort;
     private bool _disposed;
+
+    internal const int MaxSettingsBackupBytes = 64 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -74,7 +77,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         Func<string>? apiTokenProvider = null,
         IRecorderApiController? recorder = null,
         IDictationAutomationController? automationController = null,
-        Func<bool>? automationEnabledProvider = null)
+        Func<bool>? automationEnabledProvider = null,
+        IBackupRestoreService? backupRestore = null)
     {
         _modelManager = modelManager;
         _settings = settings;
@@ -86,6 +90,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         _translation = translation;
         _dictation = dictation;
         _workflows = workflows;
+        _backupRestore = backupRestore;
         _recorder = recorder;
         _automation = automationController ?? (dictation as IDictationAutomationController);
         _apiTokenProvider = apiTokenProvider ?? LoadOrCreateApiToken;
@@ -197,8 +202,23 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
 
         try
         {
-            var request = await HttpApiRequest.FromListenerRequestAsync(context.Request, ct);
-            var apiResponse = await HandleRequestAsync(request, ct);
+            HttpApiResponse apiResponse;
+            if (IsSettingsImportRequest(context.Request) && context.Request.ContentLength64 < 0)
+            {
+                apiResponse = Error(411, "Content-Length is required for settings import");
+            }
+            else if (IsSettingsImportRequest(context.Request) &&
+                     context.Request.ContentLength64 > MaxSettingsBackupBytes)
+            {
+                apiResponse = Error(
+                    413,
+                    $"Backup exceeds the {MaxSettingsBackupBytes / (1024 * 1024)} MiB size limit");
+            }
+            else
+            {
+                var request = await HttpApiRequest.FromListenerRequestAsync(context.Request, ct);
+                apiResponse = await HandleRequestAsync(request, ct);
+            }
 
             response.StatusCode = apiResponse.StatusCode;
             response.ContentType = apiResponse.ContentType;
@@ -272,6 +292,8 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/dictionary/corrections", "GET") => HandleGetDictionaryCorrections(),
                 ("/v1/dictionary/corrections", "PUT") => await HandlePutDictionaryCorrection(request),
                 ("/v1/dictionary/corrections", "DELETE") => await HandleDeleteDictionaryCorrection(request),
+                ("/v1/settings/export", "GET") => await HandleSettingsExport(ct),
+                ("/v1/settings/import", "POST") => await HandleSettingsImport(request, ct),
                 _ => Error(404, "Not found")
             };
         }
@@ -1011,6 +1033,79 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     private Func<string, string>? GetVocabularyBooster() =>
         _settings.Current.VocabularyBoostingEnabled ? _vocabularyBoosting.Apply : null;
 
+    private async Task<HttpApiResponse> HandleSettingsExport(CancellationToken ct)
+    {
+        if (_backupRestore is null)
+            return Error(503, "Backup and restore service is unavailable");
+
+        var json = await _backupRestore.ExportAsync(cancellationToken: ct);
+        return new HttpApiResponse(
+            200,
+            json,
+            "application/json",
+            SensitiveResponseHeaders());
+    }
+
+    private async Task<HttpApiResponse> HandleSettingsImport(HttpApiRequest request, CancellationToken ct)
+    {
+        if (_backupRestore is null)
+            return Error(503, "Backup and restore service is unavailable");
+
+        if (_dictation.State is DictationState.Recording or DictationState.Processing or DictationState.Inserting ||
+            _recorder?.IsRecording == true)
+        {
+            return Error(409, "Backup restore is unavailable while recording or transcription is active");
+        }
+
+        if (request.Body.Length == 0)
+            return Error(400, "Missing JSON body");
+        if (request.Body.Length > MaxSettingsBackupBytes)
+            return Error(413, $"Backup exceeds the {MaxSettingsBackupBytes / (1024 * 1024)} MiB size limit");
+
+        var contentType = Header(request.Headers, "content-type");
+        if (contentType is null ||
+            !contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+        {
+            return Error(400, "Content-Type must be application/json");
+        }
+
+        string json;
+        try
+        {
+            json = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                .GetString(request.Body);
+            var preview = _backupRestore.PreviewImport(json);
+            if (!preview.IsValid)
+                return Error(400, preview.Error ?? "Invalid backup");
+        }
+        catch (DecoderFallbackException)
+        {
+            return Error(400, "Request body must be valid UTF-8 JSON");
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or ArgumentException)
+        {
+            return Error(400, ex.Message);
+        }
+
+        var result = await _backupRestore.ImportAsync(json, cancellationToken: ct);
+        return new HttpApiResponse(
+            200,
+            JsonSerializer.Serialize(result, JsonOptions),
+            "application/json",
+            SensitiveResponseHeaders());
+    }
+
+    private static IReadOnlyDictionary<string, string> SensitiveResponseHeaders() =>
+        new Dictionary<string, string>
+        {
+            ["Cache-Control"] = "no-store, max-age=0",
+            ["Pragma"] = "no-cache"
+        };
+
+    private static bool IsSettingsImportRequest(HttpListenerRequest request) =>
+        string.Equals(request.HttpMethod, "POST", StringComparison.Ordinal) &&
+        string.Equals(request.Url?.AbsolutePath, "/v1/settings/import", StringComparison.Ordinal);
+
     private bool IsAutomationEnabled() => _automationEnabledProvider();
 
     private static bool IsKnownRoute(string path, string method, bool automationEnabled) =>
@@ -1043,11 +1138,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             ("/v1/dictionary/corrections", "GET") => true,
             ("/v1/dictionary/corrections", "PUT") => true,
             ("/v1/dictionary/corrections", "DELETE") => true,
+            ("/v1/settings/export", "GET") => true,
+            ("/v1/settings/import", "POST") => true,
             _ => false
         };
 
     private bool RequiresAuthentication(HttpApiRequest request) =>
         request.Path.StartsWith("/v1/automation/", StringComparison.Ordinal) ||
+        request.Path.StartsWith("/v1/settings/", StringComparison.Ordinal) ||
         (_settings.Current.ApiServerRequiresAuthentication &&
          !string.Equals(request.Path, "/v1/status", StringComparison.Ordinal));
 
@@ -1384,6 +1482,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
     {
         400 => "bad_request",
         401 => "unauthorized",
+        411 => "length_required",
         404 => "not_found",
         409 => "conflict",
         413 => "payload_too_large",

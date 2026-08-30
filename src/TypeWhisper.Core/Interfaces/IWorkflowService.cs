@@ -52,6 +52,11 @@ public interface IWorkflowService
     /// Performs force match.
     /// </summary>
     WorkflowMatchResult? ForceMatch(string workflowId);
+
+    /// <summary>
+    /// Atomically replaces the persisted workflow collection.
+    /// </summary>
+    bool TryReplaceAll(IReadOnlyList<Workflow> workflows) => false;
 }
 
 /// <summary>

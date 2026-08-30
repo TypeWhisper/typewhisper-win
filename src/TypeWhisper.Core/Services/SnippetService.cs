@@ -62,6 +62,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public void AddSnippet(Snippet snippet)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.Add(BackfillTimestamps(snippet));
         SaveToDisk();
@@ -73,6 +74,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public void UpdateSnippet(Snippet snippet)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(s => s.Id == snippet.Id);
         if (idx >= 0)
@@ -89,6 +91,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public void DeleteSnippet(string id)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.RemoveAll(s => s.Id == id);
         SaveToDisk();
@@ -100,6 +103,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public string ApplySnippets(string text, Func<string>? clipboardProvider = null)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var activeSnippets = _cache
             .Where(s => s.IsEnabled)
@@ -139,6 +143,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public int ImportFromJson(string json)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         var imported = JsonSerializer.Deserialize(json, SnippetJsonContext.Default.ListSnippet);
         if (imported is null or { Count: 0 }) return 0;
 
@@ -227,6 +232,7 @@ public sealed partial class SnippetService : ISnippetService
     /// </summary>
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
+        using var profileMutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var changed = false;
@@ -316,17 +322,27 @@ public sealed partial class SnippetService : ISnippetService
 
     private void SaveToDisk()
     {
-        try
-        {
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_filePath, json);
-        }
-        catch { }
+        _ = SaveToDisk(_cache);
     }
+
+    /// <inheritdoc />
+    public bool TryReplaceAll(IReadOnlyList<Snippet> snippets)
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        EnsureCacheLoaded();
+        var replacement = snippets.Select(BackfillTimestamps).ToList();
+        if (!SaveToDisk(replacement))
+            return false;
+
+        _cache = replacement;
+        SnippetsChanged?.Invoke();
+        return true;
+    }
+
+    private bool SaveToDisk(IReadOnlyList<Snippet> snippets) =>
+        AtomicFileWriter.TryWriteAllText(
+            _filePath,
+            JsonSerializer.Serialize(snippets, new JsonSerializerOptions { WriteIndented = true }));
 
     private static Snippet BackfillTimestamps(Snippet snippet)
     {
