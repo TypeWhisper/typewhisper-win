@@ -133,6 +133,10 @@ public partial class App : Application
         // Initialize localization
         Loc.Instance.CurrentLanguage = settings.Current.UiLanguage
             ?? Loc.Instance.DetectSystemLanguage();
+#if !TYPEWHISPER_STORE
+        ShellTranscriptionService.EnsureContextMenuRegistration(
+            Loc.Instance["Shell.TranscribeWithTypeWhisper"]);
+#endif
 
         // Configure feedback before the overlay graph is created.
         var soundService = _serviceProvider.GetRequiredService<SoundService>();
@@ -280,14 +284,16 @@ public partial class App : Application
                     : WelcomeCompletionRequest.None;
                 settings.Save(settings.Current with { HasCompletedOnboarding = true });
                 _welcomeWindow = null;
-                if (completionRequest.SettingsRoute is { } route)
+                if (ShellTranscriptionService.HasPendingRequests())
+                    ActivatePrimaryInstance();
+                else if (completionRequest.SettingsRoute is { } route)
                     ShowSettingsWindow(route, focusPluginId: completionRequest.PluginIdToConfigure);
             };
             _welcomeWindow.Show();
         }
 
         _startupPresentationReady = true;
-        if (_pendingSingleInstanceActivation)
+        if (_pendingSingleInstanceActivation || ShellTranscriptionService.HasPendingRequests())
         {
             _pendingSingleInstanceActivation = false;
             ActivatePrimaryInstance();
@@ -500,6 +506,15 @@ public partial class App : Application
         if (_welcomeWindow is { IsLoaded: true })
         {
             RestoreAndActivateWindow(_welcomeWindow);
+            return;
+        }
+
+        var shellTranscriptionPaths = ShellTranscriptionService.Drain();
+        if (shellTranscriptionPaths.Count > 0)
+        {
+            ShowSettingsWindow(SettingsRoute.FileTranscription);
+            _serviceProvider!.GetRequiredService<FileTranscriptionViewModel>()
+                .AddFilesCommand.Execute(shellTranscriptionPaths);
             return;
         }
 

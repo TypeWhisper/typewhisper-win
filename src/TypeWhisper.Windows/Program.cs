@@ -73,9 +73,11 @@ public static class Program
 #if TYPEWHISPER_STORE
         try
         {
-            isStartupActivation = AppInstance.GetActivatedEventArgs()?.Kind == ActivationKind.StartupTask;
+            var activationArgs = AppInstance.GetActivatedEventArgs();
+            isStartupActivation = activationArgs?.Kind == ActivationKind.StartupTask;
+            StoreShareTargetService.TryQueueSharedFiles(activationArgs);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             Debug.WriteLine($"Store activation detection failed: {ex.Message}");
         }
@@ -88,6 +90,7 @@ public static class Program
                 .OnBeforeUninstallFastCallback((v) =>
                 {
                     UninstallUserDataProtector.ProtectLegacyAudioDirectory();
+                    ShellTranscriptionService.RemoveContextMenuRegistration();
                 })
                 .OnAfterUpdateFastCallback((v) =>
                 {
@@ -101,6 +104,7 @@ public static class Program
         StartMinimized = isStartupActivation
             || args.Contains("--minimized", StringComparer.OrdinalIgnoreCase);
         var callbackArg = args.FirstOrDefault(SupporterDiscordService.CanHandleCallbackUri);
+        var shellTranscriptionPaths = ShellTranscriptionService.ParseFilePaths(args);
 
         // Single instance check
         var synchronizationSuffix = UiAutomation.IsEnabled ? $"-UiAutomation-{UiAutomation.InstanceId}" : string.Empty;
@@ -114,6 +118,9 @@ public static class Program
         {
             try
             {
+                if (shellTranscriptionPaths.Count > 0)
+                    ShellTranscriptionService.Enqueue(shellTranscriptionPaths);
+
                 if (!string.IsNullOrWhiteSpace(callbackArg))
                 {
                     Directory.CreateDirectory(TypeWhisperEnvironment.DataPath);
@@ -137,6 +144,8 @@ public static class Program
         }
 
         _singleInstanceActivationSignal = activationSignal;
+        if (shellTranscriptionPaths.Count > 0)
+            ShellTranscriptionService.Enqueue(shellTranscriptionPaths);
 
         try
         {
