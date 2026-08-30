@@ -113,6 +113,7 @@ public sealed class HistoryService : IHistoryService
     /// <inheritdoc />
     public bool TryAddRecord(TranscriptionRecord record)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         lock (_gate)
         {
@@ -137,6 +138,7 @@ public sealed class HistoryService : IHistoryService
     /// </summary>
     public void UpdateRecord(string id, string finalText)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var changed = false;
         lock (_gate)
@@ -162,6 +164,7 @@ public sealed class HistoryService : IHistoryService
     /// <inheritdoc />
     public bool TryReplaceRecord(TranscriptionRecord record)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         lock (_gate)
         {
@@ -188,6 +191,7 @@ public sealed class HistoryService : IHistoryService
     /// </summary>
     public void DeleteRecord(string id)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         string? removedAudioFileName = null;
         var changed = false;
@@ -219,6 +223,7 @@ public sealed class HistoryService : IHistoryService
     /// </summary>
     public void ClearAll()
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         List<string?> audioFiles;
         lock (_gate)
@@ -258,6 +263,7 @@ public sealed class HistoryService : IHistoryService
     /// </summary>
     public void PurgeOldRecords(TimeSpan? retention)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         if (retention is null) return;
 
         EnsureCacheLoaded();
@@ -391,6 +397,7 @@ public sealed class HistoryService : IHistoryService
     /// <inheritdoc />
     public bool TryReplaceAll(IReadOnlyList<TranscriptionRecord> records)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         lock (_gate)
         {

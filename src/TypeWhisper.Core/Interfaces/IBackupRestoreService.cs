@@ -35,3 +35,14 @@ public interface IBackupPluginHandler
         IReadOnlyList<BackupPlugin> plugins,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Optional platform bridge that materializes enabled dictionary packs without requiring settings UI construction.
+/// </summary>
+public interface IBackupTermPackHandler
+{
+    /// <summary>Activates every available enabled pack and reports unavailable pack identifiers.</summary>
+    Task<IReadOnlyList<string>> MaterializeAsync(
+        IReadOnlyList<string> enabledPackIds,
+        CancellationToken cancellationToken = default);
+}

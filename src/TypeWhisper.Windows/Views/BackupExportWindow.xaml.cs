@@ -19,6 +19,13 @@ public partial class BackupExportWindow : Window
         Loaded += OnLoaded;
     }
 
+    /// <inheritdoc />
+    protected override void OnClosed(EventArgs e)
+    {
+        _viewModel.CancelPreparation();
+        base.OnClosed(e);
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;

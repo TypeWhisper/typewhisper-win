@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using TypeWhisper.Cli;
 
@@ -177,6 +178,17 @@ public sealed class CliSupportTests : IDisposable
 
         var error = await Assert.ThrowsAsync<InvalidDataException>(() => CliBackupFile.ReadAsync(oversizedPath));
         Assert.Contains("64 MiB", error.Message);
+    }
+
+    [Fact]
+    public async Task BackupFile_ReadsResponseIncrementallyAndRejectsBeforeLimitIsExceeded()
+    {
+        await using var valid = new MemoryStream(Encoding.UTF8.GetBytes("Grüße"));
+        Assert.Equal("Grüße", await CliBackupFile.ReadBoundedUtf8Async(valid, valid.Length, 16));
+
+        await using var oversized = new MemoryStream([1, 2, 3, 4, 5]);
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CliBackupFile.ReadBoundedUtf8Async(oversized, declaredLength: null, maxBytes: 4));
     }
 
     [Theory]

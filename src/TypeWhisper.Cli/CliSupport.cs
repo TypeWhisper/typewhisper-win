@@ -268,6 +268,42 @@ public static class CliBackupFile
     public const int MaxBackupBytes = 64 * 1024 * 1024;
 
     /// <summary>
+    /// Reads a UTF-8 stream incrementally and rejects it before the configured byte limit is exceeded.
+    /// </summary>
+    public static async Task<string> ReadBoundedUtf8Async(
+        Stream stream,
+        long? declaredLength = null,
+        int maxBytes = MaxBackupBytes,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        if (declaredLength > maxBytes)
+            throw new InvalidDataException($"Backup exceeds the {maxBytes / (1024 * 1024)} MiB size limit.");
+
+        using var buffer = new MemoryStream(
+            declaredLength is >= 0 and <= int.MaxValue
+                ? (int)Math.Min(declaredLength.Value, maxBytes)
+                : 0);
+        var chunk = new byte[(int)Math.Min(81920L, (long)maxBytes + 1)];
+        while (true)
+        {
+            var remaining = maxBytes - checked((int)buffer.Length);
+            var read = await stream.ReadAsync(
+                chunk.AsMemory(0, (int)Math.Min(chunk.Length, (long)remaining + 1)),
+                cancellationToken);
+            if (read == 0)
+                break;
+            if (read > remaining)
+                throw new InvalidDataException($"Backup exceeds the {maxBytes / (1024 * 1024)} MiB size limit.");
+            buffer.Write(chunk, 0, read);
+        }
+
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+            .GetString(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+    }
+
+    /// <summary>
     /// Reads a UTF-8 backup without allowing it to exceed the API request limit.
     /// </summary>
     public static async Task<string> ReadAsync(string path, CancellationToken cancellationToken = default)

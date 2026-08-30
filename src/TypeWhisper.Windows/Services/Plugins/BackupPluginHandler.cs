@@ -68,10 +68,11 @@ public sealed class BackupPluginHandler : IBackupPluginHandler
                 continue;
             }
 
-            if (!requested.TryAdd(plugin.Id.Trim(), plugin))
+            var normalizedId = plugin.Id.Trim();
+            if (!requested.TryAdd(normalizedId, plugin with { Id = normalizedId }))
             {
                 skipped++;
-                warnings.Add($"Duplicate plugin entry '{plugin.Id}' was skipped.");
+                warnings.Add($"Duplicate plugin entry '{normalizedId}' was skipped.");
             }
         }
 

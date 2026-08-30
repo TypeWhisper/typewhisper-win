@@ -57,6 +57,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
     private readonly IHistoryService _historyService;
     private readonly IBackupPluginHandler? _pluginHandler;
     private readonly IUsageStatisticsService? _usageStatisticsService;
+    private readonly IBackupTermPackHandler? _termPackHandler;
     private readonly SemaphoreSlim _importGate = new(1, 1);
 
     /// <summary>
@@ -69,7 +70,8 @@ public sealed class BackupRestoreService : IBackupRestoreService
         ISnippetService snippetService,
         IHistoryService historyService,
         IBackupPluginHandler? pluginHandler = null,
-        IUsageStatisticsService? usageStatisticsService = null)
+        IUsageStatisticsService? usageStatisticsService = null,
+        IBackupTermPackHandler? termPackHandler = null)
     {
         _settingsService = settingsService;
         _workflowService = workflowService;
@@ -78,6 +80,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         _historyService = historyService;
         _pluginHandler = pluginHandler;
         _usageStatisticsService = usageStatisticsService;
+        _termPackHandler = termPackHandler;
     }
 
     /// <inheritdoc />
@@ -206,128 +209,166 @@ public sealed class BackupRestoreService : IBackupRestoreService
     {
         var results = new Dictionary<BackupCategory, BackupCategoryImportResult>();
         var warnings = validationWarnings.ToList();
-        var settingsSnapshot = _settingsService.Current;
-        var workflowSnapshot = _workflowService.Workflows.ToList();
-        var dictionarySnapshot = _dictionaryService.Entries.ToList();
-        var snippetSnapshot = _snippetService.Snippets.ToList();
-        var historySnapshot = _historyService.Records.ToList();
-
-        var workflowCandidate = workflowSnapshot;
-        var dictionaryCandidate = dictionarySnapshot;
-        var snippetCandidate = snippetSnapshot;
-        var historyCandidate = historySnapshot;
-        var settingsCandidate = settingsSnapshot;
-        IReadOnlyList<TranscriptionRecord> importedHistoryRecords = [];
-
-        if (selected.HasFlag(BackupCategory.Workflows))
-            (workflowCandidate, results[BackupCategory.Workflows]) = MergeWorkflows(workflowSnapshot, document.Data.Workflows);
-
-        if (selected.HasFlag(BackupCategory.Dictionary))
+        using (ProfileMutationCoordinator.Enter())
         {
-            (dictionaryCandidate, var dictionaryResult) = MergeDictionary(dictionarySnapshot, document.Data.Dictionary.Entries);
-            var mergedPackIds = settingsSnapshot.EnabledPackIds
-                .Concat(document.Data.Dictionary.EnabledPackIds)
-                .Where(static id => !string.IsNullOrWhiteSpace(id))
-                .Select(static id => id.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var newPackCount = mergedPackIds.Length - settingsSnapshot.EnabledPackIds
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
-            settingsCandidate = settingsCandidate with { EnabledPackIds = mergedPackIds };
-            results[BackupCategory.Dictionary] = dictionaryResult with
+            var settingsSnapshot = _settingsService.Current;
+            var workflowSnapshot = _workflowService.Workflows.ToList();
+            var dictionarySnapshot = _dictionaryService.Entries.ToList();
+            var snippetSnapshot = _snippetService.Snippets.ToList();
+            var historySnapshot = _historyService.Records.ToList();
+
+            var workflowCandidate = workflowSnapshot;
+            var dictionaryCandidate = dictionarySnapshot;
+            var snippetCandidate = snippetSnapshot;
+            var historyCandidate = historySnapshot;
+            var settingsCandidate = settingsSnapshot;
+            IReadOnlyList<TranscriptionRecord> importedHistoryRecords = [];
+
+            if (selected.HasFlag(BackupCategory.Workflows))
+                (workflowCandidate, results[BackupCategory.Workflows]) = MergeWorkflows(workflowSnapshot, document.Data.Workflows);
+
+            if (selected.HasFlag(BackupCategory.Dictionary))
             {
-                Imported = dictionaryResult.Imported + Math.Max(0, newPackCount),
-                Skipped = dictionaryResult.Skipped + document.Data.Dictionary.EnabledPackIds.Count - Math.Max(0, newPackCount)
-            };
-        }
-
-        if (selected.HasFlag(BackupCategory.Snippets))
-            (snippetCandidate, results[BackupCategory.Snippets]) = MergeSnippets(snippetSnapshot, document.Data.Snippets);
-
-        if (selected.HasFlag(BackupCategory.Hotkeys))
-            (settingsCandidate, results[BackupCategory.Hotkeys]) = MergeHotkeys(settingsCandidate, document.Data.Hotkeys);
-
-        if (selected.HasFlag(BackupCategory.History))
-            (historyCandidate, results[BackupCategory.History], importedHistoryRecords) = MergeHistory(
-                historySnapshot,
-                document.Data.History,
-                workflowCandidate,
-                settingsSnapshot);
-
-        if (selected.HasFlag(BackupCategory.Preferences) && document.Data.Preferences is not null)
-        {
-            if (PreferencesEqual(settingsCandidate, document.Data.Preferences))
-            {
-                results[BackupCategory.Preferences] = new BackupCategoryImportResult { Skipped = 1 };
+                (dictionaryCandidate, var dictionaryResult) = MergeDictionary(dictionarySnapshot, document.Data.Dictionary.Entries);
+                var mergedPackIds = settingsSnapshot.EnabledPackIds
+                    .Concat(document.Data.Dictionary.EnabledPackIds)
+                    .Where(static id => !string.IsNullOrWhiteSpace(id))
+                    .Select(static id => id.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var newPackCount = mergedPackIds.Length - settingsSnapshot.EnabledPackIds
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+                settingsCandidate = settingsCandidate with { EnabledPackIds = mergedPackIds };
+                results[BackupCategory.Dictionary] = dictionaryResult with
+                {
+                    Imported = dictionaryResult.Imported + Math.Max(0, newPackCount),
+                    Skipped = dictionaryResult.Skipped + document.Data.Dictionary.EnabledPackIds.Count - Math.Max(0, newPackCount)
+                };
             }
-            else
+
+            if (selected.HasFlag(BackupCategory.Snippets))
+                (snippetCandidate, results[BackupCategory.Snippets]) = MergeSnippets(snippetSnapshot, document.Data.Snippets);
+
+            if (selected.HasFlag(BackupCategory.Hotkeys))
+                (settingsCandidate, results[BackupCategory.Hotkeys]) = MergeHotkeys(settingsCandidate, document.Data.Hotkeys);
+
+            if (selected.HasFlag(BackupCategory.History))
+                (historyCandidate, results[BackupCategory.History], importedHistoryRecords) = MergeHistory(
+                    historySnapshot,
+                    document.Data.History,
+                    workflowCandidate,
+                    settingsSnapshot);
+
+            if (selected.HasFlag(BackupCategory.Preferences) && document.Data.Preferences is not null)
             {
-                settingsCandidate = ApplyPreferences(settingsCandidate, document.Data.Preferences);
-                results[BackupCategory.Preferences] = new BackupCategoryImportResult { Imported = 1 };
+                if (PreferencesEqual(settingsCandidate, document.Data.Preferences))
+                {
+                    results[BackupCategory.Preferences] = new BackupCategoryImportResult { Skipped = 1 };
+                }
+                else
+                {
+                    settingsCandidate = ApplyPreferences(settingsCandidate, document.Data.Preferences);
+                    results[BackupCategory.Preferences] = new BackupCategoryImportResult { Imported = 1 };
+                }
             }
-        }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var workflowsChanged = results.GetValueOrDefault(BackupCategory.Workflows)?.Imported > 0;
-        var dictionaryChanged = results.GetValueOrDefault(BackupCategory.Dictionary)?.Imported > 0;
-        var snippetsChanged = results.GetValueOrDefault(BackupCategory.Snippets)?.Imported > 0;
-        var historyChanged = results.GetValueOrDefault(BackupCategory.History)?.Imported > 0;
-        var settingsChanged = !Equals(settingsSnapshot, settingsCandidate);
+            cancellationToken.ThrowIfCancellationRequested();
+            var workflowsChanged = results.GetValueOrDefault(BackupCategory.Workflows)?.Imported > 0;
+            var dictionaryChanged = results.GetValueOrDefault(BackupCategory.Dictionary)?.Imported > 0;
+            var snippetsChanged = results.GetValueOrDefault(BackupCategory.Snippets)?.Imported > 0;
+            var historyChanged = results.GetValueOrDefault(BackupCategory.History)?.Imported > 0;
+            var settingsChanged = !Equals(settingsSnapshot, settingsCandidate);
 
-        try
-        {
-            if (workflowsChanged && !_workflowService.TryReplaceAll(workflowCandidate))
-                throw new IOException("Workflows could not be persisted.");
-            if (dictionaryChanged && !_dictionaryService.TryReplaceAll(dictionaryCandidate))
-                throw new IOException("Dictionary entries could not be persisted.");
-            if (snippetsChanged && !_snippetService.TryReplaceAll(snippetCandidate))
-                throw new IOException("Snippets could not be persisted.");
-            if (historyChanged && !_historyService.TryReplaceAll(historyCandidate))
-                throw new IOException("History entries could not be persisted.");
-            if (settingsChanged)
-                _settingsService.Save(settingsCandidate);
-        }
-        catch (Exception ex)
-        {
-            RollBack(
-                settingsSnapshot,
-                workflowSnapshot,
-                dictionarySnapshot,
-                snippetSnapshot,
-                historySnapshot,
-                workflowsChanged,
-                dictionaryChanged,
-                snippetsChanged,
-                historyChanged,
-                settingsChanged);
-            return new BackupImportResult
-            {
-                Error = $"The local restore was rolled back: {ex.Message}",
-                Warnings = warnings,
-                Categories = results
-            };
-        }
-
-        if (_usageStatisticsService is not null)
-        {
             try
             {
-                foreach (var record in importedHistoryRecords.Where(record => record.Status == TranscriptionRecordStatus.Succeeded))
+                if (workflowsChanged && !_workflowService.TryReplaceAll(workflowCandidate))
+                    throw new IOException("Workflows could not be persisted.");
+                if (dictionaryChanged && !_dictionaryService.TryReplaceAll(dictionaryCandidate))
+                    throw new IOException("Dictionary entries could not be persisted.");
+                if (snippetsChanged && !_snippetService.TryReplaceAll(snippetCandidate))
+                    throw new IOException("Snippets could not be persisted.");
+                if (historyChanged && !_historyService.TryReplaceAll(historyCandidate))
+                    throw new IOException("History entries could not be persisted.");
+                if (settingsChanged)
+                    _settingsService.Save(settingsCandidate);
+
+                if (selected.HasFlag(BackupCategory.Dictionary))
                 {
-                    _usageStatisticsService.RecordTranscription(
-                        record.Timestamp,
-                        record.WordCount,
-                        record.DurationSeconds,
-                        record.AppProcessName,
-                        record.AppName,
-                        record.EngineUsed,
-                        record.ModelUsed);
+                    foreach (var packId in settingsCandidate.EnabledPackIds)
+                    {
+                        if (TermPack.FindById(packId) is { } pack)
+                            _dictionaryService.ActivatePack(pack);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                warnings.Add($"History was restored, but usage statistics could not be updated: {ex.Message}");
+                var rollbackFailures = RollBack(
+                    settingsSnapshot,
+                    workflowSnapshot,
+                    dictionarySnapshot,
+                    snippetSnapshot,
+                    historySnapshot,
+                    workflowsChanged,
+                    dictionaryChanged,
+                    snippetsChanged,
+                    historyChanged,
+                    settingsChanged);
+                if (rollbackFailures.Count > 0)
+                {
+                    warnings.Add(
+                        $"Rollback could not restore: {string.Join(", ", rollbackFailures)}.");
+                }
+                return new BackupImportResult
+                {
+                    Error = rollbackFailures.Count == 0
+                        ? $"The local restore was rolled back: {ex.Message}"
+                        : $"The local restore failed and rollback was incomplete: {ex.Message}",
+                    Warnings = warnings,
+                    Categories = results
+                };
+            }
+
+            if (_usageStatisticsService is not null)
+            {
+                try
+                {
+                    foreach (var record in importedHistoryRecords.Where(record => record.Status == TranscriptionRecordStatus.Succeeded))
+                    {
+                        _usageStatisticsService.RecordTranscription(
+                            record.Timestamp,
+                            record.WordCount,
+                            record.DurationSeconds,
+                            record.AppProcessName,
+                            record.AppName,
+                            record.EngineUsed,
+                            record.ModelUsed);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    warnings.Add($"History was restored, but usage statistics could not be updated: {ex.Message}");
+                }
+            }
+        }
+
+        if (selected.HasFlag(BackupCategory.Dictionary) && _termPackHandler is not null)
+        {
+            try
+            {
+                var packWarnings = await _termPackHandler.MaterializeAsync(
+                    _settingsService.Current.EnabledPackIds,
+                    cancellationToken).ConfigureAwait(false);
+                warnings.AddRange(packWarnings);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"Dictionary settings were restored, but packs could not be activated: {ex.Message}");
             }
         }
 
@@ -362,7 +403,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         };
     }
 
-    private void RollBack(
+    private IReadOnlyList<string> RollBack(
         AppSettings settings,
         IReadOnlyList<Workflow> workflows,
         IReadOnlyList<DictionaryEntry> dictionary,
@@ -374,13 +415,43 @@ public sealed class BackupRestoreService : IBackupRestoreService
         bool historyChanged,
         bool settingsChanged)
     {
-        if (historyChanged) _ = _historyService.TryReplaceAll(history);
-        if (snippetsChanged) _ = _snippetService.TryReplaceAll(snippets);
-        if (dictionaryChanged) _ = _dictionaryService.TryReplaceAll(dictionary);
-        if (workflowsChanged) _ = _workflowService.TryReplaceAll(workflows);
+        var failures = new List<string>();
+        TryRollBack(historyChanged, "history", () => _historyService.TryReplaceAll(history), failures);
+        TryRollBack(snippetsChanged, "snippets", () => _snippetService.TryReplaceAll(snippets), failures);
+        TryRollBack(dictionaryChanged, "dictionary", () => _dictionaryService.TryReplaceAll(dictionary), failures);
+        TryRollBack(workflowsChanged, "workflows", () => _workflowService.TryReplaceAll(workflows), failures);
         if (settingsChanged)
         {
-            try { _settingsService.Save(settings); } catch { }
+            try
+            {
+                _settingsService.Save(settings);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"settings ({ex.Message})");
+            }
+        }
+
+        return failures;
+    }
+
+    private static void TryRollBack(
+        bool changed,
+        string category,
+        Func<bool> restore,
+        ICollection<string> failures)
+    {
+        if (!changed)
+            return;
+
+        try
+        {
+            if (!restore())
+                failures.Add(category);
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"{category} ({ex.Message})");
         }
     }
 
@@ -519,6 +590,9 @@ public sealed class BackupRestoreService : IBackupRestoreService
         AppSettings settings,
         BackupHotkeys incoming)
     {
+        var bindings = new Dictionary<string, IReadOnlyList<string>>(
+            incoming.Bindings,
+            StringComparer.OrdinalIgnoreCase);
         var occupied = CurrentHotkeyBindings(settings)
             .SelectMany(pair => pair.Value)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -530,7 +604,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         foreach (var action in HotkeyActions)
         {
             var current = CurrentHotkeyBindings(settings)[action];
-            if (!incoming.Bindings.TryGetValue(action, out var candidates) || candidates.Count == 0)
+            if (!bindings.TryGetValue(action, out var candidates) || candidates.Count == 0)
                 continue;
             if (current.Count > 0)
             {
@@ -907,22 +981,22 @@ public sealed class BackupRestoreService : IBackupRestoreService
     private static BackupHistoryEntry ToBackupHistoryEntry(
         TranscriptionRecord record,
         IReadOnlyDictionary<string, string> workflowNames) => new()
-    {
-        Timestamp = record.Timestamp,
-        RawText = record.RawText,
-        FinalText = record.FinalText,
-        AppName = record.AppName,
-        AppProcessName = record.AppProcessName,
-        AppUrl = record.AppUrl,
-        DurationSeconds = record.DurationSeconds,
-        Language = record.Language,
-        WorkflowName = record.WorkflowId is not null && workflowNames.TryGetValue(record.WorkflowId, out var name) ? name : null,
-        Status = record.Status,
-        EngineUsed = record.EngineUsed,
-        ModelUsed = record.ModelUsed,
-        TranscriptionTaskUsed = record.TranscriptionTaskUsed,
-        UsedTranscriptionFallback = record.UsedTranscriptionFallback
-    };
+        {
+            Timestamp = record.Timestamp,
+            RawText = record.RawText,
+            FinalText = record.FinalText,
+            AppName = record.AppName,
+            AppProcessName = record.AppProcessName,
+            AppUrl = record.AppUrl,
+            DurationSeconds = record.DurationSeconds,
+            Language = record.Language,
+            WorkflowName = record.WorkflowId is not null && workflowNames.TryGetValue(record.WorkflowId, out var name) ? name : null,
+            Status = record.Status,
+            EngineUsed = record.EngineUsed,
+            ModelUsed = record.ModelUsed,
+            TranscriptionTaskUsed = record.TranscriptionTaskUsed,
+            UsedTranscriptionFallback = record.UsedTranscriptionFallback
+        };
 
     private static BackupPreferences ToBackupPreferences(AppSettings settings) => new()
     {

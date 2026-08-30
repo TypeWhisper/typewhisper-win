@@ -177,7 +177,6 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         _selectedIndustryPresetId = IndustryPreset.Resolve(_settings.Current.SelectedIndustryPresetId).Id;
 
         _dictionary.EntriesChanged += RefreshEntries;
-        _settings.SettingsChanged += OnSettingsChanged;
         if (_license is not null)
             _license.PropertyChanged += OnLicenseChanged;
         Loc.Instance.LanguageChanged += OnLanguageChanged;
@@ -197,7 +196,6 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _dictionary.EntriesChanged -= RefreshEntries;
-        _settings.SettingsChanged -= OnSettingsChanged;
         if (_license is not null)
             _license.PropertyChanged -= OnLicenseChanged;
         Loc.Instance.LanguageChanged -= OnLanguageChanged;
@@ -562,18 +560,6 @@ public partial class DictionaryViewModel : ObservableObject, IDisposable
         }
 
         InitializeIndustryPresets();
-    }
-
-    private void OnSettingsChanged(AppSettings settings)
-    {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
-        {
-            dispatcher.InvokeAsync(SynchronizeEnabledPacks);
-            return;
-        }
-
-        SynchronizeEnabledPacks();
     }
 
     private void SynchronizeEnabledPacks()

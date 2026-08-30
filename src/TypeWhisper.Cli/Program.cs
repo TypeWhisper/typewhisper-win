@@ -62,13 +62,13 @@ static class Program
         try
         {
             using var request = CliRequestBuilder.BuildGet(baseUrl, "/v1/settings/export", apiToken);
-            using var response = await Http.SendAsync(request);
-            var body = await response.Content.ReadAsStringAsync();
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var body = await CliBackupFile.ReadBoundedUtf8Async(
+                responseStream,
+                response.Content.Headers.ContentLength);
             if (!response.IsSuccessStatusCode)
                 return Error($"Backup export failed ({(int)response.StatusCode}): {ExtractErrorMessage(body)}");
-
-            if (Encoding.UTF8.GetByteCount(body) > CliBackupFile.MaxBackupBytes)
-                return Error($"Exported backup exceeds the {CliBackupFile.MaxBackupBytes / (1024 * 1024)} MiB size limit.");
 
             using (JsonDocument.Parse(body)) { }
             await CliBackupFile.WriteAtomicAsync(path, body);

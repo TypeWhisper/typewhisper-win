@@ -663,6 +663,7 @@ public partial class App : Application
         services.AddSingleton<IWorkflowService>(
             new WorkflowService(Path.Combine(dataPath, "workflows.json")));
         services.AddSingleton<IBackupPluginHandler, BackupPluginHandler>();
+        services.AddSingleton<IBackupTermPackHandler, BackupTermPackHandler>();
         services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
         services.AddSingleton<DevelopmentDataSeeder>();
 

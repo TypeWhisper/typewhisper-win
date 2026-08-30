@@ -53,6 +53,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void AddEntry(DictionaryEntry entry)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.Add(BackfillTimestamps(entry));
         SaveToDisk();
@@ -64,6 +65,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void AddEntries(IEnumerable<DictionaryEntry> entries)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.AddRange(entries.Select(BackfillTimestamps));
         SaveToDisk();
@@ -75,6 +77,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void UpdateEntry(DictionaryEntry entry)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var idx = _cache.FindIndex(e => e.Id == entry.Id);
         if (idx >= 0)
@@ -91,6 +94,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void DeleteEntry(string id)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.RemoveAll(e => e.Id == id);
         SaveToDisk();
@@ -102,6 +106,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void DeleteEntries(IEnumerable<string> ids)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var idSet = ids.ToHashSet();
         _cache.RemoveAll(e => idSet.Contains(e.Id));
@@ -114,6 +119,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public string ApplyCorrections(string text)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var corrections = _cache
             .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
@@ -235,6 +241,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void SetTerms(IEnumerable<string> terms, bool replaceExisting)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var normalized = NormalizeTerms(terms);
@@ -309,6 +316,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void RemoveAllTerms()
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         _cache.RemoveAll(e => e.EntryType == DictionaryEntryType.Term);
         SaveToDisk();
@@ -320,6 +328,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public bool DeleteTerm(string term)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var key = TermKey(term);
         var removed = _cache.RemoveAll(e =>
@@ -339,6 +348,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void UpsertCorrection(string original, string replacement, bool caseSensitive)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var existing = _cache.FirstOrDefault(e =>
             e.EntryType == DictionaryEntryType.Correction &&
@@ -383,6 +393,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public bool DeleteCorrection(string original)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var removed = _cache.RemoveAll(e =>
             e.EntryType == DictionaryEntryType.Correction &&
@@ -401,6 +412,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void LearnCorrection(string original, string replacement)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var existing = _cache.FirstOrDefault(e =>
@@ -431,6 +443,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public IReadOnlyList<LearnedDictionaryCorrection> LearnCorrections(IEnumerable<CorrectionSuggestion> suggestions)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var learned = new List<LearnedDictionaryCorrection>();
@@ -520,6 +533,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void UndoLearnedCorrections(IEnumerable<LearnedDictionaryCorrection> learnedCorrections)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var learnedIds = learnedCorrections
@@ -544,6 +558,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void ActivatePack(TermPack pack)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var existingOriginals = _cache
@@ -580,6 +595,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void DeactivatePack(string packId)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var prefix = $"pack:{packId}:";
@@ -630,6 +646,7 @@ public sealed class DictionaryService : IDictionaryService
     /// </summary>
     public void ApplyUserDataSyncMutations(IReadOnlyList<UserDataSyncMutation> mutations)
     {
+        using var profileMutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
 
         var changed = false;
@@ -755,6 +772,7 @@ public sealed class DictionaryService : IDictionaryService
     /// <inheritdoc />
     public bool TryReplaceAll(IReadOnlyList<DictionaryEntry> entries)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
         var replacement = entries.Select(BackfillTimestamps).ToList();
         if (!SaveToDisk(replacement))

@@ -118,6 +118,34 @@ public sealed class BackupRestoreViewModelTests : IDisposable
         Assert.Single(viewModel.Warnings);
     }
 
+    [Fact]
+    public async Task StaleExportPreparation_DoesNotOverwriteLaterImportSelection()
+    {
+        Directory.CreateDirectory(_directory);
+        var source = Path.Combine(_directory, "backup.json");
+        await File.WriteAllTextAsync(source, "import");
+        var exportCompletion = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = new FakeBackupRestoreService
+        {
+            ExportCompletion = exportCompletion,
+            PreviewFactory = json => ValidPreview(new Dictionary<BackupCategory, int>
+            {
+                [json == "import" ? BackupCategory.Dictionary : BackupCategory.History] = 1
+            })
+        };
+        var viewModel = new BackupRestoreViewModel(service);
+
+        var staleExport = viewModel.PrepareExportAsync();
+        Assert.True(await viewModel.PrepareImportAsync(source));
+        viewModel.Categories.Single(item => item.Category == BackupCategory.Dictionary).IsSelected = false;
+
+        exportCompletion.SetResult("export");
+        await staleExport;
+
+        Assert.False(viewModel.Categories.Single(item => item.Category == BackupCategory.Dictionary).IsSelected);
+        Assert.True(viewModel.IsPreviewVisible);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))
@@ -140,6 +168,8 @@ public sealed class BackupRestoreViewModelTests : IDisposable
         public BackupImportPreview Preview { get; init; } = ValidPreview(
             new Dictionary<BackupCategory, int>());
         public BackupImportResult ImportResult { get; init; } = new() { Success = true };
+        public TaskCompletionSource<string>? ExportCompletion { get; init; }
+        public Func<string, BackupImportPreview>? PreviewFactory { get; init; }
         public BackupExportOptions? LastExportOptions { get; private set; }
         public BackupImportOptions? LastImportOptions { get; private set; }
 
@@ -148,10 +178,10 @@ public sealed class BackupRestoreViewModelTests : IDisposable
             CancellationToken cancellationToken = default)
         {
             LastExportOptions = options;
-            return Task.FromResult(ExportJson);
+            return ExportCompletion?.Task ?? Task.FromResult(ExportJson);
         }
 
-        public BackupImportPreview PreviewImport(string json) => Preview;
+        public BackupImportPreview PreviewImport(string json) => PreviewFactory?.Invoke(json) ?? Preview;
 
         public Task<BackupImportResult> ImportAsync(
             string json,

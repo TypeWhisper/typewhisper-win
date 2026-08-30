@@ -28,6 +28,7 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
 
     private readonly IBackupRestoreService _backupRestoreService;
     private string? _importJson;
+    private int _preparationGeneration;
 
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _isPreviewVisible;
@@ -69,6 +70,7 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
     /// <summary>Loads current category counts for the export dialog.</summary>
     public async Task PrepareExportAsync(CancellationToken cancellationToken = default)
     {
+        var generation = BeginPreparation();
         Reset();
         IsBusy = true;
         StatusText = Loc.Instance["Backup.Preparing"];
@@ -78,6 +80,9 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
             var json = await _backupRestoreService.ExportAsync(
                 new BackupExportOptions { Categories = BackupCategory.All },
                 cancellationToken);
+            if (!IsCurrentPreparation(generation))
+                return;
+
             var preview = _backupRestoreService.PreviewImport(json);
             if (!preview.IsValid)
                 throw new InvalidDataException(preview.Error ?? Loc.Instance["Backup.InvalidFile"]);
@@ -89,12 +94,16 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
         }
         catch (Exception ex) when (IsNonFatal(ex))
         {
+            if (!IsCurrentPreparation(generation))
+                return;
+
             ErrorMessage = ex.Message;
             throw;
         }
         finally
         {
-            IsBusy = false;
+            if (IsCurrentPreparation(generation))
+                IsBusy = false;
         }
     }
 
@@ -143,14 +152,19 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
     public async Task<bool> PrepareImportAsync(string path, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var generation = BeginPreparation();
         Reset();
         IsBusy = true;
         StatusText = Loc.Instance["Backup.Validating"];
 
         try
         {
-            _importJson = await File.ReadAllTextAsync(path, cancellationToken);
-            var preview = _backupRestoreService.PreviewImport(_importJson);
+            var importJson = await File.ReadAllTextAsync(path, cancellationToken);
+            if (!IsCurrentPreparation(generation))
+                return false;
+
+            _importJson = importJson;
+            var preview = _backupRestoreService.PreviewImport(importJson);
             if (!preview.IsValid)
             {
                 ErrorMessage = preview.Error ?? Loc.Instance["Backup.InvalidFile"];
@@ -167,15 +181,22 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
         }
         catch (Exception ex) when (IsNonFatal(ex))
         {
+            if (!IsCurrentPreparation(generation))
+                return false;
+
             ErrorMessage = ex.Message;
             _importJson = null;
             return false;
         }
         finally
         {
-            IsBusy = false;
+            if (IsCurrentPreparation(generation))
+                IsBusy = false;
         }
     }
+
+    /// <summary>Invalidates an in-flight preview preparation when its dialog closes.</summary>
+    public void CancelPreparation() => Interlocked.Increment(ref _preparationGeneration);
 
     /// <summary>Restores the selected categories from the validated import file.</summary>
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
@@ -263,6 +284,11 @@ public sealed partial class BackupRestoreViewModel : ObservableObject
         RestartRequired = false;
         RaiseComputedProperties();
     }
+
+    private int BeginPreparation() => Interlocked.Increment(ref _preparationGeneration);
+
+    private bool IsCurrentPreparation(int generation) =>
+        Volatile.Read(ref _preparationGeneration) == generation;
 
     private void SetCategories(
         IReadOnlyDictionary<BackupCategory, int> counts,

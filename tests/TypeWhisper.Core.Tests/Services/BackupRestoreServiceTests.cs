@@ -141,11 +141,13 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Equal(1, preview.Counts[BackupCategory.Workflows]);
         Assert.True(first.Success, first.Error);
         Assert.Single(destination.Workflows.Workflows);
-        Assert.Single(destination.Dictionary.Entries);
+        Assert.Single(destination.Dictionary.Entries, entry =>
+            !entry.Id.StartsWith("pack:", StringComparison.Ordinal));
         Assert.Single(destination.Snippets.Snippets);
         Assert.Single(destination.History.Records);
         Assert.Equal("Portable cleanup", destination.Workflows.Workflows[0].Name);
-        Assert.Equal("TypeWhisper", destination.Dictionary.Entries[0].Replacement);
+        Assert.Equal("TypeWhisper", destination.Dictionary.Entries.Single(entry =>
+            !entry.Id.StartsWith("pack:", StringComparison.Ordinal)).Replacement);
         Assert.Equal("Example Street 1", destination.Snippets.Snippets[0].Replacement);
         Assert.Null(destination.History.Records[0].AudioFileName);
         Assert.Null(destination.History.Records[0].RecoveryAudioFileName);
@@ -162,7 +164,8 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Equal(0, second.Categories[BackupCategory.Preferences].Imported);
         Assert.Equal(1, second.Categories[BackupCategory.Preferences].Skipped);
         Assert.Single(destination.Workflows.Workflows);
-        Assert.Single(destination.Dictionary.Entries);
+        Assert.Single(destination.Dictionary.Entries, entry =>
+            !entry.Id.StartsWith("pack:", StringComparison.Ordinal));
         Assert.Single(destination.Snippets.Snippets);
         Assert.Single(destination.History.Records);
     }
@@ -384,7 +387,103 @@ public sealed class BackupRestoreServiceTests : IDisposable
 
         Assert.False(result.Success);
         Assert.Empty(destination.Workflows.Workflows);
-        Assert.Contains("rolled back", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("rollback was incomplete", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Warnings, warning => warning.Contains("history", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Import_MaterializesEnabledBuiltInPackBeforeAnySettingsViewModelExists()
+    {
+        var source = CreateProfile("source-pack");
+        source.Settings.Save(source.Settings.Current with { EnabledPackIds = ["web-dev"] });
+        var json = await source.Backup.ExportAsync(
+            new BackupExportOptions { Categories = BackupCategory.Dictionary });
+        var destination = CreateProfile("destination-pack");
+
+        var result = await destination.Backup.ImportAsync(json);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(destination.Dictionary.Entries, entry =>
+            entry.Id.StartsWith("pack:web-dev:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Import_AcceptsCaseInsensitiveHotkeyActionNames()
+    {
+        var source = CreateProfile("source-hotkey-casing");
+        source.Settings.Save(source.Settings.Current with { MainDictationHotkeys = ["Ctrl+Alt+F7"] });
+        var json = await source.Backup.ExportAsync(
+            new BackupExportOptions { Categories = BackupCategory.Hotkeys });
+        json = json.Replace("mainDictation", "maindictation", StringComparison.Ordinal);
+        var destination = CreateProfile("destination-hotkey-casing");
+        destination.Settings.Save(destination.Settings.Current with
+        {
+            MainDictationHotkeys = [],
+            ToggleHotkey = "",
+            PushToTalkHotkey = ""
+        });
+
+        var result = await destination.Backup.ImportAsync(json);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(["Ctrl+Alt+F7"], destination.Settings.Current.GetMainDictationHotkeys());
+    }
+
+    [Fact]
+    public async Task Import_SerializesConcurrentCollectionWritesWithoutLosingThem()
+    {
+        var source = CreateProfile("source-concurrent-write");
+        source.Workflows.AddWorkflow(new Workflow
+        {
+            Id = "workflow",
+            Name = "Concurrent restore",
+            Template = WorkflowTemplate.Summary,
+            Trigger = WorkflowTrigger.Manual()
+        });
+        source.Dictionary.AddEntry(new DictionaryEntry
+        {
+            Id = "restored-entry",
+            EntryType = DictionaryEntryType.Term,
+            Original = "restored"
+        });
+        var json = await source.Backup.ExportAsync();
+        var destination = CreateProfile("destination-concurrent-write");
+        using var workflowWriteStarted = new ManualResetEventSlim();
+        using var releaseWorkflowWrite = new ManualResetEventSlim();
+        var workflows = new Mock<IWorkflowService>();
+        workflows.SetupGet(service => service.Workflows).Returns([]);
+        workflows.Setup(service => service.TryReplaceAll(It.IsAny<IReadOnlyList<Workflow>>()))
+            .Returns(() =>
+            {
+                workflowWriteStarted.Set();
+                releaseWorkflowWrite.Wait(TimeSpan.FromSeconds(5));
+                return true;
+            });
+        var backup = new BackupRestoreService(
+            destination.Settings,
+            workflows.Object,
+            destination.Dictionary,
+            destination.Snippets,
+            destination.History);
+
+        var import = Task.Run(() => backup.ImportAsync(json));
+        Assert.True(workflowWriteStarted.Wait(TimeSpan.FromSeconds(5)));
+        var concurrentWrite = Task.Run(() => destination.Dictionary.AddEntry(new DictionaryEntry
+        {
+            Id = "concurrent-entry",
+            EntryType = DictionaryEntryType.Term,
+            Original = "concurrent"
+        }));
+        await Task.Delay(100);
+        Assert.False(concurrentWrite.IsCompleted);
+
+        releaseWorkflowWrite.Set();
+        var result = await import;
+        await concurrentWrite;
+
+        Assert.True(result.Success, result.Error);
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == "restored");
+        Assert.Contains(destination.Dictionary.Entries, entry => entry.Original == "concurrent");
     }
 
     private Profile CreateProfile(string name)
