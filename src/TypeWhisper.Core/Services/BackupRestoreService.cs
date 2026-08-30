@@ -92,8 +92,13 @@ public sealed class BackupRestoreService : IBackupRestoreService
         cancellationToken.ThrowIfCancellationRequested();
         await _historyService.EnsureLoadedAsync().ConfigureAwait(false);
 
-        var settings = _settingsService.Current;
         var selected = options.Categories & BackupCategory.All;
+        IReadOnlyList<BackupPlugin> plugins = [];
+        if (selected.HasFlag(BackupCategory.Plugins) && _pluginHandler is not null)
+            plugins = await _pluginHandler.ExportAsync(cancellationToken).ConfigureAwait(false);
+
+        using var mutation = ProfileMutationCoordinator.Enter();
+        var settings = _settingsService.Current;
         var workflows = selected.HasFlag(BackupCategory.Workflows)
             ? _workflowService.Workflows.Select(ToBackupWorkflow).ToList()
             : [];
@@ -101,10 +106,6 @@ public sealed class BackupRestoreService : IBackupRestoreService
             workflow => workflow.Id,
             workflow => workflow.Name,
             StringComparer.Ordinal);
-
-        IReadOnlyList<BackupPlugin> plugins = [];
-        if (selected.HasFlag(BackupCategory.Plugins) && _pluginHandler is not null)
-            plugins = await _pluginHandler.ExportAsync(cancellationToken).ConfigureAwait(false);
 
         var document = new SettingsBackupDocument
         {

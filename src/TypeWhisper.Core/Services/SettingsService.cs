@@ -79,6 +79,7 @@ public sealed class SettingsService : ISettingsService
     /// </summary>
     public void Save(AppSettings settings)
     {
+        using var mutation = ProfileMutationCoordinator.Enter();
         settings = NormalizeSettings(settings);
         _current = settings;
 
