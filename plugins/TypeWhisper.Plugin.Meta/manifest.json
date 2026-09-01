@@ -1,0 +1,16 @@
+{
+  "id": "com.typewhisper.meta",
+  "name": "Meta Model API",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.9",
+  "author": "TypeWhisper",
+  "description": "Meta Model API integration for Muse Voice Transcribe and Muse Spark language models, with automatic model discovery.",
+  "descriptions": {
+    "de": "Meta Model API für Muse Voice Transcribe und Muse-Spark-Sprachmodelle mit automatischer Modellerkennung."
+  },
+  "category": "transcription",
+  "categories": ["transcription", "llm"],
+  "requiresApiKey": true,
+  "assemblyName": "TypeWhisper.Plugin.Meta.dll",
+  "pluginClass": "TypeWhisper.Plugin.Meta.MetaPlugin"
+}

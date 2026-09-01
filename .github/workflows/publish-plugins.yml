@@ -38,6 +38,7 @@ jobs:
           $map = @{
             'sherpa-onnx'        = 'TypeWhisper.Plugin.SherpaOnnx'
             'openai'             = 'TypeWhisper.Plugin.OpenAI'
+            'meta'               = 'TypeWhisper.Plugin.Meta'
             'openai-compatible'  = 'TypeWhisper.Plugin.OpenAiCompatible'
             'authenticated-cli'  = 'TypeWhisper.Plugin.AuthenticatedCli'
             'groq'               = 'TypeWhisper.Plugin.Groq'
