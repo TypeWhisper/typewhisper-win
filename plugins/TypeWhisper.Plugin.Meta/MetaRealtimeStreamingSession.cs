@@ -422,6 +422,9 @@ internal sealed class MetaRealtimeTranscriptCollector
 
     private string BuildSnapshot()
     {
+        if (!_usesDiarization && !string.IsNullOrWhiteSpace(_finalSingleTurnText))
+            return _finalSingleTurnText;
+
         var parts = _turns.Values
             .Where(turn => !string.IsNullOrWhiteSpace(turn.Transcript))
             .OrderBy(turn => turn.Id)
@@ -443,7 +446,7 @@ internal sealed class MetaRealtimeTranscriptCollector
         }
 
         if (!_usesDiarization)
-            return string.IsNullOrWhiteSpace(_finalSingleTurnText) ? _interim : _finalSingleTurnText;
+            return _interim;
 
         if (!string.IsNullOrWhiteSpace(_interim))
         {

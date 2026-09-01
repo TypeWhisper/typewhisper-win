@@ -265,6 +265,21 @@ public sealed class MetaPluginTests
         Assert.True(complete.IsFinalEvent);
     }
 
+    [Fact]
+    public void PushToTalkCollector_PrefersTerminalTranscriptOverCompletedTurn()
+    {
+        var collector = new MetaRealtimeTranscriptCollector("PUSH_TO_TALK");
+
+        collector.Apply("""{"type":"speechStart","turnId":1}""");
+        collector.Apply(
+            """{"type":"speechComplete","turnId":1,"transcript":"Hallo wor"}""");
+        var terminal = collector.Apply(
+            """{"type":"transcript","transcript":"Hallo Welt.","final":true}""");
+
+        Assert.Equal("Hallo Welt.", terminal.Transcript?.Text);
+        Assert.True(terminal.IsFinalEvent);
+    }
+
     [Theory]
     [InlineData("de", "German")]
     [InlineData("pt-BR", "Portuguese")]
