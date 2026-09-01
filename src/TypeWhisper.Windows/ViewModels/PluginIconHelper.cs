@@ -14,7 +14,8 @@ internal static class PluginIconHelper
         ["com.typewhisper.gemini"] = "gemini.png",
         ["com.typewhisper.claude"] = "claude.png",
         ["com.typewhisper.cohere"] = "cohere.png",
-        ["com.typewhisper.smallest-ai"] = "smallest.png"
+        ["com.typewhisper.smallest-ai"] = "smallest.png",
+        ["com.typewhisper.meta"] = "meta.png"
     };
 
     /// <summary>
@@ -50,6 +51,7 @@ internal static class PluginIconHelper
         "com.typewhisper.xai" => "\u2728",                 // xAI / Grok - sparkles
         "com.typewhisper.openai" => "\U0001F916",          // OpenAI - robot
         "com.typewhisper.openai-compatible" => "\U0001F310", // OpenAI Compatible - globe
+        "com.typewhisper.meta" => "\U0001F310",              // Meta - connected world
         "com.typewhisper.smallest-ai" => "\U0001F399",        // Smallest AI Pulse - studio microphone
         "com.typewhisper.reson8" => "\U0001F399",             // Reson8 - studio microphone
         "com.typewhisper.sherpa-onnx" => "\U0001F3AF",     // SherpaOnnx - local/target
@@ -68,6 +70,7 @@ internal static class PluginIconHelper
         "com.typewhisper.xai" => "#111827",
         "com.typewhisper.openai" => "#10A37F",
         "com.typewhisper.openai-compatible" => "#6366F1",
+        "com.typewhisper.meta" => "#0064E1",
         "com.typewhisper.smallest-ai" => "#14B8A6",
         "com.typewhisper.reson8" => "#0F766E",
         "com.typewhisper.sherpa-onnx" => "#F59E0B",
@@ -86,6 +89,7 @@ internal static class PluginIconHelper
         "com.typewhisper.xai" => "#1D4ED8",
         "com.typewhisper.openai" => "#0D8A6A",
         "com.typewhisper.openai-compatible" => "#4F46E5",
+        "com.typewhisper.meta" => "#0082FB",
         "com.typewhisper.smallest-ai" => "#2563EB",
         "com.typewhisper.reson8" => "#0891B2",
         "com.typewhisper.sherpa-onnx" => "#D97706",
