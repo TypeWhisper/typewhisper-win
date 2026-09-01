@@ -454,24 +454,13 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         if (languageHints is null)
             return [];
 
-        var normalized = new List<string>();
-        foreach (var rawHint in languageHints)
-        {
-            var hint = rawHint?.Trim();
-            if (string.IsNullOrWhiteSpace(hint)
-                || hint.Equals("auto", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (TryNormalizeLanguageHint(hint, out var languageName, out _)
-                && !normalized.Contains(languageName, StringComparer.OrdinalIgnoreCase))
-            {
-                normalized.Add(languageName);
-            }
-        }
-
-        return normalized;
+        return languageHints
+            .Select(hint => TryNormalizeLanguageHint(hint, out var languageName, out _)
+                ? languageName
+                : null)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     internal static IReadOnlyList<string> ParseKeywords(string? prompt) =>
@@ -625,16 +614,12 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
 
-    internal static string? FirstLanguageCode(IEnumerable<string> languageHints)
-    {
-        foreach (var hint in languageHints)
-        {
-            if (TryNormalizeLanguageHint(hint, out _, out var canonicalCode))
-                return canonicalCode;
-        }
-
-        return null;
-    }
+    internal static string? FirstLanguageCode(IEnumerable<string> languageHints) =>
+        languageHints
+            .Select(hint => TryNormalizeLanguageHint(hint, out _, out var canonicalCode)
+                ? canonicalCode
+                : null)
+            .FirstOrDefault(code => code is not null);
 
     private static bool TryNormalizeLanguageHint(
         string? rawHint,

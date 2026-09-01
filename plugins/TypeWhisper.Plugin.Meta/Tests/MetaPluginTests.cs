@@ -244,6 +244,37 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public async Task PublishTranscript_CompletesTerminalTaskAfterSubscriberReturns()
+    {
+        using var socket = new System.Net.WebSockets.ClientWebSocket();
+        await using var session = new MetaRealtimeStreamingSession(socket);
+        using var callbackStarted = new ManualResetEventSlim();
+        using var releaseCallback = new ManualResetEventSlim();
+        session.TranscriptReceived += _ =>
+        {
+            callbackStarted.Set();
+            releaseCallback.Wait();
+        };
+
+        var publishTask = Task.Run(() => session.PublishTranscript(
+            new StreamingTranscriptEvent("Done", IsFinal: true),
+            isTerminal: true));
+
+        try
+        {
+            Assert.True(callbackStarted.Wait(TimeSpan.FromSeconds(2)));
+            Assert.False(session.TerminalTranscriptTask.IsCompleted);
+        }
+        finally
+        {
+            releaseCallback.Set();
+        }
+
+        await publishTask;
+        await session.TerminalTranscriptTask;
+    }
+
+    [Fact]
     public void ParseTranscriptionResponse_MapsTurnTimestampsToSeconds()
     {
         var result = MetaPlugin.ParseTranscriptionResponse(
@@ -268,7 +299,7 @@ public sealed class MetaPluginTests
     [Fact]
     public void Manifest_DeclaresTranscriptionAndLlmCapabilities()
     {
-        var manifestPath = Path.GetFullPath(Path.Combine(
+        var manifestPath = Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "..",
             "plugins", "TypeWhisper.Plugin.Meta", "manifest.json"));

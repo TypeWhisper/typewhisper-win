@@ -19,13 +19,15 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
     private bool _ended;
     private bool _disposed;
 
-    private MetaRealtimeStreamingSession(ClientWebSocket webSocket)
+    internal MetaRealtimeStreamingSession(ClientWebSocket webSocket)
     {
         _webSocket = webSocket;
     }
 
     /// <inheritdoc />
     public event Action<StreamingTranscriptEvent>? TranscriptReceived;
+
+    internal Task TerminalTranscriptTask => _terminalTranscript.Task;
 
     internal static async Task<MetaRealtimeStreamingSession> ConnectAsync(
         string apiKey,
@@ -212,10 +214,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             {
                 var json = await ReceiveTextMessageAsync(_webSocket, ct);
                 var transcriptEvent = ParseTranscriptEvent(json, out var isTerminal);
-                if (isTerminal)
-                    _terminalTranscript.TrySetResult(true);
-                if (transcriptEvent is not null)
-                    TranscriptReceived?.Invoke(transcriptEvent);
+                PublishTranscript(transcriptEvent, isTerminal);
             }
         }
         catch (OperationCanceledException ex)
@@ -252,6 +251,14 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
     {
         var bytes = Encoding.UTF8.GetBytes(json);
         await _webSocket.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
+    }
+
+    internal void PublishTranscript(StreamingTranscriptEvent? transcriptEvent, bool isTerminal)
+    {
+        if (transcriptEvent is not null)
+            TranscriptReceived?.Invoke(transcriptEvent);
+        if (isTerminal)
+            _terminalTranscript.TrySetResult(true);
     }
 
     private static async Task<string> ReceiveTextMessageAsync(
