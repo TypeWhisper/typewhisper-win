@@ -760,6 +760,8 @@
   "Dictation.RemoveLanguage": "移除语言",
   "Dictation.SettingsSection": "设置",
   "Dictation.AutoPasteAfter": "转写后自动粘贴",
+  "Dictation.LockPasteToFocusedField": "将粘贴目标锁定到初始文本框",
+  "Dictation.LockPasteToFocusedFieldHint": "粘贴前会将焦点恢复到听写开始时的文本框。如果该文本框不可用，文本会保留在剪贴板中。",
   "Dictation.ShortQuietAggressive": "更积极地转写短音频或轻声片段",
   "Dictation.ShortQuietAggressiveHint": "仍会丢弃意外的极短点击，但会保留更多非常短或音量较低的录音。",
   "Dictation.NormalizeNumbers": "将口述数字规范为数值",

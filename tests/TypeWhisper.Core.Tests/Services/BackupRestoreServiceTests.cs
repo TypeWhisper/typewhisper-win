@@ -76,6 +76,7 @@ public sealed class BackupRestoreServiceTests : IDisposable
             Language = "de",
             LanguageHints = ["de", "en"],
             AutoPaste = false,
+            LockPasteToFocusedField = true,
             UpdateChannel = "daily"
         });
         source.Workflows.AddWorkflow(new Workflow
@@ -156,6 +157,7 @@ public sealed class BackupRestoreServiceTests : IDisposable
         Assert.Equal(["Ctrl+Alt+F8"], destination.Settings.Current.GetMainDictationHotkeys());
         Assert.Equal("de", destination.Settings.Current.Language);
         Assert.False(destination.Settings.Current.AutoPaste);
+        Assert.True(destination.Settings.Current.LockPasteToFocusedField);
         Assert.True(second.Success, second.Error);
         Assert.Equal(0, second.Categories[BackupCategory.Workflows].Imported);
         Assert.Equal(0, second.Categories[BackupCategory.Dictionary].Imported);

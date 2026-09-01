@@ -771,6 +771,8 @@
   "Dictation.RemoveLanguage": "Remove language",
   "Dictation.SettingsSection": "Settings",
   "Dictation.AutoPasteAfter": "Auto paste after transcription",
+  "Dictation.LockPasteToFocusedField": "Lock paste to the initial text field",
+  "Dictation.LockPasteToFocusedFieldHint": "Returns focus to the field active when dictation starts. If it is unavailable, the text stays on the clipboard.",
   "Dictation.ShortQuietAggressive": "Transcribe short / quiet clips more aggressively",
   "Dictation.ShortQuietAggressiveHint": "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings.",
   "Dictation.NormalizeNumbers": "Normalize spoken numbers to digits",

@@ -425,6 +425,8 @@ public sealed class WorkflowPaletteServiceTests : IDisposable
 
         public bool IsAnyModifierKeyDown() => false;
 
+        public ITextInsertionFocusTarget? CaptureFocusedTextInput(IntPtr targetHwnd) => null;
+
         public IntPtr GetForegroundWindow() => ForegroundWindow;
 
         public bool SetForegroundWindow(IntPtr hwnd)

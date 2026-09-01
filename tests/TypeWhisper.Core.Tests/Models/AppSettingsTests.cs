@@ -29,6 +29,12 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void DefaultLockPasteToFocusedField_IsFalse()
+    {
+        Assert.False(AppSettings.Default.LockPasteToFocusedField);
+    }
+
+    [Fact]
     public void DefaultTranscriptionNumberNormalizationEnabled_IsTrue()
     {
         Assert.True(AppSettings.Default.TranscriptionNumberNormalizationEnabled);

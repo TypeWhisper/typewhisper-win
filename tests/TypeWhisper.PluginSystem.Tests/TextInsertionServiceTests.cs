@@ -202,6 +202,102 @@ public sealed class TextInsertionServiceTests
     }
 
     [Fact]
+    public async Task LockedTarget_RestoresCapturedFieldBeforePaste()
+    {
+        var targetHwnd = new IntPtr(200);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = targetHwnd
+        };
+        var focusTarget = new FakeTextInsertionFocusTarget(platform.InsertionEvents);
+        platform.CapturedFocusTarget = focusTarget;
+        var sut = new TextInsertionService(platform);
+        var target = sut.CaptureTarget(targetHwnd);
+
+        var result = await sut.InsertTextAsync(
+            "dictated",
+            autoPaste: true,
+            autoEnter: false,
+            targetHwnd,
+            target);
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal(1, focusTarget.TryFocusCalls);
+        Assert.True(platform.InsertionEvents.IndexOf("focus-field") < platform.InsertionEvents.IndexOf("paste"));
+        Assert.Equal("previous", platform.ClipboardText);
+    }
+
+    [Fact]
+    public async Task LockedTarget_DoesNotRefocusFieldThatIsStillFocused()
+    {
+        var targetHwnd = new IntPtr(200);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = targetHwnd
+        };
+        var focusTarget = new FakeTextInsertionFocusTarget(platform.InsertionEvents) { Focused = true };
+        platform.CapturedFocusTarget = focusTarget;
+        var sut = new TextInsertionService(platform);
+        var target = sut.CaptureTarget(targetHwnd);
+
+        var result = await sut.InsertTextAsync("dictated", true, false, targetHwnd, target);
+
+        Assert.Equal(InsertionResult.Pasted, result);
+        Assert.Equal(0, focusTarget.TryFocusCalls);
+        Assert.Equal(1, platform.PasteInputCalls);
+    }
+
+    [Fact]
+    public async Task LockedTarget_FallsBackToClipboardWhenCapturedFieldCannotBeRestored()
+    {
+        var targetHwnd = new IntPtr(200);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = targetHwnd
+        };
+        var focusTarget = new FakeTextInsertionFocusTarget(platform.InsertionEvents)
+        {
+            TryFocusResult = false
+        };
+        platform.CapturedFocusTarget = focusTarget;
+        var errorLog = new FakeErrorLogService();
+        var sut = new TextInsertionService(platform, errorLog);
+        var target = sut.CaptureTarget(targetHwnd);
+
+        var result = await sut.InsertTextAsync("dictated", true, false, targetHwnd, target);
+
+        Assert.Equal(InsertionResult.CopiedToClipboard, result);
+        Assert.Equal("dictated", platform.ClipboardText);
+        Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Contains(errorLog.Entries, entry =>
+            entry.Category == ErrorCategory.Insertion &&
+            entry.Message.Contains("field focused at recording start", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task LockedTarget_FallsBackToClipboardWhenNoTextFieldWasCaptured()
+    {
+        var targetHwnd = new IntPtr(200);
+        var platform = new FakeTextInsertionPlatform
+        {
+            ClipboardText = "previous",
+            ForegroundWindow = targetHwnd
+        };
+        var sut = new TextInsertionService(platform);
+        var target = sut.CaptureTarget(targetHwnd);
+
+        var result = await sut.InsertTextAsync("dictated", true, false, targetHwnd, target);
+
+        Assert.Equal(InsertionResult.CopiedToClipboard, result);
+        Assert.Equal("dictated", platform.ClipboardText);
+        Assert.Equal(0, platform.PasteInputCalls);
+        Assert.Equal(targetHwnd, platform.LastCaptureTargetHwnd);
+    }
+
+    [Fact]
     public async Task PasteInputFailure_FallsBackToClipboardWithoutRestoringPreviousClipboard()
     {
         var platform = new FakeTextInsertionPlatform
@@ -870,6 +966,15 @@ public sealed class TextInsertionServiceTests
         public bool IsAnyModifierKeyDown() =>
             ModifierStates.Count > 0 ? ModifierStates.Dequeue() : ModifierDefaultState;
 
+        public ITextInsertionFocusTarget? CapturedFocusTarget { get; set; }
+        public IntPtr LastCaptureTargetHwnd { get; private set; }
+
+        public ITextInsertionFocusTarget? CaptureFocusedTextInput(IntPtr targetHwnd)
+        {
+            LastCaptureTargetHwnd = targetHwnd;
+            return CapturedFocusTarget;
+        }
+
         public IntPtr GetForegroundWindow() => ForegroundWindow;
 
         public bool SetForegroundWindow(IntPtr hwnd)
@@ -932,6 +1037,24 @@ public sealed class TextInsertionServiceTests
             public uint ExpectedSequenceNumber { get; set; }
             public bool Completed { get; set; }
             public void Dispose() => Completed = true;
+        }
+    }
+
+    private sealed class FakeTextInsertionFocusTarget(List<string> insertionEvents) : ITextInsertionFocusTarget
+    {
+        public bool Focused { get; set; }
+        public bool TryFocusResult { get; set; } = true;
+        public int TryFocusCalls { get; private set; }
+
+        public bool IsFocused() => Focused;
+
+        public bool TryFocus()
+        {
+            TryFocusCalls++;
+            insertionEvents.Add("focus-field");
+            if (TryFocusResult)
+                Focused = true;
+            return TryFocusResult;
         }
     }
 

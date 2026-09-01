@@ -94,6 +94,22 @@ public class SettingsViewModelIndicatorTests
     }
 
     [Fact]
+    public void LockPasteToFocusedField_LoadsAndPersistsSetting()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default with
+        {
+            LockPasteToFocusedField = true
+        });
+        var sut = CreateSettingsViewModel(settings);
+
+        Assert.True(sut.LockPasteToFocusedField);
+
+        sut.LockPasteToFocusedField = false;
+
+        Assert.False(settings.Current.LockPasteToFocusedField);
+    }
+
+    [Fact]
     public void EnglishOutputVariantVisibility_IncludesEnglishTranslationTarget()
     {
         var settings = new FakeSettingsService(AppSettings.Default with

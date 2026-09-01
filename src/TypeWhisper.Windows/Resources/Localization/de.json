@@ -771,6 +771,8 @@
   "Dictation.RemoveLanguage": "Sprache entfernen",
   "Dictation.SettingsSection": "Einstellungen",
   "Dictation.AutoPasteAfter": "Nach der Transkription automatisch einfügen",
+  "Dictation.LockPasteToFocusedField": "Einfügen auf das ursprüngliche Textfeld beschränken",
+  "Dictation.LockPasteToFocusedFieldHint": "Stellt vor dem Einfügen den Fokus des Feldes wieder her, das beim Start des Diktats aktiv war. Ist es nicht mehr verfügbar, bleibt der Text in der Zwischenablage.",
   "Dictation.ShortQuietAggressive": "Kurze / leise Clips aggressiver transkribieren",
   "Dictation.ShortQuietAggressiveHint": "Verwirft weiterhin versehentliche ultrakurze Taps, behält aber mehr sehr kurze oder leise Aufnahmen.",
   "Dictation.NormalizeNumbers": "Gesprochene Zahlen in Ziffern umwandeln",

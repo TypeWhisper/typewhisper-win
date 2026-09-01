@@ -144,6 +144,7 @@ public sealed record BackupPreferences
     public string Language { get; init; } = "auto";
     public IReadOnlyList<string> LanguageHints { get; init; } = [];
     public bool AutoPaste { get; init; }
+    public bool LockPasteToFocusedField { get; init; }
     public RecordingMode Mode { get; init; }
     public HistoryRetentionMode HistoryRetentionMode { get; init; }
     public int HistoryRetentionMinutes { get; init; }
