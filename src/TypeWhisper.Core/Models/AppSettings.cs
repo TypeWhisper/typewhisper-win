@@ -136,6 +136,10 @@ public record AppSettings
     /// </summary>
     public bool AutoPaste { get; init; } = true;
     /// <summary>
+    /// Gets or sets whether auto paste is restricted to the text field focused when dictation starts.
+    /// </summary>
+    public bool LockPasteToFocusedField { get; init; }
+    /// <summary>
     /// Gets or sets the mode value.
     /// </summary>
     public RecordingMode Mode { get; init; } = RecordingMode.Toggle;

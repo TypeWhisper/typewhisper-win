@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Windows.Automation;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Native;
@@ -79,7 +80,50 @@ public sealed class TextInsertionService : IDisposable
                 autoPaste,
                 autoEnter,
                 targetHwnd,
+                exactFocusTarget: null,
+                requireExactFocus: false,
                 cancellationToken);
+        }
+        finally
+        {
+            _clipboardOperationGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Captures the focused text field that belongs to the supplied target window.
+    /// A target is returned even when UI Automation cannot identify the field so
+    /// locked insertion can fail safely instead of falling back to another field.
+    /// </summary>
+    internal TextInsertionTarget CaptureTarget(IntPtr targetHwnd) =>
+        new(targetHwnd, _platform.CaptureFocusedTextInput(targetHwnd));
+
+    /// <summary>
+    /// Inserts text using normal window targeting or, when supplied, only after
+    /// the exact field captured for the locked target has focus.
+    /// </summary>
+    internal async Task<InsertionResult> InsertTextAsync(
+        string text,
+        bool autoPaste,
+        bool autoEnter,
+        IntPtr targetHwnd,
+        TextInsertionTarget? lockedTarget,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(text))
+            return InsertionResult.NoText;
+
+        await _clipboardOperationGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await InsertTextCoreAsync(
+                text,
+                autoPaste,
+                autoEnter,
+                lockedTarget?.WindowHandle ?? targetHwnd,
+                lockedTarget?.FocusTarget,
+                requireExactFocus: lockedTarget is not null,
+                cancellationToken: cancellationToken);
         }
         finally
         {
@@ -92,6 +136,8 @@ public sealed class TextInsertionService : IDisposable
         bool autoPaste,
         bool autoEnter,
         IntPtr targetHwnd,
+        ITextInsertionFocusTarget? exactFocusTarget,
+        bool requireExactFocus,
         CancellationToken cancellationToken)
     {
         if (!autoPaste)
@@ -124,6 +170,18 @@ public sealed class TextInsertionService : IDisposable
                     clipboardLease,
                     text,
                     "Auto paste fell back to clipboard: target window could not be focused.",
+                    cancellationToken);
+                leaseFinalized = true;
+                return fallback;
+            }
+
+            if (requireExactFocus &&
+                !await FocusExactTargetAsync(exactFocusTarget, cancellationToken))
+            {
+                var fallback = await CommitClipboardFallbackAsync(
+                    clipboardLease,
+                    text,
+                    "Auto paste fell back to clipboard: the field focused at recording start could not be restored.",
                     cancellationToken);
                 leaseFinalized = true;
                 return fallback;
@@ -338,6 +396,23 @@ public sealed class TextInsertionService : IDisposable
         return targetRoot != IntPtr.Zero && targetRoot == _platform.GetRootWindow(foregroundHwnd);
     }
 
+    private async Task<bool> FocusExactTargetAsync(
+        ITextInsertionFocusTarget? target,
+        CancellationToken cancellationToken)
+    {
+        if (target is null)
+            return false;
+
+        if (target.IsFocused())
+            return true;
+
+        if (!target.TryFocus())
+            return false;
+
+        await _platform.DelayAsync(FocusDelay, cancellationToken);
+        return target.IsFocused();
+    }
+
     private async Task<ClipboardTextState?> WaitForClipboardTextChangeAsync(
         string marker,
         CancellationToken cancellationToken)
@@ -422,6 +497,16 @@ public sealed class TextInsertionService : IDisposable
     }
 }
 
+internal sealed record TextInsertionTarget(
+    IntPtr WindowHandle,
+    ITextInsertionFocusTarget? FocusTarget);
+
+internal interface ITextInsertionFocusTarget
+{
+    bool IsFocused();
+    bool TryFocus();
+}
+
 internal interface ITextInsertionPlatform
 {
     Task<ClipboardTextState> TryGetClipboardTextStateAsync(CancellationToken cancellationToken);
@@ -439,6 +524,7 @@ internal interface ITextInsertionPlatform
     void AcceptClipboardSequence(IClipboardLease lease, uint sequenceNumber);
     Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken);
     bool IsAnyModifierKeyDown();
+    ITextInsertionFocusTarget? CaptureFocusedTextInput(IntPtr targetHwnd);
     IntPtr GetForegroundWindow();
     bool SetForegroundWindow(IntPtr hwnd);
     uint GetWindowProcessId(IntPtr hwnd);
@@ -555,6 +641,39 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform, IDi
         ModifierKeys.Any(key => (NativeMethods.GetAsyncKeyState(key) & unchecked((short)0x8000)) != 0);
 
     /// <summary>
+    /// Captures an editable UI Automation element without reading its text value.
+    /// </summary>
+    public ITextInsertionFocusTarget? CaptureFocusedTextInput(IntPtr targetHwnd)
+    {
+        if (targetHwnd == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            var element = AutomationElement.FocusedElement;
+            if (!IsElementInWindow(element, targetHwnd) || !IsSupportedTextInput(element))
+                return null;
+
+            var runtimeId = element.GetRuntimeId();
+            return runtimeId is { Length: > 0 }
+                ? new WindowsTextInsertionFocusTarget(element, runtimeId)
+                : null;
+        }
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Returns foreground window.
     /// </summary>
     public IntPtr GetForegroundWindow() => NativeMethods.GetForegroundWindow();
@@ -659,6 +778,96 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform, IDi
     /// Releases native clipboard resources.
     /// </summary>
     public void Dispose() => _clipboard.Dispose();
+
+    private static bool IsSupportedTextInput(AutomationElement element)
+    {
+        var current = element.Current;
+        if (!current.IsEnabled || !current.IsKeyboardFocusable)
+            return false;
+
+        if (element.GetCurrentPropertyValue(AutomationElement.IsPasswordProperty, ignoreDefaultValue: true) is true)
+            return false;
+
+        if (element.TryGetCurrentPattern(ValuePattern.Pattern, out var valuePattern) &&
+            valuePattern is ValuePattern value)
+        {
+            return !value.Current.IsReadOnly;
+        }
+
+        return (current.ControlType == ControlType.Edit || current.ControlType == ControlType.Document) &&
+               element.TryGetCurrentPattern(TextPattern.Pattern, out _);
+    }
+
+    private static bool IsElementInWindow(AutomationElement element, IntPtr targetHwnd)
+    {
+        var targetRoot = NativeMethods.GetAncestor(targetHwnd, NativeMethods.GA_ROOT);
+        if (targetRoot == IntPtr.Zero)
+            targetRoot = targetHwnd;
+
+        var walker = TreeWalker.ControlViewWalker;
+        var current = element;
+        while (current is not null && current != AutomationElement.RootElement)
+        {
+            var currentHwnd = (IntPtr)current.Current.NativeWindowHandle;
+            if (currentHwnd != IntPtr.Zero)
+            {
+                var currentRoot = NativeMethods.GetAncestor(currentHwnd, NativeMethods.GA_ROOT);
+                if ((currentRoot == IntPtr.Zero ? currentHwnd : currentRoot) == targetRoot)
+                    return true;
+            }
+
+            current = walker.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private sealed class WindowsTextInsertionFocusTarget(
+        AutomationElement element,
+        int[] runtimeId) : ITextInsertionFocusTarget
+    {
+        public bool IsFocused()
+        {
+            try
+            {
+                var focusedRuntimeId = AutomationElement.FocusedElement.GetRuntimeId();
+                return focusedRuntimeId is { Length: > 0 } && runtimeId.SequenceEqual(focusedRuntimeId);
+            }
+            catch (ElementNotAvailableException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+        }
+
+        public bool TryFocus()
+        {
+            try
+            {
+                element.SetFocus();
+                return true;
+            }
+            catch (ElementNotAvailableException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+        }
+    }
 
     private static bool IsKeyDown(int virtualKey) =>
         (NativeMethods.GetAsyncKeyState(virtualKey) & unchecked((short)0x8000)) != 0;

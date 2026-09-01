@@ -184,6 +184,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
     private Workflow? _activeWorkflow;
     private string? _workflowHotkeyOverrideId;
     private IntPtr _capturedWindowHandle;
+    private TextInsertionTarget? _capturedTextInsertionTarget;
     private string? _capturedProcessName;
     private string? _capturedWindowTitle;
     private string? _capturedUrl;
@@ -704,6 +705,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         ActiveWorkflowName = null;
         _activeWorkflow = null;
         _capturedWindowHandle = IntPtr.Zero;
+        _capturedTextInsertionTarget = null;
         _capturedProcessName = null;
         _capturedWindowTitle = null;
         _capturedUrl = null;
@@ -1242,8 +1244,13 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         FeedbackIsError = false;
         ShowFeedback = false;
 
-        // Capture active window context at recording start
+        var settingsSnapshot = _settings.Current;
+
+        // Capture active window and optional exact text-field target at recording start.
         _capturedWindowHandle = _activeWindow.GetActiveWindowHandle();
+        _capturedTextInsertionTarget = settingsSnapshot.AutoPaste && settingsSnapshot.LockPasteToFocusedField
+            ? _textInsertion.CaptureTarget(_capturedWindowHandle)
+            : null;
         _capturedProcessName = _activeWindow.GetActiveWindowProcessName();
         _capturedWindowTitle = _activeWindow.GetActiveWindowTitle();
         _capturedUrl = _activeWindow.GetBrowserUrl();
@@ -1257,7 +1264,6 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             _activeWorkflow = _workflows.MatchWorkflow(_capturedProcessName, _capturedUrl)?.Workflow;
         }
 
-        var settingsSnapshot = _settings.Current;
         var desiredModelId = _activeWorkflow?.Behavior.TranscriptionModelOverride
             ?? settingsSnapshot.SelectedModelId;
         if (string.IsNullOrWhiteSpace(desiredModelId))
@@ -1293,6 +1299,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
             desiredModelId,
             _activeWorkflow,
             _capturedWindowHandle,
+            _capturedTextInsertionTarget,
             _capturedProcessName,
             _capturedWindowTitle,
             _capturedUrl,
@@ -1546,6 +1553,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                 partialSnapshot,
                 session.Context.ActiveWorkflow,
                 session.Context.CapturedWindowHandle,
+                session.Context.CapturedTextInsertionTarget,
                 session.Context.CapturedProcessName,
                 session.Context.CapturedWindowTitle,
                 session.Context.CapturedUrl,
@@ -2100,6 +2108,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                         _settings.Current.AutoPaste,
                         job.ActiveWorkflow?.Output.AutoEnter == true,
                         job.CapturedWindowHandle,
+                        job.CapturedTextInsertionTarget,
                         ct);
                     textInsertedEventText = insertionText;
                     StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
@@ -2119,6 +2128,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
                     _settings.Current.AutoPaste,
                     job.ActiveWorkflow?.Output.AutoEnter == true,
                     job.CapturedWindowHandle,
+                    job.CapturedTextInsertionTarget,
                     ct);
                 textInsertedEventText = insertionText;
                 StartTargetAppCorrectionLearningInBackground(job, insertionText, insertResult);
@@ -3196,6 +3206,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         string DesiredModelId,
         Workflow? ActiveWorkflow,
         IntPtr CapturedWindowHandle,
+        TextInsertionTarget? CapturedTextInsertionTarget,
         string? CapturedProcessName,
         string? CapturedWindowTitle,
         string? CapturedUrl,
@@ -3294,6 +3305,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         List<string> PartialSegments,
         Workflow? ActiveWorkflow,
         IntPtr CapturedWindowHandle,
+        TextInsertionTarget? CapturedTextInsertionTarget,
         string? CapturedProcessName,
         string? CapturedWindowTitle,
         string? CapturedUrl,

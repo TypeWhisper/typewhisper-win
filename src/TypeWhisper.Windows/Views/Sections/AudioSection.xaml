@@ -526,6 +526,8 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="1"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="1"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <Border Grid.Row="0" Style="{StaticResource SettingsRowBorderStyle}">
@@ -541,14 +543,34 @@
                         <Border Grid.Row="2" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str Dictation.LockPasteToFocusedField}" Style="{StaticResource SettingsRowLabelStyle}"/>
+                                    <TextBlock Text="{loc:Str Dictation.LockPasteToFocusedFieldHint}"
+                                               Style="{StaticResource HintStyle}"
+                                               Margin="0,4,18,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ui:ToggleSwitch Grid.Column="1"
+                                                 AutomationProperties.AutomationId="DictationLockPasteToFocusedField"
+                                                 AutomationProperties.Name="{loc:Str Dictation.LockPasteToFocusedField}"
+                                                 IsChecked="{Binding Settings.LockPasteToFocusedField}"
+                                                 IsEnabled="{Binding Settings.AutoPaste}"
+                                                 OnContent=""
+                                                 OffContent=""/>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="3" Background="#18FFFFFF"/>
+                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str General.WhisperMode}" Style="{StaticResource SettingsRowLabelStyle}"/>
                                 <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding Settings.WhisperModeEnabled}" OnContent="" OffContent=""
                                                  AutomationProperties.AutomationId="DictationWhisperMode"
                                                  AutomationProperties.Name="{loc:Str General.WhisperMode}"/>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="3" Background="#18FFFFFF"/>
-                        <Border Grid.Row="4" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="5" Background="#18FFFFFF"/>
+                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Str General.SoundFeedback}" Style="{StaticResource SettingsRowLabelStyle}"/>
@@ -557,8 +579,8 @@
                                                  AutomationProperties.Name="{loc:Str General.SoundFeedback}"/>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="5" Background="#18FFFFFF"/>
-                        <Border Grid.Row="6" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="7" Background="#18FFFFFF"/>
+                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
@@ -576,8 +598,8 @@
                                                  OffContent=""/>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="7" Background="#18FFFFFF"/>
-                        <Border Grid.Row="8" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="9" Background="#18FFFFFF"/>
+                        <Border Grid.Row="10" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
@@ -595,8 +617,8 @@
                                                  OffContent=""/>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="9" Background="#18FFFFFF"/>
-                        <Border Grid.Row="10" Style="{StaticResource SettingsRowBorderStyle}">
+                        <Border Grid.Row="11" Background="#18FFFFFF"/>
+                        <Border Grid.Row="12" Style="{StaticResource SettingsRowBorderStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">

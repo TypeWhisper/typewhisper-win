@@ -54,6 +54,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _shortcutsError = "";
     [ObservableProperty] private LanguageHintOption? _selectedLanguageHintToAdd;
     [ObservableProperty] private bool _autoPaste = true;
+    [ObservableProperty] private bool _lockPasteToFocusedField;
     [ObservableProperty] private RecordingMode _mode = RecordingMode.Toggle;
     [ObservableProperty] private bool _whisperModeEnabled;
     [ObservableProperty] private bool _soundFeedbackEnabled = true;
@@ -817,6 +818,7 @@ public partial class SettingsViewModel : ObservableObject
             LanguageHints = SelectedLanguageHints.Select(static option => option.Code).ToList(),
             Language = SelectedLanguageHints.FirstOrDefault()?.Code ?? "auto",
             AutoPaste = AutoPaste,
+            LockPasteToFocusedField = LockPasteToFocusedField,
             Mode = Mode,
             WhisperModeEnabled = WhisperModeEnabled,
             SoundFeedbackEnabled = SoundFeedbackEnabled,
@@ -937,6 +939,7 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedEnglishLanguage));
         OnPropertyChanged(nameof(HasSelectedGermanLanguage));
         AutoPaste = s.AutoPaste;
+        LockPasteToFocusedField = s.LockPasteToFocusedField;
         Mode = s.Mode;
         WhisperModeEnabled = s.WhisperModeEnabled;
         SoundFeedbackEnabled = s.SoundFeedbackEnabled;

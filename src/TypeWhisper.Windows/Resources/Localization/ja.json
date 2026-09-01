@@ -760,6 +760,8 @@
   "Dictation.RemoveLanguage": "言語を削除",
   "Dictation.SettingsSection": "設定",
   "Dictation.AutoPasteAfter": "文字起こし後に自動貼り付け",
+  "Dictation.LockPasteToFocusedField": "最初のテキスト入力欄に貼り付け先を固定",
+  "Dictation.LockPasteToFocusedFieldHint": "音声入力の開始時に選択されていた入力欄へフォーカスを戻します。利用できない場合、テキストはクリップボードに残ります。",
   "Dictation.ShortQuietAggressive": "短い/静かなクリップをより積極的に文字起こし",
   "Dictation.ShortQuietAggressiveHint": "誤タップによる超短い録音は破棄しますが、非常に短いまたは静かな録音はより多く保持します。",
   "Dictation.NormalizeNumbers": "話した数字を数値に変換",

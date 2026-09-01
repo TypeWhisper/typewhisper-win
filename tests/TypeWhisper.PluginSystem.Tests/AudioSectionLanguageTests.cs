@@ -33,6 +33,8 @@ public sealed class AudioSectionLanguageTests
         Assert.Contains("GermanOutputVariant.Switzerland", viewModel);
         Assert.Contains("DictationShortUtterancePunctuation", xaml);
         Assert.Contains("Settings.ShortUtterancePunctuationEnabled", xaml);
+        Assert.Contains("DictationLockPasteToFocusedField", xaml);
+        Assert.Contains("Settings.LockPasteToFocusedField", xaml);
     }
 
     [Fact]

@@ -760,6 +760,8 @@
   "Dictation.RemoveLanguage": "Удалить язык",
   "Dictation.SettingsSection": "Параметры",
   "Dictation.AutoPasteAfter": "Автовставка после транскрипции",
+  "Dictation.LockPasteToFocusedField": "Закрепить вставку за исходным текстовым полем",
+  "Dictation.LockPasteToFocusedFieldHint": "Возвращает фокус в поле, активное при запуске диктовки. Если оно недоступно, текст остается в буфере обмена.",
   "Dictation.ShortQuietAggressive": "Агрессивнее транскрибировать короткие / тихие фрагменты",
   "Dictation.ShortQuietAggressiveHint": "По-прежнему отбрасывает случайные ультракороткие нажатия, но сохраняет больше очень коротких или тихих записей.",
   "Dictation.NormalizeNumbers": "Преобразовывать произнесенные числа в цифры",
