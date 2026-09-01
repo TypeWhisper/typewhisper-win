@@ -166,7 +166,7 @@ public partial class MetaSettingsView : UserControl
     {
         if (_isInitializing)
             return;
-        _plugin.SetSpeakerDiarizationEnabled(SpeakerDiarizationToggle.IsChecked == true);
+        _plugin.SetSpeakerDiarizationEnabled(SpeakerDiarizationToggle.IsChecked.GetValueOrDefault());
     }
 
     private void OnReasoningEffortChanged(object sender, SelectionChangedEventArgs e)
