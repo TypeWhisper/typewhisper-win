@@ -794,8 +794,14 @@ internal sealed class WindowsTextInsertionPlatform : ITextInsertionPlatform, IDi
             return !value.Current.IsReadOnly;
         }
 
-        return (current.ControlType == ControlType.Edit || current.ControlType == ControlType.Document) &&
-               element.TryGetCurrentPattern(TextPattern.Pattern, out _);
+        if ((current.ControlType != ControlType.Edit && current.ControlType != ControlType.Document) ||
+            !element.TryGetCurrentPattern(TextPattern.Pattern, out var textPattern) ||
+            textPattern is not TextPattern text)
+        {
+            return false;
+        }
+
+        return text.DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute) is false;
     }
 
     private static bool IsElementInWindow(AutomationElement element, IntPtr targetHwnd)
