@@ -1,12 +1,12 @@
 {
   "id": "com.typewhisper.meta",
-  "name": "Meta Model API",
-  "version": "1.0.0",
-  "minHostVersion": "1.0.9",
+  "name": "Meta",
+  "version": "1.0.1",
+  "minHostVersion": "1.0.10",
   "author": "TypeWhisper",
-  "description": "Meta Model API integration for Muse Voice Transcribe and Muse Spark language models, with automatic model discovery.",
+  "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark.",
   "descriptions": {
-    "de": "Meta Model API für Muse Voice Transcribe und Muse-Spark-Sprachmodelle mit automatischer Modellerkennung."
+    "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechertrennung und Prompt-Verarbeitung mit Muse Spark."
   },
   "category": "transcription",
   "categories": ["transcription", "llm"],

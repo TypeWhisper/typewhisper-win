@@ -1431,7 +1431,7 @@ public partial class DictationViewModel : ObservableObject, IDisposable, IDictat
         try
         {
             var stopRequestedAtUtc = DateTime.UtcNow;
-            var streamingText = _streamingHandler.Stop();
+            var streamingText = await _streamingHandler.StopAsync();
             _audio.SamplesAvailable -= OnSamplesAvailable;
 
             var recordingResult = await StopAudioOnceWithRecoveryAsync(session);

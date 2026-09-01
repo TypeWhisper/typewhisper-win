@@ -14,6 +14,8 @@
   "Settings.TranscriptionModel": "Transkriptionsmodell",
   "Settings.TranscriptionModelFallback": "Das dokumentierte Muse-Voice-Transcribe-Modell wird verwendet, bis der API-Katalog geladen ist.",
   "Settings.TranscriptionModelsFetched": "{0} Muse-Voice-Transcribe-Modell(e) aus der API geladen.",
+  "Settings.SpeakerDiarization": "Sprechertrennung",
+  "Settings.SpeakerDiarizationHint": "Kennzeichnet Sprecher in Echtzeit- und Datei-Transkriptionen. Die Echtzeit-Transkription streamt 16-kHz-PCM über Metas WebSocket-API.",
   "Settings.LlmModel": "LLM-Modell",
   "Settings.LlmModelFallback": "Die dokumentierten Muse-Spark-Modelle werden verwendet, bis der API-Katalog geladen ist.",
   "Settings.LlmModelsFetched": "{0} Muse-Spark-Modell(e) aus der API geladen.",

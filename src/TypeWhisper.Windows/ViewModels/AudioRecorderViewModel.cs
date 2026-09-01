@@ -459,7 +459,7 @@ public partial class AudioRecorderViewModel : ObservableObject, IRecorderApiCont
             _timer?.Dispose();
             _timer = null;
             SetLocalizedStatus("Recorder.Finalizing");
-            liveTranscript = _streamingHandler.Stop();
+            liveTranscript = await _streamingHandler.StopAsync(ct);
             await ReleaseStreamingModelAsync();
 
             capture = await _capture.StopAsync(ct);
