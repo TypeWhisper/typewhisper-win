@@ -50,6 +50,46 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public async Task RefreshAvailableModelsAsync_RemovesModelsMissingFromSuccessfulRefresh()
+    {
+        var handler = new RecordingHandler(
+            HttpStatusCode.OK,
+            """{"data":[{"id":"muse-spark-1.2"},{"id":"muse-voice-transcribe-1.0"}]}""");
+        handler.EnqueueResponse(
+            HttpStatusCode.OK,
+            """{"data":[{"id":"muse-spark-1.2"}]}""");
+        using var client = new HttpClient(handler);
+        using var sut = new MetaPlugin(client);
+        await sut.ActivateAsync(new FakePluginHostServices());
+        await sut.SetApiKeyAsync("meta-key");
+
+        await sut.RefreshAvailableModelsAsync();
+        var refreshed = await sut.RefreshAvailableModelsAsync();
+
+        Assert.NotNull(refreshed);
+        Assert.Empty(refreshed.TranscriptionModels);
+        Assert.Equal(0, sut.FetchedTranscriptionModelCount);
+        Assert.Equal(
+            MetaPlugin.DefaultTranscriptionModelId,
+            Assert.Single(sut.TranscriptionModels).Id);
+    }
+
+    [Fact]
+    public async Task ValidateApiKeyAsync_ExposesAuthenticationFailureKind()
+    {
+        var handler = new RecordingHandler(
+            HttpStatusCode.Unauthorized,
+            """{"error":{"message":"bad token"}}""");
+        using var client = new HttpClient(handler);
+        using var sut = new MetaPlugin(client);
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() =>
+            sut.ValidateApiKeyAsync("invalid"));
+
+        Assert.Equal(PluginRequestFailureKind.Authentication, error.FailureKind);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesMetaChatCompletionsParameters()
     {
         var handler = new RecordingHandler(
@@ -163,6 +203,19 @@ public sealed class MetaPluginTests
         Assert.Equal(expected, Assert.Single(MetaPlugin.NormalizeLanguageHints([language])));
     }
 
+    [Theory]
+    [InlineData("German", "de")]
+    [InlineData("de-DE", "de")]
+    [InlineData("iw", "he")]
+    [InlineData("cmn", "zh")]
+    [InlineData("fil", "tl")]
+    [InlineData("Klingon", null)]
+    [InlineData("auto", null)]
+    public void FirstLanguageCode_ReturnsCanonicalAcceptedCode(string language, string? expected)
+    {
+        Assert.Equal(expected, MetaPlugin.FirstLanguageCode([language]));
+    }
+
     [Fact]
     public void ParseTranscriptEvent_HandlesPartialAndFinalEvents()
     {
@@ -177,6 +230,17 @@ public sealed class MetaPluginTests
         Assert.NotNull(final);
         Assert.True(final.IsFinal);
         Assert.Equal("Hello world.", final.Text);
+    }
+
+    [Fact]
+    public void ParseTranscriptEvent_RecognizesEmptyTerminalEvent()
+    {
+        var transcript = MetaRealtimeStreamingSession.ParseTranscriptEvent(
+            """{"type":"transcript","transcript":"","final":true}""",
+            out var isTerminal);
+
+        Assert.Null(transcript);
+        Assert.True(isTerminal);
     }
 
     [Fact]
@@ -243,14 +307,23 @@ public sealed class MetaPluginTests
         return stream.ToArray();
     }
 
-    private sealed class RecordingHandler(HttpStatusCode statusCode, string responseBody)
-        : HttpMessageHandler
+    private sealed class RecordingHandler : HttpMessageHandler
     {
+        private readonly Queue<(HttpStatusCode StatusCode, string Body)> _responses = [];
+
+        public RecordingHandler(HttpStatusCode statusCode, string responseBody)
+        {
+            EnqueueResponse(statusCode, responseBody);
+        }
+
         public Uri? RequestUri { get; private set; }
         public string? AuthorizationScheme { get; private set; }
         public string? AuthorizationParameter { get; private set; }
         public string? Accept { get; private set; }
         public string? RequestBody { get; private set; }
+
+        public void EnqueueResponse(HttpStatusCode statusCode, string responseBody) =>
+            _responses.Enqueue((statusCode, responseBody));
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -263,9 +336,10 @@ public sealed class MetaPluginTests
             RequestBody = request.Content is null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
-            return new HttpResponseMessage(statusCode)
+            var response = _responses.Dequeue();
+            return new HttpResponseMessage(response.StatusCode)
             {
-                Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
+                Content = new StringContent(response.Body, Encoding.UTF8, "application/json"),
             };
         }
     }

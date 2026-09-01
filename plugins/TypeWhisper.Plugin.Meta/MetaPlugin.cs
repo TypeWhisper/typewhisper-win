@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -72,6 +73,11 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             ["tr"] = "Turkish",
             ["vi"] = "Vietnamese",
         };
+
+    private static readonly IReadOnlyDictionary<string, string> CanonicalLanguageCodes =
+        LanguageNames
+            .Where(pair => pair.Key.Length == 2 && pair.Key != "iw")
+            .ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.OrdinalIgnoreCase);
 
     private readonly HttpClient _httpClient;
     private IPluginHostServices? _host;
@@ -323,15 +329,19 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     {
         var normalized = NormalizeApiKey(apiKey);
         var changed = !string.Equals(_apiKey, normalized, StringComparison.Ordinal);
-        _apiKey = normalized;
 
         if (_host is null)
+        {
+            _apiKey = normalized;
             return;
+        }
 
         if (normalized is null)
             await _host.DeleteSecretAsync(ApiKeySecretName);
         else
             await _host.StoreSecretAsync(ApiKeySecretName, normalized);
+
+        _apiKey = normalized;
 
         if (changed)
         {
@@ -365,19 +375,8 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
     {
         using var request = CreateModelsRequest(apiKey);
-        try
-        {
-            using var response = await _httpClient.SendAsync(request, ct);
-            return response.IsSuccessStatusCode;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            return false;
-        }
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
+        return true;
     }
 
     internal async Task<MetaModelCatalog?> RefreshAvailableModelsAsync(CancellationToken ct = default)
@@ -409,10 +408,8 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
                 .ToList();
             var llmModels = NormalizeModels(models, IsLlmModel);
             var transcriptionModels = NormalizeModels(models, IsTranscriptionModel);
-            if (llmModels.Count > 0)
-                _fetchedLlmModels = llmModels;
-            if (transcriptionModels.Count > 0)
-                _fetchedTranscriptionModels = transcriptionModels;
+            _fetchedLlmModels = llmModels;
+            _fetchedTranscriptionModels = transcriptionModels;
 
             if (_host is not null)
             {
@@ -428,10 +425,21 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         {
             throw;
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _host?.Log(PluginLogLevel.Warning, $"Could not refresh Meta model catalog: {ex.Message}");
-            return null;
+            return ModelRefreshFailed(ex);
+        }
+        catch (IOException ex)
+        {
+            return ModelRefreshFailed(ex);
+        }
+        catch (JsonException ex)
+        {
+            return ModelRefreshFailed(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ModelRefreshFailed(ex);
         }
     }
 
@@ -456,11 +464,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
                 continue;
             }
 
-            var baseCode = hint.Split('-', '_')[0];
-            var languageName = LanguageNames.GetValueOrDefault(baseCode)
-                ?? LanguageNames.Values.FirstOrDefault(name =>
-                    name.Equals(hint, StringComparison.OrdinalIgnoreCase));
-            if (languageName is not null
+            if (TryNormalizeLanguageHint(hint, out var languageName, out _)
                 && !normalized.Contains(languageName, StringComparer.OrdinalIgnoreCase))
             {
                 normalized.Add(languageName);
@@ -621,11 +625,51 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     private static string? NormalizeApiKey(string? apiKey) =>
         string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
 
-    private static string? FirstLanguageCode(IEnumerable<string> languageHints)
+    internal static string? FirstLanguageCode(IEnumerable<string> languageHints)
     {
-        var hint = languageHints.FirstOrDefault(value =>
-            !string.IsNullOrWhiteSpace(value)
-            && !value.Equals("auto", StringComparison.OrdinalIgnoreCase));
-        return hint?.Split('-', '_')[0].ToLowerInvariant();
+        foreach (var hint in languageHints)
+        {
+            if (TryNormalizeLanguageHint(hint, out _, out var canonicalCode))
+                return canonicalCode;
+        }
+
+        return null;
+    }
+
+    private static bool TryNormalizeLanguageHint(
+        string? rawHint,
+        out string languageName,
+        out string canonicalCode)
+    {
+        languageName = "";
+        canonicalCode = "";
+        var hint = rawHint?.Trim();
+        if (string.IsNullOrWhiteSpace(hint)
+            || hint.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var baseCode = hint.Split('-', '_')[0];
+        if (LanguageNames.TryGetValue(baseCode, out var matchedName)
+            && CanonicalLanguageCodes.TryGetValue(matchedName, out var matchedCode))
+        {
+            languageName = matchedName;
+            canonicalCode = matchedCode;
+            return true;
+        }
+
+        if (!CanonicalLanguageCodes.TryGetValue(hint, out var namedCode))
+            return false;
+
+        canonicalCode = namedCode;
+        languageName = LanguageNames[namedCode];
+        return true;
+    }
+
+    private MetaModelCatalog? ModelRefreshFailed(Exception ex)
+    {
+        _host?.Log(PluginLogLevel.Warning, $"Could not refresh Meta model catalog: {ex.Message}");
+        return null;
     }
 }

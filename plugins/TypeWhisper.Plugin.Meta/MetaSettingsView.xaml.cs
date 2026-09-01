@@ -1,6 +1,11 @@
+using System.IO;
+using System.Security;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.Plugin.Meta;
@@ -64,7 +69,13 @@ public partial class MetaSettingsView : UserControl
         if (_isInitializing)
             return;
 
-        await _plugin.SetApiKeyAsync(ApiKeyBox.Password);
+        var error = await TrySetApiKeyAsync(ApiKeyBox.Password);
+        if (error is not null)
+        {
+            ShowError(error);
+            return;
+        }
+
         StatusText.Text = string.IsNullOrWhiteSpace(ApiKeyBox.Password)
             ? ""
             : L("Settings.Saved");
@@ -95,7 +106,13 @@ public partial class MetaSettingsView : UserControl
                 return;
             }
 
-            await _plugin.SetApiKeyAsync(apiKey);
+            var saveError = await TrySetApiKeyAsync(apiKey);
+            if (saveError is not null)
+            {
+                ShowError(saveError);
+                return;
+            }
+
             var catalog = await _plugin.RefreshAvailableModelsAsync();
             PopulateModelPickers();
             StatusText.Text = catalog is null
@@ -106,10 +123,15 @@ public partial class MetaSettingsView : UserControl
                     catalog.LlmModels.Count);
             StatusText.Foreground = Brushes.Green;
         }
-        catch (Exception ex)
+        catch (PluginRequestException ex) when (
+            ex.FailureKind == PluginRequestFailureKind.Authentication)
         {
-            StatusText.Text = L("Settings.Error", ex.Message);
+            StatusText.Text = L("Settings.ApiKeyInvalid");
             StatusText.Foreground = Brushes.Red;
+        }
+        catch (PluginRequestException ex)
+        {
+            ShowError(ex);
         }
         finally
         {
@@ -183,11 +205,6 @@ public partial class MetaSettingsView : UserControl
             StatusText.Text = L("Settings.RefreshFailed");
             StatusText.Foreground = Brushes.Orange;
         }
-        catch (Exception ex)
-        {
-            StatusText.Text = L("Settings.Error", ex.Message);
-            StatusText.Foreground = Brushes.Red;
-        }
         finally
         {
             RefreshButton.IsEnabled = true;
@@ -224,6 +241,49 @@ public partial class MetaSettingsView : UserControl
         ModelsSection.Visibility = _plugin.IsConfigured
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private async Task<Exception?> TrySetApiKeyAsync(string apiKey)
+    {
+        try
+        {
+            await _plugin.SetApiKeyAsync(apiKey);
+            return null;
+        }
+        catch (IOException ex)
+        {
+            return ex;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ex;
+        }
+        catch (SecurityException ex)
+        {
+            return ex;
+        }
+        catch (CryptographicException ex)
+        {
+            return ex;
+        }
+        catch (JsonException ex)
+        {
+            return ex;
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex;
+        }
+        catch (NotSupportedException ex)
+        {
+            return ex;
+        }
+    }
+
+    private void ShowError(Exception ex)
+    {
+        StatusText.Text = L("Settings.Error", ex.Message);
+        StatusText.Foreground = Brushes.Red;
     }
 
     private string L(string key) => _plugin.Loc?.GetString(key) ?? key;

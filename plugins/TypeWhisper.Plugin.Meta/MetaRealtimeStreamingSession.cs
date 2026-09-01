@@ -12,7 +12,10 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
     private readonly ClientWebSocket _webSocket;
     private readonly CancellationTokenSource _receiveCts = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private readonly TaskCompletionSource<bool> _terminalTranscript =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
+    private int _disposeStarted;
     private bool _ended;
     private bool _disposed;
 
@@ -31,6 +34,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         CancellationToken ct)
     {
         var webSocket = new ClientWebSocket();
+        var connected = false;
         try
         {
             await webSocket.ConnectAsync(new Uri("wss://api.meta.ai/v1/asr/realtime"), ct);
@@ -39,12 +43,13 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             var acknowledgement = await ReceiveTextMessageAsync(webSocket, ct);
             ValidateHandshakeAcknowledgement(acknowledgement);
             session._receiveTask = session.ReceiveLoopAsync(session._receiveCts.Token);
+            connected = true;
             return session;
         }
-        catch
+        finally
         {
-            webSocket.Dispose();
-            throw;
+            if (!connected)
+                webSocket.Dispose();
         }
     }
 
@@ -71,8 +76,12 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         return JsonSerializer.Serialize(body);
     }
 
-    internal static StreamingTranscriptEvent? ParseTranscriptEvent(string json)
+    internal static StreamingTranscriptEvent? ParseTranscriptEvent(string json) =>
+        ParseTranscriptEvent(json, out _);
+
+    internal static StreamingTranscriptEvent? ParseTranscriptEvent(string json, out bool isTerminal)
     {
+        isTerminal = false;
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         if (!root.TryGetProperty("type", out var typeElement))
@@ -93,19 +102,20 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             return null;
         }
 
-        var transcript = transcriptElement.GetString()?.Trim();
-        if (string.IsNullOrWhiteSpace(transcript))
-            return null;
         var isFinal = root.TryGetProperty("final", out var finalElement)
             && finalElement.ValueKind is JsonValueKind.True or JsonValueKind.False
             && finalElement.GetBoolean();
+        isTerminal = isFinal;
+        var transcript = transcriptElement.GetString()?.Trim();
+        if (string.IsNullOrWhiteSpace(transcript))
+            return null;
         return new StreamingTranscriptEvent(transcript, isFinal);
     }
 
     /// <inheritdoc />
     public async Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
     {
-        if (_disposed || _ended || pcm16Audio.Length == 0)
+        if (pcm16Audio.Length == 0)
             return;
 
         await _sendLock.WaitAsync(ct);
@@ -124,43 +134,70 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
     /// <inheritdoc />
     public async Task FinalizeAsync(CancellationToken ct)
     {
-        if (_disposed || _ended)
-            return;
-
+        var waitForTerminalTranscript = false;
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_disposed || _ended || _webSocket.State != WebSocketState.Open)
+            if (_disposed || _webSocket.State != WebSocketState.Open)
                 return;
-            _ended = true;
-            await SendTextAsync("""{"type":"endStream"}""", ct);
+
+            if (!_ended)
+            {
+                _ended = true;
+                try
+                {
+                    await SendTextAsync("""{"type":"endStream"}""", ct);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    _terminalTranscript.TrySetCanceled(ex.CancellationToken);
+                    throw;
+                }
+                catch (WebSocketException ex)
+                {
+                    _terminalTranscript.TrySetException(ex);
+                    throw;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _terminalTranscript.TrySetException(ex);
+                    throw;
+                }
+            }
+
+            waitForTerminalTranscript = true;
         }
         finally
         {
             _sendLock.Release();
         }
+
+        if (waitForTerminalTranscript)
+            await _terminalTranscript.Task.WaitAsync(ct);
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
             return;
 
-        _disposed = true;
-        _receiveCts.Cancel();
-        _webSocket.Abort();
-        if (_receiveTask is not null)
+        await _sendLock.WaitAsync(CancellationToken.None);
+        try
         {
-            try
-            {
-                await _receiveTask;
-            }
-            catch
-            {
-                // The receive is expected to stop when the session is disposed.
-            }
+            _disposed = true;
+            _terminalTranscript.TrySetException(
+                new ObjectDisposedException(nameof(MetaRealtimeStreamingSession)));
+            _receiveCts.Cancel();
+            _webSocket.Abort();
         }
+        finally
+        {
+            _sendLock.Release();
+        }
+
+        if (_receiveTask is not null)
+            await _receiveTask;
 
         _sendLock.Dispose();
         _receiveCts.Dispose();
@@ -174,21 +211,40 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             while (!ct.IsCancellationRequested && _webSocket.State == WebSocketState.Open)
             {
                 var json = await ReceiveTextMessageAsync(_webSocket, ct);
-                var transcriptEvent = ParseTranscriptEvent(json);
+                var transcriptEvent = ParseTranscriptEvent(json, out var isTerminal);
+                if (isTerminal)
+                    _terminalTranscript.TrySetResult(true);
                 if (transcriptEvent is not null)
                     TranscriptReceived?.Invoke(transcriptEvent);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            if (!_disposed)
+                _terminalTranscript.TrySetException(ex);
         }
         catch (WebSocketException ex)
         {
+            _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"Meta realtime WebSocket error: {ex.Message}");
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
+            _terminalTranscript.TrySetException(ex);
+            Debug.WriteLine($"Meta realtime parse error: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _terminalTranscript.TrySetException(ex);
             Debug.WriteLine($"Meta realtime transcription error: {ex.Message}");
+        }
+        finally
+        {
+            if (_ended && !_terminalTranscript.Task.IsCompleted)
+            {
+                _terminalTranscript.TrySetException(
+                    new WebSocketException("Meta realtime session ended before the final transcript."));
+            }
         }
     }
 
