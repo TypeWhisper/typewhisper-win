@@ -83,10 +83,11 @@ public class SnippetServiceTests : IDisposable
             Replacement = "{time:HH:mm:ss}"
         });
 
+        var before = DateTime.Now.ToString("HH:mm:ss");
         var result = _sut.ApplySnippets("uhr");
-        // Allow 1 second tolerance
-        var expected = DateTime.Now.ToString("HH:mm:ss");
-        Assert.Equal(expected, result);
+        var after = DateTime.Now.ToString("HH:mm:ss");
+
+        Assert.Contains(result, new[] { before, after });
     }
 
     [Fact]

@@ -48,6 +48,7 @@ public class PluginHostServicesTests : IDisposable
     [InlineData("com.typewhisper.google-cloud-stt", "api-key")]
     [InlineData("com.typewhisper.groq", "api-key")]
     [InlineData("com.typewhisper.linear", "api-key")]
+    [InlineData("com.typewhisper.meta", "api-key")]
     [InlineData("com.typewhisper.openai", "api-key")]
     [InlineData("com.typewhisper.openai-compatible", "api-key")]
     [InlineData("com.typewhisper.openai-vector-memory", "api-key")]

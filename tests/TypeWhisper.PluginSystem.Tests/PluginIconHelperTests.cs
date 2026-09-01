@@ -74,6 +74,7 @@ public sealed class PluginIconHelperTests : IDisposable
     [InlineData("com.typewhisper.claude", "claude.png")]
     [InlineData("com.typewhisper.cohere", "cohere.png")]
     [InlineData("com.typewhisper.smallest-ai", "smallest.png")]
+    [InlineData("com.typewhisper.meta", "meta.png")]
     public void GetLogoPath_MapsApprovedSvglPlugins(string pluginId, string fileName)
     {
         var expectedPath = BuildLogoPath(fileName);

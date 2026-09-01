@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\Tests\*.cs" LinkBase="OpenAi" />
+    <Compile Include="..\..\plugins\TypeWhisper.Plugin.Meta\Tests\*.cs" LinkBase="Meta" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.OpenRouter\Tests\*.cs" LinkBase="OpenRouter" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.Gemini\Tests\**\*.cs" LinkBase="Gemini" />
     <Compile Include="..\..\plugins\TypeWhisper.Plugin.LiveTranscript\Tests\*.cs" LinkBase="LiveTranscript" />
@@ -28,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAi\TypeWhisper.Plugin.OpenAi.csproj" />
+    <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Meta\TypeWhisper.Plugin.Meta.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.Claude\TypeWhisper.Plugin.Claude.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.GemmaLocal\TypeWhisper.Plugin.GemmaLocal.csproj" />
     <ProjectReference Include="..\..\plugins\TypeWhisper.Plugin.OpenAiCompatible\TypeWhisper.Plugin.OpenAiCompatible.csproj" />

@@ -24,6 +24,7 @@ internal static class UiAutomationPluginFixtures
         ("com.typewhisper.google-cloud-stt", "api-key"),
         ("com.typewhisper.groq", "api-key"),
         ("com.typewhisper.linear", "api-key"),
+        ("com.typewhisper.meta", "api-key"),
         ("com.typewhisper.openai", "api-key"),
         ("com.typewhisper.openai-compatible", "api-key"),
         ("com.typewhisper.openai-vector-memory", "api-key"),
