@@ -646,5 +646,26 @@
     "descriptions": {
       "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text."
     }
+  },
+  {
+    "id": "com.typewhisper.meta",
+    "name": "Meta Model API",
+    "version": "1.0.0",
+    "minHostVersion": "1.0.9",
+    "author": "TypeWhisper",
+    "description": "Meta Model API integration for Muse Voice Transcribe and Muse Spark language models, with automatic model discovery.",
+    "category": "transcription",
+    "categories": [
+      "transcription",
+      "llm"
+    ],
+    "size": 30835,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.meta-1.0.0.zip",
+    "sha256": "37b572f19a9f8e06a0ed51e7a8e4f3e71ff21253e16c784adeb4776576e38c0d",
+    "iconSystemName": null,
+    "requiresApiKey": true,
+    "descriptions": {
+      "de": "Meta Model API für Muse Voice Transcribe und Muse-Spark-Sprachmodelle mit automatischer Modellerkennung."
+    }
   }
 ]
