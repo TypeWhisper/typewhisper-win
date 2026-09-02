@@ -157,10 +157,10 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
 
             if (!_ended)
             {
-                _ended = true;
                 try
                 {
                     await SendTextAsync("""{"type":"endStream"}""", ct);
+                    Volatile.Write(ref _ended, true);
                 }
                 catch (OperationCanceledException ex)
                 {
