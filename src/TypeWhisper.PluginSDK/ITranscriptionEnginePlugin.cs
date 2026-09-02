@@ -90,6 +90,17 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
         IReadOnlyList<string> languageHints, CancellationToken ct) =>
         StartStreamingAsync(FirstLanguageHint(languageHints), ct);
 
+    /// <summary>
+    /// Opens a real-time streaming session with ordered language hints and provider-specific
+    /// prompt context. The default implementation preserves compatibility with plugins whose
+    /// streaming transport does not consume prompt context.
+    /// </summary>
+    Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(
+        IReadOnlyList<string> languageHints,
+        string? prompt,
+        CancellationToken ct) =>
+        StartStreamingWithLanguageHintsAsync(languageHints, ct);
+
     /// <summary>Unloads the currently loaded model from memory to free resources.</summary>
     Task UnloadModelAsync() => Task.CompletedTask;
 

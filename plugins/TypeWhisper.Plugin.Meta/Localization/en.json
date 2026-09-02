@@ -14,6 +14,8 @@
   "Settings.TranscriptionModel": "Transcription Model",
   "Settings.TranscriptionModelFallback": "Using the documented Muse Voice Transcribe fallback until the API catalog is loaded.",
   "Settings.TranscriptionModelsFetched": "Showing {0} Muse Voice Transcribe model(s) loaded from the API.",
+  "Settings.SpeakerDiarization": "Speaker diarization",
+  "Settings.SpeakerDiarizationHint": "Labels speakers in realtime and uploaded audio. Realtime transcription streams 16 kHz PCM over Meta's WebSocket API.",
   "Settings.LlmModel": "LLM Model",
   "Settings.LlmModelFallback": "Using the documented Muse Spark fallbacks until the API catalog is loaded.",
   "Settings.LlmModelsFetched": "Showing {0} Muse Spark model(s) loaded from the API.",

@@ -46,6 +46,7 @@ public sealed class StreamingHandler : IDisposable
     private const int MinimumRollingWindowOverlapWords = 3;
     private static readonly TimeSpan LocalPollingInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan OnlineBatchPollingInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan StreamingFinalizeTimeout = TimeSpan.FromSeconds(15);
     private const string RollingWindowCjkCharacterClass =
         @"\u1100-\u11FF\u2E80-\u2FFF\u3040-\u30FF\u3100-\u318F\u31A0-\u31BF" +
         @"\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uA960-\uA97F\uAC00-\uD7AF" +
@@ -109,7 +110,7 @@ public sealed class StreamingHandler : IDisposable
         if (plugin is not null && plugin.SupportsStreamingForPrompt(prompt))
         {
             _audio.SamplesAvailable += OnStreamingSamplesAvailable;
-            _streamingTask = RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
+            _streamingTask = RunWebSocketStreamingAsync(plugin, languageHints, prompt, sessionVersion, ct);
         }
         else
         {
@@ -196,6 +197,84 @@ public sealed class StreamingHandler : IDisposable
         return finalText;
     }
 
+    /// <summary>
+    /// Stops live transcription after draining queued audio and waiting for the provider's
+    /// terminal transcript. If finalization fails or times out, the latest interim text is used.
+    /// </summary>
+    public async Task<string> StopAsync(CancellationToken ct = default)
+    {
+        _audio.SamplesAvailable -= OnStreamingSamplesAvailable;
+
+        var streamingCts = _cts;
+        IStreamingSession? session;
+        ChannelWriter<byte[]>? audioWriter;
+        Task? audioSenderTask;
+        Action<StreamingTranscriptEvent>? transcriptHandler;
+        lock (_streamingAudioLock)
+        {
+            session = _session;
+            audioWriter = _streamingAudioWriter;
+            audioSenderTask = _streamingAudioSenderTask;
+            transcriptHandler = _transcriptHandler;
+            _session = null;
+            _streamingAudioWriter = null;
+            _streamingAudioSenderTask = null;
+            _transcriptHandler = null;
+            ClearPendingStreamingAudioCore();
+        }
+
+        audioWriter?.TryComplete();
+
+        if (session is not null)
+        {
+            using var finalizeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            finalizeCts.CancelAfter(StreamingFinalizeTimeout);
+            try
+            {
+                if (audioSenderTask is not null)
+                    await audioSenderTask.WaitAsync(finalizeCts.Token);
+                await session.FinalizeAsync(finalizeCts.Token);
+            }
+            catch (OperationCanceledException ex)
+            {
+                Debug.WriteLine($"Streaming finalization canceled or timed out: {ex.Message}");
+            }
+            catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+            {
+                Debug.WriteLine($"Streaming finalization failed: {ex.Message}");
+            }
+        }
+        else
+        {
+            streamingCts?.Cancel();
+        }
+
+        var finalText = _transcriptState.StopSession();
+
+        if (session is not null && transcriptHandler is not null)
+            session.TranscriptReceived -= transcriptHandler;
+
+        streamingCts?.Cancel();
+        if (session is not null)
+        {
+            try
+            {
+                await session.DisposeAsync();
+            }
+            catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+            {
+                Debug.WriteLine($"Streaming session disposal failed: {ex.Message}");
+            }
+        }
+
+        streamingCts?.Dispose();
+        if (ReferenceEquals(_cts, streamingCts))
+            _cts = null;
+        _streamingTask = null;
+
+        return finalText;
+    }
+
     private static async Task CleanupSessionAsync(IStreamingSession session)
     {
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -232,7 +311,7 @@ public sealed class StreamingHandler : IDisposable
 
             if (plugin.SupportsStreamingForPrompt(prompt))
             {
-                await RunWebSocketStreamingAsync(plugin, languageHints, sessionVersion, ct);
+                await RunWebSocketStreamingAsync(plugin, languageHints, prompt, sessionVersion, ct);
                 return;
             }
 
@@ -288,12 +367,16 @@ public sealed class StreamingHandler : IDisposable
     private async Task RunWebSocketStreamingAsync(
         ITranscriptionEnginePlugin plugin,
         IReadOnlyList<string> languageHints,
+        string? prompt,
         int sessionVersion,
         CancellationToken ct)
     {
         try
         {
-            var session = await plugin.StartStreamingWithLanguageHintsAsync(languageHints, ct);
+            var session = await plugin.StartStreamingWithLanguageHintsAndPromptAsync(
+                languageHints,
+                prompt,
+                ct);
             if (!_transcriptState.IsCurrentSession(sessionVersion) || ct.IsCancellationRequested)
             {
                 await CleanupSessionAsync(session);
@@ -306,17 +389,19 @@ public sealed class StreamingHandler : IDisposable
                 SingleWriter = false,
                 FullMode = BoundedChannelFullMode.DropOldest
             });
+            Action<StreamingTranscriptEvent> transcriptHandler =
+                evt => OnTranscriptReceived(evt, sessionVersion);
 
             lock (_streamingAudioLock)
             {
                 _session = session;
                 _streamingAudioWriter = audioChannel.Writer;
                 _isFlushingPendingStreamingAudio = true;
+                _transcriptHandler = transcriptHandler;
+                session.TranscriptReceived += transcriptHandler;
+                _streamingAudioSenderTask = RunStreamingAudioSenderAsync(session, audioChannel.Reader, ct);
             }
 
-            _transcriptHandler = evt => OnTranscriptReceived(evt, sessionVersion);
-            session.TranscriptReceived += _transcriptHandler;
-            _streamingAudioSenderTask = RunStreamingAudioSenderAsync(session, audioChannel.Reader, ct);
             await FlushPendingStreamingAudioAsync(audioChannel.Writer, ct);
 
             // Keep alive until cancelled

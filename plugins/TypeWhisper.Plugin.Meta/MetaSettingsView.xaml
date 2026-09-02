@@ -43,6 +43,16 @@
                        Foreground="Gray"
                        TextWrapping="Wrap" />
 
+            <CheckBox x:Name="SpeakerDiarizationToggle"
+                      Margin="0,16,0,0"
+                      Checked="OnSpeakerDiarizationChanged"
+                      Unchecked="OnSpeakerDiarizationChanged" />
+            <TextBlock x:Name="SpeakerDiarizationHintText"
+                       Margin="20,4,0,0"
+                       FontSize="11"
+                       Foreground="Gray"
+                       TextWrapping="Wrap" />
+
             <TextBlock x:Name="LlmModelLabel" FontWeight="SemiBold" Margin="0,16,0,4" />
             <ComboBox x:Name="LlmModelPicker"
                       DisplayMemberPath="DisplayName"

@@ -161,6 +161,7 @@ public sealed class MetaPluginTests
     {
         var json = MetaPlugin.CreateTranscriptionRequestJson(
             "muse-voice-transcribe-1.0",
+            "PUSH_TO_TALK",
             ["German", "English"],
             ["TypeWhisper"]);
 
@@ -178,7 +179,9 @@ public sealed class MetaPluginTests
         var json = MetaRealtimeStreamingSession.CreateHandshakeJson(
             "secret",
             "muse-voice-transcribe-1.0",
-            ["German"]);
+            "DIARIZATION",
+            ["German"],
+            ["TypeWhisper"]);
 
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -186,9 +189,95 @@ public sealed class MetaPluginTests
             "Bearer secret",
             root.GetProperty("authorization").GetProperty("accessToken").GetString());
         Assert.Equal("PCM_16KHZ", root.GetProperty("audioEncoding").GetString());
-        Assert.Equal("PUSH_TO_TALK", root.GetProperty("mode").GetString());
+        Assert.Equal("DIARIZATION", root.GetProperty("mode").GetString());
         Assert.Equal("CUMULATIVE", root.GetProperty("partialMode").GetString());
         Assert.False(root.GetProperty("emitAudioProgress").GetBoolean());
+        Assert.Equal("TypeWhisper", root.GetProperty("keywords")[0].GetString());
+    }
+
+    [Fact]
+    public async Task MetaIdentityAndStreamingRemainAvailableWithDictionaryPrompt()
+    {
+        using var sut = new MetaPlugin(new HttpClient(new RecordingHandler(
+            HttpStatusCode.OK,
+            "{}")));
+        await sut.ActivateAsync(new FakePluginHostServices());
+        await sut.SetApiKeyAsync("meta-key");
+
+        Assert.Equal("Meta", sut.PluginName);
+        Assert.Equal("Meta", sut.ProviderDisplayName);
+        Assert.Equal("Meta", sut.ProviderName);
+        Assert.Equal("1.0.1", sut.PluginVersion);
+        Assert.True(sut.SupportsStreamingForPrompt("TypeWhisper, Muse"));
+    }
+
+    [Fact]
+    public async Task SpeakerDiarization_PersistsAndSelectsDiarizationMode()
+    {
+        var host = new FakePluginHostServices();
+        using var sut = new MetaPlugin(new HttpClient(new RecordingHandler(
+            HttpStatusCode.OK,
+            "{}")));
+        await sut.ActivateAsync(host);
+
+        sut.SetSpeakerDiarizationEnabled(true);
+
+        Assert.True(sut.SpeakerDiarizationEnabled);
+        Assert.Equal("DIARIZATION", sut.TranscriptionMode);
+        Assert.True(host.GetSetting<bool>("speakerDiarizationEnabled"));
+    }
+
+    [Fact]
+    public void DiarizationCollector_BuildsSpeakerLabeledCompleteSnapshots()
+    {
+        var collector = new MetaRealtimeTranscriptCollector("DIARIZATION");
+
+        collector.Apply("""{"type":"speechStart","turnId":1}""");
+        collector.Apply("""{"type":"transcript","transcript":"Hallo","final":false}""");
+        var speaker = collector.Apply("""{"type":"speaker","label":"A"}""");
+        var firstFinal = collector.Apply(
+            """{"type":"speechComplete","turnId":1,"transcript":"Hallo zusammen."}""");
+        collector.Apply("""{"type":"speechStart","turnId":2}""");
+        collector.Apply("""{"type":"speaker","label":"B"}""");
+        var secondFinal = collector.Apply(
+            """{"type":"speechComplete","turnId":2,"transcript":"Guten Tag."}""");
+
+        Assert.Equal("Speaker A: Hallo", speaker.Transcript?.Text);
+        Assert.Equal("Speaker A: Hallo zusammen.", firstFinal.Transcript?.Text);
+        Assert.True(firstFinal.IsFinalEvent);
+        Assert.Equal(
+            "Speaker A: Hallo zusammen.\nSpeaker B: Guten Tag.",
+            secondFinal.Transcript?.Text);
+        Assert.True(secondFinal.Transcript?.IsFinal);
+    }
+
+    [Fact]
+    public void PushToTalkCollector_UsesCompletedTurnAsFinalSnapshot()
+    {
+        var collector = new MetaRealtimeTranscriptCollector("PUSH_TO_TALK");
+
+        collector.Apply("""{"type":"speechStart","turnId":1}""");
+        collector.Apply("""{"type":"transcript","transcript":"Hallo","final":false}""");
+        var complete = collector.Apply(
+            """{"type":"speechComplete","turnId":1,"transcript":"Hallo Welt."}""");
+
+        Assert.Equal("Hallo Welt.", complete.Transcript?.Text);
+        Assert.True(complete.IsFinalEvent);
+    }
+
+    [Fact]
+    public void PushToTalkCollector_PrefersTerminalTranscriptOverCompletedTurn()
+    {
+        var collector = new MetaRealtimeTranscriptCollector("PUSH_TO_TALK");
+
+        collector.Apply("""{"type":"speechStart","turnId":1}""");
+        collector.Apply(
+            """{"type":"speechComplete","turnId":1,"transcript":"Hallo wor"}""");
+        var terminal = collector.Apply(
+            """{"type":"transcript","transcript":"Hallo Welt.","final":true}""");
+
+        Assert.Equal("Hallo Welt.", terminal.Transcript?.Text);
+        Assert.True(terminal.IsFinalEvent);
     }
 
     [Theory]
@@ -275,6 +364,27 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public async Task FinalizationRequest_AllowsImmediateFinalEventToComplete()
+    {
+        using var socket = new System.Net.WebSockets.ClientWebSocket();
+        await using var session = new MetaRealtimeStreamingSession(socket);
+
+        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: true));
+
+        session.RequestFinalization();
+
+        var isTerminal = session.ShouldCompleteFinalization(isFinalEvent: true);
+        Assert.True(isTerminal);
+        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: false));
+
+        session.PublishTranscript(
+            new StreamingTranscriptEvent("Done", IsFinal: true),
+            isTerminal);
+
+        await session.TerminalTranscriptTask;
+    }
+
+    [Fact]
     public void ParseTranscriptionResponse_MapsTurnTimestampsToSeconds()
     {
         var result = MetaPlugin.ParseTranscriptionResponse(
@@ -297,6 +407,28 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public void ParseTranscriptionResponse_DiarizationPrefixesSpeakerLabels()
+    {
+        var result = MetaPlugin.ParseTranscriptionResponse(
+            """
+            {
+              "transcript":"Hello. Hi.",
+              "audioDurationMs":2000,
+              "turns":[
+                {"turnId":1,"startMs":0,"endMs":1000,"transcript":"Hello.","speaker":"A"},
+                {"turnId":2,"startMs":1000,"endMs":2000,"transcript":"Hi.","speaker":"Speaker B"}
+              ]
+            }
+            """,
+            requestedLanguage: "en",
+            includeSpeakerLabels: true);
+
+        Assert.Equal("Speaker A: Hello.\nSpeaker B: Hi.", result.Text);
+        Assert.Equal("Speaker A: Hello.", result.Segments[0].Text);
+        Assert.Equal("Speaker B: Hi.", result.Segments[1].Text);
+    }
+
+    [Fact]
     public void Manifest_DeclaresTranscriptionAndLlmCapabilities()
     {
         var manifestPath = Path.GetFullPath(Path.Join(
@@ -307,6 +439,9 @@ public sealed class MetaPluginTests
         var root = document.RootElement;
 
         Assert.Equal("com.typewhisper.meta", root.GetProperty("id").GetString());
+        Assert.Equal("Meta", root.GetProperty("name").GetString());
+        Assert.Equal("1.0.1", root.GetProperty("version").GetString());
+        Assert.Equal("1.0.10", root.GetProperty("minHostVersion").GetString());
         Assert.Equal("TypeWhisper.Plugin.Meta.MetaPlugin", root.GetProperty("pluginClass").GetString());
         Assert.Contains(
             "transcription",

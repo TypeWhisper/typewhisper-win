@@ -11,7 +11,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.Meta;
 
 /// <summary>
-/// Provides Meta Model API transcription and language-model capabilities.
+/// Provides Meta transcription and language-model capabilities.
 /// </summary>
 public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport
 {
@@ -24,6 +24,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     private const string FetchedLlmModelsSettingName = "fetchedLlmModels";
     private const string FetchedTranscriptionModelsSettingName = "fetchedTranscriptionModels";
     private const string ReasoningEffortSettingName = "reasoningEffort";
+    private const string SpeakerDiarizationSettingName = "speakerDiarizationEnabled";
     private static readonly DictionaryTermsBudget KeywordBudget = new(
         MaxTerms: 100,
         MaxCharsPerTerm: 100,
@@ -80,35 +81,49 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             .ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.OrdinalIgnoreCase);
 
     private readonly HttpClient _httpClient;
+    private readonly Func<MetaRealtimeConnectionOptions, CancellationToken, Task<IStreamingSession>>
+        _streamingSessionFactory;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
     private string? _selectedLlmModelId;
     private string _reasoningEffort = "medium";
+    private bool _speakerDiarizationEnabled;
     private List<MetaFetchedModel> _fetchedLlmModels = [];
     private List<MetaFetchedModel> _fetchedTranscriptionModels = [];
 
     /// <summary>
-    /// Initializes a new Meta Model API plugin instance.
+    /// Initializes a new Meta plugin instance.
     /// </summary>
     public MetaPlugin()
         : this(new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
     {
     }
 
-    internal MetaPlugin(HttpClient httpClient)
+    internal MetaPlugin(
+        HttpClient httpClient,
+        Func<MetaRealtimeConnectionOptions, CancellationToken, Task<IStreamingSession>>?
+            streamingSessionFactory = null)
     {
         _httpClient = httpClient;
+        _streamingSessionFactory = streamingSessionFactory
+            ?? (async (options, ct) => await MetaRealtimeStreamingSession.ConnectAsync(
+                options.ApiKey,
+                options.ModelId,
+                options.Mode,
+                options.LanguageBias,
+                options.Keywords,
+                ct));
     }
 
     /// <inheritdoc />
     public string PluginId => "com.typewhisper.meta";
 
     /// <inheritdoc />
-    public string PluginName => "Meta Model API";
+    public string PluginName => "Meta";
 
     /// <inheritdoc />
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.0.1";
 
     /// <inheritdoc />
     public bool SupportsRequestHedging => true;
@@ -133,6 +148,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             SupportedModels,
             DefaultLlmModelId);
         _reasoningEffort = NormalizeReasoningEffort(host.GetSetting<string>(ReasoningEffortSettingName));
+        _speakerDiarizationEnabled = host.GetSetting<bool>(SpeakerDiarizationSettingName);
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -150,7 +166,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     public string ProviderId => "meta";
 
     /// <inheritdoc />
-    public string ProviderDisplayName => "Meta Model API";
+    public string ProviderDisplayName => "Meta";
 
     /// <inheritdoc />
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
@@ -179,8 +195,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     public DictionaryTermsBudget DictionaryTermsBudget => KeywordBudget;
 
     /// <inheritdoc />
-    public bool SupportsStreamingForPrompt(string? prompt) =>
-        SupportsStreaming && string.IsNullOrWhiteSpace(prompt);
+    public bool SupportsStreamingForPrompt(string? prompt) => SupportsStreaming;
 
     /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages => LanguageNames.Keys
@@ -234,6 +249,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         var keywords = ParseKeywords(prompt);
         var requestJson = CreateTranscriptionRequestJson(
             _selectedModelId!,
+            TranscriptionMode,
             normalizedLanguageHints,
             keywords);
 
@@ -250,7 +266,10 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
         using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
-        return ParseTranscriptionResponse(json, FirstLanguageCode(languageHints));
+        return ParseTranscriptionResponse(
+            json,
+            FirstLanguageCode(languageHints),
+            _speakerDiarizationEnabled);
     }
 
     /// <inheritdoc />
@@ -260,20 +279,30 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             ct);
 
     /// <inheritdoc />
-    public async Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(
+    public Task<IStreamingSession> StartStreamingWithLanguageHintsAsync(
         IReadOnlyList<string> languageHints,
+        CancellationToken ct) =>
+        StartStreamingWithLanguageHintsAndPromptAsync(languageHints, null, ct);
+
+    /// <inheritdoc />
+    public async Task<IStreamingSession> StartStreamingWithLanguageHintsAndPromptAsync(
+        IReadOnlyList<string> languageHints,
+        string? prompt,
         CancellationToken ct)
     {
         EnsureTranscriptionConfigured();
-        return await MetaRealtimeStreamingSession.ConnectAsync(
-            _apiKey!,
-            _selectedModelId!,
-            NormalizeLanguageHints(languageHints),
+        return await _streamingSessionFactory(
+            new MetaRealtimeConnectionOptions(
+                _apiKey!,
+                _selectedModelId!,
+                TranscriptionMode,
+                NormalizeLanguageHints(languageHints),
+                ParseKeywords(prompt)),
             ct);
     }
 
     /// <inheritdoc />
-    public string ProviderName => "Meta Model API";
+    public string ProviderName => "Meta";
 
     /// <inheritdoc />
     public bool IsAvailable => IsConfigured;
@@ -320,6 +349,8 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     internal string? ApiKey => _apiKey;
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal string ReasoningEffort => _reasoningEffort;
+    internal bool SpeakerDiarizationEnabled => _speakerDiarizationEnabled;
+    internal string TranscriptionMode => _speakerDiarizationEnabled ? "DIARIZATION" : "PUSH_TO_TALK";
     internal IPluginLocalization? Loc => _host?.Localization;
     internal bool IsUiAutomation => _host?.IsUiAutomation == true;
     internal int FetchedLlmModelCount => _fetchedLlmModels.Count;
@@ -370,6 +401,16 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     {
         _reasoningEffort = NormalizeReasoningEffort(reasoningEffort);
         _host?.SetSetting(ReasoningEffortSettingName, _reasoningEffort);
+    }
+
+    internal void SetSpeakerDiarizationEnabled(bool enabled)
+    {
+        if (_speakerDiarizationEnabled == enabled)
+            return;
+
+        _speakerDiarizationEnabled = enabled;
+        _host?.SetSetting(SpeakerDiarizationSettingName, enabled);
+        _host?.NotifyCapabilitiesChanged();
     }
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
@@ -473,6 +514,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
     internal static string CreateTranscriptionRequestJson(
         string modelId,
+        string mode,
         IReadOnlyList<string> languageBias,
         IReadOnlyList<string> keywords)
     {
@@ -480,7 +522,7 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         {
             ["model"] = modelId,
             ["audioEncoding"] = "WAV",
-            ["mode"] = "PUSH_TO_TALK",
+            ["mode"] = mode,
         };
         if (languageBias.Count > 0)
             body["languageBias"] = languageBias;
@@ -492,7 +534,8 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 
     internal static PluginTranscriptionResult ParseTranscriptionResponse(
         string json,
-        string? requestedLanguage)
+        string? requestedLanguage,
+        bool includeSpeakerLabels = false)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -510,8 +553,17 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             foreach (var turn in turnsElement.EnumerateArray())
             {
                 var text = turn.TryGetProperty("transcript", out var textElement)
-                    ? textElement.GetString() ?? ""
+                    ? textElement.GetString()?.Trim() ?? ""
                     : "";
+                if (string.IsNullOrWhiteSpace(text))
+                    continue;
+
+                if (includeSpeakerLabels
+                    && turn.TryGetProperty("speaker", out var speakerElement)
+                    && NormalizeSpeakerLabel(speakerElement.GetString()) is { } speaker)
+                {
+                    text = $"{speaker}: {text}";
+                }
                 var start = turn.TryGetProperty("startMs", out var startElement)
                     && startElement.ValueKind == JsonValueKind.Number
                     ? startElement.GetDouble() / 1000d
@@ -524,6 +576,9 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             }
         }
 
+        if (includeSpeakerLabels && segments.Count > 0)
+            transcript = string.Join("\n", segments.Select(segment => segment.Text));
+
         return new PluginTranscriptionResult(
             transcript,
             requestedLanguage,
@@ -532,6 +587,16 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         {
             Segments = segments,
         };
+    }
+
+    internal static string? NormalizeSpeakerLabel(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+        return trimmed.Contains("speaker", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : $"Speaker {trimmed}";
     }
 
     /// <inheritdoc />
@@ -658,3 +723,10 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         return null;
     }
 }
+
+internal sealed record MetaRealtimeConnectionOptions(
+    string ApiKey,
+    string ModelId,
+    string Mode,
+    IReadOnlyList<string> LanguageBias,
+    IReadOnlyList<string> Keywords);

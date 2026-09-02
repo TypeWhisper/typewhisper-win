@@ -1,9 +1,11 @@
 using System.IO;
+using System.Net.Http;
 using System.Reflection;
 using Moq;
 using NAudio.Wave;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
+using TypeWhisper.Plugin.Meta;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.Windows.Services;
@@ -159,6 +161,59 @@ public class StreamingTranscriptionTests
         await WaitUntilAsync(() => session.SentAudio.Count == 1);
 
         Assert.Equal(4, session.SentAudio.Single().Length);
+    }
+
+    [Fact]
+    public async Task StreamingHandler_MetaUsesDictionaryKeywordsAndWaitsForFinalTranscript()
+    {
+        var settings = new FakeSettingsService(AppSettings.Default);
+        using var pluginManager = TestPluginManagerFactory.Create(settings);
+        var session = new FinalizingStreamingSession();
+        MetaRealtimeConnectionOptions? connection = null;
+        using var plugin = new MetaPlugin(
+            new HttpClient(),
+            (options, _) =>
+            {
+                connection = options;
+                return Task.FromResult<IStreamingSession>(session);
+            });
+        var host = new Mock<IPluginHostServices>();
+        host.Setup(value => value.LoadSecretAsync("api-key")).ReturnsAsync("meta-key");
+        await plugin.ActivateAsync(host.Object);
+        TestPluginManagerFactory.SetPrivateField(
+            pluginManager,
+            "_transcriptionEngines",
+            new List<ITranscriptionEnginePlugin> { plugin });
+
+        var modelManager = new ModelManagerService(pluginManager, settings);
+        await modelManager.LoadModelAsync(ModelManagerService.GetPluginModelId(
+            plugin.PluginId,
+            MetaPlugin.DefaultTranscriptionModelId));
+
+        var devices = new FakeAudioInputDeviceProvider("Test Microphone");
+        var captures = new FakeAudioInputCaptureFactory();
+        using var audio = new AudioRecordingService(devices, captures, Timeout.InfiniteTimeSpan);
+        using var handler = new StreamingHandler(
+            modelManager,
+            audio,
+            new PassthroughDictionaryService("TypeWhisper", "Muse"));
+        var partialUpdates = new List<string>();
+        handler.OnPartialTextUpdate = partialUpdates.Add;
+
+        handler.Start("de", TranscriptionTask.Transcribe, () => audio.IsRecording);
+        audio.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        capture.RaiseData([0, 0, 0, 0], 4);
+        await WaitUntilAsync(() => connection is not null && session.SentAudio.Count == 1);
+        session.RaiseTranscript(new StreamingTranscriptEvent("Hallo", IsFinal: false));
+
+        var finalText = await handler.StopAsync();
+
+        Assert.Equal(["TypeWhisper", "Muse"], connection!.Keywords);
+        Assert.Equal(["German"], connection.LanguageBias);
+        Assert.Contains("Hallo", partialUpdates);
+        Assert.Equal("Hallo Welt.", finalText);
+        Assert.True(session.FinalizeCalled);
     }
 
     [Fact]
@@ -616,6 +671,29 @@ public class StreamingTranscriptionTests
         public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
     }
 
+    private sealed class FinalizingStreamingSession : IStreamingSession
+    {
+        public List<byte[]> SentAudio { get; } = [];
+        public bool FinalizeCalled { get; private set; }
+        public event Action<StreamingTranscriptEvent>? TranscriptReceived;
+
+        public Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken ct)
+        {
+            SentAudio.Add(pcm16Audio.ToArray());
+            return Task.CompletedTask;
+        }
+
+        public Task FinalizeAsync(CancellationToken ct)
+        {
+            FinalizeCalled = true;
+            TranscriptReceived?.Invoke(new StreamingTranscriptEvent("Hallo Welt.", IsFinal: true));
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void RaiseTranscript(StreamingTranscriptEvent evt) => TranscriptReceived?.Invoke(evt);
+    }
+
     private sealed class BlockingStreamingSession : IStreamingSession
     {
         private readonly TaskCompletionSource _firstSendEntered =
@@ -759,9 +837,16 @@ public class StreamingTranscriptionTests
         }
     }
 
-    private sealed class PassthroughDictionaryService : IDictionaryService
+    private sealed class PassthroughDictionaryService(params string[] terms) : IDictionaryService
     {
-        public IReadOnlyList<DictionaryEntry> Entries => [];
+        public IReadOnlyList<DictionaryEntry> Entries { get; } = terms
+            .Select((term, index) => new DictionaryEntry
+            {
+                Id = index.ToString(),
+                EntryType = DictionaryEntryType.Term,
+                Original = term,
+            })
+            .ToList();
         public event Action? EntriesChanged { add { } remove { } }
         public void AddEntry(DictionaryEntry entry) { }
         public void AddEntries(IEnumerable<DictionaryEntry> entries) { }

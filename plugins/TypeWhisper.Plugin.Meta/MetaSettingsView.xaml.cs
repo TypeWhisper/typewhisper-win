@@ -11,7 +11,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.Plugin.Meta;
 
 /// <summary>
-/// Provides the Meta Model API settings view.
+/// Provides the Meta settings view.
 /// </summary>
 public partial class MetaSettingsView : UserControl
 {
@@ -42,6 +42,9 @@ public partial class MetaSettingsView : UserControl
         TestButton.Content = L("Settings.Test");
         RefreshButton.Content = L("Settings.Refresh");
         TranscriptionModelLabel.Text = L("Settings.TranscriptionModel");
+        SpeakerDiarizationToggle.Content = L("Settings.SpeakerDiarization");
+        SpeakerDiarizationHintText.Text = L("Settings.SpeakerDiarizationHint");
+        SpeakerDiarizationToggle.IsChecked = plugin.SpeakerDiarizationEnabled;
         LlmModelLabel.Text = L("Settings.LlmModel");
         ReasoningEffortLabel.Text = L("Settings.ReasoningEffort");
         ReasoningEffortHintText.Text = L("Settings.ReasoningEffortHint");
@@ -157,6 +160,13 @@ public partial class MetaSettingsView : UserControl
             return;
         if (LlmModelPicker.SelectedItem is PluginModelInfo model)
             _plugin.SelectLlmModel(model.Id);
+    }
+
+    private void OnSpeakerDiarizationChanged(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing)
+            return;
+        _plugin.SetSpeakerDiarizationEnabled(SpeakerDiarizationToggle.IsChecked.GetValueOrDefault());
     }
 
     private void OnReasoningEffortChanged(object sender, SelectionChangedEventArgs e)
