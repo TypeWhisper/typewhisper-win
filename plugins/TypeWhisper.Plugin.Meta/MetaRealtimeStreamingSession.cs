@@ -17,7 +17,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? _receiveTask;
     private int _disposeStarted;
-    private bool _ended;
+    private int _finalizationRequested;
     private bool _disposed;
 
     internal MetaRealtimeStreamingSession(
@@ -135,7 +135,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         await _sendLock.WaitAsync(ct);
         try
         {
-            if (_disposed || _ended || _webSocket.State != WebSocketState.Open)
+            if (_disposed || FinalizationRequested || _webSocket.State != WebSocketState.Open)
                 return;
             await _webSocket.SendAsync(pcm16Audio, WebSocketMessageType.Binary, true, ct);
         }
@@ -155,12 +155,12 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             if (_disposed || _webSocket.State != WebSocketState.Open)
                 return;
 
-            if (!_ended)
+            if (!FinalizationRequested)
             {
+                RequestFinalization();
                 try
                 {
                     await SendTextAsync("""{"type":"endStream"}""", ct);
-                    Volatile.Write(ref _ended, true);
                 }
                 catch (OperationCanceledException ex)
                 {
@@ -226,7 +226,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
             {
                 var json = await ReceiveTextMessageAsync(_webSocket, ct);
                 var update = _collector.Apply(json);
-                var isTerminal = Volatile.Read(ref _ended) && update.IsFinalEvent;
+                var isTerminal = ShouldCompleteFinalization(update.IsFinalEvent);
                 var transcript = update.Transcript is { } snapshot
                     ? snapshot with { IsFinal = isTerminal }
                     : null;
@@ -255,7 +255,7 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         }
         finally
         {
-            if (Volatile.Read(ref _ended) && !_terminalTranscript.Task.IsCompleted)
+            if (FinalizationRequested && !_terminalTranscript.Task.IsCompleted)
             {
                 _terminalTranscript.TrySetException(
                     new WebSocketException("Meta realtime session ended before the final transcript."));
@@ -276,6 +276,14 @@ internal sealed class MetaRealtimeStreamingSession : IStreamingSession
         if (isTerminal)
             _terminalTranscript.TrySetResult(true);
     }
+
+    internal bool ShouldCompleteFinalization(bool isFinalEvent) =>
+        FinalizationRequested && isFinalEvent;
+
+    internal void RequestFinalization() =>
+        Volatile.Write(ref _finalizationRequested, 1);
+
+    private bool FinalizationRequested => Volatile.Read(ref _finalizationRequested) != 0;
 
     private static async Task<string> ReceiveTextMessageAsync(
         ClientWebSocket webSocket,

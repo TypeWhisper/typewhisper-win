@@ -364,6 +364,27 @@ public sealed class MetaPluginTests
     }
 
     [Fact]
+    public async Task FinalizationRequest_AllowsImmediateFinalEventToComplete()
+    {
+        using var socket = new System.Net.WebSockets.ClientWebSocket();
+        await using var session = new MetaRealtimeStreamingSession(socket);
+
+        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: true));
+
+        session.RequestFinalization();
+
+        var isTerminal = session.ShouldCompleteFinalization(isFinalEvent: true);
+        Assert.True(isTerminal);
+        Assert.False(session.ShouldCompleteFinalization(isFinalEvent: false));
+
+        session.PublishTranscript(
+            new StreamingTranscriptEvent("Done", IsFinal: true),
+            isTerminal);
+
+        await session.TerminalTranscriptTask;
+    }
+
+    [Fact]
     public void ParseTranscriptionResponse_MapsTurnTimestampsToSeconds()
     {
         var result = MetaPlugin.ParseTranscriptionResponse(
