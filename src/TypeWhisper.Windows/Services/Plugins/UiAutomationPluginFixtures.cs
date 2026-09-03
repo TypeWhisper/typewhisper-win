@@ -25,6 +25,7 @@ internal static class UiAutomationPluginFixtures
         ("com.typewhisper.groq", "api-key"),
         ("com.typewhisper.linear", "api-key"),
         ("com.typewhisper.meta", "api-key"),
+        ("com.typewhisper.microsoft-ai", "api-key"),
         ("com.typewhisper.openai", "api-key"),
         ("com.typewhisper.openai-compatible", "api-key"),
         ("com.typewhisper.openai-vector-memory", "api-key"),
