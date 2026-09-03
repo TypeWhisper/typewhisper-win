@@ -188,12 +188,24 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             try
             {
                 var context = await _listener.GetContextAsync();
-                _ = RunRequestAsync(context, ct);
+                ObserveRequestTask(DispatchRequestAsync(() => RunRequestAsync(context, ct)));
             }
             catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
             catch (ObjectDisposedException) { break; }
             catch { /* continue listening */ }
         }
+    }
+
+    internal static Task DispatchRequestAsync(Func<Task> request) =>
+        Task.Run(request, CancellationToken.None);
+
+    private static void ObserveRequestTask(Task requestTask)
+    {
+        _ = requestTask.ContinueWith(
+            static completedTask => _ = completedTask.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private async Task RunRequestAsync(HttpListenerContext context, CancellationToken ct)

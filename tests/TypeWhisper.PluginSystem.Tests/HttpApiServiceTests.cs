@@ -100,6 +100,37 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RequestDispatch_DoesNotBlockListenerForSynchronousRouteWork()
+    {
+        using var handlerStarted = new ManualResetEventSlim();
+        using var releaseHandler = new ManualResetEventSlim();
+        var dispatchCall = Task.Factory.StartNew(
+            () => HttpApiService.DispatchRequestAsync(() =>
+            {
+                handlerStarted.Set();
+                releaseHandler.Wait(TimeSpan.FromSeconds(5));
+                return Task.CompletedTask;
+            }),
+            CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
+
+        try
+        {
+            Assert.True(handlerStarted.Wait(TimeSpan.FromSeconds(2)));
+            var requestTask = await dispatchCall.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.False(requestTask.IsCompleted);
+
+            releaseHandler.Set();
+            await requestTask.WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            releaseHandler.Set();
+        }
+    }
+
+    [Fact]
     public async Task Options_ReturnsNoContentWithoutJsonBody()
     {
         var service = CreateService();
