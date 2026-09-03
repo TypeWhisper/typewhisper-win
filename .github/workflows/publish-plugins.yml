@@ -49,6 +49,7 @@ jobs:
             'elevenlabs'         = 'TypeWhisper.Plugin.ElevenLabs'
             'reson8'             = 'TypeWhisper.Plugin.Reson8'
             'gemini'             = 'TypeWhisper.Plugin.Gemini'
+            'microsoft-ai'       = 'TypeWhisper.Plugin.MicrosoftAi'
             'linear'             = 'TypeWhisper.Plugin.Linear'
             'obsidian'           = 'TypeWhisper.Plugin.Obsidian'
             'script'             = 'TypeWhisper.Plugin.Script'
