@@ -67,6 +67,44 @@ public sealed class MainWindowLayoutTests
         Assert.Contains("PowerModes.Resume", code);
         Assert.Contains("SessionSwitchReason.SessionUnlock", code);
         Assert.Contains("SchedulePrimaryOverlayRecovery", code);
+        Assert.Contains("DispatchAudioCaptureRefresh", code);
+        Assert.Contains("RefreshAfterDisplayOrPowerChange", code);
+    }
+
+    [Fact]
+    public void SoftwareRenderingSafety_IsEnabledBeforeFirstWpfWindow()
+    {
+        var program = TestFile.ReadProjectFile(
+            "src",
+            "TypeWhisper.Windows",
+            "Program.cs");
+        var safetyCall = program.IndexOf(
+            "WpfRenderingSafety.EnableBeforeAnyWindow();",
+            StringComparison.Ordinal);
+        var firstAppWindow = program.IndexOf("new App()", StringComparison.Ordinal);
+        var firstMessageBox = program.IndexOf("MessageBox.Show", StringComparison.Ordinal);
+        var firstWindow = Math.Min(firstAppWindow, firstMessageBox);
+
+        Assert.True(safetyCall >= 0);
+        Assert.True(firstAppWindow >= 0);
+        Assert.True(firstMessageBox >= 0);
+        Assert.True(firstWindow > safetyCall);
+
+        TypeWhisper.Windows.Services.WpfRenderingSafety.EnableBeforeAnyWindow();
+        Assert.Equal(
+            System.Windows.Interop.RenderMode.SoftwareOnly,
+            System.Windows.Media.RenderOptions.ProcessRenderMode);
+    }
+
+    [Fact]
+    public void RenderingSafety_RecognizesWrappedUceRenderThreadFailure()
+    {
+        var renderFailure = new System.Runtime.InteropServices.COMException(
+            "render thread failed",
+            TypeWhisper.Windows.Services.WpfRenderingSafety.RenderThreadFailureHResult);
+
+        Assert.True(TypeWhisper.Windows.Services.WpfRenderingSafety.IsRenderThreadFailure(
+            new InvalidOperationException("wrapper", renderFailure)));
     }
 
     [Fact]

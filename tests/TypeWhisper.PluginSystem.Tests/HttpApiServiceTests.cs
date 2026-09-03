@@ -36,6 +36,70 @@ public class HttpApiServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ResponseSender_SubmitsHeadersAndBodyOnlyOnce()
+    {
+        var transport = new FakeHttpApiResponseTransport();
+        var sender = new HttpApiResponseSender(transport);
+
+        var first = await sender.TrySendAsync(
+            new HttpApiResponse(200, "ok", "text/plain"),
+            CancellationToken.None);
+        var second = await sender.TrySendAsync(
+            new HttpApiResponse(500, "error"),
+            CancellationToken.None);
+        sender.Close();
+
+        Assert.True(first);
+        Assert.False(second);
+        Assert.Equal(1, transport.SubmitCount);
+        Assert.Equal(200, Assert.Single(transport.Responses).StatusCode);
+        Assert.Equal(1, transport.CloseCount);
+    }
+
+    [Fact]
+    public async Task ResponseSender_DoesNotRetryAfterHeadersWereAlreadySubmitted()
+    {
+        var transport = new FakeHttpApiResponseTransport
+        {
+            SubmitException = new InvalidOperationException(
+                "This operation cannot be performed after the response has been submitted.")
+        };
+        var sender = new HttpApiResponseSender(transport);
+
+        var first = await sender.TrySendAsync(
+            new HttpApiResponse(200, "ok"),
+            CancellationToken.None);
+        var retry = await sender.TrySendAsync(
+            new HttpApiResponse(500, "error"),
+            CancellationToken.None);
+
+        Assert.False(first);
+        Assert.False(retry);
+        Assert.Equal(1, transport.SubmitCount);
+    }
+
+    [Fact]
+    public async Task ResponseSender_ObservesClientAbortAndCloseFailures()
+    {
+        var transport = new FakeHttpApiResponseTransport
+        {
+            SubmitException = new IOException("The client disconnected."),
+            CloseException = new ObjectDisposedException("response")
+        };
+        var sender = new HttpApiResponseSender(transport);
+
+        var exception = await Record.ExceptionAsync(() => sender.TrySendAsync(
+            new HttpApiResponse(200, "ok"),
+            new CancellationToken(canceled: true)));
+        var closeException = Record.Exception(sender.Close);
+
+        Assert.Null(exception);
+        Assert.Null(closeException);
+        Assert.Equal(1, transport.SubmitCount);
+        Assert.Equal(1, transport.CloseCount);
+    }
+
+    [Fact]
     public async Task Options_ReturnsNoContentWithoutJsonBody()
     {
         var service = CreateService();
@@ -1686,5 +1750,31 @@ public class HttpApiServiceTests : IDisposable
         }
 
         public void Dispose() { }
+    }
+}
+
+internal sealed class FakeHttpApiResponseTransport : IHttpApiResponseTransport
+{
+    public List<HttpApiResponse> Responses { get; } = [];
+    public Exception? SubmitException { get; init; }
+    public Exception? CloseException { get; init; }
+    public int SubmitCount { get; private set; }
+    public int CloseCount { get; private set; }
+
+    public Task SubmitAsync(HttpApiResponse response, CancellationToken cancellationToken)
+    {
+        SubmitCount++;
+        Responses.Add(response);
+        if (SubmitException is not null)
+            throw SubmitException;
+
+        return Task.CompletedTask;
+    }
+
+    public void Close()
+    {
+        CloseCount++;
+        if (CloseException is not null)
+            throw CloseException;
     }
 }

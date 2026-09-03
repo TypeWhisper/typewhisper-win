@@ -188,7 +188,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             try
             {
                 var context = await _listener.GetContextAsync();
-                _ = Task.Run(() => HandleRequest(context, ct), ct);
+                _ = RunRequestAsync(context, ct);
             }
             catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
             catch (ObjectDisposedException) { break; }
@@ -196,9 +196,23 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         }
     }
 
+    private async Task RunRequestAsync(HttpListenerContext context, CancellationToken ct)
+    {
+        try
+        {
+            await HandleRequest(context, ct);
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[HttpApi] Request processing failed: {ex.Message}");
+        }
+    }
+
     private async Task HandleRequest(HttpListenerContext context, CancellationToken ct)
     {
-        var response = context.Response;
+        var sender = new HttpApiResponseSender(
+            new HttpListenerResponseTransport(context.Response));
 
         try
         {
@@ -220,28 +234,17 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 apiResponse = await HandleRequestAsync(request, ct);
             }
 
-            response.StatusCode = apiResponse.StatusCode;
-            response.ContentType = apiResponse.ContentType;
-            foreach (var (name, value) in apiResponse.Headers)
-                response.Headers[name] = value;
-
-            var bytes = Encoding.UTF8.GetBytes(apiResponse.Body);
-            response.ContentLength64 = bytes.Length;
-            if (bytes.Length > 0)
-                await response.OutputStream.WriteAsync(bytes, ct);
+            await sender.TrySendAsync(apiResponse, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
-            var apiResponse = Error(500, ex.Message);
-            response.StatusCode = apiResponse.StatusCode;
-            response.ContentType = apiResponse.ContentType;
-            var errorBytes = Encoding.UTF8.GetBytes(apiResponse.Body);
-            response.ContentLength64 = errorBytes.Length;
-            await response.OutputStream.WriteAsync(errorBytes, ct);
+            // TrySendAsync is intentionally idempotent. If headers or body submission
+            // already began, this call is a no-op rather than a second response.
+            await sender.TrySendAsync(Error(500, ex.Message), ct);
         }
         finally
         {
-            response.Close();
+            sender.Close();
         }
     }
 

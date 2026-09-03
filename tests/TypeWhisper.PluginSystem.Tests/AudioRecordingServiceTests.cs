@@ -66,7 +66,7 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         var waveIn = new FakeAudioInputCaptureFactory();
         var factory = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
         using var capture = factory.Create(
-            deviceNumber: 0,
+            new AudioInputDeviceSelection("usb", "USB Microphone", 0),
             new WaveFormat(16000, 16, 1),
             bufferMilliseconds: 30);
 
@@ -87,7 +87,7 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         var waveIn = new FakeAudioInputCaptureFactory();
         var factory = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
         using var capture = factory.Create(
-            deviceNumber: 0,
+            new AudioInputDeviceSelection("usb", "USB Microphone", 0),
             new WaveFormat(16000, 16, 1),
             bufferMilliseconds: 30);
 
@@ -229,7 +229,7 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
-    public void CheckForDeviceChanges_FallsBackWithoutClearingConfiguredSelection_WhenSelectedDeviceDisappears()
+    public void CheckForDeviceChanges_DoesNotReuseLegacyIndex_WhenSelectedDeviceDisappears()
     {
         var devices = new FakeAudioInputDeviceProvider("Built-in Microphone", "USB Microphone");
         var captures = new FakeAudioInputCaptureFactory();
@@ -240,7 +240,8 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         devices.SetDevices("Built-in Microphone");
         sut.CheckForDeviceChanges();
 
-        Assert.Equal([1, 0], captures.Created.Select(c => c.DeviceNumber));
+        Assert.Equal([1], captures.Created.Select(c => c.DeviceNumber));
+        Assert.True(captures.Created[0].Disposed);
     }
 
     [Fact]
@@ -283,7 +284,113 @@ public sealed class AudioRecordingServiceDeviceChangeTests
     }
 
     [Fact]
-    public void WarmUp_UsesNextAvailablePriorityDevice_ThenFallsBackToSystemDefault()
+    public void EndpointIdSelection_ResolvesSameMicrophoneAfterIndexesChange()
+    {
+        var selection = new AudioInputDeviceSelection(
+            "usb-endpoint",
+            "Microphone (4- Shure MV7)",
+            LastKnownDeviceNumber: 1);
+        var reordered = new[]
+        {
+            new AudioInputDeviceInfo(0, "usb-endpoint", "Microphone (5- Shure MV7)", false),
+            new AudioInputDeviceInfo(1, "built-in", "Microphone Array", true)
+        };
+
+        var resolved = AudioInputDeviceSelectionResolver.Resolve(selection, reordered);
+
+        Assert.NotNull(resolved);
+        Assert.Equal("usb-endpoint", resolved.Id);
+        Assert.Equal(0, resolved.DeviceNumber);
+    }
+
+    [Fact]
+    public void DeviceNameFallback_IgnoresChangedWindowsOrdinalNumber()
+    {
+        var selection = new AudioInputDeviceSelection(
+            "removed-endpoint",
+            "Microphone (4- Shure MV7)",
+            LastKnownDeviceNumber: 1);
+        var current = new[]
+        {
+            new AudioInputDeviceInfo(0, "replacement-endpoint", "Microphone (5- Shure MV7)", false)
+        };
+
+        var resolved = AudioInputDeviceSelectionResolver.Resolve(selection, current);
+
+        Assert.NotNull(resolved);
+        Assert.Equal("replacement-endpoint", resolved.Id);
+        Assert.Equal(0, resolved.DeviceNumber);
+    }
+
+    [Fact]
+    public void PreparedWasapiToWaveInFallback_PreservesStableDeviceIdentity()
+    {
+        var wasapi = new FakeAudioInputCaptureFactory
+        {
+            StartException = new InvalidOperationException("WASAPI endpoint became stale.")
+        };
+        var waveIn = new FakeAudioInputCaptureFactory();
+        var factory = new FallbackAudioInputCaptureFactory(wasapi, waveIn);
+        var selection = new AudioInputDeviceSelection(
+            "usb-endpoint",
+            "Microphone (4- Shure MV7)",
+            LastKnownDeviceNumber: 1);
+        using var capture = factory.Create(
+            selection,
+            new WaveFormat(16000, 16, 1),
+            bufferMilliseconds: 30);
+
+        capture.StartRecording();
+
+        Assert.Equal("usb-endpoint", Assert.Single(wasapi.Created).Selection.Id);
+        Assert.Equal("usb-endpoint", Assert.Single(waveIn.Created).Selection.Id);
+        Assert.Equal("Microphone (4- Shure MV7)", waveIn.Created.Single().Selection.Name);
+    }
+
+    [Fact]
+    public void MissingPriorityMicrophone_DoesNotOpenAnUnrelatedDevice()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"));
+        var captures = new FakeAudioInputCaptureFactory();
+        using var sut = CreateService(devices, captures);
+        sut.SetMicrophonePriorityList([new MicrophonePriorityItem("usb", "USB Microphone")]);
+        Assert.True(sut.WarmUp());
+
+        devices.SetDevices(new FakeAudioInputDevice("built-in", "Built-in Microphone"));
+        sut.CheckForDeviceChanges();
+
+        Assert.Single(captures.Created);
+        Assert.True(captures.Created[0].Disposed);
+        Assert.False(sut.IsRecording);
+        Assert.False(sut.WarmUp());
+    }
+
+    [Fact]
+    public void DisplayWakeRefresh_RecreatesPreparedCaptureWithStableIdentity()
+    {
+        var devices = new FakeAudioInputDeviceProvider(
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"),
+            new FakeAudioInputDevice("usb", "USB Microphone"));
+        var captures = new FakeAudioInputCaptureFactory { CanRestartAfterStop = true };
+        using var sut = CreateService(devices, captures);
+        sut.SetMicrophonePriorityList([new MicrophonePriorityItem("usb", "USB Microphone")]);
+        Assert.True(sut.WarmUp());
+
+        devices.SetDevices(
+            new FakeAudioInputDevice("usb", "USB Microphone"),
+            new FakeAudioInputDevice("built-in", "Built-in Microphone"));
+        sut.RefreshAfterDisplayOrPowerChange();
+
+        Assert.Equal(2, captures.Created.Count);
+        Assert.True(captures.Created[0].Disposed);
+        Assert.Equal("usb", captures.Created[1].Selection.Id);
+        Assert.Equal(0, captures.Created[1].DeviceNumber);
+    }
+
+    [Fact]
+    public void WarmUp_UsesNextAvailablePriorityDevice_WithoutUnrelatedDefaultFallback()
     {
         var devices = new FakeAudioInputDeviceProvider(
             new FakeAudioInputDevice("built-in", "Built-in Microphone"),
@@ -305,7 +412,8 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         devices.SetDevices(new FakeAudioInputDevice("built-in", "Built-in Microphone"));
         sut.CheckForDeviceChanges();
 
-        Assert.Equal(0, captures.Created.Last().DeviceNumber);
+        Assert.Single(captures.Created);
+        Assert.True(captures.Created[0].Disposed);
     }
 
     [Fact]
@@ -1867,12 +1975,15 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
     public Exception? StopException { get; set; }
     public bool CanRestartAfterStop { get; set; }
 
-    public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
+    public IAudioInputCapture Create(
+        AudioInputDeviceSelection selection,
+        WaveFormat waveFormat,
+        int bufferMilliseconds)
     {
         if (CreateException is not null)
             throw CreateException;
 
-        var capture = new FakeAudioInputCapture(deviceNumber, ActualWaveFormat ?? waveFormat)
+        var capture = new FakeAudioInputCapture(selection, ActualWaveFormat ?? waveFormat)
         {
             CanRestartAfterStop = CanRestartAfterStop,
             PrepareException = PrepareException,
@@ -1884,9 +1995,10 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
     }
 }
 
-internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFormat) : IAudioInputCapture
+internal sealed class FakeAudioInputCapture(AudioInputDeviceSelection selection, WaveFormat waveFormat) : IAudioInputCapture
 {
-    public int DeviceNumber { get; } = deviceNumber;
+    public AudioInputDeviceSelection Selection { get; } = selection;
+    public int DeviceNumber => Selection.LastKnownDeviceNumber;
     public WaveFormat WaveFormat { get; } = waveFormat;
     public bool CanRestartAfterStop { get; init; }
     public bool Prepared => PrepareCount > 0;

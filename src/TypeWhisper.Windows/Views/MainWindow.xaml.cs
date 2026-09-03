@@ -33,19 +33,25 @@ public partial class MainWindow : Window
     private static partial int SetWindowLongW(IntPtr hWnd, int nIndex, int dwNewLong);
 
     private readonly ISettingsService _settings;
+    private readonly AudioRecordingService _audio;
     private readonly RecordingOverlayViewModel _viewModel;
     private readonly DispatcherTimer _overlayRecoveryTimer;
     private OverlayPlacementTarget _currentPlacementTarget = OverlayPlacementTarget.CursorMonitor;
+    private int _audioRefreshQueued;
 
     /// <summary>
     /// Initializes a new instance of the MainWindow class.
     /// </summary>
-    public MainWindow(RecordingOverlayViewModel viewModel, ISettingsService settings)
+    public MainWindow(
+        RecordingOverlayViewModel viewModel,
+        ISettingsService settings,
+        AudioRecordingService audio)
     {
         InitializeComponent();
         DataContext = viewModel;
         _viewModel = viewModel;
         _settings = settings;
+        _audio = audio;
         _overlayRecoveryTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = OverlayRecoveryDelay
@@ -114,19 +120,47 @@ public partial class MainWindow : Window
         ReassertTopmost();
     }
 
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
         DispatchPrimaryOverlayRecovery();
+        DispatchAudioCaptureRefresh();
+    }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
         if (e.Mode == PowerModes.Resume)
+        {
             DispatchPrimaryOverlayRecovery();
+            DispatchAudioCaptureRefresh();
+        }
     }
 
     private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
         if (e.Reason == SessionSwitchReason.SessionUnlock)
+        {
             DispatchPrimaryOverlayRecovery();
+            DispatchAudioCaptureRefresh();
+        }
+    }
+
+    private void DispatchAudioCaptureRefresh()
+    {
+        if (Interlocked.Exchange(ref _audioRefreshQueued, 1) != 0)
+            return;
+
+        ThreadPool.QueueUserWorkItem(static state =>
+        {
+            var window = (MainWindow)state!;
+            try
+            {
+                window._audio.RefreshAfterDisplayOrPowerChange();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref window._audioRefreshQueued, 0);
+            }
+        }, this);
     }
 
     private void DispatchPrimaryOverlayRecovery()
