@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using Moq;
 using TypeWhisper.Plugin.AuthenticatedCli;
 using TypeWhisper.PluginSDK;
+using TypeWhisper.PluginSDK.Models;
 
 namespace TypeWhisper.PluginSystem.Tests;
 
@@ -476,6 +478,459 @@ public sealed class AuthenticatedCliPluginTests
         Assert.Throws<CliProtocolException>(() =>
             Descriptor(CliProviderKind.Codex).ParseSuccessfulOutput(
                 "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"{\\\"text\\\":\\\"partial\\\"}\"}}"));
+    }
+
+    [Fact]
+    public void Providers_ExposeStableFourthOpenCodeRoleAndConsistentVersion()
+    {
+        using var plugin = new AuthenticatedCliPlugin();
+
+        Assert.Equal(4, plugin.AdditionalLlmProviders.Count);
+        Assert.Equal(
+            new[]
+            {
+                "authenticated-cli-codex",
+                "authenticated-cli-claude",
+                "authenticated-cli-antigravity",
+                "authenticated-cli-opencode"
+            },
+            plugin.AdditionalLlmProviders
+                .Select(provider => ((ILlmProviderSelectionIdentity)provider).LlmSelectionId));
+        Assert.Equal("1.1.0", plugin.PluginVersion);
+        Assert.Equal("opencode.exe", Descriptor(CliProviderKind.OpenCode).ExecutableName);
+    }
+
+    [Fact]
+    public async Task OpenCodeProvider_UsesOnlyFreeCatalogModelsAndExactIsolatedInvocation()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-success", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        var host = CreateHost();
+        await plugin.ActivateAsync(host.Object);
+        await plugin.RefreshFromSettingsAsync();
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+        var model = Assert.Single(role.SupportedModels);
+
+        Assert.Equal("opencode/muse-spark-1.3-contributor-free", model.Id);
+        Assert.Equal("Muse Spark 1.3 Free", model.DisplayName);
+        Assert.True(model.IsRecommended);
+        Assert.True(role.IsAvailable);
+        host.Verify(service => service.SetSetting(
+            AuthenticatedCliPlugin.OpenCodeCatalogSettingName,
+            It.Is<OpenCodeModelCatalogCache>(cache =>
+                cache.Version == 1
+                && cache.Models.Count == 1
+                && cache.Models[0].Id == model.Id)), Times.AtLeastOnce);
+
+        var result = await role.ProcessAsync("Instruction", "Synthetic input", model.Id, CancellationToken.None);
+
+        Assert.Equal("processed", result);
+        using var capture = JsonDocument.Parse(await File.ReadAllTextAsync(fake.CapturePath));
+        var root = capture.RootElement;
+        Assert.Equal(
+            new[]
+            {
+                "run", "--pure", "--format", "json", "--title", "TypeWhisper",
+                "--dir", root.GetProperty("workingDirectory").GetString(),
+                "--agent", "typewhisper", "--model", model.Id
+            },
+            root.GetProperty("arguments").EnumerateArray().Select(argument => argument.GetString()));
+        var arguments = root.GetProperty("arguments").EnumerateArray()
+            .Select(argument => argument.GetString()!)
+            .ToList();
+        Assert.DoesNotContain("--variant", arguments);
+        Assert.DoesNotContain("--auto", arguments);
+        Assert.DoesNotContain("--continue", arguments);
+        Assert.DoesNotContain("--session", arguments);
+        Assert.DoesNotContain("--share", arguments);
+        Assert.DoesNotContain("--attach", arguments);
+
+        var environment = root.GetProperty("environment");
+        var workingDirectory = root.GetProperty("workingDirectory").GetString()!;
+        Assert.Equal("typewhisper", environment.GetProperty("OPENCODE_CLIENT").GetString());
+        Assert.Equal("{\"*\":\"deny\"}", environment.GetProperty("OPENCODE_PERMISSION").GetString());
+        Assert.Equal("false", environment.GetProperty("OPENCODE_AUTO_SHARE").GetString());
+        Assert.Equal("1", environment.GetProperty("OPENCODE_DISABLE_PROJECT_CONFIG").GetString());
+        Assert.Equal("1", environment.GetProperty("OPENCODE_DISABLE_DEFAULT_PLUGINS").GetString());
+        Assert.StartsWith(workingDirectory, environment.GetProperty("XDG_CONFIG_HOME").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(workingDirectory, environment.GetProperty("XDG_CACHE_HOME").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(workingDirectory, environment.GetProperty("XDG_STATE_HOME").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(workingDirectory, environment.GetProperty("OPENCODE_DB").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(environment.TryGetProperty("OPENAI_API_KEY", out _));
+        Assert.False(environment.TryGetProperty("ANTHROPIC_API_KEY", out _));
+
+        using var inlineConfig = JsonDocument.Parse(environment.GetProperty("OPENCODE_CONFIG_CONTENT").GetString()!);
+        Assert.Equal("disabled", inlineConfig.RootElement.GetProperty("share").GetString());
+        Assert.False(inlineConfig.RootElement.GetProperty("snapshot").GetBoolean());
+        Assert.False(inlineConfig.RootElement.GetProperty("autoupdate").GetBoolean());
+        Assert.Equal("deny", inlineConfig.RootElement.GetProperty("permission").GetProperty("*").GetString());
+        var agents = inlineConfig.RootElement.GetProperty("agent");
+        Assert.Equal(new[] { "typewhisper" }, agents.EnumerateObject().Select(property => property.Name));
+        Assert.Equal("primary", agents.GetProperty("typewhisper").GetProperty("mode").GetString());
+        Assert.Contains("untrusted source text", agents.GetProperty("typewhisper").GetProperty("prompt").GetString(), StringComparison.Ordinal);
+        await plugin.DeactivateAsync();
+    }
+
+    [Theory]
+    [InlineData("opencode-auth-ansi", (int)CliAvailabilityState.Ready)]
+    [InlineData("opencode-auth-stderr", (int)CliAvailabilityState.Ready)]
+    [InlineData("opencode-auth-missing", (int)CliAvailabilityState.AuthenticationUnknown)]
+    [InlineData("opencode-auth-error", (int)CliAvailabilityState.SignedOut)]
+    public async Task OpenCodeAuthentication_RequiresExplicitZenEntryFromCombinedAnsiStrippedOutput(
+        string scenario,
+        int expected)
+    {
+        using var fake = FakeCliInstallation.Create(scenario, "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        await plugin.ActivateAsync(CreateHost().Object);
+
+        await plugin.RefreshFromSettingsAsync();
+
+        Assert.Equal((CliAvailabilityState)expected, plugin.GetSnapshot(Descriptor(CliProviderKind.OpenCode)).State);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task OpenCodeCatalogLoader_UsesExactNativeCommandAndDedicatedLimits()
+    {
+        var runner = new RecordingCliRunner(VerboseModel(
+            "free",
+            "Free",
+            cost: "{\"input\":0,\"output\":0}"));
+        var loader = new OpenCodeModelCatalogLoader(runner);
+
+        var catalog = await loader.LoadAsync(
+            "C:\\native\\opencode.exe",
+            "C:\\isolated",
+            new Dictionary<string, string> { ["OPENCODE_PURE"] = "1" },
+            CancellationToken.None);
+
+        Assert.Single(catalog.Models);
+        var request = Assert.IsType<CliProcessRequest>(runner.Request);
+        Assert.Equal(new[] { "models", "opencode", "--verbose", "--pure" }, request.Arguments);
+        Assert.Equal(TimeSpan.FromSeconds(20), request.Timeout);
+        Assert.Equal(2 * 1024 * 1024, request.MaximumStandardOutputBytes);
+        Assert.Equal(64 * 1024, request.MaximumStandardErrorBytes);
+        Assert.True(request.RestrictUserDirectories);
+        Assert.Equal(new[] { "XDG_DATA_HOME" }, request.ProviderEnvironmentVariables);
+    }
+
+    [Fact]
+    public void OpenCodeCatalogParser_FiltersUnsafeEntriesAndChecksEveryCostNumber()
+    {
+        var output = string.Join('\n', new[]
+        {
+            VerboseModel("first-free", "First Free", cost: "{\"input\":0,\"output\":0,\"cache\":{\"read\":0},\"tiers\":[{\"input\":0,\"output\":0}]}", variants: "{\"safe\":{},\"bad value\":{}}"),
+            VerboseModel("cache-paid", "Cache Paid", cost: "{\"input\":0,\"output\":0,\"cache\":{\"read\":0.01}}"),
+            VerboseModel("tier-paid", "Tier Paid", cost: "{\"input\":0,\"output\":0,\"tiers\":[{\"input\":1,\"output\":0}]}"),
+            VerboseModel("direct-paid", "Direct Paid", cost: "{\"input\":1,\"output\":2}"),
+            VerboseModel("deprecated", "Deprecated", cost: "{\"input\":0,\"output\":0}", status: "deprecated"),
+            VerboseModel("wrong-provider", "Wrong Provider", cost: "{\"input\":0,\"output\":0}", providerId: "other"),
+            VerboseModel("wrong-id", "Wrong ID", cost: "{\"input\":0,\"output\":0}", metadataId: "different"),
+            VerboseModel("no-text-output", "No Text", cost: "{\"input\":0,\"output\":0}", outputModalities: "[\"image\"]"),
+            VerboseModel("duplicate", "Duplicate A", cost: "{\"input\":0,\"output\":0}"),
+            VerboseModel("duplicate", "Duplicate B", cost: "{\"input\":0,\"output\":0}")
+        });
+
+        var catalog = OpenCodeModelCatalogLoader.Parse(output, DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(
+            new[] { "opencode/first-free", "opencode/cache-paid", "opencode/tier-paid", "opencode/direct-paid" },
+            catalog.Models.Select(model => model.Id));
+        Assert.True(catalog.Models[0].IsFree);
+        Assert.Equal(new[] { "safe" }, catalog.Models[0].Variants);
+        Assert.All(catalog.Models.Skip(1), model => Assert.False(model.IsFree));
+    }
+
+    [Fact]
+    public void OpenCodeCatalogParser_RejectsUnparseableCatalogAndSkipsMalformedEntry()
+    {
+        Assert.Throws<CliProtocolException>(() => OpenCodeModelCatalogLoader.Parse(
+            "opencode/broken\n{not-json",
+            DateTimeOffset.UnixEpoch));
+
+        var catalog = OpenCodeModelCatalogLoader.Parse(
+            "opencode/broken\n{not-json\n" + VerboseModel(
+                "valid",
+                "Valid",
+                cost: "{\"input\":0,\"output\":0}"),
+            DateTimeOffset.UnixEpoch);
+        Assert.Equal("opencode/valid", Assert.Single(catalog.Models).Id);
+    }
+
+    [Fact]
+    public async Task OpenCodeWithNoFreeModels_IsUnavailableAndNeverFallsBackToDefault()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-catalog-none", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        await plugin.ActivateAsync(CreateHost().Object);
+        await plugin.RefreshFromSettingsAsync();
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+
+        Assert.Equal(CliAvailabilityState.NoFreeModels, plugin.GetSnapshot(Descriptor(CliProviderKind.OpenCode)).State);
+        Assert.False(role.IsAvailable);
+        Assert.Empty(role.SupportedModels);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task OpenCodeCatalogFailure_KeepsValidatedCachedFreeListVisible()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-catalog-fail", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        var host = CreateHost();
+        host.Setup(service => service.GetSetting<OpenCodeModelCatalogCache>(AuthenticatedCliPlugin.OpenCodeCatalogSettingName))
+            .Returns(new OpenCodeModelCatalogCache(
+                1,
+                DateTimeOffset.UnixEpoch,
+                [new OpenCodeCachedModel("opencode/cached-free", "Cached Free", [])]));
+        await plugin.ActivateAsync(host.Object);
+
+        await plugin.RefreshFromSettingsAsync();
+
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+        Assert.True(role.IsAvailable);
+        Assert.Equal("opencode/cached-free", Assert.Single(role.SupportedModels).Id);
+        Assert.True(plugin.GetOpenCodeCatalogStatus().IsLastKnownGood);
+        Assert.NotNull(plugin.GetOpenCodeCatalogStatus().LastRefreshError);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public async Task OpenCodeCatalogFailureWithoutCache_IsUnavailableAndActionable()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-catalog-fail-no-cache", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        await plugin.ActivateAsync(CreateHost().Object);
+
+        await plugin.RefreshFromSettingsAsync();
+
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+        Assert.Equal(
+            CliAvailabilityState.ModelCatalogUnavailable,
+            plugin.GetSnapshot(Descriptor(CliProviderKind.OpenCode)).State);
+        Assert.False(role.IsAvailable);
+        Assert.Empty(role.SupportedModels);
+        await plugin.DeactivateAsync();
+    }
+
+    [Theory]
+    [InlineData("default")]
+    [InlineData("anthropic/claude")]
+    [InlineData("opencode/paid-model")]
+    [InlineData("opencode/stale-free")]
+    public async Task OpenCodeRejectsNonCurrentOrPaidModelBeforeRequestLaunch(string model)
+    {
+        using var fake = FakeCliInstallation.Create("opencode-reject-model", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        await plugin.ActivateAsync(CreateHost().Object);
+        await plugin.RefreshFromSettingsAsync();
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+
+        var error = await Assert.ThrowsAsync<PluginRequestException>(() => role.ProcessAsync(
+            "Instruction",
+            "Input",
+            model,
+            CancellationToken.None));
+
+        Assert.Equal(PluginRequestFailureKind.InvalidRequest, error.FailureKind);
+        Assert.False(error.IsTransient);
+        Assert.False(File.Exists(fake.CapturePath));
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public void OpenCodeJsonlParser_UsesLastTextPartAndRejectsIncompleteOrExtraLogicalFields()
+    {
+        var descriptor = Descriptor(CliProviderKind.OpenCode);
+        Assert.Equal(
+            "last",
+            descriptor.ParseSuccessfulOutput(
+                "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"first\\\"}\"}}\n"
+                + "{\"type\":\"reasoning\",\"part\":{\"type\":\"reasoning\"}}\n"
+                + "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"last\\\"}\"}}"));
+        Assert.ThrowsAny<JsonException>(() => descriptor.ParseSuccessfulOutput("plain text"));
+        Assert.Throws<CliProtocolException>(() => descriptor.ParseSuccessfulOutput(
+            "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"ok\\\",\\\"extra\\\":true}\"}}"));
+        Assert.Throws<CliProtocolException>(() => descriptor.ParseSuccessfulOutput(
+            "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"earlier\\\"}\"}}\n"
+            + "{\"type\":\"text\",\"part\":{\"type\":\"text\"}}"));
+        Assert.Throws<CliProtocolException>(() => descriptor.ParseSuccessfulOutput(
+            "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"{\\\"text\\\":\\\"earlier\\\"}\"}}\n"
+            + "{\"type\":\"text\"}"));
+        Assert.ThrowsAny<JsonException>(() => descriptor.ParseSuccessfulOutput("{\"type\":\"text\""));
+    }
+
+    [Fact]
+    public void OpenCodeFailureClassificationInput_UsesOnlyExplicitErrorFields()
+    {
+        var descriptor = Descriptor(CliProviderKind.OpenCode);
+        Assert.Equal(
+            "rate limit exceeded",
+            descriptor.ExtractFailureText(
+                "{\"type\":\"error\",\"error\":{\"data\":{\"message\":\"rate limit exceeded\"}}}",
+                "prompt secret: authentication failed"));
+        Assert.Equal(
+            "login required",
+            descriptor.ExtractFailureText(
+                "",
+                "{\"error\":{\"message\":\"login required\"}}"));
+        Assert.Equal("", descriptor.ExtractFailureText("untrusted prompt text", "plain error"));
+    }
+
+    [Fact]
+    public async Task OpenCodeNeverWritesPromptOrResultContentToHostLogs()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-invalid-json", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        var logs = new List<string>();
+        var host = CreateHost();
+        host.Setup(service => service.Log(It.IsAny<PluginLogLevel>(), It.IsAny<string>()))
+            .Callback<PluginLogLevel, string>((_, message) => logs.Add(message));
+        await plugin.ActivateAsync(host.Object);
+        await plugin.RefreshFromSettingsAsync();
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+        const string secretInput = "TYPEWHISPER_PRIVATE_PROMPT_SENTINEL";
+
+        await Assert.ThrowsAsync<PluginRequestException>(() => role.ProcessAsync(
+            "Do not log the source text.",
+            secretInput,
+            Assert.Single(role.SupportedModels).Id,
+            CancellationToken.None));
+
+        var combinedLogs = string.Join('\n', logs);
+        Assert.DoesNotContain(secretInput, combinedLogs, StringComparison.Ordinal);
+        Assert.DoesNotContain("processed", combinedLogs, StringComparison.Ordinal);
+        await plugin.DeactivateAsync();
+    }
+
+    [Fact]
+    public void OpenCodeEnvironment_PreservesOnlySafeExplicitAuthenticationDataPath()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-environment", "opencode.exe");
+        var safeData = Path.Combine(fake.WorkingDirectory, "data");
+        Directory.CreateDirectory(safeData);
+        var previous = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", safeData);
+        try
+        {
+            var request = CreateRunnerRequest(fake, "", TimeSpan.FromSeconds(5)) with
+            {
+                ProviderEnvironmentVariables = ["XDG_DATA_HOME"],
+                EnvironmentOverrides = AuthenticatedCliPlugin.CreateOpenCodeEnvironmentOverrides(fake.WorkingDirectory),
+                RestrictUserDirectories = true
+            };
+            var startInfo = CliProcessRunner.CreateStartInfo(request);
+
+            Assert.Equal(safeData, startInfo.Environment["XDG_DATA_HOME"]);
+            Assert.Equal(fake.WorkingDirectory, startInfo.Environment["TEMP"]);
+            Assert.False(startInfo.Environment.ContainsKey("APPDATA"));
+            Assert.False(startInfo.Environment.ContainsKey("LOCALAPPDATA"));
+            Assert.False(startInfo.Environment.ContainsKey("HOMEPATH"));
+            Assert.Throws<InvalidOperationException>(() => CliProcessRunner.CreateStartInfo(request with
+            {
+                EnvironmentOverrides = new Dictionary<string, string> { ["BAD=NAME"] = "value" }
+            }));
+            Assert.Throws<InvalidOperationException>(() => CliProcessRunner.CreateStartInfo(request with
+            {
+                EnvironmentOverrides = new Dictionary<string, string> { ["PATH"] = "unsafe" }
+            }));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_DATA_HOME", previous);
+        }
+    }
+
+    [Fact]
+    public async Task CatalogCapabilityNotification_IsPublishedAfterReleasingRefreshGate()
+    {
+        using var fake = FakeCliInstallation.Create("opencode-notification", "opencode.exe");
+        using var plugin = CreatePlugin(fake.DirectoryPath);
+        var host = CreateHost();
+        var nestedRefreshes = 0;
+        host.Setup(service => service.NotifyCapabilitiesChanged()).Callback(() =>
+        {
+            if (Interlocked.Increment(ref nestedRefreshes) == 1)
+                plugin.RefreshFromSettingsAsync().Wait(TimeSpan.FromSeconds(10));
+        });
+        await plugin.ActivateAsync(host.Object);
+
+        await plugin.RefreshFromSettingsAsync().WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(nestedRefreshes > 0);
+        Assert.Equal(
+            "opencode/muse-spark-1.3-contributor-free",
+            Assert.Single(GetRole(plugin, "authenticated-cli-opencode").SupportedModels).Id);
+        await plugin.DeactivateAsync();
+    }
+
+    [LiveOpenCodeFact]
+    public async Task LiveOpenCodeProviderWithMuseSparkFree()
+    {
+        using var plugin = CreatePlugin(Environment.GetEnvironmentVariable("PATH") ?? "");
+        await plugin.ActivateAsync(CreateHost().Object);
+        await plugin.RefreshFromSettingsAsync();
+        var role = GetRole(plugin, "authenticated-cli-opencode");
+        const string model = "opencode/muse-spark-1.3-contributor-free";
+        Assert.Contains(role.SupportedModels, entry => string.Equals(entry.Id, model, StringComparison.Ordinal));
+
+        var result = await role.ProcessAsync(
+            "Return exactly {\"text\":\"TYPEWHISPER_OPENCODE_OK\"}. Do not add any other text.",
+            "Synthetic TypeWhisper live validation input.",
+            model,
+            CancellationToken.None);
+
+        Assert.Equal("TYPEWHISPER_OPENCODE_OK", result);
+        await plugin.DeactivateAsync();
+    }
+
+    private static string VerboseModel(
+        string headerId,
+        string name,
+        string cost,
+        string status = "active",
+        string providerId = "opencode",
+        string? metadataId = null,
+        string inputModalities = "[\"text\"]",
+        string outputModalities = "[\"text\"]",
+        string variants = "{}") =>
+        $"opencode/{headerId}\n{{\"id\":{JsonSerializer.Serialize(metadataId ?? headerId)},"
+        + $"\"providerID\":{JsonSerializer.Serialize(providerId)},\"name\":{JsonSerializer.Serialize(name)},"
+        + $"\"status\":{JsonSerializer.Serialize(status)},\"modalities\":{{\"input\":{inputModalities},\"output\":{outputModalities}}},"
+        + $"\"cost\":{cost},\"variants\":{variants}}}";
+
+    private sealed class LiveOpenCodeFactAttribute : FactAttribute
+    {
+        public LiveOpenCodeFactAttribute()
+        {
+            if (!string.Equals(
+                    Environment.GetEnvironmentVariable("TYPEWHISPER_LIVE_OPENCODE_TEST"),
+                    "1",
+                    StringComparison.Ordinal))
+            {
+                Skip = "Set TYPEWHISPER_LIVE_OPENCODE_TEST=1 to run the live OpenCode Zen test.";
+            }
+        }
+    }
+
+    private sealed class RecordingCliRunner(string standardOutput) : ICliProcessRunner
+    {
+        internal CliProcessRequest? Request { get; private set; }
+
+        public Task<CliProcessResult> RunAsync(
+            CliProcessRequest request,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            return Task.FromResult(new CliProcessResult(
+                0,
+                standardOutput,
+                "",
+                TimeSpan.Zero,
+                Encoding.UTF8.GetByteCount(standardOutput),
+                0));
+        }
     }
 
     private static AuthenticatedCliPlugin CreatePlugin(string processPath) =>
