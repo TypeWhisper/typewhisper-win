@@ -667,5 +667,24 @@
     "descriptions": {
       "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechertrennung und Prompt-Verarbeitung mit Muse Spark."
     }
+  },
+  {
+    "id": "com.typewhisper.authenticated-cli",
+    "name": "Authenticated Provider CLIs",
+    "version": "1.1.0",
+    "minHostVersion": null,
+    "author": "TypeWhisper",
+    "description": "Use authenticated Codex, Claude, Antigravity, and OpenCode Zen CLI sessions for prompt processing",
+    "category": "llm",
+    "categories": [
+      "llm",
+      "integrations"
+    ],
+    "size": 60602,
+    "downloadUrl": "https://typewhisper.github.io/typewhisper-win/plugins/com.typewhisper.authenticated-cli-1.1.0.zip",
+    "sha256": "dea9fbfe91c91a2724269e1414f1c0d3868e27b4374b5f949f7e2948f0c3196e",
+    "iconSystemName": null,
+    "requiresApiKey": false,
+    "descriptions": null
   }
 ]
