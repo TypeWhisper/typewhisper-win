@@ -14,11 +14,8 @@ public sealed class MicrosoftAiPluginTests
     [Fact]
     public void ManifestAndPlugin_ExposeMicrosoftAiMetadataAndFallbackModels()
     {
-        var manifestPath = Path.GetFullPath(Path.Join(
-            AppContext.BaseDirectory,
-            "..", "..", "..", "..", "..",
+        using var manifest = JsonDocument.Parse(TestFile.ReadProjectFile(
             "plugins", "TypeWhisper.Plugin.MicrosoftAi", "manifest.json"));
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
         using var sut = new MicrosoftAiPlugin();
 
         Assert.Equal("com.typewhisper.microsoft-ai", sut.PluginId);

@@ -50,6 +50,8 @@ public partial class MicrosoftAiSettingsView : UserControl
     private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
         SaveButton.IsEnabled = false;
+        EndpointBox.IsEnabled = false;
+        ApiKeyBox.IsEnabled = false;
         try
         {
             _plugin.SetEndpoint(EndpointBox.Text);
@@ -81,6 +83,8 @@ public partial class MicrosoftAiSettingsView : UserControl
         finally
         {
             SaveButton.IsEnabled = true;
+            EndpointBox.IsEnabled = true;
+            ApiKeyBox.IsEnabled = true;
         }
     }
 
