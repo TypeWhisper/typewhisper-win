@@ -56,6 +56,17 @@ public partial class App : Application
         {
             System.Diagnostics.Debug.WriteLine($"Unhandled UI exception: {args.Exception}");
             LogCrash(args.Exception);
+            if (WpfRenderingSafety.IsRenderThreadFailure(args.Exception))
+            {
+                // Once WPF's render thread has failed, showing another WPF dialog can
+                // recurse into the same failure. Exit cleanly instead of hanging.
+                args.Handled = true;
+                _ = Dispatcher.BeginInvoke(
+                    DispatcherPriority.Send,
+                    new Action(() => Shutdown(-1)));
+                return;
+            }
+
             MessageBox.Show(Loc.Instance.GetString("App.ErrorFormat", args.Exception.Message),
                 Loc.Instance["App.ErrorTitle"], MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;

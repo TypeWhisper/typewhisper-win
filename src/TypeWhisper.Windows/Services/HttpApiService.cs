@@ -188,7 +188,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             try
             {
                 var context = await _listener.GetContextAsync();
-                _ = Task.Run(() => HandleRequest(context, ct), ct);
+                ObserveRequestTask(DispatchRequestAsync(() => RunRequestAsync(context, ct), ct));
             }
             catch (HttpListenerException) when (ct.IsCancellationRequested) { break; }
             catch (ObjectDisposedException) { break; }
@@ -196,9 +196,39 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         }
     }
 
+    internal static Task DispatchRequestAsync(Func<Task> request, CancellationToken ct) =>
+        Task.Run(request, ct);
+
+    private static void ObserveRequestTask(Task requestTask)
+    {
+        _ = requestTask.ContinueWith(
+            static completedTask => _ = completedTask.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private async Task RunRequestAsync(HttpListenerContext context, CancellationToken ct)
+    {
+        try
+        {
+            await HandleRequest(context, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Listener shutdown cancels accepted work that has not completed.
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[HttpApi] Request processing failed: {ex.Message}");
+        }
+    }
+
     private async Task HandleRequest(HttpListenerContext context, CancellationToken ct)
     {
-        var response = context.Response;
+        var sender = new HttpApiResponseSender(
+            new HttpListenerResponseTransport(context.Response));
 
         try
         {
@@ -220,33 +250,28 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 apiResponse = await HandleRequestAsync(request, ct);
             }
 
-            response.StatusCode = apiResponse.StatusCode;
-            response.ContentType = apiResponse.ContentType;
-            foreach (var (name, value) in apiResponse.Headers)
-                response.Headers[name] = value;
-
-            var bytes = Encoding.UTF8.GetBytes(apiResponse.Body);
-            response.ContentLength64 = bytes.Length;
-            if (bytes.Length > 0)
-                await response.OutputStream.WriteAsync(bytes, ct);
+            await sender.TrySendAsync(apiResponse, ct);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            var apiResponse = Error(500, ex.Message);
-            response.StatusCode = apiResponse.StatusCode;
-            response.ContentType = apiResponse.ContentType;
-            var errorBytes = Encoding.UTF8.GetBytes(apiResponse.Body);
-            response.ContentLength64 = errorBytes.Length;
-            await response.OutputStream.WriteAsync(errorBytes, ct);
+            // Closing the listener cancels request conversion and response delivery.
+        }
+        catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+        {
+            // TrySendAsync is intentionally idempotent. If headers or body submission
+            // already began, this call is a no-op rather than a second response.
+            await sender.TrySendAsync(Error(500, ex.Message), ct);
         }
         finally
         {
-            response.Close();
+            sender.Close();
         }
     }
 
     internal async Task<HttpApiResponse> HandleRequestAsync(HttpApiRequest request, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (request.Method == "OPTIONS")
             return new HttpApiResponse(204, "", "text/plain");
 
@@ -269,7 +294,7 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 ("/v1/transcribe/local-file", "POST") => await HandleTranscribeLocalFile(request, ct),
                 ("/v1/history", "GET") => HandleHistorySearch(request),
                 ("/v1/history", "DELETE") => HandleHistoryDelete(request),
-                ("/v1/dictation/start", "POST") => await HandleDictationStart(request),
+                ("/v1/dictation/start", "POST") => await HandleDictationStart(request, ct),
                 ("/v1/dictation/stop", "POST") => await HandleDictationStop(),
                 ("/v1/dictation/status", "GET") => HandleDictationStatus(),
                 ("/v1/dictation/transcription", "GET") => HandleDictationTranscription(request),
@@ -308,6 +333,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         catch (DispatcherUnavailableException ex)
         {
             return Error(503, ex.Message);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -612,7 +641,9 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
         return Json(new { deleted = true, id });
     }
 
-    private async Task<HttpApiResponse> HandleDictationStart(HttpApiRequest request)
+    private async Task<HttpApiResponse> HandleDictationStart(
+        HttpApiRequest request,
+        CancellationToken ct)
     {
         if (_dictation.IsRecording)
             return Error(409, "Already recording");
@@ -648,7 +679,10 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
                 return Error(409, "Workflow is disabled");
         }
 
-        var id = await InvokeOnDispatcherAsync(() => _dictation.StartRecordingForApiAsync(workflow?.Id));
+        ct.ThrowIfCancellationRequested();
+        var id = await InvokeOnDispatcherAsync(
+            () => _dictation.StartRecordingForApiAsync(workflow?.Id),
+            ct);
         var session = _dictation.GetApiDictationSession(id);
         if (session?.Status == ApiDictationSessionStatus.Failed)
             return Error(409, session.Error ?? "Failed to start dictation");
@@ -1555,8 +1589,11 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             : dispatcher;
     }
 
-    private async Task<T> InvokeOnDispatcherAsync<T>(Func<Task<T>> action)
+    private async Task<T> InvokeOnDispatcherAsync<T>(
+        Func<Task<T>> action,
+        CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var dispatcher = _dispatcher;
         if (dispatcher is null)
             return await action();
@@ -1565,11 +1602,14 @@ public sealed class HttpApiService : ILocalApiServer, IDisposable
             throw new DispatcherUnavailableException("Application is shutting down.");
 
         if (dispatcher.CheckAccess())
+        {
+            ct.ThrowIfCancellationRequested();
             return await action();
+        }
 
         try
         {
-            var operation = dispatcher.InvokeAsync(action);
+            var operation = dispatcher.InvokeAsync(action, DispatcherPriority.Normal, ct);
             return await await operation.Task;
         }
         catch (TaskCanceledException) when (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)

@@ -48,6 +48,11 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // UCEERR_RENDERTHREADFAILURE cannot be recovered after WPF's shared render
+        // thread has failed. This app's lightweight windows favor reliability across
+        // monitor sleep/DPI topology changes over GPU-accelerated composition.
+        WpfRenderingSafety.EnableBeforeAnyWindow();
+
         if (NativeModelProbe.TryRun(args, out var probeExitCode))
         {
             Environment.ExitCode = probeExitCode;

@@ -2,6 +2,7 @@ using NAudio;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
+using System.Text.RegularExpressions;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
 
@@ -260,27 +261,29 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 return false;
             }
 
-            _activeDeviceNumber = ResolvePreferredDeviceNumber(allowFallback: true);
-            if (_activeDeviceNumber < 0)
+            var captureSelection = ResolvePreferredDeviceSelection();
+            if (captureSelection is null)
             {
                 AudioCaptureDiagnostics.Log("WarmUp no active device after resolve");
                 StartDevicePolling();
                 return false;
             }
 
+            _activeDeviceNumber = captureSelection.LastKnownDeviceNumber;
+
             try
             {
                 AudioCaptureDiagnostics.Log(
-                    $"WarmUp creating capture active={_activeDeviceNumber}:{TryGetDeviceName(_activeDeviceNumber) ?? "<unknown>"}");
+                    $"WarmUp creating capture active={captureSelection.LastKnownDeviceNumber}:{captureSelection.Name} id={captureSelection.Id}");
                 _waveIn = _captureFactory.Create(
-                    _activeDeviceNumber,
+                    captureSelection,
                     new WaveFormat(SampleRate, BitsPerSample, Channels),
                     bufferMilliseconds: 30);
                 _waveIn.Prepare();
                 _waveIn.DataAvailable += OnDataAvailable;
                 _waveIn.RecordingStopped += OnRecordingStopped;
 
-                SetActiveDeviceIdentity(_activeDeviceNumber);
+                SetActiveDeviceIdentity(captureSelection);
                 _isWarmedUp = true;
                 _activeCaptureGeneration = ++_captureGeneration;
                 AudioCaptureDiagnostics.Log(
@@ -359,6 +362,8 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             // Always stop preview before entering recording mode.
             if (_isPreviewing)
                 StopPreview();
+
+            RefreshPreparedCaptureSelection();
 
             if ((!_isWarmedUp || _waveIn is null) && !WarmUp())
             {
@@ -724,10 +729,10 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         return deviceCount > 0 ? 0 : -1;
     }
 
-    private int ResolvePreferredDeviceNumber(bool allowFallback)
+    private int ResolvePreferredDeviceNumber()
     {
         var priorityDeviceNumber = FindPriorityDeviceNumber();
-        if (priorityDeviceNumber >= 0)
+        if (_microphonePriorityList.Count > 0)
             return priorityDeviceNumber;
 
         if (_configuredDeviceNumber is int configuredDeviceNumber)
@@ -746,10 +751,32 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (rememberedDeviceNumber >= 0)
                 return rememberedDeviceNumber;
 
-            return allowFallback ? FindBestMicrophoneDevice() : -1;
+            // A numeric WaveIn index is only a legacy hint, never durable device
+            // identity. If its remembered name is gone, do not open whatever
+            // endpoint now happens to occupy the old index.
+            return -1;
         }
 
         return FindBestMicrophoneDevice();
+    }
+
+    private AudioInputDeviceSelection? ResolvePreferredDeviceSelection()
+    {
+        var deviceNumber = ResolvePreferredDeviceNumber();
+        if (deviceNumber < 0)
+            return null;
+
+        var info = TryGetDeviceInfo(deviceNumber);
+        if (info is not null)
+            return new AudioInputDeviceSelection(info.Id, info.Name, info.DeviceNumber);
+
+        var name = TryGetDeviceName(deviceNumber);
+        return name is null
+            ? null
+            : new AudioInputDeviceSelection(
+                StableDeviceIdFromName(name),
+                name,
+                deviceNumber);
     }
 
     private void ApplyPreferredDeviceChange()
@@ -759,7 +786,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             if (!_isWarmedUp)
                 return;
 
-            var newDevice = ResolvePreferredDeviceNumber(allowFallback: true);
+            var newDevice = ResolvePreferredDeviceNumber();
             if (!ActiveDeviceMatches(newDevice))
             {
                 DisposeWaveIn(reason: "device change");
@@ -898,6 +925,27 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         _activeDeviceNumber = deviceNumber;
         _activeDeviceId = info?.Id;
         _activeDeviceName = info?.Name ?? TryGetDeviceName(deviceNumber);
+    }
+
+    private void SetActiveDeviceIdentity(AudioInputDeviceSelection selection)
+    {
+        _activeDeviceNumber = selection.LastKnownDeviceNumber;
+        _activeDeviceId = selection.Id;
+        _activeDeviceName = selection.Name;
+    }
+
+    private void RefreshPreparedCaptureSelection()
+    {
+        if (!_isWarmedUp || _waveIn is null)
+            return;
+
+        var snapshot = GetDeviceSnapshot(refresh: true);
+        if (IsActiveDeviceAvailable(snapshot) && IsActiveDevicePreferred())
+            return;
+
+        AudioCaptureDiagnostics.Log(
+            $"Prepared capture identity is stale active={_activeDeviceNumber}:{_activeDeviceName ?? "<unknown>"} id={_activeDeviceId ?? "<unknown>"}");
+        DisposeWaveIn(reason: "stale prepared capture identity");
     }
 
     private bool ActiveDeviceMatches(int deviceNumber)
@@ -1168,6 +1216,27 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         DeviceAvailable?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Recreates an idle prepared capture after display, power, or session topology changes.
+    /// </summary>
+    internal void RefreshAfterDisplayOrPowerChange()
+    {
+        var recreatePreparedCapture = false;
+        lock (_captureLifecycleLock)
+        {
+            if (_disposed)
+                return;
+
+            recreatePreparedCapture = !_isRecording;
+            if (recreatePreparedCapture)
+                DisposeWaveIn(reason: "display or power change");
+        }
+
+        CheckForDeviceChanges();
+        if (recreatePreparedCapture)
+            WarmUp();
+    }
+
     private void ClearRecordingState()
     {
         _isRecording = false;
@@ -1223,7 +1292,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
                 return true;
             }
 
-            return devices.Count > 0;
+            return false;
         }
 
         if (_configuredDeviceNumber is not int configuredDeviceNumber)
@@ -1259,7 +1328,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         if (_activeDeviceNumber < 0)
             return false;
 
-        var preferredDeviceNumber = ResolvePreferredDeviceNumber(allowFallback: true);
+        var preferredDeviceNumber = ResolvePreferredDeviceNumber();
         if (preferredDeviceNumber < 0)
             return true;
 
@@ -1289,14 +1358,21 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
             var deviceIndex = deviceNumber.HasValue
                 ? TryGetDeviceName(deviceNumber.Value) is not null
                     ? deviceNumber.Value
-                    : ResolvePreferredDeviceNumber(allowFallback: true)
+                    : ResolvePreferredDeviceNumber()
                 : FindBestMicrophoneDevice();
             if (deviceIndex < 0) return;
+
+            var captureSelection = TryGetDeviceInfo(deviceIndex) is { } info
+                ? new AudioInputDeviceSelection(info.Id, info.Name, info.DeviceNumber)
+                : TryGetDeviceName(deviceIndex) is { } name
+                    ? new AudioInputDeviceSelection(StableDeviceIdFromName(name), name, deviceIndex)
+                    : null;
+            if (captureSelection is null) return;
 
             try
             {
                 _previewWaveIn = _captureFactory.Create(
-                    deviceIndex,
+                    captureSelection,
                     new WaveFormat(SampleRate, BitsPerSample, Channels),
                     bufferMilliseconds: 50);
                 _previewWaveIn.DataAvailable += OnPreviewDataAvailable;
@@ -1576,7 +1652,7 @@ public sealed class AudioRecordingService : IStreamingAudioSource, IDisposable
         WasapiAudioInputDeviceOrdering.DeviceNamesMatch(first, second);
 
     private static string StableDeviceIdFromName(string name) =>
-        $"name:{name.Trim().ToUpperInvariant()}";
+        $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(name).ToUpperInvariant()}";
 }
 
 /// <summary>
@@ -1625,6 +1701,8 @@ internal sealed record AudioInputDeviceInfo(int DeviceNumber, string Id, string 
 
 internal sealed record AudioInputDeviceSnapshot(int DeviceNumber, string Id, string Name, bool IsDefault);
 
+internal sealed record AudioInputDeviceSelection(string Id, string Name, int LastKnownDeviceNumber);
+
 internal interface IAudioInputDeviceProvider
 {
     int DeviceCount { get; }
@@ -1647,7 +1725,10 @@ internal interface IAudioInputDeviceChangeNotifier : IDisposable
 
 internal interface IAudioInputCaptureFactory
 {
-    IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds);
+    IAudioInputCapture Create(
+        AudioInputDeviceSelection selection,
+        WaveFormat waveFormat,
+        int bufferMilliseconds);
 }
 
 internal interface IAudioInputCapture : IDisposable
@@ -1757,7 +1838,7 @@ internal sealed class WaveInAudioInputDeviceProvider : IAudioInputDeviceProvider
         string.IsNullOrWhiteSpace(id) ? StableFallbackDeviceId(name) : id;
 
     private static string StableFallbackDeviceId(string name) =>
-        $"name:{name.Trim().ToUpperInvariant()}";
+        $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(name).ToUpperInvariant()}";
 
     private static IReadOnlyList<string> GetWaveInDeviceNames()
     {
@@ -1948,11 +2029,19 @@ internal sealed class WasapiAudioInputDeviceChangeNotifier : IAudioInputDeviceCh
 
 internal sealed class WaveInAudioInputCaptureFactory : IAudioInputCaptureFactory
 {
-    /// <summary>
-    /// Creates.
-    /// </summary>
-    public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds) =>
-        new WaveInAudioInputCapture(deviceNumber, waveFormat, bufferMilliseconds);
+    public IAudioInputCapture Create(
+        AudioInputDeviceSelection selection,
+        WaveFormat waveFormat,
+        int bufferMilliseconds)
+    {
+        var devices = new WaveInAudioInputDeviceProvider().GetDeviceInfos();
+        var resolved = AudioInputDeviceSelectionResolver.Resolve(selection, devices)
+            ?? throw new InvalidOperationException(
+                $"Microphone '{selection.Name}' is no longer available for WaveIn capture.");
+        AudioCaptureDiagnostics.Log(
+            $"WaveIn capture resolved id={selection.Id} oldIndex={selection.LastKnownDeviceNumber} currentIndex={resolved.DeviceNumber} name={resolved.Name}");
+        return new WaveInAudioInputCapture(resolved.DeviceNumber, waveFormat, bufferMilliseconds);
+    }
 }
 
 internal sealed class WaveInAudioInputCapture : IAudioInputCapture
@@ -2065,7 +2154,7 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
                 .Select((device, index) => new AudioInputDeviceInfo(
                     index,
                     string.IsNullOrWhiteSpace(device.ID)
-                        ? $"name:{device.FriendlyName.Trim().ToUpperInvariant()}"
+                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.FriendlyName).ToUpperInvariant()}"
                         : device.ID,
                     device.FriendlyName,
                     string.Equals(device.ID, defaultDeviceId, StringComparison.OrdinalIgnoreCase)))
@@ -2083,17 +2172,31 @@ internal sealed class WasapiAudioInputDeviceProvider : IAudioInputDeviceProvider
 
 internal sealed class WasapiAudioInputCaptureFactory : IAudioInputCaptureFactory
 {
-    public IAudioInputCapture Create(int deviceNumber, WaveFormat waveFormat, int bufferMilliseconds)
+    public IAudioInputCapture Create(
+        AudioInputDeviceSelection selection,
+        WaveFormat waveFormat,
+        int bufferMilliseconds)
     {
         var devices = WasapiAudioInputDeviceResolver.GetCaptureDevicesInWaveInOrder();
         try
         {
-            if (deviceNumber < 0 || deviceNumber >= devices.Count)
-                throw new ArgumentOutOfRangeException(nameof(deviceNumber));
+            var currentDevices = devices
+                .Select((device, index) => new AudioInputDeviceInfo(
+                    index,
+                    string.IsNullOrWhiteSpace(device.ID)
+                        ? $"name:{WasapiAudioInputDeviceOrdering.NormalizeDeviceName(device.FriendlyName).ToUpperInvariant()}"
+                        : device.ID,
+                    device.FriendlyName,
+                    false))
+                .ToList();
+            var resolved = AudioInputDeviceSelectionResolver.Resolve(selection, currentDevices)
+                ?? throw new InvalidOperationException(
+                    $"Microphone '{selection.Name}' is no longer available for WASAPI capture.");
 
-            var selectedDevice = devices[deviceNumber];
-            devices.RemoveAt(deviceNumber);
-
+            var selectedDevice = devices[resolved.DeviceNumber];
+            devices.RemoveAt(resolved.DeviceNumber);
+            AudioCaptureDiagnostics.Log(
+                $"WASAPI capture resolved id={selection.Id} oldIndex={selection.LastKnownDeviceNumber} currentIndex={resolved.DeviceNumber} name={resolved.Name}");
             return new WasapiAudioInputCapture(selectedDevice, bufferMilliseconds);
         }
         finally
@@ -2108,13 +2211,13 @@ internal sealed class FallbackAudioInputCaptureFactory(
     IAudioInputCaptureFactory fallbackFactory) : IAudioInputCaptureFactory
 {
     public IAudioInputCapture Create(
-        int deviceNumber,
+        AudioInputDeviceSelection selection,
         WaveFormat waveFormat,
         int bufferMilliseconds) =>
         new FallbackAudioInputCapture(
             primaryFactory,
             fallbackFactory,
-            deviceNumber,
+            selection,
             waveFormat,
             bufferMilliseconds);
 }
@@ -2122,7 +2225,7 @@ internal sealed class FallbackAudioInputCaptureFactory(
 internal sealed class FallbackAudioInputCapture : IAudioInputCapture
 {
     private readonly IAudioInputCaptureFactory _fallbackFactory;
-    private readonly int _deviceNumber;
+    private readonly AudioInputDeviceSelection _selection;
     private readonly WaveFormat _requestedWaveFormat;
     private readonly int _bufferMilliseconds;
     private IAudioInputCapture? _capture;
@@ -2132,25 +2235,25 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
     public FallbackAudioInputCapture(
         IAudioInputCaptureFactory primaryFactory,
         IAudioInputCaptureFactory fallbackFactory,
-        int deviceNumber,
+        AudioInputDeviceSelection selection,
         WaveFormat waveFormat,
         int bufferMilliseconds)
     {
         _fallbackFactory = fallbackFactory;
-        _deviceNumber = deviceNumber;
+        _selection = selection;
         _requestedWaveFormat = waveFormat;
         _bufferMilliseconds = bufferMilliseconds;
 
         try
         {
-            _capture = primaryFactory.Create(deviceNumber, waveFormat, bufferMilliseconds);
+            _capture = primaryFactory.Create(selection, waveFormat, bufferMilliseconds);
         }
         catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
         {
             AudioCaptureDiagnostics.Log(
                 $"Primary microphone capture creation failed; using fallback {ex.GetType().Name}: {ex.Message}");
             _usingFallback = true;
-            _capture = fallbackFactory.Create(deviceNumber, waveFormat, bufferMilliseconds);
+            _capture = fallbackFactory.Create(selection, waveFormat, bufferMilliseconds);
         }
 
         AttachCapture();
@@ -2238,12 +2341,12 @@ internal sealed class FallbackAudioInputCapture : IAudioInputCapture
         try
         {
             _capture = _fallbackFactory.Create(
-                _deviceNumber,
+                _selection,
                 _requestedWaveFormat,
                 _bufferMilliseconds);
             AttachCapture();
             AudioCaptureDiagnostics.Log(
-                $"WaveIn fallback recreated deviceNumber={_deviceNumber} bufferMs={_bufferMilliseconds}");
+                $"WaveIn fallback recreated id={_selection.Id} oldIndex={_selection.LastKnownDeviceNumber} bufferMs={_bufferMilliseconds}");
         }
         catch
         {
@@ -2365,6 +2468,10 @@ internal static class WasapiAudioInputDeviceResolver
 
 internal static class WasapiAudioInputDeviceOrdering
 {
+    private static readonly Regex WindowsOrdinalPrefix = new(
+        @"(?<=\()\s*\d+\s*-\s*",
+        RegexOptions.CultureInvariant);
+
     public static IReadOnlyList<int> BuildWaveInCompatibleOrder(
         IReadOnlyList<string> wasapiDeviceNames,
         IReadOnlyList<string> waveInDeviceNames)
@@ -2387,11 +2494,36 @@ internal static class WasapiAudioInputDeviceOrdering
 
     internal static bool DeviceNamesMatch(string wasapiDeviceName, string waveInDeviceName)
     {
-        if (string.Equals(wasapiDeviceName, waveInDeviceName, StringComparison.OrdinalIgnoreCase))
+        var normalizedWasapiName = NormalizeDeviceName(wasapiDeviceName);
+        var normalizedWaveInName = NormalizeDeviceName(waveInDeviceName);
+        if (string.Equals(normalizedWasapiName, normalizedWaveInName, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        var trimmedWaveInName = waveInDeviceName.Trim();
-        return wasapiDeviceName.StartsWith(trimmedWaveInName, StringComparison.OrdinalIgnoreCase)
-            || trimmedWaveInName.StartsWith(wasapiDeviceName, StringComparison.OrdinalIgnoreCase);
+        return normalizedWasapiName.StartsWith(normalizedWaveInName, StringComparison.OrdinalIgnoreCase)
+            || normalizedWaveInName.StartsWith(normalizedWasapiName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string NormalizeDeviceName(string name)
+    {
+        var withoutOrdinal = WindowsOrdinalPrefix.Replace(name.Trim(), "");
+        return string.Join(
+            ' ',
+            withoutOrdinal.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+}
+
+internal static class AudioInputDeviceSelectionResolver
+{
+    public static AudioInputDeviceInfo? Resolve(
+        AudioInputDeviceSelection selection,
+        IReadOnlyList<AudioInputDeviceInfo> currentDevices)
+    {
+        var byId = currentDevices.FirstOrDefault(device =>
+            string.Equals(device.Id, selection.Id, StringComparison.OrdinalIgnoreCase));
+        if (byId is not null)
+            return byId;
+
+        return currentDevices.FirstOrDefault(device =>
+            WasapiAudioInputDeviceOrdering.DeviceNamesMatch(device.Name, selection.Name));
     }
 }
