@@ -3,7 +3,7 @@
   "name": "Authenticated Provider CLIs",
   "version": "1.1.0",
   "author": "TypeWhisper",
-  "description": "Use authenticated Codex, Claude, and OpenCode Zen CLI sessions for prompt processing",
+  "description": "Use authenticated Codex, Claude, Antigravity, and OpenCode Zen CLI sessions for prompt processing",
   "category": "llm",
   "categories": ["llm", "integrations"],
   "requiresApiKey": false,

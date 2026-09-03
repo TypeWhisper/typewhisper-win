@@ -238,18 +238,31 @@ internal sealed class OpenCodeModelCatalogLoader(ICliProcessRunner runner)
 
     private static bool TryGetNumber(JsonElement parent, string propertyName) =>
         parent.TryGetProperty(propertyName, out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetDouble(out _);
+        && value.ValueKind == JsonValueKind.Number;
 
     private static bool IsEntireCostObjectZero(JsonElement value)
     {
         return value.ValueKind switch
         {
-            JsonValueKind.Number => value.TryGetDouble(out var number) && number == 0,
+            JsonValueKind.Number => IsJsonNumberZero(value),
             JsonValueKind.Object => value.EnumerateObject().All(property => IsEntireCostObjectZero(property.Value)),
             JsonValueKind.Array => value.EnumerateArray().All(IsEntireCostObjectZero),
-            _ => true
+            _ => false
         };
+    }
+
+    private static bool IsJsonNumberZero(JsonElement value)
+    {
+        foreach (var character in value.GetRawText())
+        {
+            if (character is 'e' or 'E')
+                break;
+
+            if (character is >= '1' and <= '9')
+                return false;
+        }
+
+        return true;
     }
 
     private static IReadOnlyList<string> ReadSafeVariants(JsonElement metadata)

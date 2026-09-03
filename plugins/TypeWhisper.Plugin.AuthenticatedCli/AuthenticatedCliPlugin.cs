@@ -856,10 +856,10 @@ public sealed class AuthenticatedCliPlugin :
     internal static IReadOnlyDictionary<string, string> CreateOpenCodeEnvironmentOverrides(string requestDirectory)
     {
         var root = Path.GetFullPath(requestDirectory);
-        var configDirectory = Path.Combine(root, "xdg-config");
-        var cacheDirectory = Path.Combine(root, "xdg-cache");
-        var stateDirectory = Path.Combine(root, "xdg-state");
-        var openCodeConfigDirectory = Path.Combine(configDirectory, "opencode");
+        var configDirectory = Path.Join(root, "xdg-config");
+        var cacheDirectory = Path.Join(root, "xdg-cache");
+        var stateDirectory = Path.Join(root, "xdg-state");
+        var openCodeConfigDirectory = Path.Join(configDirectory, "opencode");
         Directory.CreateDirectory(openCodeConfigDirectory);
         Directory.CreateDirectory(cacheDirectory);
         Directory.CreateDirectory(stateDirectory);
@@ -896,7 +896,7 @@ public sealed class AuthenticatedCliPlugin :
             ["XDG_CACHE_HOME"] = cacheDirectory,
             ["XDG_STATE_HOME"] = stateDirectory,
             ["OPENCODE_CONFIG_DIR"] = openCodeConfigDirectory,
-            ["OPENCODE_DB"] = Path.Combine(root, "opencode.db"),
+            ["OPENCODE_DB"] = Path.Join(root, "opencode.db"),
             ["OPENCODE_PERMISSION"] = "{\"*\":\"deny\"}",
             ["OPENCODE_CLIENT"] = "typewhisper",
             ["OPENCODE_AUTO_SHARE"] = "false",

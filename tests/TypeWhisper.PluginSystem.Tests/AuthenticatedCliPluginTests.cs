@@ -621,6 +621,9 @@ public sealed class AuthenticatedCliPluginTests
         var output = string.Join('\n', new[]
         {
             VerboseModel("first-free", "First Free", cost: "{\"input\":0,\"output\":0,\"cache\":{\"read\":0},\"tiers\":[{\"input\":0,\"output\":0}]}", variants: "{\"safe\":{},\"bad value\":{}}"),
+            VerboseModel("exponent-zero", "Exponent Zero", cost: "{\"input\":0e999999,\"output\":-0.0e-999999}"),
+            VerboseModel("underflow-paid", "Underflow Paid", cost: "{\"input\":1e-400,\"output\":0}"),
+            VerboseModel("unknown-nested-cost", "Unknown Nested Cost", cost: "{\"input\":0,\"output\":0,\"cache\":{\"read\":\"0\"}}"),
             VerboseModel("cache-paid", "Cache Paid", cost: "{\"input\":0,\"output\":0,\"cache\":{\"read\":0.01}}"),
             VerboseModel("tier-paid", "Tier Paid", cost: "{\"input\":0,\"output\":0,\"tiers\":[{\"input\":1,\"output\":0}]}"),
             VerboseModel("direct-paid", "Direct Paid", cost: "{\"input\":1,\"output\":2}"),
@@ -635,11 +638,12 @@ public sealed class AuthenticatedCliPluginTests
         var catalog = OpenCodeModelCatalogLoader.Parse(output, DateTimeOffset.UnixEpoch);
 
         Assert.Equal(
-            new[] { "opencode/first-free", "opencode/cache-paid", "opencode/tier-paid", "opencode/direct-paid" },
+            new[] { "opencode/first-free", "opencode/exponent-zero", "opencode/underflow-paid", "opencode/unknown-nested-cost", "opencode/cache-paid", "opencode/tier-paid", "opencode/direct-paid" },
             catalog.Models.Select(model => model.Id));
         Assert.True(catalog.Models[0].IsFree);
+        Assert.True(catalog.Models[1].IsFree);
         Assert.Equal(new[] { "safe" }, catalog.Models[0].Variants);
-        Assert.All(catalog.Models.Skip(1), model => Assert.False(model.IsFree));
+        Assert.All(catalog.Models.Skip(2), model => Assert.False(model.IsFree));
     }
 
     [Fact]
@@ -808,7 +812,7 @@ public sealed class AuthenticatedCliPluginTests
     public void OpenCodeEnvironment_PreservesOnlySafeExplicitAuthenticationDataPath()
     {
         using var fake = FakeCliInstallation.Create("opencode-environment", "opencode.exe");
-        var safeData = Path.Combine(fake.WorkingDirectory, "data");
+        var safeData = Path.Join(fake.WorkingDirectory, "data");
         Directory.CreateDirectory(safeData);
         var previous = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
         Environment.SetEnvironmentVariable("XDG_DATA_HOME", safeData);
