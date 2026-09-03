@@ -4,13 +4,18 @@ internal sealed class CoalescedRefreshDispatcher
 {
     private readonly Action _refresh;
     private readonly Action<Action> _queue;
+    private readonly Action<Exception> _reportFailure;
     private int _requestedGeneration;
     private int _workerRunning;
 
-    internal CoalescedRefreshDispatcher(Action refresh, Action<Action>? queue = null)
+    internal CoalescedRefreshDispatcher(
+        Action refresh,
+        Action<Action>? queue = null,
+        Action<Exception>? reportFailure = null)
     {
         _refresh = refresh ?? throw new ArgumentNullException(nameof(refresh));
         _queue = queue ?? QueueOnThreadPool;
+        _reportFailure = reportFailure ?? ReportFailure;
     }
 
     internal void Request()
@@ -28,7 +33,14 @@ internal sealed class CoalescedRefreshDispatcher
             do
             {
                 handledGeneration = Volatile.Read(ref _requestedGeneration);
-                _refresh();
+                try
+                {
+                    _refresh();
+                }
+                catch (Exception ex) when (NonFatalExceptionFilter.IsNonFatal(ex))
+                {
+                    _reportFailure(ex);
+                }
             }
             while (handledGeneration != Volatile.Read(ref _requestedGeneration));
         }
@@ -49,4 +61,8 @@ internal sealed class CoalescedRefreshDispatcher
 
     private static void QueueOnThreadPool(Action action) =>
         ThreadPool.QueueUserWorkItem(static state => ((Action)state!).Invoke(), action);
+
+    private static void ReportFailure(Exception exception) =>
+        System.Diagnostics.Debug.WriteLine(
+            $"[Audio] Display/power refresh failed: {exception.Message}");
 }

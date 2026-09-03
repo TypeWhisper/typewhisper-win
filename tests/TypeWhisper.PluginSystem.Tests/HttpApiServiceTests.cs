@@ -110,7 +110,7 @@ public class HttpApiServiceTests : IDisposable
                 handlerStarted.Set();
                 releaseHandler.Wait(TimeSpan.FromSeconds(5));
                 return Task.CompletedTask;
-            }),
+            }, CancellationToken.None),
             CancellationToken.None,
             TaskCreationOptions.DenyChildAttach,
             TaskScheduler.Default);
@@ -128,6 +128,42 @@ public class HttpApiServiceTests : IDisposable
         {
             releaseHandler.Set();
         }
+    }
+
+    [Fact]
+    public async Task RequestDispatch_DoesNotStartQueuedWorkAfterShutdown()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var requestStarted = false;
+
+        var requestTask = HttpApiService.DispatchRequestAsync(() =>
+        {
+            requestStarted = true;
+            return Task.CompletedTask;
+        }, cts.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => requestTask);
+        Assert.False(requestStarted);
+    }
+
+    [Fact]
+    public async Task DictationStart_DoesNotMutateStateAfterRequestCancellation()
+    {
+        var service = CreateService();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.HandleRequestAsync(new HttpApiRequest(
+                "POST",
+                "/v1/dictation/start",
+                new NameValueCollection(),
+                new Dictionary<string, string>(),
+                []), cts.Token));
+
+        Assert.Empty(_dictation.StartWorkflowIds);
+        Assert.False(_dictation.IsRecording);
     }
 
     [Fact]
