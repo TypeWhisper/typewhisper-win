@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
@@ -572,7 +573,15 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         if (string.IsNullOrEmpty(tail))
             return transcript;
 
-        if (char.IsPunctuation(tail[0]))
+        var firstCharacter = tail[0];
+        var punctuationCategory = char.GetUnicodeCategory(firstCharacter);
+        var isOpeningPunctuation = punctuationCategory is UnicodeCategory.OpenPunctuation
+            or UnicodeCategory.InitialQuotePunctuation
+            || ((firstCharacter is '"' or '\'')
+                && tail.Length > 1
+                && !char.IsWhiteSpace(tail[1]));
+
+        if (char.IsPunctuation(firstCharacter) && !isOpeningPunctuation)
         {
             var transcriptEnd = transcript.Length;
             while (transcriptEnd > 0 && char.IsPunctuation(transcript[transcriptEnd - 1]))

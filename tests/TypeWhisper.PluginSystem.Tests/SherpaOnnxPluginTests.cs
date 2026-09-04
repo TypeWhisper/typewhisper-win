@@ -74,6 +74,24 @@ public class SherpaOnnxPluginTests
         Assert.Equal("The quick brown fox jumps over the lazy dog, then rests.", merged);
     }
 
+    [Theory]
+    [InlineData(
+        "world again (continued).",
+        "Hello there world again. (continued).")]
+    [InlineData(
+        "world again \"continued.\"",
+        "Hello there world again. \"continued.\"")]
+    public void MergeChunkTranscripts_SeparatesOpeningPunctuation(
+        string nextChunk,
+        string expected)
+    {
+        var merged = SherpaOnnxPlugin.MergeChunkTranscripts(
+            "Hello there world again.",
+            nextChunk);
+
+        Assert.Equal(expected, merged);
+    }
+
     [Fact]
     public void MergeChunkTranscripts_AppendsChunkWhenNoOverlapIsRecognized()
     {
