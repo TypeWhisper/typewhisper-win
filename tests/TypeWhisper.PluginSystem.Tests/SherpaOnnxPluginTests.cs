@@ -29,8 +29,59 @@ public class SherpaOnnxPluginTests
         var sut = new SherpaOnnxPlugin();
 
         Assert.NotNull(manifest);
-        Assert.Equal("1.0.5", manifest.Version);
+        Assert.Equal("1.0.6", manifest.Version);
         Assert.Equal(manifest.Version, sut.PluginVersion);
+    }
+
+    [Fact]
+    public void CreateParakeetChunks_ShortAudioUsesOneUnchangedChunk()
+    {
+        var sampleCount = (SherpaOnnxPlugin.ParakeetMaximumChunkSeconds - 1)
+            * SherpaOnnxPlugin.SampleRate;
+
+        var chunks = SherpaOnnxPlugin.CreateParakeetChunks(sampleCount);
+
+        Assert.Equal([(0, sampleCount)], chunks);
+    }
+
+    [Fact]
+    public void CreateParakeetChunks_LongAudioStaysWithinEncoderLimitAndCoversInput()
+    {
+        var sampleCount = 8 * 60 * SherpaOnnxPlugin.SampleRate;
+        var maximumChunkSamples = SherpaOnnxPlugin.ParakeetMaximumChunkSeconds
+            * SherpaOnnxPlugin.SampleRate;
+        var overlapSamples = SherpaOnnxPlugin.ParakeetChunkOverlapSeconds
+            * SherpaOnnxPlugin.SampleRate;
+
+        var chunks = SherpaOnnxPlugin.CreateParakeetChunks(sampleCount);
+
+        Assert.Equal(2, chunks.Count);
+        Assert.All(chunks, chunk => Assert.InRange(chunk.Count, 1, maximumChunkSamples));
+        Assert.Equal(0, chunks[0].Offset);
+        Assert.Equal(sampleCount, chunks[^1].Offset + chunks[^1].Count);
+        Assert.Equal(
+            overlapSamples,
+            chunks[0].Offset + chunks[0].Count - chunks[1].Offset);
+    }
+
+    [Fact]
+    public void MergeChunkTranscripts_RemovesNormalizedWordOverlap()
+    {
+        var merged = SherpaOnnxPlugin.MergeChunkTranscripts(
+            "The quick brown fox jumps over the lazy dog.",
+            "OVER the lazy dog, then rests.");
+
+        Assert.Equal("The quick brown fox jumps over the lazy dog, then rests.", merged);
+    }
+
+    [Fact]
+    public void MergeChunkTranscripts_AppendsChunkWhenNoOverlapIsRecognized()
+    {
+        var merged = SherpaOnnxPlugin.MergeChunkTranscripts(
+            "First section.",
+            "Second section.");
+
+        Assert.Equal("First section. Second section.", merged);
     }
 
     [Fact]
