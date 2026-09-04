@@ -13,16 +13,16 @@ internal static class OpenAiTranscriptionClient
         string baseUrl,
         string apiKey,
         string model,
-        byte[] wavAudio,
+        OpenAiTranscriptionUpload upload,
         IReadOnlyList<string> languageHints,
         string? responseFormat,
         string? prompt,
         CancellationToken ct)
     {
         using var content = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(wavAudio);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        content.Add(fileContent, "file", "audio.wav");
+        var fileContent = new ByteArrayContent(upload.Data);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(upload.ContentType);
+        content.Add(fileContent, "file", upload.FileName);
         content.Add(new StringContent(model), "model");
         if (!string.IsNullOrWhiteSpace(responseFormat))
             content.Add(new StringContent(responseFormat), "response_format");
