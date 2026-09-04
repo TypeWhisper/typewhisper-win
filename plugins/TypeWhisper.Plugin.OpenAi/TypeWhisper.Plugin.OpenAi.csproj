@@ -6,6 +6,7 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.OpenAi</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
@@ -14,6 +15,7 @@
     <Compile Remove="Tests\**\*.cs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
@@ -35,8 +37,11 @@
     <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
     <ItemGroup>
       <_LocalizationFiles Include="$(ProjectDir)Localization\*.json" />
+      <_DependencyFiles Include="$(TargetDir)*.dll"
+                        Exclude="$(TargetPath);$(TargetDir)TypeWhisper.PluginSDK.dll" />
     </ItemGroup>
     <MakeDir Directories="$(PluginOutputDir)Localization\" />
     <Copy SourceFiles="@(_LocalizationFiles)" DestinationFolder="$(PluginOutputDir)Localization\" />
+    <Copy SourceFiles="@(_DependencyFiles)" DestinationFolder="$(PluginOutputDir)" />
   </Target>
 </Project>

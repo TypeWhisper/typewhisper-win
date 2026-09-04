@@ -2,8 +2,11 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Controls;
+using NAudio.MediaFoundation;
+using NAudio.Wave;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -17,7 +20,8 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
 {
     private const string BaseUrl = "https://api.openai.com";
     private const string ChatGptModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
-    private const string PluginVersionValue = "1.1.2";
+    private const string PluginVersionValue = "1.1.3";
+    private const int TranscriptionUploadBitRate = 48_000;
     private const string ApiKeySecretName = "api-key";
     private const string SelectedModelSettingName = "selectedModel";
     private const string SelectedVoiceSettingName = "selectedVoice";
@@ -46,6 +50,7 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _oauthRefreshLock = new(1, 1);
     private readonly Func<byte[], ITtsPlaybackSession> _ttsPlaybackFactory;
+    private readonly Func<byte[], OpenAiTranscriptionUpload> _compressedUploadFactory;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
@@ -132,10 +137,14 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
     {
     }
 
-    internal OpenAiPlugin(HttpClient httpClient, Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null)
+    internal OpenAiPlugin(
+        HttpClient httpClient,
+        Func<byte[], ITtsPlaybackSession>? ttsPlaybackFactory = null,
+        Func<byte[], OpenAiTranscriptionUpload>? compressedUploadFactory = null)
     {
         _httpClient = httpClient;
         _ttsPlaybackFactory = ttsPlaybackFactory ?? (pcm => new OpenAiPcmTtsPlaybackSession(pcm, OpenAiTtsConfiguration.SampleRate));
+        _compressedUploadFactory = compressedUploadFactory ?? CreateCompressedUpload;
     }
 
     // ITypeWhisperPlugin
@@ -308,31 +317,141 @@ public sealed class OpenAiPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugi
                 ct);
         }
 
-        if (entry.LanguageFormat == TranscriptionLanguageFormat.Plural)
+        var preferredUpload = await Task.Run(() => CreatePreferredUpload(wavAudio, ct), ct);
+
+        async Task<PluginTranscriptionResult> TranscribeUploadAsync(OpenAiTranscriptionUpload upload)
         {
-            return await OpenAiTranscriptionClient.TranscribeAsync(
+            if (entry.LanguageFormat == TranscriptionLanguageFormat.Plural)
+            {
+                return await OpenAiTranscriptionClient.TranscribeAsync(
+                    _httpClient,
+                    BaseUrl,
+                    _apiKey!,
+                    entry.ApiModelName,
+                    upload,
+                    normalizedLanguageHints,
+                    entry.ResponseFormat,
+                    prompt,
+                    ct);
+            }
+
+            return await OpenAiTranscriptionHelper.TranscribeAsync(
                 _httpClient,
                 BaseUrl,
                 _apiKey!,
                 entry.ApiModelName,
-                wavAudio,
-                normalizedLanguageHints,
-                entry.ResponseFormat,
-                prompt,
-                ct);
+                upload,
+                normalizedLanguageHints.FirstOrDefault(),
+                translate,
+                entry.ResponseFormat ?? "json",
+                ct,
+                prompt);
         }
 
-        return await OpenAiTranscriptionHelper.TranscribeAsync(
-            _httpClient,
-            BaseUrl,
-            _apiKey!,
-            entry.ApiModelName,
-            wavAudio,
-            normalizedLanguageHints.FirstOrDefault(),
-            translate,
-            entry.ResponseFormat ?? "json",
-            ct,
-            prompt);
+        try
+        {
+            return await TranscribeUploadAsync(preferredUpload);
+        }
+        catch (PluginRequestException ex) when (
+            IsM4aUpload(preferredUpload)
+            && ShouldRetryWithWav(ex))
+        {
+            ct.ThrowIfCancellationRequested();
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"OpenAI rejected the M4A upload; retrying with WAV: {ex.Message}");
+            return await TranscribeUploadAsync(CreateWavUpload(wavAudio));
+        }
+    }
+
+    private OpenAiTranscriptionUpload CreatePreferredUpload(byte[] wavAudio, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        try
+        {
+            return _compressedUploadFactory(wavAudio);
+        }
+        catch (Exception ex) when (IsExpectedCompressionFailure(ex))
+        {
+            _host?.Log(
+                PluginLogLevel.Warning,
+                $"OpenAI M4A encoding failed; falling back to WAV: {ex.Message}");
+            return CreateWavUpload(wavAudio);
+        }
+    }
+
+    private static bool IsExpectedCompressionFailure(Exception ex) =>
+        ex is InvalidDataException
+        or FormatException
+        or IOException
+        or InvalidOperationException
+        or COMException
+        or NotSupportedException;
+
+    internal static OpenAiTranscriptionUpload CreateCompressedUpload(byte[] wavAudio)
+    {
+        ArgumentNullException.ThrowIfNull(wavAudio);
+        if (wavAudio.Length == 0)
+            throw new InvalidOperationException("No WAV audio bytes were provided.");
+
+        using var input = new MemoryStream(wavAudio, writable: false);
+        using var reader = new WaveFileReader(input);
+        using var output = new MemoryStream();
+        MediaFoundationEncoder.EncodeToAac(reader, output, TranscriptionUploadBitRate);
+
+        var bytes = output.ToArray();
+        if (bytes.Length == 0)
+            throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
+
+        return new OpenAiTranscriptionUpload(bytes, "audio.m4a", "audio/mp4");
+    }
+
+    private static OpenAiTranscriptionUpload CreateWavUpload(byte[] wavAudio) =>
+        new(wavAudio, "audio.wav", "audio/wav");
+
+    private static bool IsM4aUpload(OpenAiTranscriptionUpload upload) =>
+        upload.FileName.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool ShouldRetryWithWav(PluginRequestException exception)
+    {
+        if (exception.HttpStatusCode == 415)
+            return true;
+
+        var message = exception.Message;
+        if (exception.HttpStatusCode is 400 or 422)
+            return IndicatesUnsupportedAudioUpload(message);
+
+        return exception.HttpStatusCode == 500 && IndicatesMediaProbeFailure(message);
+    }
+
+    private static bool IndicatesUnsupportedAudioUpload(string message)
+    {
+        string[] rejectionTerms =
+        [
+            "unsupported", "not supported", "does not support", "invalid", "unrecognized",
+            "unknown", "could not process", "failed to process", "corrupt"
+        ];
+        string[] mediaTerms =
+        [
+            "format", "media", "mime", "content-type", "content type", "codec", "container",
+            "file type", "audio", "m4a", "mp4", "aac", "wav"
+        ];
+
+        return rejectionTerms.Any(term => message.Contains(term, StringComparison.OrdinalIgnoreCase))
+            && mediaTerms.Any(term => message.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IndicatesMediaProbeFailure(string message)
+    {
+        string[] probeFailures =
+        [
+            "ffprobe failed", "ffprobe error", "ffprobe returned", "ffprobe exited",
+            "ffmpeg failed", "ffmpeg error", "ffmpeg returned", "ffmpeg exited",
+            "moov atom not found", "invalid data found when processing input"
+        ];
+
+        return probeFailures.Any(term => message.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
