@@ -24,27 +24,34 @@ internal sealed class LocalDictationSession : IDisposable
     internal bool IsReady => _recognizer is not null;
     internal float CurrentLevel => _audio.CurrentRmsLevel;
     internal event Action? Changed;
-    private MicrophonePriorityItem? _microphone;
+    private List<MicrophonePriorityItem> _microphones = [];
     private static readonly string MicrophonePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "microphone.json");
-    internal string SelectedMicrophoneId => _microphone?.Id ?? "default";
-    internal string SelectedMicrophoneName => _microphone?.Name ?? "System default";
+    internal IReadOnlyList<MicrophonePriorityItem> MicrophonePriority => _microphones.AsReadOnly();
+    internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
+    internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? "System default";
     internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
 
     internal string? SelectMicrophone(string id)
+    {
+        var device = GetMicrophones().FirstOrDefault(item => item.Id == id);
+        if (id != "default" && device is null) return "This microphone is no longer available. Reopen Audio to refresh.";
+        return SetMicrophonePriority(device is null ? [] :
+            new[] { new MicrophonePriorityItem(device.Id, device.Name) }.Concat(_microphones.Where(item => item.Id != id)).ToArray());
+    }
+
+    internal string? SetMicrophonePriority(IReadOnlyList<MicrophonePriorityItem> devices)
     {
         if (!_gate.Wait(0)) return "Please wait until dictation is ready.";
         try
         {
             if (_audio.IsRecording) return "Finish the current recording before changing microphones.";
-            var device = GetMicrophones().FirstOrDefault(item => item.Id == id);
-            if (id != "default" && device is null) return "This microphone is no longer available. Reopen Audio to refresh.";
-            var selected = device is null ? null : new MicrophonePriorityItem(device.Id, device.Name);
+            var selected = devices.DistinctBy(item => item.Id).ToList();
             Directory.CreateDirectory(Path.GetDirectoryName(MicrophonePath)!);
             var pending = MicrophonePath + ".tmp";
             File.WriteAllText(pending, System.Text.Json.JsonSerializer.Serialize(selected));
             File.Move(pending, MicrophonePath, true);
-            _microphone = selected;
-            _audio.SetMicrophonePriorityList(selected is null ? [] : [selected]);
+            _microphones = selected;
+            _audio.SetMicrophonePriorityList(selected);
             return null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not apply microphone: " + ex.Message; }
@@ -64,8 +71,13 @@ internal sealed class LocalDictationSession : IDisposable
         {
             if (File.Exists(MicrophonePath))
             {
-                _microphone = System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(File.ReadAllText(MicrophonePath));
-                _audio.SetMicrophonePriorityList(_microphone is null ? [] : [_microphone]);
+                var json = File.ReadAllText(MicrophonePath);
+                using var document = System.Text.Json.JsonDocument.Parse(json);
+                // Preserve the previous single-device preference on upgrade.
+                _microphones = document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? System.Text.Json.JsonSerializer.Deserialize<List<MicrophonePriorityItem>>(json) ?? []
+                    : System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(json) is { } previous ? [previous] : [];
+                _audio.SetMicrophonePriorityList(_microphones);
             }
             var modelDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TypeWhisper-DevUserData", "PluginData", "com.typewhisper.sherpa-onnx", "Models", "parakeet-tdt-0.6b");

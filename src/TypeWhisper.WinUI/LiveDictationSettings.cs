@@ -11,22 +11,18 @@ internal sealed class LiveDictationSettings(LocalDictationSession session)
         {
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SelectedMicrophoneDevice"));
             row.Children.Clear();
-            row.Children.Add(new TextBlock { Text = "Microphone", FontSize = 14 });
-            var picker = new PrototypeChoicePicker();
-            picker.Configure("Microphone", "microphone", "Dictation microphone");
-            var choices = new List<PrototypeChoice> { new("default", "System default", "Follow the Windows default input device.") };
-            choices.AddRange(session.GetMicrophones().Select(device => new PrototypeChoice(device.Id, device.Name, "Available input device")));
-            if (!choices.Any(item => item.Id == session.SelectedMicrophoneId))
-                choices.Add(new(session.SelectedMicrophoneId, session.SelectedMicrophoneName, "Disconnected; the capture service uses its device fallback."));
-            var hint = new TextBlock { Text = "Applies to real dictation and is saved for the next launch. Other audio controls remain previews.", FontSize = 12, TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap };
-            picker.SetOptions(choices, session.SelectedMicrophoneId);
-            picker.SelectionChanged += id =>
-            {
-                var error = session.SelectMicrophone(id);
-                hint.Text = error ?? "Microphone saved. The next dictation uses this preference.";
-                if (error is not null) picker.SetOptions(choices, session.SelectedMicrophoneId);
-            };
-            row.Children.Add(picker); row.Children.Add(hint); pickers.Add(picker);
+            var priorityRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "MicrophonePriorityList"));
+            var priorityIndex = content.Children.IndexOf(priorityRow);
+            // RenderFields emits a separator after each field. Remove the old
+            // fallback field's separator together with the replaced field.
+            if (priorityIndex + 1 < content.Children.Count && content.Children[priorityIndex + 1] is Border { Height: 1 })
+                content.Children.RemoveAt(priorityIndex + 1);
+            content.Children.Remove(priorityRow);
+            var priorities = new MicrophonePriorityEditor(session);
+            row.Children.Add(priorities);
+            pickers.Add(priorities.AddPicker);
+            foreach (var text in content.Children.OfType<TextBlock>().Where(text => text.Text.StartsWith("Settings preview")))
+                text.Text = "Microphone selection and priority are saved and used by dictation. Other controls are previews.";
         }
         if (category == "Dictation")
         {

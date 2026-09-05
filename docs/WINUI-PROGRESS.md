@@ -17,6 +17,8 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [x] Add foreground activation and repeated-hotkey visibility toggling; owner confirmed toggling.
 - [ ] Complete keyboard, screen-reader, submenu and focus-restoration walkthroughs.
 - [ ] Verify actual 200% DPI and mixed-DPI multi-monitor transitions throughout the application.
+- [ ] Complete WinUI localization: reuse the existing Windows app's translations and replace hard-coded UI text, tooltips, accessibility labels, errors and status messages with language resources.
+- [ ] Connect and persist UI language selection with system-language fallback; verify language switching, locale-aware dates/numbers, missing-translation fallback and layouts with longer translations across all supported languages.
 
 ## Service integration checklist
 

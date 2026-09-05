@@ -37,6 +37,7 @@ public sealed partial class PrototypeSettingsWindow : Window
         _values = values;
         _preferences = preferences;
         InitializeComponent();
+        CatalogContent.LayoutUpdated += (_, _) => PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
         PrototypeToggleSwitch.Configure(LiveTextToggle);
         PrototypeToggleSwitch.Configure(DetailsToggle);
         OverlayEditor.Changed += Publish;
@@ -274,6 +275,9 @@ public sealed partial class PrototypeSettingsWindow : Window
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
+            PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
+            if (category == "Audio" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Microphone preferences are live and saved · other audio controls are previews";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

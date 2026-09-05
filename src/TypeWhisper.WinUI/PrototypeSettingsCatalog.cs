@@ -338,8 +338,34 @@ internal static partial class PrototypeSettingsCatalog
             }
             if (field.Hint.Length > 0 && field.Choices is not ["Off", "On"]) stack.Children.Add(Label(field.Hint, 12, true));
             target.Children.Add(stack);
-            if (field.Category != "Shortcuts") target.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
+            if (field.Category != "Shortcuts") target.Children.Add(new Border { Tag = "SettingSeparator", Height = 1, Background = (Brush)Application.Current.Resources["HairlineBrush"] });
         }
+    }
+
+    // Follow the visible content, including expanded/collapsed dependent fields.
+    // Keeping the separator in the tree lets it reappear when another row is shown.
+    internal static void UpdateTrailingSeparators(StackPanel root)
+    {
+        bool Visit(StackPanel panel, bool followingContent)
+        {
+            var hasContent = false;
+            for (var index = panel.Children.Count - 1; index >= 0; index--)
+            {
+                var child = panel.Children[index];
+                if (child is Border { Tag: "SettingSeparator" } separator)
+                {
+                    var visibility = followingContent ? Visibility.Visible : Visibility.Collapsed;
+                    if (separator.Visibility != visibility) separator.Visibility = visibility;
+                    continue;
+                }
+                if (child.Visibility != Visibility.Visible) continue;
+                var contributes = child is StackPanel nested ? Visit(nested, followingContent) : true;
+                followingContent |= contributes;
+                hasContent |= contributes;
+            }
+            return hasContent;
+        }
+        Visit(root, false);
     }
 
     // Variant 1 is the selected shared pattern; icons identify the setting, not its current value.
