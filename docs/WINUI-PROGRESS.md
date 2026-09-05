@@ -4,6 +4,14 @@
 
 Preserve the approved Windows UI prototype and progressively connect it to the existing application services. This is a draft checkpoint, **not ready to merge or ship**. The WPF host remains available. UI completion does not mean production functionality is connected.
 
+## Version 1.1 branch workflow
+
+- `seofood/release-1.1` is the shared integration branch for the WinUI migration and other version 1.1 features. It is not a published release.
+- Start independent `seofood/<feature>` branches/worktrees from this integration branch and target their pull requests at `seofood/release-1.1`.
+- Keep current-version fixes on separate branches targeting `main`. Bring relevant fixes into 1.1 through reviewed integration changes; do not mix unfinished 1.1 work into maintenance releases.
+- The release-wide draft targets `main` and remains unmerged until migration/release validation is complete. The prior migration draft #446 and `seofood/windows-winui-migration` remain historical references; new work goes through the 1.1 branch.
+- This branch setup does not change the repository default branch, application version numbers, release tags or deployment settings.
+
 ## UI and interaction checklist
 
 - [x] Preserve the approved prototype and its isolated model/check projects.
