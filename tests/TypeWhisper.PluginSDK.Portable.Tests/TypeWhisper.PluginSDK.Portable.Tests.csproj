@@ -14,5 +14,6 @@
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
   </ItemGroup>
 </Project>

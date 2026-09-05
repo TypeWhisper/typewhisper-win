@@ -24,6 +24,8 @@
     <PackageReference Include="WinUIEx" Version="2.9.3" />
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;TargetFramework" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -47,5 +49,11 @@
       <WinUIResource Include="$(OutputPath)**/*.pri;$(OutputPath)**/*.xbf" />
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishVocabularyPlugin" AfterTargets="Publish">
+    <ItemGroup>
+      <VocabularyPluginFiles Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(VocabularyPluginFiles)" DestinationFiles="@(VocabularyPluginFiles->'$(PublishDir)Plugins/com.typewhisper.parakeet-ctc/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

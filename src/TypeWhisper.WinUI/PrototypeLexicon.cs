@@ -10,7 +10,7 @@ internal enum PrototypeLexiconKind { Word, Correction, Snippet }
 
 // Dictionary entries use isolated development storage; snippets remain session-only.
 internal sealed record PrototypeLexiconEntry(Guid Id, PrototypeLexiconKind Kind, string Key,
-    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false);
+    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null);
 
 internal sealed class PrototypeLexicon
 {
@@ -45,7 +45,7 @@ internal sealed class PrototypeLexicon
         _entries.AddRange(_dictionary.Entries.Select(e => new PrototypeLexiconEntry(UiId(e.Id),
             e.EntryType == DictionaryEntryType.Term ? PrototypeLexiconKind.Word : PrototypeLexiconKind.Correction,
             e.Original, e.Replacement ?? "", e.Id.StartsWith("pack:", StringComparison.Ordinal) ? "Term pack" : "",
-            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal))));
+            e.CaseSensitive, e.IsEnabled, e.Id.StartsWith("pack:", StringComparison.Ordinal), e.CtcMinSimilarity)));
     }
 
     internal bool PackEnabled(string id) => _dictionary?.Entries.Any(e => e.Id.StartsWith($"pack:{id}:", StringComparison.Ordinal)) == true;
@@ -74,6 +74,8 @@ internal sealed class PrototypeLexicon
     {
         if (_loadError is not null && draft.Kind != PrototypeLexiconKind.Snippet) return LastError = _loadError;
         if (draft.FromPack) return "Manage this term through its term pack.";
+        if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
+            return "Use a CTC similarity between 40% and 95%.";
         var key = draft.Key.Trim();
         if (key.Length == 0) return draft.Kind == PrototypeLexiconKind.Snippet ? "Enter a trigger phrase." : "Enter a word or phrase.";
         if (key.Length > 160 || key.Contains('\n') || key.Contains('\r')) return "Use a single line of up to 160 characters.";
@@ -89,7 +91,7 @@ internal sealed class PrototypeLexicon
         {
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
             var entry = (existing ?? new DictionaryEntry { Id = draft.Id.ToString(), EntryType = draft.Kind == PrototypeLexiconKind.Word ? DictionaryEntryType.Term : DictionaryEntryType.Correction, Original = key })
-                with { Original = key, Replacement = draft.Kind == PrototypeLexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, UpdatedAt = DateTime.UtcNow };
+                with { Original = key, Replacement = draft.Kind == PrototypeLexiconKind.Word ? null : draft.Value, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, CtcMinSimilarity = draft.CtcMinSimilarity, UpdatedAt = DateTime.UtcNow };
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = "Could not save dictionary entry.";
             RefreshDictionary(); LastError = null; return null;
         }

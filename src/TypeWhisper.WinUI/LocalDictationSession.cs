@@ -3,6 +3,7 @@ using SherpaOnnx;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
+using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.WinUI;
 
@@ -15,6 +16,8 @@ internal sealed class LocalDictationSession : IDisposable
     private readonly AudioDuckingService _ducking = new();
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
+    internal LocalCtcVocabulary CtcVocabulary { get; } = new();
+    private bool _ctcAtStart;
     private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
     private bool _boostVocabulary;
     internal bool LivePreviewEnabled { get; set; } = true;
@@ -160,6 +163,7 @@ internal sealed class LocalDictationSession : IDisposable
             });
             // Prepare the device without starting capture, so key-down need not initialize it.
             var prepared = _audio.WarmUp();
+            await CtcVocabulary.InitializeAsync();
             SetStatus(prepared ? $"Parakeet ready · {Shortcut} to dictate" : "Parakeet ready · microphone preparation failed; check the device");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -212,6 +216,7 @@ internal sealed class LocalDictationSession : IDisposable
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
+                _ctcAtStart = CtcVocabulary.Enabled;
                 LivePreviewText = "";
                 if (LivePreviewEnabled)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
@@ -250,15 +255,26 @@ internal sealed class LocalDictationSession : IDisposable
             await _livePreview.StopAsync();
             if (samples is null || samples.Length < 1600) { SetStatus("No usable audio captured. Try again."); return; }
             SetStatus("Transcribing with Parakeet…", DictationPhase.Processing);
-            var rawText = await DecodeAsync(samples);
+            var decoded = await DecodeFinalAsync(samples);
+            var rawText = decoded.Text;
             if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
             var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
-            var boostVocabulary = _boostVocabulary;
-            var text = dictionary is null ? rawText : await Task.Run(() => dictionary.Apply(rawText, boostVocabulary));
+            var refinedText = rawText;
+            var recordingId = Guid.NewGuid();
+            if (_ctcAtStart && dictionary is not null && CtcVocabulary.Enabled)
+            {
+                SetStatus("Checking vocabulary with CTC…", DictationPhase.Processing);
+                var refined = await CtcVocabulary.RefineAsync(recordingId, rawText, samples, decoded.Timings, dictionary.EnabledCtcEntries);
+                refinedText = refined.Text;
+                if (refined.Error is not null) System.Diagnostics.Debug.WriteLine(refined.Error);
+            }
+            else CtcVocabulary.Trace($"{recordingId} host-skipped enabledAtStart={_ctcAtStart} enabledNow={CtcVocabulary.Enabled} dictionaryLoaded={dictionary is not null}");
+            var boostVocabulary = _boostVocabulary && !_ctcAtStart;
+            var text = dictionary is null ? refinedText : await Task.Run(() => dictionary.Apply(refinedText, boostVocabulary));
             if (_disposed) return;
             var record = new TranscriptionRecord
             {
-                Id = Guid.NewGuid().ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
+                Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
                 EngineUsed = "sherpa-onnx", ModelUsed = "parakeet-tdt-0.6b", TranscriptionTaskUsed = "transcribe"
             };
@@ -302,12 +318,17 @@ internal sealed class LocalDictationSession : IDisposable
     }
 
     internal string? LastUnsavedText { get; private set; }
-    private Task<string> DecodeAsync(float[] samples) => Task.Run(() =>
+    private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
+    private Task<(string Text, VocabularyTokenTiming[] Timings)> DecodeFinalAsync(float[] samples, bool includeTimings = true) => Task.Run(() =>
     {
         using var stream = _recognizer!.CreateStream();
         stream.AcceptWaveform(16000, samples);
         _recognizer.Decode(stream);
-        return stream.Result.Text.Trim();
+        var result = stream.Result;
+        var timings = includeTimings && result.Tokens is not null && result.Timestamps is not null
+            ? TypeWhisper.PluginHost.VocabularyTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, samples.Length / 16000d)
+            : [];
+        return (result.Text.Trim(), timings);
     });
     private void StopSilenceMonitoring()
     {
@@ -327,6 +348,7 @@ internal sealed class LocalDictationSession : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _ = CtcVocabulary.DisposeAsync();
         _livePreview.Dispose();
         StopSilenceMonitoring();
         _effects.End();

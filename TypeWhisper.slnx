@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/plugins/">
+    <Project Path="plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
     <Project Path="src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />

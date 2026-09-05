@@ -12,6 +12,7 @@ internal sealed class DictationDictionarySnapshot
     private readonly DictionaryEntry[] _entries;
     private readonly TypeWhisper.Core.Interfaces.IVocabularyBoostingService _boosting;
     internal string? Error { get; }
+    internal IReadOnlyList<DictionaryEntry> EnabledCtcEntries => _entries.Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Term).ToArray();
     private DictationDictionarySnapshot(DictionaryEntry[] entries, string? error = null)
     {
         _entries = entries; Error = error;

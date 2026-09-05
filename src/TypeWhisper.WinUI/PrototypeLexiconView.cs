@@ -173,8 +173,47 @@ public sealed class PrototypeLexiconView : UserControl
             _body.Children.Add(Text("Placeholders such as {date} are kept as text here. No clipboard content is accessed.", 11, true));
         }
         AddToggle("Enabled", "Keep this entry available without removing it.", _draft.Enabled, value => _draft = _draft! with { Enabled = value });
+        if (_kind == PrototypeLexiconKind.Word) AddBoostingOptions();
         if (_kind != PrototypeLexiconKind.Word)
             AddToggle("Match capitalization", "Only match the trigger with this exact capitalization.", _draft.CaseSensitive, value => _draft = _draft! with { CaseSensitive = value });
+    }
+
+    private void AddBoostingOptions()
+    {
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(Text("Boosting", 14));
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var description = Text("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size.", 12, true);
+        var slider = new Slider { Minimum = 40, Maximum = 95, StepFrequency = 1, Value = (_draft!.CtcMinSimilarity ?? .65f) * 100 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, "Minimum CTC similarity in percent");
+        var valueLabel = Text("", 12, true);
+        var advanced = new StackPanel { Spacing = 4 }; advanced.Children.Add(slider); advanced.Children.Add(valueLabel);
+        var choices = new (string Name, float? Value)[] { ("Auto", null), ("Strong", .5f), ("Balanced", .65f), ("Precise", .8f), ("Advanced", null) };
+        var selected = _draft.CtcMinSimilarity is null ? 0 : Array.FindIndex(choices, 1, 3, c => Math.Abs(c.Value!.Value - _draft.CtcMinSimilarity.Value) < .001f);
+        if (selected < 0) selected = 4;
+        void Refresh()
+        {
+            options.Children.Clear();
+            for (var index = 0; index < choices.Length; index++)
+            {
+                var choice = index;
+                options.Children.Add(Button(choices[index].Name, () =>
+                {
+                    selected = choice;
+                    _draft = _draft! with { CtcMinSimilarity = choice == 4 ? (float)(slider.Value / 100) : choices[choice].Value };
+                    Refresh();
+                }, primary: index == selected));
+            }
+            advanced.Visibility = selected == 4 ? Visibility.Visible : Visibility.Collapsed;
+            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+        }
+        slider.ValueChanged += (_, _) =>
+        {
+            if (selected == 4) _draft = _draft! with { CtcMinSimilarity = (float)(slider.Value / 100) };
+            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+        };
+        Refresh(); panel.Children.Add(options); panel.Children.Add(advanced); panel.Children.Add(description);
+        _body.Children.Add(Surface(panel, 14));
     }
 
     private void AddField(string label, string value, Action<string> update, int maxLength, bool multiline = false)
