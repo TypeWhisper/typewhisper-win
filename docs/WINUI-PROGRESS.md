@@ -36,6 +36,7 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [x] Use capture RMS for the recording overlay and expose real recording/model status in the tray.
 - [x] Replace character-by-character insertion with one Ctrl+V gesture; owner confirmed whole-text insertion.
 - [x] Reuse native clipboard snapshots with strict WinUI preservation, sequence-guarded restore and no automatic paste retry.
+- [x] Reproduce and fix Explorer FileContents blocking dictation insertion; owner confirmed dictation into Notepad with files still copied.
 - [x] Add synthetic PCM and local generated-speech regression tests through the capture service and Parakeet; reproduce loss of the first word with a simulated 300-ms delay.
 - [ ] Validate real microphone/driver latency and native keyboard-hook timing with a physical or virtual input end-to-end.
 - [ ] Validate bitmap/HTML/file clipboard round-trips and slow target applications end-to-end.
@@ -63,6 +64,9 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 
 - WinUI development host built, published and launched through the prescribed dev launcher.
 - Presentation/history/hotkey/paste-coordinator tests: **33 passed**.
+- Clipboard format-policy regression tests: **5 passed**. The exact current clipboard snapshot failed before the fix and passed afterward without changing its sequence number.
+- The FileContents exception requires an already captured nonempty CF_HDROP; unavailable virtual-file-only, bitmap and unknown representations remain protected.
+- Added native clipboard round-trip fixtures; the expanded isolated suite has not run here because private window-station creation is denied. Do not count it as passed. Full slow-target and restored-file-paste coverage remains pending.
 - Isolated audio regression tests: **3 passed**, repeated successfully with the local Parakeet model and Microsoft David Desktop speech synthesis.
 - Immediate audio: `Bananas are yellow. This is a test of immediate recording.` Simulated 300-ms delay: `are yellow. This is a test of immediate recording.` Exactly 4,800 samples are lost in the delayed control.
 - Audio tests use in-memory synthetic speech and a replay input, not a real microphone or clipboard. See `tests/TypeWhisper.Dictation.AudioTests/README.md` for reproduction and prerequisites.

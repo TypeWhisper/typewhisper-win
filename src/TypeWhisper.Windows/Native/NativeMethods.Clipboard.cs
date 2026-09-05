@@ -29,6 +29,9 @@ internal static partial class NativeMethods
     public const uint GMEM_MOVEABLE = 0x0002;
     public const uint GMEM_ZEROINIT = 0x0040;
 
+    [LibraryImport("shell32.dll", EntryPoint = "DragQueryFileW")]
+    public static partial uint DragQueryFileCount(IntPtr drop, uint index, IntPtr buffer, uint count);
+
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool OpenClipboard(IntPtr hWndNewOwner);

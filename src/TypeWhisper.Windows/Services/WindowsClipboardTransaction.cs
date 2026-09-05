@@ -265,6 +265,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         var entries = new List<ClipboardFormatHandle>();
         var unavailableFormats = new List<UnavailableClipboardFormat>();
         string? enterpriseId = null;
+        var hasFileDrop = false;
         try
         {
             uint currentFormat = 0;
@@ -323,12 +324,14 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     nextFormat,
                     duplicateHandle,
                     _handleReleaseObserver));
+                if (nextFormat == NativeMethods.CF_HDROP)
+                    hasFileDrop = NativeMethods.DragQueryFileCount(duplicateHandle, uint.MaxValue, IntPtr.Zero, 0) > 0;
                 currentFormat = nextFormat;
             }
 
             foreach (var unavailableFormat in unavailableFormats)
             {
-                if (CanSkipUnavailableFormat(unavailableFormat.Format))
+                if (CanSkipUnavailableFormat(unavailableFormat.Format, hasFileDrop))
                     continue;
 
                 throw ClipboardError(
@@ -394,11 +397,17 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return length > 0 ? $"{format} ('{name}')" : format.ToString();
     }
 
-    private static bool CanSkipUnavailableFormat(uint unavailableFormat)
+    private static bool CanSkipUnavailableFormat(uint unavailableFormat, bool hasFileDrop)
     {
 #if TYPEWHISPER_WINUI
-        // Advertised but unmaterializable data may be the user's only copy.
-        return false;
+        // Explorer can additionally advertise indexed OLE FileContents, which
+        // GetClipboardData cannot materialize. A captured nonempty CF_HDROP
+        // already preserves the filesystem objects. Never apply this exception
+        // to virtual files (no CF_HDROP), bitmaps, or arbitrary opaque formats.
+        if (!hasFileDrop || unavailableFormat < 0xC000) return false;
+        var name = new StringBuilder(256);
+        return NativeMethods.GetClipboardFormatName(unavailableFormat, name, name.Capacity) > 0
+            && name.ToString() == "FileContents";
 #else
         // Some clipboard owners advertise delayed bitmap formats but fail to render them.
         // Drop those unusable representations instead of blocking dictated text insertion.
