@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_WINUI</DefineConstants><GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/TypeWhisper.Windows/Services/WindowsClipboardTransaction.cs" Link="WindowsClipboardTransaction.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Native/NativeMethods.Clipboard.cs" Link="NativeMethods.Clipboard.cs" />
+  </ItemGroup>
+</Project>
