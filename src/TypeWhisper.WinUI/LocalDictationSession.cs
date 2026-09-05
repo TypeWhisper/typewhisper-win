@@ -24,6 +24,32 @@ internal sealed class LocalDictationSession : IDisposable
     internal bool IsReady => _recognizer is not null;
     internal float CurrentLevel => _audio.CurrentRmsLevel;
     internal event Action? Changed;
+    private MicrophonePriorityItem? _microphone;
+    private static readonly string MicrophonePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "microphone.json");
+    internal string SelectedMicrophoneId => _microphone?.Id ?? "default";
+    internal string SelectedMicrophoneName => _microphone?.Name ?? "System default";
+    internal IReadOnlyList<AudioInputDeviceInfo> GetMicrophones() => _audio.GetAvailableInputDeviceInfos();
+
+    internal string? SelectMicrophone(string id)
+    {
+        if (!_gate.Wait(0)) return "Please wait until dictation is ready.";
+        try
+        {
+            if (_audio.IsRecording) return "Finish the current recording before changing microphones.";
+            var device = GetMicrophones().FirstOrDefault(item => item.Id == id);
+            if (id != "default" && device is null) return "This microphone is no longer available. Reopen Audio to refresh.";
+            var selected = device is null ? null : new MicrophonePriorityItem(device.Id, device.Name);
+            Directory.CreateDirectory(Path.GetDirectoryName(MicrophonePath)!);
+            var pending = MicrophonePath + ".tmp";
+            File.WriteAllText(pending, System.Text.Json.JsonSerializer.Serialize(selected));
+            File.Move(pending, MicrophonePath, true);
+            _microphone = selected;
+            _audio.SetMicrophonePriorityList(selected is null ? [] : [selected]);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return "Could not apply microphone: " + ex.Message; }
+        finally { _gate.Release(); }
+    }
 
     internal LocalDictationSession(IHistoryService history, IntPtr owner)
     {
@@ -36,6 +62,11 @@ internal sealed class LocalDictationSession : IDisposable
         await _gate.WaitAsync();
         try
         {
+            if (File.Exists(MicrophonePath))
+            {
+                _microphone = System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(File.ReadAllText(MicrophonePath));
+                _audio.SetMicrophonePriorityList(_microphone is null ? [] : [_microphone]);
+            }
             var modelDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "TypeWhisper-DevUserData", "PluginData", "com.typewhisper.sherpa-onnx", "Models", "parakeet-tdt-0.6b");
             foreach (var name in new[] { "encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt" })

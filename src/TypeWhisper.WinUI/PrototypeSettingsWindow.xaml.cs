@@ -15,6 +15,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     private PrototypeOverlayPreferences _preferences;
     internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
+    internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
     private bool _updating = true;
     private uint _dpi;
     private bool _positioning;
@@ -272,6 +273,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 return;
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
+            ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

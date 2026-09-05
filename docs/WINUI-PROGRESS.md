@@ -42,6 +42,8 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Validate bitmap/HTML/file clipboard round-trips and slow target applications end-to-end.
 - [ ] Verify populated dictation history, detail/copy behavior and live refresh during daily use.
 - [ ] Connect configurable transcription model/device selection.
+- [x] Connect the Audio microphone picker to real capture device preferences and isolated persistence; reject changes during recording.
+- [ ] Validate microphone switching, unplug/replug fallback and restart persistence with real devices. Model switching and forced-language configuration are not connected; Dictation now shows the actual Parakeet/automatic configuration instead of sample choices.
 - [ ] Connect remaining dictation modes/hotkeys, live transcription, complete cancellation and durable recovery.
 - [ ] Connect recorder audio capture, source toggles, playback and persisted history entries.
 - [ ] Connect general settings persistence, native services and model downloads/activation.

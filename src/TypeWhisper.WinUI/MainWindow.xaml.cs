@@ -809,6 +809,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
+            _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation).Configure;
             _settingsWindow.HistoryRequested += () =>
             {
                 if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }
