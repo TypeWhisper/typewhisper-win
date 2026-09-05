@@ -123,7 +123,7 @@ public sealed partial class PrototypeChoicePicker : UserControl
                 HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"] };
             if (selected)
             {
-                button.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 19, 40, 58));
+                button.Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 19, 40, 58));
                 _selectedButton = button;
             }
             AutomationProperties.SetName(button, $"{_automationName} option {option.Id}");
@@ -153,12 +153,12 @@ public sealed partial class PrototypeChoicePicker : UserControl
     internal void FocusEntry() => ChoiceButton.Focus(FocusState.Programmatic);
     private void Choices_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Escape) { ClosePopup(); e.Handled = true; }
-        else if (e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+        if (e.Key == global::Windows.System.VirtualKey.Escape) { ClosePopup(); e.Handled = true; }
+        else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             var buttons = Choices.Children.OfType<HandCursorButton>().ToList();
             var index = buttons.FindIndex(button => ReferenceEquals(button, FocusManager.GetFocusedElement(XamlRoot)));
-            if (buttons.Count > 0) buttons[Math.Clamp(index + (e.Key == Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1)].Focus(FocusState.Keyboard);
+            if (buttons.Count > 0) buttons[Math.Clamp(index + (e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1)].Focus(FocusState.Keyboard);
             e.Handled = true;
         }
     }

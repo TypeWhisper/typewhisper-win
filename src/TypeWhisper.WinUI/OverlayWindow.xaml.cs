@@ -8,8 +8,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
-using Windows.Graphics;
-using Windows.UI;
+using global::Windows.Graphics;
+using global::Windows.UI;
 
 namespace TypeWhisper.WinUI;
 
@@ -29,6 +29,7 @@ public sealed partial class OverlayWindow : Window
     private readonly float[] _levels = new float[64];
     private readonly PrototypeAudioLevelSource _audioLevelSource = new();
     private readonly Random _random = new(73);
+    private readonly Func<float>? _externalLevel;
     private TranscriptPreviewWindow? _transcriptWindow;
     private long _lastCompositionTimestamp;
     private double _renderAccumulatorTicks;
@@ -52,8 +53,9 @@ public sealed partial class OverlayWindow : Window
     internal bool IsPaused => _paused;
     internal bool IsPreviewVisible => _previewVisible;
 
-    internal OverlayWindow(bool transcriptPreviewEnabled = true)
+    internal OverlayWindow(bool transcriptPreviewEnabled = true, Func<float>? externalLevel = null)
     {
+        _externalLevel = externalLevel;
         _transcriptPreviewEnabled = transcriptPreviewEnabled;
         InitializeComponent();
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
@@ -114,7 +116,7 @@ public sealed partial class OverlayWindow : Window
         if (_sessionStarted) return;
         _sessionStarted = true;
         _paused = false;
-        _useMicrophone = _audioLevelSource.TryStart();
+        _useMicrophone = _externalLevel is null && _audioLevelSource.TryStart();
         _duration.Restart();
         Array.Clear(_levels);
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
@@ -341,7 +343,8 @@ public sealed partial class OverlayWindow : Window
         var carrier = (Math.Sin(_phase) + 1) * 0.5;
         var phrase = (Math.Sin(_phase * 0.16) + 1) * 0.5;
         var demoRms = Math.Clamp((carrier * 0.56 + _random.NextDouble() * 0.16) * phrase, 0.025, 0.94);
-        var dbfs = _useMicrophone ? _audioLevelSource.LatestDbfs : 20 * Math.Log10(demoRms);
+        var dbfs = _externalLevel is not null ? 20 * Math.Log10(Math.Max(0.000001f, _externalLevel()))
+            : _useMicrophone ? _audioLevelSource.LatestDbfs : 20 * Math.Log10(demoRms);
         var sampleSeconds = (timestamp - _diagnosticSampleStart) / (double)Stopwatch.Frequency;
         if (sampleSeconds >= 1)
         {
@@ -404,7 +407,7 @@ public sealed partial class OverlayWindow : Window
     {
         var visual = ElementCompositionPreview.GetElementVisual(OverlayRoot);
         visual.Scale = Vector3.One;
-        if (!new Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
+        if (!new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
         {
             visual.Opacity = 1;
             return;

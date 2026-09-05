@@ -22,7 +22,7 @@ internal static class PrototypeToggleSwitch
         control.MinHeight = 36;
         control.HorizontalAlignment = HorizontalAlignment.Right;
         control.VerticalAlignment = VerticalAlignment.Center;
-        if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+        if (!new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
         {
             foreach (var state in new[] { "", "PointerOver", "Pressed" })
             {

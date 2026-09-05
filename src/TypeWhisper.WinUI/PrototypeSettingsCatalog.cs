@@ -75,7 +75,7 @@ internal static partial class PrototypeSettingsCatalog
 
         Text("Shortcuts", "MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9"),
         Text("Shortcuts", "QuickLaunchHotkeys", "Quick Launch", "Alt+Space"),
-        Text("Shortcuts", "PushToTalkHotkey", "Push to talk", "Ctrl+Shift"),
+        Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
         Text("Shortcuts", "ToggleOnlyHotkeys", "Toggle recording"),
         Text("Shortcuts", "HoldOnlyHotkeys", "Hold to record"),
         Text("Shortcuts", "RecentTranscriptionsHotkeys", "Recent transcriptions"),
@@ -152,7 +152,7 @@ internal static partial class PrototypeSettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(category, 24);
@@ -213,7 +213,7 @@ internal static partial class PrototypeSettingsCatalog
                     var item = new StackPanel { Tag = field.Key };
                     item.Children.Add(new PrototypeShortcutRecorder(field.Key, field.Label, field.Value, values,
                         () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
-                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), field.Key == "QuickLaunchHotkeys" ? commitLauncherHotkeys : null));
+                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), field.Key switch { "QuickLaunchHotkeys" => commitLauncherHotkeys, "MainDictationHotkeys" => commitDictationHotkeys, _ => null }));
                     rows.Children.Add(item);
                 }
                 section.Children.Add(new Border

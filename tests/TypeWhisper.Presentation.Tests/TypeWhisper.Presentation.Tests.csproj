@@ -14,6 +14,10 @@
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryEntry.cs" Link="PrototypeHistoryEntry.cs" />
   </ItemGroup>
 </Project>

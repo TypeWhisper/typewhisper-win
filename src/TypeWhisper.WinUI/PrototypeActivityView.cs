@@ -209,7 +209,7 @@ public sealed class PrototypeActivityView : UserControl
             button.Unloaded += (_, _) => tooltip.IsOpen = false;
             button.KeyDown += (_, e) =>
             {
-                if (e.Key == Windows.System.VirtualKey.Escape && tooltip.IsOpen)
+                if (e.Key == global::Windows.System.VirtualKey.Escape && tooltip.IsOpen)
                 { tooltip.IsOpen = false; e.Handled = true; }
             };
             Grid.SetColumn(button, bars.Children.Count); bars.Children.Add(button);
@@ -280,14 +280,14 @@ public sealed class PrototypeActivityView : UserControl
                 var index = cells.Count;
                 cell.KeyDown += (_, e) =>
                 {
-                    if (e.Key == Windows.System.VirtualKey.Escape && tooltip.IsOpen)
+                    if (e.Key == global::Windows.System.VirtualKey.Escape && tooltip.IsOpen)
                     { tooltip.IsOpen = false; e.Handled = true; return; }
                     var destination = e.Key switch
                     {
-                        Windows.System.VirtualKey.Left => index % 24 > 0 ? index - 1 : index,
-                        Windows.System.VirtualKey.Right => index % 24 < 23 ? index + 1 : index,
-                        Windows.System.VirtualKey.Up => index >= 24 ? index - 24 : index,
-                        Windows.System.VirtualKey.Down => index < 144 ? index + 24 : index,
+                        global::Windows.System.VirtualKey.Left => index % 24 > 0 ? index - 1 : index,
+                        global::Windows.System.VirtualKey.Right => index % 24 < 23 ? index + 1 : index,
+                        global::Windows.System.VirtualKey.Up => index >= 24 ? index - 24 : index,
+                        global::Windows.System.VirtualKey.Down => index < 144 ? index + 24 : index,
                         _ => -1
                     };
                     if (destination < 0) return;

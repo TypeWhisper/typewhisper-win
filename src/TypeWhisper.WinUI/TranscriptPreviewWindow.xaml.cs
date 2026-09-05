@@ -5,7 +5,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
-using Windows.Graphics;
+using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
 
@@ -155,7 +155,7 @@ public sealed partial class TranscriptPreviewWindow : Window
         if (!_animationClock.IsRunning)
             return;
 
-        var linear = !new Windows.UI.ViewManagement.UISettings().AnimationsEnabled ? 1 : Math.Clamp(
+        var linear = !new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled ? 1 : Math.Clamp(
             _animationClock.Elapsed.TotalMilliseconds / AnimationDurationMilliseconds,
             0,
             1);

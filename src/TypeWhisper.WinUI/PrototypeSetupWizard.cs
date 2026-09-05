@@ -13,6 +13,7 @@ public sealed class PrototypeSetupWizard : UserControl
     private readonly Dictionary<string, string> _values;
     private readonly PrototypeSetupState _state;
     private readonly Action<bool> _exit;
+    private readonly Func<string, string?>? _commitHotkeys;
     private readonly StackPanel _body = new() { Spacing = 18, MaxWidth = 670, Margin = new Thickness(24, 24, 24, 20) };
     private readonly Grid _progress = new() { ColumnSpacing = 6, MaxWidth = 740, Margin = new Thickness(24, 18, 24, 0) };
     private readonly TextBlock _message = Copy("", 12, true);
@@ -22,9 +23,10 @@ public sealed class PrototypeSetupWizard : UserControl
     private readonly DispatcherTimer _demo = new() { Interval = TimeSpan.FromMilliseconds(90) };
     private readonly List<PrototypeChoicePicker> _pickers = [];
 
-    internal PrototypeSetupWizard(Dictionary<string, string> values, Action<bool> exit)
+    internal PrototypeSetupWizard(Dictionary<string, string> values, Action<bool> exit, Func<string, string?>? commitHotkeys = null)
     {
         _values = values; _state = new(values); _exit = exit;
+        _commitHotkeys = commitHotkeys;
         var shell = new Grid { Background = Brush("InkBrush") };
         shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
         shell.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) });
@@ -128,8 +130,8 @@ public sealed class PrototypeSetupWizard : UserControl
                     _body.Children.Add(choice);
                 }
                 _body.Children.Add(new PrototypeShortcutRecorder("MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9", _values,
-                    () => PrototypeSettingsCatalog.ShortcutBindings(_values)));
-                _body.Children.Add(Copy("Add alternatives with +. Keys are recorded only inside this preview; no global shortcut is registered.", 12, true));
+                    () => PrototypeSettingsCatalog.ShortcutBindings(_values), _commitHotkeys));
+                _body.Children.Add(Copy("Add alternatives with +. Main dictation shortcuts are saved and active globally. Modifier-only shortcuts trigger on release.", 12, true));
                 break;
             case 3:
                 var session = new PrototypeModelSession(_values);
@@ -157,7 +159,7 @@ public sealed class PrototypeSetupWizard : UserControl
             _next.Focus(FocusState.Keyboard);
             var visual = ElementCompositionPreview.GetElementVisual(_body);
             visual.StopAnimation("Opacity"); visual.Opacity = 1;
-            if (new Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
+            if (new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
             {
                 var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
                 fade.Duration = TimeSpan.FromMilliseconds(160);

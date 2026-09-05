@@ -12,7 +12,7 @@ namespace TypeWhisper.WinUI;
 public sealed class PrototypeSetupLogo : UserControl
 {
     private readonly List<Border> _bars = [];
-    private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
+    private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _hovering;
 
     public PrototypeSetupLogo()
@@ -44,7 +44,7 @@ public sealed class PrototypeSetupLogo : UserControl
         };
     }
 
-    private void AnimationsChanged(Windows.UI.ViewManagement.UISettings sender, object args) =>
+    private void AnimationsChanged(global::Windows.UI.ViewManagement.UISettings sender, object args) =>
         DispatcherQueue.TryEnqueue(() => { if (IsLoaded) Animate(); });
 
     private void Animate()

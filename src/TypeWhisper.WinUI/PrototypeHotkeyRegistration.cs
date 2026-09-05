@@ -11,7 +11,7 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
     private const uint ModControl = 0x0002;
     private const uint ModNoRepeat = 0x4000;
     private const uint VkSpace = 0x20;
-    private const nuint SubclassId = 0x54575052;
+    private readonly nuint SubclassId;
 
     private readonly IntPtr _hwnd;
     private readonly Action _callback;
@@ -23,8 +23,10 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
     internal string DisplayText { get; private set; } = "Not assigned";
     internal string Value => string.Join(",", _bindings.Keys);
 
-    internal PrototypeHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback)
+    internal PrototypeHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase = HotkeyId)
     {
+        _nextId = idBase;
+        SubclassId = (nuint)idBase;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _callback = callback;
         _subclassProc = WindowSubclassProc;
@@ -44,7 +46,7 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
             var error = PrototypeShortcutRules.Validate(chord, false);
             var parts = chord.Split('+');
             var key = parts[^1] switch { "SPACE" => "Space", "ENTER" => "Enter", "ESC" => "Escape", var other => other };
-            if (error is not null || !Enum.TryParse<Windows.System.VirtualKey>(key, true, out var vk) || vk == Windows.System.VirtualKey.F12)
+            if (error is not null || !Enum.TryParse<global::Windows.System.VirtualKey>(key, true, out var vk) || vk == global::Windows.System.VirtualKey.F12)
             {
                 foreach (var id in added.Values) UnregisterHotKey(_hwnd, id);
                 return error ?? "Choose a letter, function key or Space with modifiers. F12 is reserved.";

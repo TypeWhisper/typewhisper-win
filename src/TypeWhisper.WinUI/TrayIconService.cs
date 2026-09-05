@@ -12,8 +12,10 @@ internal sealed class TrayIconService : IDisposable
 {
     private readonly TaskbarIcon _icon;
     private readonly TrayMenuWindow _menuWindow;
+    private readonly MenuFlyoutItem _status;
+    private readonly MenuFlyoutItem _recordingAction;
 
-    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit)
+    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation)
     {
         var menu = new MenuFlyout();
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
@@ -25,9 +27,12 @@ internal sealed class TrayIconService : IDisposable
         presenterStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0, 4, 0, 4)));
         presenterStyle.Setters.Add(new Setter(FrameworkElement.MinWidthProperty, 230d));
         menu.MenuFlyoutPresenterStyle = presenterStyle;
-        menu.Items.Add(Label("UI preview · engine not connected"));
+        _status = Label("Loading Parakeet…");
+        menu.Items.Add(_status);
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Unavailable("Start recording", "\uE720"));
+        _recordingAction = CreateItem("Start with dictation shortcut", "\uE720", finishDictation);
+        _recordingAction.IsEnabled = false;
+        menu.Items.Add(_recordingAction);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Label("General"));
         menu.Items.Add(CreateItem("Quick Launch", "\uE80F", show));
@@ -67,6 +72,15 @@ internal sealed class TrayIconService : IDisposable
     {
         _icon.Dispose();
         _menuWindow.Close();
+    }
+
+    internal void UpdateDictation(string status, bool recording)
+    {
+        _status.Text = recording ? "Recording" : status;
+        ToolTipService.SetToolTip(_status, status);
+        _recordingAction.Text = recording ? "Finish dictation" : "Start with dictation shortcut";
+        _recordingAction.IsEnabled = recording;
+        _icon.ToolTipText = recording ? "TypeWhisper · Recording" : "TypeWhisper · " + status[..Math.Min(status.Length, 90)];
     }
 
     private static MenuFlyoutItem Label(string text) => new()

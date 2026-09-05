@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
-using Windows.Graphics;
-using Windows.System;
+using global::Windows.Graphics;
+using global::Windows.System;
 
 namespace TypeWhisper.WinUI;
 
@@ -115,7 +115,7 @@ internal sealed class TrayMenuWindow : Window
         AppWindow.Move(new PointInt32(cursor.X, cursor.Y));
         var scale = _presenter.XamlRoot?.RasterizationScale ?? 1;
         _presenter.MaxHeight = Math.Max(100, (area.Height - 16) / scale);
-        _presenter.Measure(new Windows.Foundation.Size(Math.Min(420, area.Width / scale), _presenter.MaxHeight));
+        _presenter.Measure(new global::Windows.Foundation.Size(Math.Min(420, area.Width / scale), _presenter.MaxHeight));
         var width = Math.Min(area.Width, (int)Math.Ceiling(_presenter.DesiredSize.Width * scale) + 2);
         var height = Math.Min(area.Height, (int)Math.Ceiling(_presenter.DesiredSize.Height * scale) + 2);
         AppWindow.MoveAndResize(new RectInt32(

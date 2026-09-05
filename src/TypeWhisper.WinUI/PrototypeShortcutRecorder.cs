@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.System;
-using Windows.UI.Core;
+using global::Windows.System;
+using global::Windows.UI.Core;
 
 namespace TypeWhisper.WinUI;
 
@@ -13,6 +13,7 @@ namespace TypeWhisper.WinUI;
 public sealed class PrototypeShortcutRecorder : UserControl
 {
     private static WeakReference<PrototypeShortcutRecorder>? _active;
+    internal static bool AnyEditing => _active?.TryGetTarget(out var recorder) == true && recorder.IsEditing;
     private readonly string _key;
     private readonly Func<string, string?>? _commit;
     private readonly string _defaultValue;

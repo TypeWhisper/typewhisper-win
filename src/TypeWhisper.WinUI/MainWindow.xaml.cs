@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.Graphics;
+using global::Windows.Graphics;
 
 namespace TypeWhisper.WinUI;
 
@@ -44,8 +44,7 @@ public sealed partial class MainWindow : Window
     private static extern bool SetForegroundWindow(IntPtr hwnd);
     private static readonly IReadOnlyList<PrototypeCommand> Commands =
     [
-        new("Active", "microphone", "Stop dictation", "Recording for 00:18 · Default microphone", "Enter", "Finishes the active recording and sends it to the selected transcription engine.", true),
-        new("Active", "pause", "Pause dictation", "Keep the recording available without capturing audio", "Ctrl P", "Pauses audio capture without discarding the current recording.", true),
+        new("Pinned", "microphone", "Dictation", "Focus a text field, then use your dictation shortcut", "", "Configure Main dictation in Settings > Shortcuts. Use the shortcut to start, and again to finish."),
         new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
         new("Pinned", "recorder", "Recorder", "Record microphone and system audio", "R", "Opens the recorder workspace without interrupting active dictation."),
         new("Pinned", "workflow", "Workflows", "Run and manage reusable text workflows", "W", "Choose a workflow, inspect its provider, and run it against selected or dictated text."),
@@ -63,6 +62,78 @@ public sealed partial class MainWindow : Window
 
     private readonly Stopwatch _activationStopwatch = Stopwatch.StartNew();
     private readonly PrototypeHotkeyRegistration? _hotkeyRegistration;
+    private DictationHotkeyRegistration? _dictationHotkey;
+    private static string DictationHotkeyPath => Path.Combine(Path.GetDirectoryName(LauncherHotkeyPath)!, "dictation-hotkeys.txt");
+    private string? ChangeDictationHotkeys(string value)
+    {
+        if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
+        if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
+        var previous = _dictationHotkey.Value;
+        var error = _dictationHotkey.TryChange(value);
+        if (error is not null) return error;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(DictationHotkeyPath)!);
+            File.WriteAllText(DictationHotkeyPath + ".tmp", _dictationHotkey.Value);
+            File.Move(DictationHotkeyPath + ".tmp", DictationHotkeyPath, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            var rollback = _dictationHotkey.TryChange(previous);
+            return rollback ?? $"Could not save the shortcut: {ex.Message}";
+        }
+        _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
+        return null;
+    }
+    private readonly LocalDictationSession _dictation;
+    private OverlayWindow? _liveOverlay;
+    internal event Action<string, bool>? DictationChanged;
+
+    internal async Task InitializeDictationAsync()
+    {
+        try
+        {
+            _dictationHotkey = new DictationHotkeyRegistration(this, action =>
+            {
+                _ = action switch
+                {
+                    HybridHotkeyAction.Start => _dictation.StartAsync(),
+                    HybridHotkeyAction.Stop => _dictation.StopAsync(),
+                    HybridHotkeyAction.Cancel => _dictation.CancelAsync(),
+                    _ => _dictation.ToggleAsync()
+                };
+            }, () => _dictation.IsRecording);
+            var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
+            var error = _dictationHotkey.TryChange(saved);
+            _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
+            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
+            if (error is not null) { MetricsText.Text = error; DictationChanged?.Invoke(error, false); return; }
+            await _dictation.InitializeAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { MetricsText.Text = "Dictation startup failed: " + ex.Message; }
+    }
+
+    internal void FinishDictationFromTray() { if (_dictation.IsRecording) _ = _dictation.ToggleAsync(); }
+    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictation.Dispose(); _liveOverlay?.Close(); }
+
+    private void UpdateLiveDictation()
+    {
+        MetricsText.Text = _dictation.Status;
+        DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
+        if (_dictation.IsRecording)
+        {
+            if (_liveOverlay is null)
+                _liveOverlay = new OverlayWindow(false, () => _dictation.CurrentLevel);
+            _liveOverlay.SetLayout(OverlayPreferences);
+            _liveOverlay.SetMode(_overlayMode, DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
+            _liveOverlay.ActivateWithoutTakingFocus();
+        }
+        else
+        {
+            _liveOverlay?.HidePreview();
+            if (_historyOpen) _ = HistoryView.RefreshAsync();
+        }
+    }
     private PrototypeCommand? _selected;
     private OverlayWindow? _overlay;
     private PrototypeSettingsWindow? _settingsWindow;
@@ -88,6 +159,8 @@ public sealed partial class MainWindow : Window
         var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService));
+        _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
         // Recorder previews must not be mixed into persisted history.
@@ -486,7 +559,7 @@ public sealed partial class MainWindow : Window
         else if (_selected?.Title is "Dashboard" or "Statistics")
             OpenDashboard(_selected.Title == "Statistics");
         else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
-            ShowWaveformOverlay();
+            MetricsText.Text = _dictation.Status;
         else if (_selected is not null)
             MetricsText.Text = $"Executed {_selected.Title} · prototype data only";
     }
@@ -534,29 +607,29 @@ public sealed partial class MainWindow : Window
     {
         if (LexiconOpen)
         {
-            if (e.Key == Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
+            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
             { _lexicon?.GoBack(); e.Handled = true; }
             return;
         }
         if (FileTranscriptionOpen)
         {
-            if (e.Key == Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
+            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
             {
                 _fileTranscription?.GoBack(); e.Handled = true;
             }
             return;
         }
-        if ((!_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen) || e.Key != Windows.System.VirtualKey.Back) return;
+        if ((!_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen) || e.Key != global::Windows.System.VirtualKey.Back) return;
         // Inspect before the editor processes deletion: deleting the last character
         // must not also navigate away from the current page.
         var focused = FocusManager.GetFocusedElement(WindowRoot.XamlRoot);
         if (_workflowsOpen && WorkflowsView.IsConfiguring && focused is TextBox) return;
         if (focused is TextBox { Text.Length: > 0 } or TextBox { AcceptsReturn: true } or PasswordBox or RichEditBox) return;
-        foreach (var modifier in new[] { Windows.System.VirtualKey.Control, Windows.System.VirtualKey.Menu,
-                     Windows.System.VirtualKey.Shift, Windows.System.VirtualKey.LeftWindows, Windows.System.VirtualKey.RightWindows })
+        foreach (var modifier in new[] { global::Windows.System.VirtualKey.Control, global::Windows.System.VirtualKey.Menu,
+                     global::Windows.System.VirtualKey.Shift, global::Windows.System.VirtualKey.LeftWindows, global::Windows.System.VirtualKey.RightWindows })
         {
             if (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(modifier)
-                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
+                .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
         }
         if (_recorderOpen) RecorderView.GoBack();
         else if (_marketplaceOpen) MarketplaceView.GoBack();
@@ -570,32 +643,32 @@ public sealed partial class MainWindow : Window
     {
         if (LexiconOpen)
         {
-            if (e.Key == Windows.System.VirtualKey.Escape) { _lexicon?.GoBack(); e.Handled = true; }
+            if (e.Key == global::Windows.System.VirtualKey.Escape) { _lexicon?.GoBack(); e.Handled = true; }
             return;
         }
         if (FileTranscriptionOpen)
         {
-            if (e.Key == Windows.System.VirtualKey.Escape) { _fileTranscription?.GoBack(); e.Handled = true; }
+            if (e.Key == global::Windows.System.VirtualKey.Escape) { _fileTranscription?.GoBack(); e.Handled = true; }
             return;
         }
-        var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
+            .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down);
 
-        if (ctrl && e.Key == (Windows.System.VirtualKey)0xBC) // VK_OEM_COMMA
+        if (ctrl && e.Key == (global::Windows.System.VirtualKey)0xBC) // VK_OEM_COMMA
         {
             OpenSettings();
             e.Handled = true;
             return;
         }
 
-        if (ctrl && e.Key == Windows.System.VirtualKey.K)
+        if (ctrl && e.Key == global::Windows.System.VirtualKey.K)
         {
             ToggleActions();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Windows.System.VirtualKey.Escape)
+        if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
             if (_recorderOpen)
                 RecorderView.GoBack();
@@ -629,43 +702,43 @@ public sealed partial class MainWindow : Window
         }
 
         if (_historyOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
-            HistoryView.MoveSelection(e.Key == Windows.System.VirtualKey.Down ? 1 : -1);
+            HistoryView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
             return;
         }
 
         if (_workflowsOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
-            WorkflowsView.MoveSelection(e.Key == Windows.System.VirtualKey.Down ? 1 : -1);
+            WorkflowsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
             return;
         }
 
         if (_pluginsOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
-            PluginsView.MoveSelection(e.Key == Windows.System.VirtualKey.Down ? 1 : -1);
+            PluginsView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
             return;
         }
 
         if (_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
-            MarketplaceView.MoveSelection(e.Key == Windows.System.VirtualKey.Down ? 1 : -1);
+            MarketplaceView.MoveSelection(e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
             e.Handled = true;
             return;
         }
 
         if (!_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen && ReferenceEquals(FocusManager.GetFocusedElement(WindowRoot.XamlRoot), SearchBox)
-            && e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+            && e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             if (FilteredItems.Count > 0)
             {
-                var offset = e.Key == Windows.System.VirtualKey.Down ? 1 : -1;
+                var offset = e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1;
                 CompactResults.SelectedIndex = Math.Clamp(CompactResults.SelectedIndex + offset, 0, FilteredItems.Count - 1);
                 CompactResults.ScrollIntoView(CompactResults.SelectedItem);
             }
@@ -673,7 +746,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Windows.System.VirtualKey.Enter && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not Button)
+        if (e.Key == global::Windows.System.VirtualKey.Enter && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not Button)
         {
             if (FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is TextBox { AcceptsReturn: true }) return;
             RunSelected();
@@ -735,6 +808,7 @@ public sealed partial class MainWindow : Window
         {
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
+            _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.HistoryRequested += () =>
             {
                 if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }
@@ -924,7 +998,7 @@ public sealed partial class MainWindow : Window
         UpdateSearchPresentation();
         HistoryView.Filter(string.Empty);
         NavigationHint.Text = "↑↓ Navigate   Enter Open   ⌫ / Esc Back";
-        MetricsText.Text = "History · local sample data";
+        MetricsText.Text = "History · local data";
         SearchBox.Focus(FocusState.Programmatic);
     }
 

@@ -14,7 +14,7 @@ public enum PrototypeAudioAvailability { None, LocalOnly, RemoteOnly, LocalAndRe
 public enum PrototypeCaptureInputs { None = 0, Microphone = 1, SystemAudio = 2 }
 
 // IDs are opaque and independent of display names. Raw platform/source strings
-// preserve unfamiliar values from newer clients instead of treating them as Windows.
+// preserve unfamiliar values from newer clients instead of treating them as global::Windows.
 public sealed record PrototypeHistoryOrigin(string DeviceId, string Platform, string? DeviceName);
 
 public static class PrototypeHistoryDevices

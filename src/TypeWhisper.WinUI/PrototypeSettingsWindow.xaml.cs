@@ -5,8 +5,8 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.Graphics;
-using Windows.UI;
+using global::Windows.Graphics;
+using global::Windows.UI;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,6 +14,7 @@ public sealed partial class PrototypeSettingsWindow : Window
 {
     private PrototypeOverlayPreferences _preferences;
     internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
+    internal Func<string, string?>? CommitDictationHotkeys { get; set; }
     private bool _updating = true;
     private uint _dpi;
     private bool _positioning;
@@ -179,7 +180,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         var recorder = Descendants(SettingsRoot).OfType<PrototypeShortcutRecorder>().FirstOrDefault(control => control.IsEditing);
-        if (recorder is not null && (recorder.IsCapturing || e.Key == Windows.System.VirtualKey.Escape)) recorder.CaptureKeyDown(e);
+        if (recorder is not null && (recorder.IsCapturing || e.Key == global::Windows.System.VirtualKey.Escape)) recorder.CaptureKeyDown(e);
     }
 
     private void Root_KeyUp(object sender, KeyRoutedEventArgs e) =>
@@ -189,22 +190,22 @@ public sealed partial class PrototypeSettingsWindow : Window
     {
         if (SetupHost.Child is PrototypeSetupWizard wizard)
         {
-            if (e.Key == Windows.System.VirtualKey.Escape)
+            if (e.Key == global::Windows.System.VirtualKey.Escape)
             {
                 if (!wizard.CloseOpenPicker()) ExitSetup(false);
                 e.Handled = true;
             }
             return;
         }
-        if (e.Key == Windows.System.VirtualKey.F &&
-            Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+        if (e.Key == global::Windows.System.VirtualKey.F &&
+            Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control).HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down))
         {
             SettingsSearch.Focus(FocusState.Keyboard);
             SettingsSearch.SelectAll();
             e.Handled = true;
             return;
         }
-        if (e.Key == Windows.System.VirtualKey.Escape)
+        if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
             if (_activity?.CloseRangeIfOpen() == true) { e.Handled = true; return; }
             if (ComparisonScroll.Visibility == Visibility.Visible)
@@ -270,7 +271,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "Sample activity only · no personal usage is measured";
                 return;
             }
-            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys);
+            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,
@@ -298,7 +299,7 @@ public sealed partial class PrototypeSettingsWindow : Window
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
         SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Collapsed;
-        SetupHost.Child = new PrototypeSetupWizard(_values, ExitSetup);
+        SetupHost.Child = new PrototypeSetupWizard(_values, ExitSetup, CommitDictationHotkeys);
         SetupHost.Visibility = Visibility.Visible;
     }
 
@@ -311,12 +312,12 @@ public sealed partial class PrototypeSettingsWindow : Window
 
     private void SettingsSearch_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Down && _searchButtons.Count > 0)
+        if (e.Key == global::Windows.System.VirtualKey.Down && _searchButtons.Count > 0)
         {
             _searchButtons[0].Focus(FocusState.Keyboard);
             e.Handled = true;
         }
-        else if (e.Key == Windows.System.VirtualKey.Enter && _searchButtons.FirstOrDefault()?.Tag is PrototypeSettingSearchEntry entry)
+        else if (e.Key == global::Windows.System.VirtualKey.Enter && _searchButtons.FirstOrDefault()?.Tag is PrototypeSettingSearchEntry entry)
         {
             OpenSearchResult(entry);
             e.Handled = true;
@@ -382,8 +383,8 @@ public sealed partial class PrototypeSettingsWindow : Window
             button.Click += (_, _) => OpenSearchResult(result);
             button.KeyDown += (_, key) =>
             {
-                if (key.Key is not (Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)) return;
-                var index = _searchButtons.IndexOf(button) + (key.Key == Windows.System.VirtualKey.Down ? 1 : -1);
+                if (key.Key is not (global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)) return;
+                var index = _searchButtons.IndexOf(button) + (key.Key == global::Windows.System.VirtualKey.Down ? 1 : -1);
                 if (index < 0) SettingsSearch.Focus(FocusState.Keyboard);
                 else _searchButtons[Math.Min(index, _searchButtons.Count - 1)].Focus(FocusState.Keyboard);
                 key.Handled = true;

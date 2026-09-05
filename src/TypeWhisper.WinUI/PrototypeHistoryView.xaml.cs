@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel.DataTransfer;
+using global::Windows.ApplicationModel.DataTransfer;
 
 namespace TypeWhisper.WinUI;
 
@@ -164,7 +164,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         content.Children.Add(check);
         var button = new HandCursorButton { Content = content, MinHeight = 56, Padding = new Thickness(12, 9, 12, 9),
             HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"] };
-        if (selected) button.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 19, 40, 58));
+        if (selected) button.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 19, 40, 58));
         if (selected) _selectedDeviceButton = button;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, $"History device {id ?? "all"}");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(button, $"{label}. {description}");
@@ -175,17 +175,17 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void Devices_PreviewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Escape)
+        if (e.Key == global::Windows.System.VirtualKey.Escape)
         {
             DeviceFilter.Flyout.Hide();
             DeviceFilter.Focus(FocusState.Keyboard);
             e.Handled = true;
         }
-        else if (e.Key is Windows.System.VirtualKey.Down or Windows.System.VirtualKey.Up)
+        else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
             var buttons = DeviceChoices.Children.OfType<HandCursorButton>().ToList();
             var current = buttons.FindIndex(button => ReferenceEquals(button, Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)));
-            var next = current < 0 ? 0 : Math.Clamp(current + (e.Key == Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1);
+            var next = current < 0 ? 0 : Math.Clamp(current + (e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1);
             if (buttons.Count > 0) buttons[next].Focus(FocusState.Keyboard);
             e.Handled = true;
         }

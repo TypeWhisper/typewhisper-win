@@ -287,7 +287,7 @@ public sealed partial class PrototypePluginsView : UserControl
     private void View_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_page != Page.Settings) return;
-        if (e.Key == Windows.System.VirtualKey.S && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) { Save(); e.Handled = true; }
+        if (e.Key == global::Windows.System.VirtualKey.S && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
+            .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down)) { Save(); e.Handled = true; }
     }
 }

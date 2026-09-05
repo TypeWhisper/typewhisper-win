@@ -36,7 +36,7 @@ public sealed class PrototypeDateRangePicker : UserControl
         _flyout.Closed += (_, _) => { IsOpen = false; _button.Focus(FocusState.Programmatic); };
         _panel.KeyDown += (_, e) =>
         {
-            if (e.Key == Windows.System.VirtualKey.Escape) { Close(); e.Handled = true; }
+            if (e.Key == global::Windows.System.VirtualKey.Escape) { Close(); e.Handled = true; }
         };
         Unloaded += (_, _) => Close(); Content = _button;
     }

@@ -51,7 +51,10 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray),
             () => _window.DispatcherQueue.TryEnqueue(() => { _window.ShowFromActivation(); _window.OpenFileTranscription(); }),
-            () => _window.DispatcherQueue.TryEnqueue(ExitFromTray));
+            () => _window.DispatcherQueue.TryEnqueue(ExitFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray));
+        _window.DictationChanged += _tray.UpdateDictation;
+        _ = _window.InitializeDictationAsync();
         if (Environment.GetCommandLineArgs().Contains("--account"))
             _window.DispatcherQueue.TryEnqueue(_window.OpenAccount);
         else if (Environment.GetCommandLineArgs().Contains("--sync-backup"))
@@ -76,6 +79,7 @@ public partial class App : Application
 
     private void ExitFromTray()
     {
+        _window?.DisposeDictation();
         _tray?.Dispose();
         _tray = null;
         _mainInstance?.UnregisterKey();

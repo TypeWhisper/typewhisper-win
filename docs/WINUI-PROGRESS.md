@@ -28,9 +28,20 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [x] Register configurable global Quick Launch shortcuts, support alternatives, preserve previous registrations on conflicts, and save in isolated development storage.
 - [x] Prepare an optional SDK contract for plugin-contributed tray and Quick Launch commands.
 - [ ] Validate populated history, detail/copy behavior and live refresh end-to-end.
-- [ ] Connect real microphone capture, transcription engine/model selection and text insertion into the foreground application.
-- [ ] Save real dictation results with timestamps and engine/model metadata; verify dictation-to-history during daily use.
-- [ ] Connect dictation modes, remaining hotkeys, live transcript overlay, cancellation and recovery.
+- [x] Connect microphone capture, local Parakeet batch transcription and foreground text insertion; owner confirmed a real dictation round-trip.
+- [x] Persist dictation results with timestamps and engine/model metadata before insertion.
+- [x] Connect and persist Main Dictation shortcuts from settings/setup, including modifier-only chords and alternatives.
+- [x] Implement hybrid Main Dictation: immediate key-down start, tap-to-toggle and hold-to-talk; owner confirmed all three behaviors.
+- [x] Prepare the microphone without starting capture; remove the 300-ms capture-start delay.
+- [x] Use capture RMS for the recording overlay and expose real recording/model status in the tray.
+- [x] Replace character-by-character insertion with one Ctrl+V gesture; owner confirmed whole-text insertion.
+- [x] Reuse native clipboard snapshots with strict WinUI preservation, sequence-guarded restore and no automatic paste retry.
+- [x] Add synthetic PCM and local generated-speech regression tests through the capture service and Parakeet; reproduce loss of the first word with a simulated 300-ms delay.
+- [ ] Validate real microphone/driver latency and native keyboard-hook timing with a physical or virtual input end-to-end.
+- [ ] Validate bitmap/HTML/file clipboard round-trips and slow target applications end-to-end.
+- [ ] Verify populated dictation history, detail/copy behavior and live refresh during daily use.
+- [ ] Connect configurable transcription model/device selection.
+- [ ] Connect remaining dictation modes/hotkeys, live transcription, complete cancellation and durable recovery.
 - [ ] Connect recorder audio capture, source toggles, playback and persisted history entries.
 - [ ] Connect general settings persistence, native services and model downloads/activation.
 - [ ] Connect workflows, file transcription, dictionary and snippets to real services.
@@ -51,10 +62,13 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 ## Validation at this checkpoint
 
 - WinUI development host built, published and launched through the prescribed dev launcher.
-- Presentation/integration tests: **11 passed**.
+- Presentation/history/hotkey/paste-coordinator tests: **33 passed**.
+- Isolated audio regression tests: **3 passed**, repeated successfully with the local Parakeet model and Microsoft David Desktop speech synthesis.
+- Immediate audio: `Bananas are yellow. This is a test of immediate recording.` Simulated 300-ms delay: `are yellow. This is a test of immediate recording.` Exactly 4,800 samples are lost in the delayed control.
+- Audio tests use in-memory synthetic speech and a replay input, not a real microphone or clipboard. See `tests/TypeWhisper.Dictation.AudioTests/README.md` for reproduction and prerequisites.
 - Existing Core HistoryService tests: **11 passed**.
 - Plugin SDK build: **0 warnings, 0 errors**.
-- Interactive owner feedback confirmed tray appearance/first opening and Quick Launch hotkey toggling.
-- Full CI, populated-history walkthroughs, real dictation and comprehensive DPI/accessibility testing remain pending.
+- Interactive owner feedback confirmed tray appearance/first opening, Quick Launch toggling, immediate dictation start, hybrid hold/toggle and whole-text insertion.
+- Full CI, populated-history walkthroughs, real-device latency, rich clipboard round-trips and comprehensive DPI/accessibility testing remain pending.
 
 No personal history or audio has been imported or deleted. Third-party dictation does not automatically appear in TypeWhisper history. See `docs/WINUI-MIGRATION.md` for implementation boundaries and known limitations.

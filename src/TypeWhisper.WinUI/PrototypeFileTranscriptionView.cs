@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Windows.Storage.Pickers;
-using Windows.ApplicationModel.DataTransfer;
-using Windows.Storage;
+using global::Windows.ApplicationModel.DataTransfer;
+using global::Windows.Storage;
 
 namespace TypeWhisper.WinUI;
 

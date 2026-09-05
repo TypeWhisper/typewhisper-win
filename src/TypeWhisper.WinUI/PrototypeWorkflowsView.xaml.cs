@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Windows.ApplicationModel.DataTransfer;
+using global::Windows.ApplicationModel.DataTransfer;
 
 namespace TypeWhisper.WinUI;
 
@@ -165,9 +165,9 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void Source_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         // Never use Enter or Backspace in the multiline editor for navigation.
-        if (e.Key == Windows.System.VirtualKey.Enter
-            && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
-                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+        if (e.Key == global::Windows.System.VirtualKey.Enter
+            && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control)
+                .HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down))
         {
             PreviewExample();
             e.Handled = true;
@@ -363,8 +363,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void Configuration_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_page != Page.Configuration) return;
-        if (e.Key == Windows.System.VirtualKey.S
-            && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+        if (e.Key == global::Windows.System.VirtualKey.S
+            && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(global::Windows.System.VirtualKey.Control).HasFlag(global::Windows.UI.Core.CoreVirtualKeyStates.Down))
         {
             SaveConfiguration();
             e.Handled = true;

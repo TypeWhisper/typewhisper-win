@@ -3,7 +3,7 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
+using global::Windows.UI;
 
 namespace TypeWhisper.WinUI;
 
@@ -17,7 +17,7 @@ public sealed partial class PrototypeRecorderView : UserControl
     private bool AnySource => MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true;
     private string SourceSummary => DescribeSources(MicrophoneSource.IsChecked == true, SystemSource.IsChecked == true);
     private readonly Stopwatch _elapsed = new();
-    private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
+    private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _presented;
     private bool _rendering;
     private bool _animationsEnabled;
