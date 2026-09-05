@@ -1,0 +1,120 @@
+<UserControl
+    x:Class="TypeWhisper.WinUI.PrototypeRecorderView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TypeWhisper.WinUI"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid Margin="12,0,12,12" MinHeight="32">
+            <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock Text="Demo · no audio captured" FontSize="11" Foreground="{ThemeResource MutedBrush}"
+                HorizontalAlignment="Right" VerticalAlignment="Center" />
+        </Grid>
+        <Grid Grid.Row="1" Margin="12,0,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <StackPanel Spacing="9">
+                <TextBlock Text="AUDIO SOURCE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                <Grid x:Name="SourceChoices" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <local:HandCursorToggleButton x:Name="MicrophoneSource" Checked="Source_Changed" Unchecked="Source_Changed"
+                        Style="{StaticResource PrototypeSourceToggleStyle}" HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Recorder source microphone">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <local:TypeWhisperGlyph x:Name="MicrophoneIcon" Kind="microphone" Width="20" Height="20" />
+                            <TextBlock Grid.Column="1" Text="Microphone" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock x:Name="MicrophoneState" Grid.Column="2" Text="On" FontSize="11" VerticalAlignment="Center" />
+                        </Grid>
+                    </local:HandCursorToggleButton>
+                    <local:HandCursorToggleButton x:Name="SystemSource" Grid.Column="1" Checked="Source_Changed" Unchecked="Source_Changed"
+                        Style="{StaticResource PrototypeSourceToggleStyle}" HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Recorder source system audio">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="22" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <local:TypeWhisperGlyph x:Name="SystemIcon" Kind="speaker" Width="20" Height="20" />
+                            <TextBlock Grid.Column="1" Text="System audio" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock x:Name="SystemState" Grid.Column="2" Text="Off" FontSize="11" VerticalAlignment="Center" />
+                        </Grid>
+                    </local:HandCursorToggleButton>
+                </Grid>
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,14,0,0">
+                <StackPanel x:Name="SessionPanel" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock x:Name="RecorderStatus" Text="Ready to record" FontSize="14" HorizontalAlignment="Center"
+                        Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock x:Name="RecorderDuration" Text="00:00" FontFamily="Cascadia Mono" FontSize="42"
+                        HorizontalAlignment="Center" />
+                    <canvas:CanvasControl x:Name="SignalCanvas" Draw="SignalCanvas_Draw" Height="52" MaxWidth="420"
+                        HorizontalAlignment="Stretch" ClearColor="Transparent" IsHitTestVisible="False" />
+                    <TextBlock x:Name="SessionHint" Text="Choose a source, then start your session." FontSize="12"
+                        Foreground="{ThemeResource MutedBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+                <Grid x:Name="CompletedPanel" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="6" Margin="0,0,0,14">
+                        <TextBlock x:Name="CompletedTitle" Text="Demo session complete" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="CompletedMetadata" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                        <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="10" Margin="0,0,20,12">
+                            <TextBlock Text="EXAMPLE TRANSCRIPT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
+                            <TextBlock Text="Wir halten die wichtigsten Gedanken aus dem Gespräch fest. Die Aufnahme lässt sich pausieren und später fortsetzen, ohne eine neue Sitzung zu beginnen.&#x0a;&#x0a;Nach dem Abschluss können wir den Text prüfen und die nächsten Schritte zusammenfassen. Dieser Text ist nur ein Beispiel für die Vorschau – er wurde nicht aus Audio erzeugt."
+                                FontSize="15" LineHeight="25" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+                <Border x:Name="DiscardConfirmation" Visibility="Collapsed" Background="{ThemeResource ElevatedBrush}"
+                    BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="10" Padding="20"
+                    VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Discard this demo session?" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="This resets the timer. No audio files will be deleted." FontSize="12"
+                            TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                            <local:HandCursorButton x:Name="KeepSessionButton" Content="Keep session" Click="KeepSession_Click"
+                                Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Keep recorder session" />
+                            <local:HandCursorButton Content="Discard session" Click="ConfirmDiscard_Click"
+                                Style="{StaticResource PrototypeDestructiveConfirmButtonStyle}" AutomationProperties.Name="Confirm discard recorder session" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+        <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+            <Grid Height="48" Padding="2,0" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <local:PrototypeBreadcrumbs x:Name="RecorderBreadcrumbs" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+                <StackPanel x:Name="SessionActions" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <local:HandCursorButton x:Name="ViewHistoryButton" Content="View in history" Click="ViewHistory_Click" Visibility="Collapsed"
+                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="View recorder in history" />
+                    <local:HandCursorButton x:Name="DiscardButton" Content="Discard" Click="Discard_Click" Visibility="Collapsed"
+                        Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Discard recorder session" />
+                    <local:HandCursorButton x:Name="PauseButton" Content="Pause" Click="Pause_Click" Visibility="Collapsed"
+                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Pause or resume recorder" />
+                    <local:HandCursorButton x:Name="PrimaryButton" Content="Start demo" Click="Primary_Click"
+                        Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Recorder primary action" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

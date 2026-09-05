@@ -1,8 +1,10 @@
 using System.Runtime.InteropServices;
 using System.Text;
+#if !TYPEWHISPER_WINUI
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+#endif
 using TypeWhisper.Windows.Native;
 
 namespace TypeWhisper.Windows.Services;
@@ -30,11 +32,23 @@ internal sealed class WindowsClipboardTransaction : IDisposable
     private const int MaxClipboardRestoreAttempts = 3;
     private static readonly IntPtr MessageOnlyWindowParent = new(-3);
 
-    private readonly Dispatcher? _dispatcher;
     private readonly Action<uint, IntPtr>? _handleReleaseObserver;
+#if TYPEWHISPER_WINUI
+    private readonly IntPtr _ownerHandle;
+    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
+    public WindowsClipboardTransaction(IntPtr ownerHandle)
+    {
+        if (ownerHandle == IntPtr.Zero) throw new ArgumentException("A clipboard owner window is required.", nameof(ownerHandle));
+        _ownerHandle = ownerHandle;
+        _handleReleaseObserver = null;
+    }
+#else
+    private readonly Dispatcher? _dispatcher;
     private HwndSource? _ownerWindow;
+#endif
     private bool _disposed;
 
+#if !TYPEWHISPER_WINUI
     public WindowsClipboardTransaction(
         Dispatcher? dispatcher = null,
         Action<uint, IntPtr>? handleReleaseObserver = null)
@@ -42,6 +56,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         _dispatcher = dispatcher;
         _handleReleaseObserver = handleReleaseObserver;
     }
+#endif
 
     public Task<IClipboardLease> BeginTemporaryTextAsync(
         string text,
@@ -143,12 +158,20 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             windowsLease.ExpectedSequenceNumber = sequenceNumber;
     }
 
+    internal bool IsCurrent(IClipboardLease lease)
+    {
+        var current = RequireLease(lease);
+        return !current.IsCompleted && current.HasExpectedSequenceNumber
+            && NativeMethods.GetClipboardSequenceNumber() == current.ExpectedSequenceNumber;
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
 
         _disposed = true;
+#if !TYPEWHISPER_WINUI
         var ownerWindow = _ownerWindow;
         _ownerWindow = null;
         if (ownerWindow is null)
@@ -169,6 +192,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         {
             // The dispatcher shut down between the check and the invoke.
         }
+#endif
     }
 
     private WindowsClipboardLease BeginTemporaryTextCore(string text)
@@ -219,6 +243,10 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
     private WindowsClipboardSnapshot CaptureSnapshotOrEmptyCore(uint enterpriseFormat)
     {
+#if TYPEWHISPER_WINUI
+        // Never replace an unpreservable clipboard in the new host.
+        return CaptureSnapshotCore(enterpriseFormat);
+#else
         try
         {
             return CaptureSnapshotCore(enterpriseFormat);
@@ -229,6 +257,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             // blocking dictated text insertion.
             return new WindowsClipboardSnapshot([]);
         }
+#endif
     }
 
     private WindowsClipboardSnapshot CaptureSnapshotCore(uint enterpriseFormat)
@@ -236,6 +265,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         var entries = new List<ClipboardFormatHandle>();
         var unavailableFormats = new List<UnavailableClipboardFormat>();
         string? enterpriseId = null;
+        var hasFileDrop = false;
         try
         {
             uint currentFormat = 0;
@@ -294,12 +324,14 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     nextFormat,
                     duplicateHandle,
                     _handleReleaseObserver));
+                if (nextFormat == NativeMethods.CF_HDROP)
+                    hasFileDrop = NativeMethods.DragQueryFileCount(duplicateHandle, uint.MaxValue, IntPtr.Zero, 0) > 0;
                 currentFormat = nextFormat;
             }
 
             foreach (var unavailableFormat in unavailableFormats)
             {
-                if (CanSkipUnavailableFormat(unavailableFormat.Format))
+                if (CanSkipUnavailableFormat(unavailableFormat.Format, hasFileDrop))
                     continue;
 
                 throw ClipboardError(
@@ -365,8 +397,18 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return length > 0 ? $"{format} ('{name}')" : format.ToString();
     }
 
-    private static bool CanSkipUnavailableFormat(uint unavailableFormat)
+    private static bool CanSkipUnavailableFormat(uint unavailableFormat, bool hasFileDrop)
     {
+#if TYPEWHISPER_WINUI
+        // Explorer can additionally advertise indexed OLE FileContents, which
+        // GetClipboardData cannot materialize. A captured nonempty CF_HDROP
+        // already preserves the filesystem objects. Never apply this exception
+        // to virtual files (no CF_HDROP), bitmaps, or arbitrary opaque formats.
+        if (!hasFileDrop || unavailableFormat < 0xC000) return false;
+        var name = new StringBuilder(256);
+        return NativeMethods.GetClipboardFormatName(unavailableFormat, name, name.Capacity) > 0
+            && name.ToString() == "FileContents";
+#else
         // Some clipboard owners advertise delayed bitmap formats but fail to render them.
         // Drop those unusable representations instead of blocking dictated text insertion.
         if (unavailableFormat is NativeMethods.CF_BITMAP
@@ -392,6 +434,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
             "System.Drawing.Bitmap" or
             "FileContents" or
             "FileName";
+#endif
     }
 
     private static IntPtr DuplicateClipboardHandle(uint format, IntPtr sourceHandle)
@@ -539,14 +582,21 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
+#if !TYPEWHISPER_WINUI
         var dispatcher = _dispatcher ?? Application.Current?.Dispatcher
             ?? throw new InvalidOperationException("The WPF application dispatcher is unavailable.");
+#endif
 
         for (var attempt = 0; attempt < MaxClipboardOpenAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
+#if TYPEWHISPER_WINUI
+                if (Environment.CurrentManagedThreadId != _ownerThread)
+                    throw new InvalidOperationException("Clipboard operations must run on the owning UI thread.");
+                return ExecuteWithOpenClipboardCore(action);
+#else
                 if (dispatcher.CheckAccess())
                     return ExecuteWithOpenClipboardCore(action);
 
@@ -554,6 +604,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                     () => ExecuteWithOpenClipboardCore(action),
                     DispatcherPriority.Send,
                     cancellationToken);
+#endif
             }
             catch (ClipboardBusyException) when (attempt < MaxClipboardOpenAttempts - 1)
             {
@@ -566,7 +617,11 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
     private T ExecuteWithOpenClipboardCore<T>(Func<T> action)
     {
+#if TYPEWHISPER_WINUI
+        var ownerHandle = _ownerHandle;
+#else
         var ownerHandle = EnsureOwnerWindow().Handle;
+#endif
         if (!NativeMethods.OpenClipboard(ownerHandle))
             throw new ClipboardBusyException(Marshal.GetLastPInvokeError());
 
@@ -597,6 +652,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         return result;
     }
 
+#if !TYPEWHISPER_WINUI
     private HwndSource EnsureOwnerWindow()
     {
         if (_ownerWindow is not null)
@@ -612,6 +668,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         });
         return _ownerWindow;
     }
+#endif
 
     private static WindowsClipboardLease RequireLease(IClipboardLease lease) =>
         lease as WindowsClipboardLease

@@ -1,5 +1,6 @@
 using System.IO;
 using NAudio.Wave;
+using NAudio.CoreAudioApi;
 
 namespace TypeWhisper.Windows.Services;
 
@@ -19,6 +20,7 @@ public sealed class SoundService
     /// Gets or sets the is enabled value.
     /// </summary>
     public bool IsEnabled { get; set; } = true;
+    public string? OutputDeviceId { get; set; }
 
     /// <summary>
     /// Performs play start sound.
@@ -40,17 +42,34 @@ public sealed class SoundService
     private void Play(byte[]? wav)
     {
         if (!IsEnabled || wav is null) return;
+        MemoryStream? ms = null;
+        WaveFileReader? reader = null;
+        IWavePlayer? output = null;
+        MMDevice? device = null;
+        var cleaned = 0;
+        void Cleanup()
+        {
+            if (Interlocked.Exchange(ref cleaned, 1) != 0) return;
+            output?.Dispose(); reader?.Dispose(); ms?.Dispose(); device?.Dispose();
+        }
         try
         {
-            var ms = new MemoryStream(wav);
-            var reader = new WaveFileReader(ms);
-            var output = new WaveOutEvent();
+            ms = new MemoryStream(wav);
+            reader = new WaveFileReader(ms);
+            {
+                using var enumerator = new MMDeviceEnumerator();
+                device = string.IsNullOrEmpty(OutputDeviceId)
+                    ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
+                    : enumerator.GetDevice(OutputDeviceId);
+                output = new WasapiOut(device, AudioClientShareMode.Shared, true, 100);
+            }
             output.Init(reader);
-            output.PlaybackStopped += (_, _) => { reader.Dispose(); output.Dispose(); };
+            output.PlaybackStopped += (_, _) => Cleanup();
             output.Play();
         }
         catch (Exception ex)
         {
+            Cleanup();
             System.Diagnostics.Debug.WriteLine($"Sound playback failed: {ex.Message}");
         }
     }

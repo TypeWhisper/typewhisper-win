@@ -1,7 +1,7 @@
 namespace TypeWhisper.PluginSDK.Models;
 
 /// <summary>
-/// Describes a plugin's metadata, loaded from plugin.json in the plugin directory.
+/// Describes a plugin's metadata, loaded from manifest.json in the plugin directory.
 /// </summary>
 public sealed record PluginManifest
 {

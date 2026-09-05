@@ -1,0 +1,324 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+
+namespace TypeWhisper.WinUI;
+
+public sealed class PrototypeLexiconView : UserControl
+{
+    private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath);
+    private bool _showPacks;
+    private readonly StackPanel _body = new() { Spacing = 14 };
+    private readonly StackPanel _rows = new() { Spacing = 6 };
+    private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+    private readonly PrototypeBreadcrumbs _crumbs = new();
+    private readonly TextBlock _heading = Text("Dictionary", 22);
+    private readonly TextBlock _notice = Text("Sample data · changes last for this session only.", 11, true);
+    private readonly TextBlock _count = Text("", 11, true);
+    private readonly ScrollViewer _scroll;
+    private PrototypeLexiconKind _kind;
+    private PrototypeLexiconEntry? _original;
+    private PrototypeLexiconEntry? _draft;
+    private Action? _pending;
+    private bool _confirmDelete;
+    private string _query = "";
+    internal event Action? ExitRequested;
+
+    public PrototypeLexiconView()
+    {
+        var root = new Grid { Background = Brush("InkBrush"), Padding = new Thickness(24, 8, 24, 0), RowSpacing = 12 };
+        root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
+        root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        _heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1); root.Children.Add(_heading);
+        _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 8, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
+        AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite); Grid.SetRow(_notice, 2); root.Children.Add(_notice);
+        var footer = new Grid { MinHeight = 52, ColumnSpacing = 10 }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        footer.Children.Add(_crumbs); Grid.SetColumn(_actions, 1); footer.Children.Add(_actions);
+        var border = new Border { Child = footer, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 0, 0) };
+        Grid.SetRow(border, 3); root.Children.Add(border); Content = root;
+    }
+
+    internal void Present(bool snippets)
+    {
+        _kind = snippets ? PrototypeLexiconKind.Snippet : PrototypeLexiconKind.Word;
+        _showPacks = false;
+        _draft = _original = null; _pending = null; _query = ""; Render();
+    }
+
+    internal void GoBack()
+    {
+        if (_showPacks) { _showPacks = false; Render(); return; }
+        if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = "Entry kept."; return; }
+        if (_pending is not null) { _pending = null; Render(); return; }
+        Navigate(_draft is not null ? CloseEditor : () => ExitRequested?.Invoke());
+    }
+
+    private void Navigate(Action next)
+    {
+        if (_draft is not null && _draft != _original)
+        {
+            _pending = next; RenderActions(); _notice.Text = "You have unsaved changes. Keep editing or discard them to leave.";
+            _actions.Children.OfType<Control>().FirstOrDefault()?.Focus(FocusState.Programmatic);
+        }
+        else next();
+    }
+
+    private void CloseEditor() { _draft = _original = null; _pending = null; _confirmDelete = false; Render(); }
+    private string Section => _kind switch { PrototypeLexiconKind.Word => "Words", PrototypeLexiconKind.Correction => "Corrections", _ => "Snippets" };
+    private string Singular => _kind switch { PrototypeLexiconKind.Word => "word", PrototypeLexiconKind.Correction => "correction", _ => "snippet" };
+    private string Icon => _kind == PrototypeLexiconKind.Snippet ? "text" : "dictionary";
+
+    private void Render()
+    {
+        _body.Children.Clear(); _rows.Children.Clear();
+        if (_showPacks) { RenderPacks(); return; }
+        _heading.Text = _draft is null ? (_kind == PrototypeLexiconKind.Snippet ? "Snippets" : "Dictionary") :
+            $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
+        var launch = new PrototypeCrumb("Quick Launch", () => Navigate(() => { _draft = _original = null; ExitRequested?.Invoke(); }));
+        if (_draft is null) _crumbs.SetItems(launch, new(Section));
+        else _crumbs.SetItems(launch, new(Section, () => Navigate(CloseEditor)), new("Editor"));
+        _notice.Text = _store.LastError ?? (_kind == PrototypeLexiconKind.Snippet ? "Snippets remain session-only; expansion is not connected." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
+        if (_draft is null) RenderList(); else RenderEditor();
+        RenderActions(); _scroll.ChangeView(null, 0, null, true);
+    }
+
+    private void RenderList()
+    {
+        var tabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        foreach (var kind in Enum.GetValues<PrototypeLexiconKind>())
+        {
+            var label = kind switch { PrototypeLexiconKind.Word => "Words", PrototypeLexiconKind.Correction => "Corrections", _ => "Snippets" };
+            var tab = Button(label, () => { _kind = kind; _query = ""; Render(); }, primary: kind == _kind);
+            AutomationProperties.SetName(tab, label + (kind == _kind ? ", selected" : "")); tabs.Children.Add(tab);
+        }
+        tabs.Children.Add(Button("Term packs", () => { _showPacks = true; Render(); }));
+        _body.Children.Add(tabs);
+        _body.Children.Add(Text(_kind switch
+        {
+            PrototypeLexiconKind.Word => "Names and specialist terms you want TypeWhisper to recognize.",
+            PrototypeLexiconKind.Correction => "Replace commonly misheard phrases with the spelling you prefer.",
+            _ => "Turn a short spoken phrase into a reusable block of text."
+        }, 13, true));
+        var search = Input(_query, "Search " + Section.ToLowerInvariant(), false);
+        var searchGrid = new Grid { ColumnSpacing = 8 }; searchGrid.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); searchGrid.ColumnDefinitions.Add(new());
+        searchGrid.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 18, Height = 18 });
+        var placeholder = Text("Search " + Section.ToLowerInvariant() + "…", 14, true); placeholder.IsHitTestVisible = false;
+        placeholder.Margin = new Thickness(12, 0, 0, 0); placeholder.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(search, 1); Grid.SetColumn(placeholder, 1); searchGrid.Children.Add(search); searchGrid.Children.Add(placeholder);
+        void SearchChanged() { _query = search.Text; placeholder.Visibility = _query.Length == 0 ? Visibility.Visible : Visibility.Collapsed; RenderRows(); }
+        search.TextChanged += (_, _) => SearchChanged();
+        _body.Children.Add(Surface(searchGrid, 6)); _body.Children.Add(_count); _body.Children.Add(_rows); SearchChanged();
+    }
+
+    private void RenderRows()
+    {
+        _rows.Children.Clear(); var entries = _store.Search(_kind, _query).ToArray();
+        _count.Text = $"{entries.Length} of {_store.Entries.Count(entry => entry.Kind == _kind)} {Section.ToLowerInvariant()}";
+        if (entries.Length == 0)
+        {
+            var empty = new StackPanel { Spacing = 10, Padding = new Thickness(16, 24, 16, 24) };
+            empty.Children.Add(new TypeWhisperGlyph { Kind = "search", Width = 30, Height = 30, HorizontalAlignment = HorizontalAlignment.Center });
+            var title = Text(_query.Length == 0 ? $"Your first {Singular} starts here" : "No matching entries", 16); title.TextAlignment = TextAlignment.Center; empty.Children.Add(title);
+            var hint = Text(_query.Length == 0 ? "Add a term or phrase with the button below." : "Try a different word, phrase, or tag.", 12, true); hint.TextAlignment = TextAlignment.Center; empty.Children.Add(hint);
+            _rows.Children.Add(empty); return;
+        }
+        foreach (var entry in entries)
+        {
+            var content = new Grid { ColumnSpacing = 14, Padding = new Thickness(2, 6, 2, 6) };
+            content.ColumnDefinitions.Add(new() { Width = new GridLength(24) }); content.ColumnDefinitions.Add(new()); content.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            content.Children.Add(new TypeWhisperGlyph { Kind = Icon, Width = 20, Height = 20 });
+            var labels = new StackPanel { Spacing = 5 }; var title = Text(entry.Key, 14); title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold; labels.Children.Add(title);
+            if (_kind != PrototypeLexiconKind.Word)
+            {
+                var description = Text((_kind == PrototypeLexiconKind.Correction ? "→  " : "") + entry.Value.Replace('\n', ' '), 12, true);
+                description.MaxLines = 1; description.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(description);
+            }
+            if (entry.Tags.Length > 0) labels.Children.Add(Text(entry.Tags, 11, true));
+            Grid.SetColumn(labels, 1); content.Children.Add(labels);
+            var trailing = Text(entry.Enabled ? "Edit  ›" : "Off  ·  Edit  ›", 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(trailing, 2); content.Children.Add(trailing);
+            var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
+            if (entry.FromPack) trailing.Text = "Term packs  ›";
+            row.Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"];
+            AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
+        }
+    }
+
+    private void OpenEditor(PrototypeLexiconEntry entry)
+    {
+        _original = _draft = entry; Render();
+        DispatcherQueue.TryEnqueue(() => _body.Children.OfType<StackPanel>().SelectMany(panel => panel.Children).OfType<Border>()
+            .Select(border => border.Child).OfType<TextBox>().FirstOrDefault()?.Focus(FocusState.Programmatic));
+    }
+
+    private void RenderEditor()
+    {
+        _body.Children.Add(Text(_kind switch
+        {
+            PrototypeLexiconKind.Word => "Save the exact spelling of a name or specialist term.",
+            PrototypeLexiconKind.Correction => "When this phrase is recognized, use your preferred spelling instead.",
+            _ => "Say the trigger phrase to insert the text. Expansion is not connected in this preview."
+        }, 13, true));
+        AddField(_kind == PrototypeLexiconKind.Word ? "Word or phrase" : _kind == PrototypeLexiconKind.Correction ? "Recognized phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
+        if (_kind != PrototypeLexiconKind.Word)
+            AddField(_kind == PrototypeLexiconKind.Snippet ? "Insert this text" : "Replace with", _draft.Value, value => _draft = _draft! with { Value = value }, 10000, _kind == PrototypeLexiconKind.Snippet);
+        if (_kind == PrototypeLexiconKind.Snippet)
+        {
+            AddField("Tags · optional, separated by commas", _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
+            _body.Children.Add(Text("Placeholders such as {date} are kept as text here. No clipboard content is accessed.", 11, true));
+        }
+        AddToggle("Enabled", "Keep this entry available without removing it.", _draft.Enabled, value => _draft = _draft! with { Enabled = value });
+        if (_kind == PrototypeLexiconKind.Word) AddBoostingOptions();
+        if (_kind != PrototypeLexiconKind.Word)
+            AddToggle("Match capitalization", "Only match the trigger with this exact capitalization.", _draft.CaseSensitive, value => _draft = _draft! with { CaseSensitive = value });
+    }
+
+    private void AddBoostingOptions()
+    {
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(Text("Boosting", 14));
+        var options = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var description = Text("Lower similarity considers more spellings. CTC compares acoustic scores with a vocabulary bonus. Auto uses 52–60%, depending on dictionary size.", 12, true);
+        var slider = new Slider { Minimum = 40, Maximum = 95, StepFrequency = 1, Value = (_draft!.CtcMinSimilarity ?? .65f) * 100 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, "Minimum CTC similarity in percent");
+        var valueLabel = Text("", 12, true);
+        var advanced = new StackPanel { Spacing = 4 }; advanced.Children.Add(slider); advanced.Children.Add(valueLabel);
+        var choices = new (string Name, float? Value)[] { ("Auto", null), ("Strong", .5f), ("Balanced", .65f), ("Precise", .8f), ("Advanced", null) };
+        var selected = _draft.CtcMinSimilarity is null ? 0 : Array.FindIndex(choices, 1, 3, c => Math.Abs(c.Value!.Value - _draft.CtcMinSimilarity.Value) < .001f);
+        if (selected < 0) selected = 4;
+        void Refresh()
+        {
+            options.Children.Clear();
+            for (var index = 0; index < choices.Length; index++)
+            {
+                var choice = index;
+                options.Children.Add(Button(choices[index].Name, () =>
+                {
+                    selected = choice;
+                    _draft = _draft! with { CtcMinSimilarity = choice == 4 ? (float)(slider.Value / 100) : choices[choice].Value };
+                    Refresh();
+                }, primary: index == selected));
+            }
+            advanced.Visibility = selected == 4 ? Visibility.Visible : Visibility.Collapsed;
+            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+        }
+        slider.ValueChanged += (_, _) =>
+        {
+            if (selected == 4) _draft = _draft! with { CtcMinSimilarity = (float)(slider.Value / 100) };
+            valueLabel.Text = $"Minimum similarity: {slider.Value:0}%";
+        };
+        Refresh(); panel.Children.Add(options); panel.Children.Add(advanced); panel.Children.Add(description);
+        _body.Children.Add(Surface(panel, 14));
+    }
+
+    private void AddField(string label, string value, Action<string> update, int maxLength, bool multiline = false)
+    {
+        var field = new StackPanel { Spacing = 7 }; field.Children.Add(Text(label, 12, true));
+        var input = Input(value, label, multiline); input.MaxLength = maxLength;
+        input.TextChanged += (_, _) => update(input.Text); field.Children.Add(Surface(input, 2)); _body.Children.Add(field);
+    }
+
+    private void AddToggle(string title, string hint, bool value, Action<bool> update)
+    {
+        var row = new Grid { ColumnSpacing = 16 }; row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var text = new StackPanel { Spacing = 4 }; text.Children.Add(Text(title, 13)); text.Children.Add(Text(hint, 11, true)); row.Children.Add(text);
+        var toggle = PrototypeToggleSwitch.Create(value); AutomationProperties.SetName(toggle, title); toggle.Toggled += (_, _) => update(toggle.IsOn);
+        Grid.SetColumn(toggle, 1); row.Children.Add(toggle); _body.Children.Add(row);
+    }
+
+    private void RenderActions()
+    {
+        _confirmDelete = false;
+        _actions.Children.Clear();
+        if (_pending is not null)
+        {
+            _actions.Children.Add(Button("Keep editing", () => { _pending = null; _notice.Text = "Your changes are still here."; RenderActions(); }));
+            _actions.Children.Add(Button("Discard", () => { var next = _pending; _pending = null; next?.Invoke(); }, destructive: true)); return;
+        }
+        if (_draft is null)
+        {
+            _actions.Children.Add(Button("+ Add " + Singular, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
+        }
+        if (_store.Entries.Any(entry => entry.Id == _draft.Id))
+            _actions.Children.Add(Button("Delete", () =>
+            {
+                _confirmDelete = true;
+                _notice.Text = "Delete this entry? Installed production data is unchanged.";
+                _actions.Children.Clear();
+                _actions.Children.Add(Button("Keep entry", () => { RenderActions(); _notice.Text = "Entry kept."; }));
+                _actions.Children.Add(Button("Delete entry", () => { if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? "Could not delete entry."; return; } CloseEditor(); _notice.Text = "Entry deleted."; }, destructive: true));
+            }, destructive: true));
+        _actions.Children.Add(Button("Cancel", () => Navigate(CloseEditor)));
+        _actions.Children.Add(Button("Save", () =>
+        {
+            var error = _store.Save(_draft!);
+            if (error is not null) { _notice.Text = error; return; }
+            CloseEditor(); _notice.Text = _kind == PrototypeLexiconKind.Snippet ? "Snippet saved for this session only." : "Dictionary saved for the next dictation.";
+        }, primary: true));
+    }
+
+    private void RenderPacks()
+    {
+        _heading.Text = "Term packs";
+        _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
+        _actions.Children.Clear();
+        _actions.Children.Add(Button("Back to dictionary", () => { _showPacks = false; Render(); }));
+        _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
+            ? "Packs use Windows text-based boosting · acoustic CTC is not connected yet."
+            : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
+        _body.Children.Add(Text("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.", 13, true));
+        foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
+        {
+            var row = new Grid { ColumnSpacing = 14 };
+            row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            row.Children.Add(new TypeWhisperGlyph { Kind = "dictionary", Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
+            var labels = new StackPanel { Spacing = 5 };
+            labels.Children.Add(Text($"{pack.Name} · {pack.Terms.Length} terms", 14));
+            labels.Children.Add(Text(string.Join(", ", pack.Terms.Take(8)) + (pack.Terms.Length > 8 ? "…" : ""), 12, true));
+            Grid.SetColumn(labels, 1); row.Children.Add(labels);
+            var toggle = PrototypeToggleSwitch.Create(_store.PackEnabled(pack.Id));
+            AutomationProperties.SetName(toggle, "Enable term pack " + pack.Name);
+            var restoring = false;
+            toggle.Toggled += (_, _) =>
+            {
+                if (restoring) return;
+                var error = _store.SetPackEnabled(pack, toggle.IsOn);
+                _notice.Text = error ?? $"{pack.Name} {(toggle.IsOn ? "enabled" : "disabled")} · saved.";
+                if (error is not null) { restoring = true; toggle.IsOn = _store.PackEnabled(pack.Id); restoring = false; }
+            };
+            Grid.SetColumn(toggle, 2); row.Children.Add(toggle);
+            _body.Children.Add(Surface(row, 14));
+        }
+        _scroll.ChangeView(null, 0, null, true);
+    }
+
+    private static TextBox Input(string value, string name, bool multiline)
+    {
+        var input = new TextBox { MinHeight = multiline ? 120 : 36, MaxHeight = multiline ? 220 : 36,
+            AcceptsReturn = multiline, TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
+            Style = (Style)Application.Current.Resources[multiline ? "PrototypeLexiconMultilineStyle" : "PrototypeSearchTextBoxStyle"],
+            Padding = new Thickness(12, 8, 12, 8), IsSpellCheckEnabled = multiline };
+        // Set content only after AcceptsReturn: WinUI otherwise truncates initial multiline values.
+        input.Text = value;
+        AutomationProperties.SetName(input, name); return input;
+    }
+    private static Border Surface(UIElement child, double padding)
+    {
+        var border = new Border { Child = child, Padding = new Thickness(padding), Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8) };
+        border.GotFocus += (_, _) => border.BorderBrush = Brush("FocusBrush");
+        border.LostFocus += (_, _) => border.BorderBrush = Brush("HairlineBrush");
+        return border;
+    }
+    private static HandCursorButton Button(string label, Action click, bool primary = false, bool destructive = false)
+    {
+        var button = new HandCursorButton { Content = label, Style = (Style)Application.Current.Resources[destructive ? "PrototypeDestructiveButtonStyle" : primary ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"] };
+        button.Click += (_, _) => click(); return button;
+    }
+    private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
+    private static TextBlock Text(string text, double size, bool muted = false) => new() { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Foreground = Brush(muted ? "MutedBrush" : "TextBrush") };
+}

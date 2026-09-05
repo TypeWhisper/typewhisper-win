@@ -1,0 +1,115 @@
+<Window x:Class="TypeWhisper.WinUI.PrototypeSettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TypeWhisper.WinUI"
+    Title="TypeWhisper Settings Prototype">
+    <Grid x:Name="SettingsRoot" Background="{ThemeResource InkBrush}" PreviewKeyDown="Root_PreviewKeyDown" KeyUp="Root_KeyUp" KeyDown="Root_KeyDown">
+        <Grid.RowDefinitions><RowDefinition Height="38" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid x:Name="SettingsDragRegion" Padding="18,0,8,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <local:TypeWhisperGlyph Kind="settings" Width="16" Height="16" />
+                <TextBlock Text="TYPEWHISPER" FontSize="11" FontWeight="SemiBold" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                <TextBlock Text="SETTINGS PROTOTYPE" FontSize="10" Foreground="{ThemeResource MutedBrush}" Opacity="0.65" />
+            </StackPanel>
+            <local:HandCursorButton Grid.Column="1" Content="×" Click="Close_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Close settings" />
+        </Grid>
+        <Grid x:Name="SettingsBody" Grid.Row="1">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="216" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <Border Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,0,1,0">
+        <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Border Margin="10,12,10,6" Background="{ThemeResource InkBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="7">
+            <Grid MinHeight="38" Padding="10,0,3,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <local:TypeWhisperGlyph Kind="search" Width="14" Height="14" />
+                <TextBox x:Name="SettingsSearch" Grid.Column="1" FontSize="12" Style="{StaticResource PrototypeSearchTextBoxStyle}" TextChanged="SettingsSearch_TextChanged" KeyDown="SettingsSearch_KeyDown" AutomationProperties.Name="Search settings" />
+                <TextBlock x:Name="SearchPlaceholder" Grid.Column="1" Text="Search settings…" Margin="10,0,0,0" FontSize="12" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" IsHitTestVisible="False" />
+                <local:HandCursorButton x:Name="ClearSettingsSearch" Grid.Column="2" Content="×" Visibility="Collapsed" Padding="6,0" MinWidth="26" Click="ClearSearch_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Clear settings search" />
+            </Grid>
+        </Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="10,12,10,16">
+            <StackPanel x:Name="SettingsNavigation" Spacing="18" />
+        </ScrollViewer>
+        </Grid>
+        </Border>
+        <ScrollViewer x:Name="SettingsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="22" Margin="24,16,24,20">
+                <StackPanel Spacing="7">
+                    <TextBlock Text="Appearance" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock Text="Choose how much you want to see while you speak." FontSize="13" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Spacing="10">
+                    <TextBlock Text="RECORDING OVERLAY" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <local:HandCursorButton x:Name="StandardChoice" Tag="Standard" Click="Mode_Click" Padding="14" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Settings standard overlay">
+                            <StackPanel Spacing="9">
+                                <local:TypeWhisperGlyph Kind="microphone" Width="23" Height="23" HorizontalAlignment="Left" />
+                                <TextBlock Text="Standard" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="Waveform, status and time" FontSize="12" FontWeight="Normal" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </local:HandCursorButton>
+                        <local:HandCursorButton x:Name="CompactChoice" Grid.Column="1" Tag="Compact" Click="Mode_Click" Padding="14" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Settings compact overlay">
+                            <StackPanel Spacing="9">
+                                <local:TypeWhisperGlyph Kind="signal" Width="23" Height="23" HorizontalAlignment="Left" />
+                                <TextBlock Text="Compact" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="A slim waveform with time" FontSize="12" FontWeight="Normal" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </local:HandCursorButton>
+                        <local:HandCursorButton x:Name="MinimalChoice" Grid.Column="2" Tag="Minimal" Click="Mode_Click" Padding="14" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Stretch" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Settings minimal overlay">
+                            <StackPanel Spacing="9">
+                                <Border Width="34" Height="4" Background="{ThemeResource AccentBrush}" CornerRadius="2" HorizontalAlignment="Left" Margin="0,9,0,10" />
+                                <TextBlock Text="Minimal" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="Just an indicator at the edge" FontSize="12" FontWeight="Normal" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </local:HandCursorButton>
+                    </Grid>
+                </StackPanel>
+                <Grid ColumnSpacing="24">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="Live transcription" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock x:Name="LiveTextDescription" Text="Show streaming text above the waveform. Longer text scrolls." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="LiveTextToggle" Grid.Column="1" Toggled="Preference_Changed" AutomationProperties.Name="Settings live transcription" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="24">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="Technical details" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock x:Name="DetailsDescription" Text="Show the audio level in dBFS and measured render frequency. Off by default." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="DetailsToggle" Grid.Column="1" Toggled="Preference_Changed" AutomationProperties.Name="Settings technical details" />
+                </Grid>
+                <local:HandCursorButton Content="Customize layout" Click="CustomizeLayout_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Customize overlay layout" />
+                <StackPanel x:Name="LiveTextOptions" Spacing="16" />
+                <TextBlock x:Name="PreviewExplanation" Text="Preview uses your microphone level when available, otherwise a simulated signal. Transcript text is a sample; no audio is saved." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="EditorScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="24,16,24,20" Spacing="12">
+                <local:HandCursorButton Content="← Appearance" Click="BackToAppearance_Click" Style="{StaticResource PrototypeIconButtonStyle}" HorizontalAlignment="Left" AutomationProperties.Name="Back to appearance" />
+                <local:PrototypeOverlayEditor x:Name="OverlayEditor" />
+            </StackPanel>
+        </ScrollViewer>
+        <ScrollViewer x:Name="CatalogScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="CatalogContent" Spacing="20" Margin="24,16,24,20" />
+        </ScrollViewer>
+        <Border x:Name="ActivityHost" Grid.Column="1" Visibility="Collapsed" />
+        <ScrollViewer x:Name="ComparisonScroll" Grid.Column="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <local:PrototypeSelectComparison x:Name="SelectComparison" Margin="24,16,24,20" />
+        </ScrollViewer>
+        </Grid>
+        <Border x:Name="SettingsFooter" Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="18,0">
+            <Grid MinHeight="58" ColumnSpacing="10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="SessionHint" Text="Applies immediately · this session only" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <local:HandCursorButton x:Name="PreviewButton" Grid.Column="1" Content="Preview overlay" Click="Preview_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Settings overlay preview" />
+                <local:HandCursorButton Grid.Column="2" Content="Done" Click="Close_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Done with settings" />
+            </Grid>
+        </Border>
+        <Border x:Name="SetupHost" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed" />
+    </Grid>
+</Window>

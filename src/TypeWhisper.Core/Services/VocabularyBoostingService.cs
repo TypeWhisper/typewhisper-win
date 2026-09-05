@@ -15,7 +15,7 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
     private const int MaxReplacements = 10;
     private const double AmbiguityMargin = 0.08;
 
-    private readonly IDictionaryService _dictionary;
+    private readonly IDictionaryService? _dictionary;
     private readonly object _sync = new();
     private IReadOnlyList<NormalizedTerm> _terms = [];
 
@@ -28,6 +28,16 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
         _dictionary.EntriesChanged += RebuildCatalog;
         RebuildCatalog();
     }
+
+    private VocabularyBoostingService(IReadOnlyList<DictionaryEntry> entries) => RebuildCatalog(entries);
+
+    /// <summary>Applies the existing text-based vocabulary heuristic to an immutable recording snapshot.</summary>
+    public static string ApplySnapshot(string text, IReadOnlyList<DictionaryEntry> entries) =>
+        CreateSnapshot(entries).Apply(text);
+
+    /// <summary>Normalizes an independent vocabulary catalog once for repeated read-only processing.</summary>
+    public static IVocabularyBoostingService CreateSnapshot(IReadOnlyList<DictionaryEntry> entries) =>
+        new VocabularyBoostingService(entries);
 
     /// <summary>
     /// Applies the configured transformation to the supplied input.
@@ -113,9 +123,19 @@ public sealed class VocabularyBoostingService : IVocabularyBoostingService
 
     private void RebuildCatalog()
     {
+        try { RebuildCatalog(_dictionary!.Entries); }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"VocabularyBoosting catalog read failed: {ex.Message}");
+            lock (_sync) { _terms = []; }
+        }
+    }
+
+    private void RebuildCatalog(IReadOnlyList<DictionaryEntry> entries)
+    {
         try
         {
-            var terms = _dictionary.Entries
+            var terms = entries
                 .Where(entry =>
                     entry.IsEnabled &&
                     entry.EntryType == DictionaryEntryType.Term &&
