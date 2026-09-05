@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Speech" Version="10.0.0" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="AudioRecordingService.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="WasapiAudioInputCapture.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="AudioRecordingResult.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="RecorderCaptureModels.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="SystemAudioCaptureService.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="AudioCaptureDiagnostics.cs" />
+    <Compile Include="../../src/TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="NonFatalExceptionFilter.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
+  </ItemGroup>
+</Project>

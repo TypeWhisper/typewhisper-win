@@ -1,0 +1,53 @@
+<Window
+    x:Class="TypeWhisper.WinUI.OverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    Title="TypeWhisper Recording Overlay Prototype">
+
+    <Border x:Name="OverlayRoot"
+            Background="{ThemeResource InkBrush}"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            CornerRadius="14"
+            Padding="14,10">
+        <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid x:Name="RecordingLayout" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="DotHost" Width="34" Height="34">
+                <Ellipse Fill="#203BA7FF" />
+                <Ellipse x:Name="RecordingDot" Width="9" Height="9"
+                         Fill="{ThemeResource AccentBrush}" />
+                <StackPanel x:Name="PauseMark" Orientation="Horizontal" Spacing="3"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                    <Rectangle Width="3" Height="10" RadiusX="1" Fill="#FFF4BC6A" />
+                    <Rectangle Width="3" Height="10" RadiusX="1" Fill="#FFF4BC6A" />
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="WaveformHost" Grid.Column="1" Height="42">
+                <canvas:CanvasControl x:Name="WaveformCanvas"
+                                      Draw="WaveformCanvas_Draw"
+                                      ClearColor="Transparent" />
+            </Grid>
+
+            <StackPanel x:Name="StatusHost" Grid.Column="2" Width="104" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText" Text="RECORDING" FontSize="9" FontWeight="SemiBold"
+                           CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
+                <TextBlock x:Name="DurationText" Text="00:00" FontFamily="Cascadia Mono"
+                           FontSize="12" Foreground="{ThemeResource MutedBrush}" Margin="0,2,0,0" />
+            </StackPanel>
+            <TextBlock x:Name="LeftWidgetText" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
+            <TextBlock x:Name="RightWidgetText" Grid.Column="2" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
+        </Grid>
+        <TextBlock x:Name="DiagnosticsText" Grid.Row="1" Text="Measuring…" FontFamily="Cascadia Mono" FontSize="8"
+                   HorizontalAlignment="Right" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
+        </Grid>
+    </Border>
+</Window>

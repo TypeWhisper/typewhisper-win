@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.26100.0</TargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../TypeWhisper.Windows/Resources/Icons/app.ico</ApplicationIcon>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);TYPEWHISPER_WINUI</DefineConstants>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
+    <PackageReference Include="WinUIEx" Version="2.9.3" />
+    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
+    <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/WindowsClipboardTransaction.cs" Link="Platform/WindowsClipboardTransaction.cs" />
+    <Compile Include="../TypeWhisper.Windows/Native/NativeMethods.Clipboard.cs" Link="Platform/NativeMethods.Clipboard.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="Platform/WasapiAudioInputCapture.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="Platform/AudioRecordingResult.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="Platform/RecorderCaptureModels.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="Platform/SystemAudioCaptureService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="Platform/AudioCaptureDiagnostics.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="Platform/NonFatalExceptionFilter.cs" />
+  </ItemGroup>
+  <Target Name="PublishWinUIResources" AfterTargets="Publish">
+    <ItemGroup>
+      <WinUIResource Include="$(OutputPath)**/*.pri;$(OutputPath)**/*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

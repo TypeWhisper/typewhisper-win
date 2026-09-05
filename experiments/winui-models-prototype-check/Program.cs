@@ -1,0 +1,52 @@
+using TypeWhisper.WinUIPrototype;
+
+var count = 0;
+void Check(bool condition, string name)
+{
+    if (!condition) throw new InvalidOperationException(name);
+    Console.WriteLine($"PASS {name}"); count++;
+}
+var values = new Dictionary<string, string>();
+var session = new PrototypeModelSession(values);
+Check(session.Active == "Not selected", "No automatic activation");
+Check(session.IsDownloaded("demo-balanced"), "Ready-to-activate sample available");
+Check(!session.Activate("demo-light"), "Unavailable model cannot activate");
+Check(!session.StartDownload("unknown"), "Unknown download rejected");
+Check(session.Activate("demo-balanced"), "Downloaded model can activate");
+Check(session.StartDownload("demo-light"), "Download can start");
+Check(!session.StartDownload("demo-full"), "Concurrent simulation blocked");
+session.Advance(); session.CancelDownload();
+Check(session.Downloading is null && session.Progress == 0 && !session.IsDownloaded("demo-light"), "Cancel leaves no partial installation");
+Check(session.Active == "demo-balanced", "Cancel preserves active model");
+Check(session.StartDownload("demo-light"), "Canceled download can restart");
+for (var i = 0; i < 9; i++) Check(!session.Advance(), $"Incomplete progress step {i + 1}");
+Check(!session.IsDownloaded("demo-light"), "No early installation");
+Check(session.Advance() && session.IsDownloaded("demo-light"), "Completion installs sample");
+Check(session.Active == "demo-balanced", "Completion does not change active model");
+Check(session.Activate("demo-light") && session.Active == "demo-light", "Explicit activation replaces default");
+Check(!session.Advance() && !session.StartDownload("demo-light"), "Completed download cannot run again");
+var reopened = new PrototypeModelSession(values);
+Check(reopened.IsDownloaded("demo-light") && reopened.Active == "demo-light", "Page re-entry keeps session choices");
+Check(!reopened.Activate("unknown"), "Unknown model cannot activate");
+var setupValues = new Dictionary<string, string>();
+var setup = new PrototypeSetupState(setupValues);
+Check(setup.Step == 0, "Setup starts at welcome");
+setup.Back(); Check(setup.Step == 0, "Back stays within bounds");
+setup.Revisit(4); Check(setup.Step == 0, "Progress cannot skip prerequisites");
+Check(setup.Next() && setup.Next() && setup.Step == 2, "Welcome and microphone preview continue");
+setupValues["MainDictationHotkeys"] = "";
+Check(!setup.Next() && setup.Validation is not null, "Empty shortcut blocks continue");
+setupValues["MainDictationHotkeys"] = "Ctrl+Shift+F9";
+Check(setup.Next() && setup.Step == 3, "Configured shortcut permits model step");
+Check(!setup.Next(), "Missing active model blocks continue");
+setupValues["SelectedModelId"] = "demo-full";
+Check(!setup.Next(), "Unavailable model blocks continue");
+new PrototypeModelSession(setupValues).Activate("demo-balanced");
+Check(setup.Next() && setup.Step == 4, "Downloaded active model permits trial");
+Check(!setup.Next(), "Final step stays within bounds");
+Check(new PrototypeSetupState(setupValues).Step == 4, "Setup resumes within session");
+setup.Revisit(1); Check(setup.Step == 1 && setupValues["SelectedModelId"] == "demo-balanced", "Revisit preserves selected model");
+setup.Restart(); Check(setup.Step == 0, "Finish can return to welcome");
+setupValues["PrototypeSetup.Step"] = "900";
+Check(new PrototypeSetupState(setupValues).Step == 4, "Invalid saved step clamped");
+Console.WriteLine($"{count} checks passed.");
