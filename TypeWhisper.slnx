@@ -4,6 +4,7 @@
     <Project Path="src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Project Path="src/TypeWhisper.WinUI/TypeWhisper.WinUI.csproj" />
     <Project Path="src/TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" />
+    <Project Path="src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <Project Path="src/TypeWhisper.Windows/TypeWhisper.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">

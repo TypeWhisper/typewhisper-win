@@ -87,9 +87,24 @@ internal static partial class PrototypeSettingsCatalog
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("TranscriptionTask", "Transcribe") == "Translate", "TranslationTargetLanguage"));
         advanced.Children.Add(Conditional(() => values.GetValueOrDefault("AutoPaste", "On") == "On", "LockPasteToFocusedField"));
         FieldsInto(advanced, "TranscriptionNumberNormalizationEnabled", "ShortUtterancePunctuationEnabled",
-            "EnglishOutputVariant", "GermanOutputVariant", "TranscribeShortQuietClipsAggressively", "VocabularyBoostingEnabled");
-        advanced.Children.Add(Conditional(() => values.GetValueOrDefault("VocabularyBoostingEnabled", "Off") == "On",
-            "VocabularyBoostingEnabledPackIds", "VocabularyBoostingSelectedIndustryPresetId"));
+            "EnglishOutputVariant", "GermanOutputVariant", "TranscribeShortQuietClipsAggressively");
+        var vocabulary = new StackPanel { Spacing = 8, Tag = "VocabularyBoostingEnabled" };
+        var vocabularyToggle = PrototypeToggleSwitch.Create(DictionaryBoostingPreferences.Load());
+        AutomationProperties.SetName(vocabularyToggle, "Vocabulary boosting");
+        var vocabularyRow = new Grid(); vocabularyRow.ColumnDefinitions.Add(new()); vocabularyRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        vocabularyRow.Children.Add(Label("Vocabulary boosting", 14));
+        Grid.SetColumn(vocabularyToggle, 1); vocabularyRow.Children.Add(vocabularyToggle); vocabulary.Children.Add(vocabularyRow);
+        var vocabularyHint = Label("Saved for dictation. Uses existing Windows text-based matching, not acoustic CTC. Manage words and Term packs in Quick Launch > Dictionary.", 12, true);
+        vocabulary.Children.Add(vocabularyHint);
+        var restoringVocabulary = false;
+        vocabularyToggle.Toggled += (_, _) =>
+        {
+            if (restoringVocabulary) return;
+            var error = DictionaryBoostingPreferences.Save(vocabularyToggle.IsOn);
+            vocabularyHint.Text = error ?? "Saved for the next dictation. Manage words and Term packs in Quick Launch > Dictionary.";
+            if (error is not null) { restoringVocabulary = true; vocabularyToggle.IsOn = !vocabularyToggle.IsOn; restoringVocabulary = false; }
+        };
+        advanced.Children.Add(vocabulary);
         FieldsInto(advanced, "SpokenFormattingProfiles");
         target.Children.Add(Label("Preview only · sample models, no recording or text insertion. Changes last for this session.", 12, true));
         Update();

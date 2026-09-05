@@ -15,6 +15,8 @@ internal sealed class LocalDictationSession : IDisposable
     private readonly AudioDuckingService _ducking = new();
     private readonly RecordingAudioEffects _effects;
     private readonly LocalLivePreview _livePreview = new();
+    private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
+    private bool _boostVocabulary;
     internal bool LivePreviewEnabled { get; set; } = true;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
@@ -208,6 +210,8 @@ internal sealed class LocalDictationSession : IDisposable
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
+                _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
+                _boostVocabulary = DictionaryBoostingPreferences.Load();
                 LivePreviewText = "";
                 if (LivePreviewEnabled)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
@@ -246,12 +250,16 @@ internal sealed class LocalDictationSession : IDisposable
             await _livePreview.StopAsync();
             if (samples is null || samples.Length < 1600) { SetStatus("No usable audio captured. Try again."); return; }
             SetStatus("Transcribing with Parakeet…", DictationPhase.Processing);
-            var text = await DecodeAsync(samples);
-            if (string.IsNullOrWhiteSpace(text)) { SetStatus("No speech recognized. Ready to try again."); return; }
+            var rawText = await DecodeAsync(samples);
+            if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
+            var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
+            var boostVocabulary = _boostVocabulary;
+            var text = dictionary is null ? rawText : await Task.Run(() => dictionary.Apply(rawText, boostVocabulary));
+            if (_disposed) return;
             var record = new TranscriptionRecord
             {
                 Id = Guid.NewGuid().ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
-                RawText = text, FinalText = text, DurationSeconds = samples.Length / 16000.0,
+                RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
                 EngineUsed = "sherpa-onnx", ModelUsed = "parakeet-tdt-0.6b", TranscriptionTaskUsed = "transcribe"
             };
             await _history.EnsureLoadedAsync();

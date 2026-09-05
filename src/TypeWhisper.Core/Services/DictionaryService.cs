@@ -121,7 +121,16 @@ public sealed class DictionaryService : IDictionaryService
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
-        var corrections = _cache
+        return ApplyCorrectionsSnapshot(text, _cache, IncrementUsageCount);
+    }
+
+    /// <summary>Applies a recording's dictionary snapshot without modifying persisted entries or usage counters.</summary>
+    public static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries) =>
+        ApplyCorrectionsSnapshot(text, entries, null);
+
+    private static string ApplyCorrectionsSnapshot(string text, IReadOnlyList<DictionaryEntry> entries, Action<string>? onMatch)
+    {
+        var corrections = entries
             .Where(e => e.IsEnabled && e.EntryType == DictionaryEntryType.Correction && e.Replacement is not null)
             .OrderByDescending(e => e.Original.Length);
 
@@ -139,7 +148,7 @@ public sealed class DictionaryService : IDictionaryService
 
                 var replacement = ExpandReplacementEscapes(entry.Replacement!);
                 text = regex.Replace(text, _ => replacement);
-                IncrementUsageCount(entry.Id);
+                onMatch?.Invoke(entry.Id);
             }
             catch (ArgumentException) when (entry.IsRegex)
             {

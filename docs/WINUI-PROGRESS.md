@@ -58,10 +58,14 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Port Parakeet vocabulary boosting/CTC as an optional add-on, following the Mac implementation; separate the WPF-bound plugin UI contract before connecting installable add-ons to WinUI.
 - [x] Add a portable net10.0 SDK target alongside the legacy WPF target and an acoustic vocabulary-rescoring contract (audio, token timings, term hints, recording identity and replacement spans).
 - [x] Exercise a separate portable test-plugin assembly: **6 contract tests passed** for framework independence, lifecycle/settings, request data, cancellation and explicit errors. This is not CTC inference or WinUI plugin discovery.
+- [x] Add an independently tested portable package loader using the existing Windows `manifest.json` convention, shared SDK identity and collectible assembly contexts. The portable suite now has **21 passing tests**, including actual separate-assembly activation/unload and host-side vocabulary result validation. This loader is not yet connected to the WinUI Plugins screen.
+- [x] Extend portable host coverage to **27 passing tests** with serialized vocabulary-plugin activation, disable/dispose draining, stale-result rejection, activation retry and cancellation. Prepare normalized dictionary catalogs off the UI thread and run final dictionary processing on a worker. These remain distinct from actual CTC inference and WinUI plugin discovery.
+- [x] Connect personal dictionary entries, corrections and the 12 existing built-in Term Packs to isolated development persistence. Keep per-pack ownership so disabling a pack preserves personal terms and overlapping terms from other packs. Commercial/remote packs and snippet expansion remain unconnected.
+- [x] Reuse the existing Windows text-based vocabulary algorithm and correction rules after final Parakeet decoding. Preserve raw text separately in History; use a per-recording read-only dictionary snapshot so processing cannot overwrite newer edits. Persist opt-in vocabulary boosting under Dictation > Advanced. This is not acoustic CTC rescoring.
 - [ ] Validate WPF compatibility, package/discovery, host-side result validation, enable/disable persistence, model lifecycle and the actual CTC backend. The portable and WPF SDK targets are not a promise that legacy WPF plugins load unchanged in WinUI.
 - [ ] Connect recorder audio capture, source toggles, playback and persisted history entries.
 - [ ] Connect general settings persistence, native services and model downloads/activation.
-- [ ] Connect workflows, file transcription, dictionary and snippets to real services.
+- [ ] Connect workflows, file transcription and snippet expansion to real services; add licensed remote dictionary packs after license integration.
 - [ ] Connect plugin discovery/lifecycle and the shared command registry to both tray and Quick Launch.
 - [ ] Handle plugin capability changes, unload, command identity, disabled state, cancellation and failures.
 - [ ] Connect real dashboard/statistics data, onboarding checks, licensing and updates.
@@ -69,6 +73,7 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 
 ## Migration and release checklist
 
+- [ ] At the end of the migration, run a controlled legacy-versus-WinUI benchmark and add methodology/results to PR #446. Deferred at the owner's request. Match audio/model/backend/thread settings, separate warm-up from steady-state inference, compare text quality, and measure hotkey/live-preview/history/paste separately from the file API. The prepared local probe is in `tools/TypeWhisper.Benchmarks`; API versus standalone decoder timings are not an end-to-end app comparison.
 - [ ] Finish maintainable service/view-model boundaries and retire prototype-only dispatch/mock code incrementally without redesigning the UI.
 - [ ] Save/review the companion `typewhisper-dev-tools` launcher change in its own repository; it is currently a local dependency and is **not included in this PR**.
 - [ ] Decide supported Windows versions: the new host currently targets build 26100, unlike the older Windows-10-capable host.
@@ -79,7 +84,10 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 ## Validation at this checkpoint
 
 - WinUI development host built, published and launched through the prescribed dev launcher.
-- Presentation/history/hotkey/paste-coordinator/overlay/audio-effects/silence/live-preview tests: **59 passed**. Audio-effects tests use mocks, not actual output-volume or media changes. Silence tests use injected elapsed time and RMS levels, not real microphone input. Preview tests use a fake decoder to verify publication, cancellation/draining and error isolation.
+- Presentation/history/hotkey/paste-coordinator/overlay/audio-effects/silence/live-preview/dictionary tests: **68 passed**. Audio-effects tests use mocks, not actual output-volume or media changes. Silence tests use injected elapsed time and RMS levels, not real microphone input. Preview tests use a fake decoder to verify publication, cancellation/draining and error isolation. Dictionary tests cover pack ownership/reload, malformed files, opt-in matching, corrections and concurrent UI edits without stale writes.
+- Existing Core dictionary and vocabulary-boosting regression tests: **68 passed** after extracting reusable read-only snapshot entry points; the original matching algorithm is unchanged.
+- Legacy Windows SDK target (`net10.0-windows`) builds with **0 warnings and 0 errors**. Full WPF application/plugin compatibility remains unvalidated.
+- Visually inspected the real Dictionary and Term Packs surfaces in the WinUI development host. The stored personal term TypeWhisper is visible. No real CTC inference or plugin-driven dictation has been validated.
 - Clipboard format-policy regression tests: **5 passed**. The exact current clipboard snapshot failed before the fix and passed afterward without changing its sequence number.
 - The FileContents exception requires an already captured nonempty CF_HDROP; unavailable virtual-file-only, bitmap and unknown representations remain protected.
 - Added native clipboard round-trip fixtures; the expanded isolated suite has not run here because private window-station creation is denied. Do not count it as passed. Full slow-target and restored-file-paste coverage remains pending.

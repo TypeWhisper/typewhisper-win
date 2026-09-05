@@ -8,7 +8,8 @@ namespace TypeWhisper.WinUI;
 
 public sealed class PrototypeLexiconView : UserControl
 {
-    private readonly PrototypeLexicon _store = PrototypeLexicon.CreateSamples();
+    private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath);
+    private bool _showPacks;
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly StackPanel _rows = new() { Spacing = 6 };
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
@@ -45,11 +46,13 @@ public sealed class PrototypeLexiconView : UserControl
     internal void Present(bool snippets)
     {
         _kind = snippets ? PrototypeLexiconKind.Snippet : PrototypeLexiconKind.Word;
+        _showPacks = false;
         _draft = _original = null; _pending = null; _query = ""; Render();
     }
 
     internal void GoBack()
     {
+        if (_showPacks) { _showPacks = false; Render(); return; }
         if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = "Entry kept."; return; }
         if (_pending is not null) { _pending = null; Render(); return; }
         Navigate(_draft is not null ? CloseEditor : () => ExitRequested?.Invoke());
@@ -73,12 +76,13 @@ public sealed class PrototypeLexiconView : UserControl
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
+        if (_showPacks) { RenderPacks(); return; }
         _heading.Text = _draft is null ? (_kind == PrototypeLexiconKind.Snippet ? "Snippets" : "Dictionary") :
             $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
         var launch = new PrototypeCrumb("Quick Launch", () => Navigate(() => { _draft = _original = null; ExitRequested?.Invoke(); }));
         if (_draft is null) _crumbs.SetItems(launch, new(Section));
         else _crumbs.SetItems(launch, new(Section, () => Navigate(CloseEditor)), new("Editor"));
-        _notice.Text = "Sample data · changes last for this session only.";
+        _notice.Text = _store.LastError ?? (_kind == PrototypeLexiconKind.Snippet ? "Snippets remain session-only; expansion is not connected." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
         if (_draft is null) RenderList(); else RenderEditor();
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
@@ -92,6 +96,7 @@ public sealed class PrototypeLexiconView : UserControl
             var tab = Button(label, () => { _kind = kind; _query = ""; Render(); }, primary: kind == _kind);
             AutomationProperties.SetName(tab, label + (kind == _kind ? ", selected" : "")); tabs.Children.Add(tab);
         }
+        tabs.Children.Add(Button("Term packs", () => { _showPacks = true; Render(); }));
         _body.Children.Add(tabs);
         _body.Children.Add(Text(_kind switch
         {
@@ -137,9 +142,10 @@ public sealed class PrototypeLexiconView : UserControl
             Grid.SetColumn(labels, 1); content.Children.Add(labels);
             var trailing = Text(entry.Enabled ? "Edit  ›" : "Off  ·  Edit  ›", 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(trailing, 2); content.Children.Add(trailing);
-            var row = Button("", () => OpenEditor(entry)); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
+            var row = Button("", () => { if (entry.FromPack) { _showPacks = true; Render(); } else OpenEditor(entry); }); row.Content = content; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
+            if (entry.FromPack) trailing.Text = "Term packs  ›";
             row.Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"];
-            AutomationProperties.SetName(row, $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
+            AutomationProperties.SetName(row, entry.FromPack ? $"Manage term pack for {entry.Key}" : $"Edit {Singular}: {entry.Key}"); _rows.Children.Add(row);
         }
     }
 
@@ -203,18 +209,53 @@ public sealed class PrototypeLexiconView : UserControl
             _actions.Children.Add(Button("Delete", () =>
             {
                 _confirmDelete = true;
-                _notice.Text = "Delete this entry from the preview? Production data is unchanged.";
+                _notice.Text = "Delete this entry? Installed production data is unchanged.";
                 _actions.Children.Clear();
                 _actions.Children.Add(Button("Keep entry", () => { RenderActions(); _notice.Text = "Entry kept."; }));
-                _actions.Children.Add(Button("Delete entry", () => { _store.Remove(_draft!.Id); CloseEditor(); _notice.Text = "Entry deleted from this session only."; }, destructive: true));
+                _actions.Children.Add(Button("Delete entry", () => { if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? "Could not delete entry."; return; } CloseEditor(); _notice.Text = "Entry deleted."; }, destructive: true));
             }, destructive: true));
         _actions.Children.Add(Button("Cancel", () => Navigate(CloseEditor)));
         _actions.Children.Add(Button("Save", () =>
         {
             var error = _store.Save(_draft!);
             if (error is not null) { _notice.Text = error; return; }
-            CloseEditor(); _notice.Text = "Saved for this session. Production data is unchanged.";
+            CloseEditor(); _notice.Text = _kind == PrototypeLexiconKind.Snippet ? "Snippet saved for this session only." : "Dictionary saved for the next dictation.";
         }, primary: true));
+    }
+
+    private void RenderPacks()
+    {
+        _heading.Text = "Term packs";
+        _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
+        _actions.Children.Clear();
+        _actions.Children.Add(Button("Back to dictionary", () => { _showPacks = false; Render(); }));
+        _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
+            ? "Packs use Windows text-based boosting · acoustic CTC is not connected yet."
+            : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
+        _body.Children.Add(Text("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.", 13, true));
+        foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
+        {
+            var row = new Grid { ColumnSpacing = 14 };
+            row.ColumnDefinitions.Add(new() { Width = new GridLength(28) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            row.Children.Add(new TypeWhisperGlyph { Kind = "dictionary", Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Center });
+            var labels = new StackPanel { Spacing = 5 };
+            labels.Children.Add(Text($"{pack.Name} · {pack.Terms.Length} terms", 14));
+            labels.Children.Add(Text(string.Join(", ", pack.Terms.Take(8)) + (pack.Terms.Length > 8 ? "…" : ""), 12, true));
+            Grid.SetColumn(labels, 1); row.Children.Add(labels);
+            var toggle = PrototypeToggleSwitch.Create(_store.PackEnabled(pack.Id));
+            AutomationProperties.SetName(toggle, "Enable term pack " + pack.Name);
+            var restoring = false;
+            toggle.Toggled += (_, _) =>
+            {
+                if (restoring) return;
+                var error = _store.SetPackEnabled(pack, toggle.IsOn);
+                _notice.Text = error ?? $"{pack.Name} {(toggle.IsOn ? "enabled" : "disabled")} · saved.";
+                if (error is not null) { restoring = true; toggle.IsOn = _store.PackEnabled(pack.Id); restoring = false; }
+            };
+            Grid.SetColumn(toggle, 2); row.Children.Add(toggle);
+            _body.Children.Add(Surface(row, 14));
+        }
+        _scroll.ChangeView(null, 0, null, true);
     }
 
     private static TextBox Input(string value, string name, bool multiline)
