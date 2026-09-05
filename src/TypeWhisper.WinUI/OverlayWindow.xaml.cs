@@ -30,6 +30,11 @@ public sealed partial class OverlayWindow : Window
     private readonly PrototypeAudioLevelSource _audioLevelSource = new();
     private readonly Random _random = new(73);
     private readonly Func<float>? _externalLevel;
+    private readonly Func<DictationOverlayState>? _runtimeState;
+    private readonly Func<string>? _liveText;
+    private uint _iconProcessId;
+    private bool _closed;
+    private int _iconRequest;
     private TranscriptPreviewWindow? _transcriptWindow;
     private long _lastCompositionTimestamp;
     private double _renderAccumulatorTicks;
@@ -53,9 +58,11 @@ public sealed partial class OverlayWindow : Window
     internal bool IsPaused => _paused;
     internal bool IsPreviewVisible => _previewVisible;
 
-    internal OverlayWindow(bool transcriptPreviewEnabled = true, Func<float>? externalLevel = null)
+    internal OverlayWindow(bool transcriptPreviewEnabled = true, Func<float>? externalLevel = null, Func<DictationOverlayState>? runtimeState = null, Func<string>? liveText = null)
     {
+        _liveText = liveText;
         _externalLevel = externalLevel;
+        _runtimeState = runtimeState;
         _transcriptPreviewEnabled = transcriptPreviewEnabled;
         InitializeComponent();
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
@@ -88,6 +95,8 @@ public sealed partial class OverlayWindow : Window
 
         Closed += (_, _) =>
         {
+            _closed = true;
+            _iconRequest++;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
             _audioLevelSource.Dispose();
             WaveformCanvas.RemoveFromVisualTree();
@@ -160,6 +169,23 @@ public sealed partial class OverlayWindow : Window
 
     private void UpdateStateAppearance()
     {
+        if (_runtimeState is not null)
+        {
+            var state = _runtimeState();
+            if (_iconProcessId != state.TargetProcessId)
+            {
+                _iconProcessId = state.TargetProcessId;
+                _ = UpdateTargetIconAsync(state.TargetProcessId, ++_iconRequest);
+            }
+            StatusText.Text = state.Label;
+            StatusText.Foreground = new SolidColorBrush(state.Phase == DictationPhase.Error
+                ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 59, 167, 255));
+            RecordingDot.Visibility = state.Phase == DictationPhase.Recording ? Visibility.Visible : Visibility.Collapsed;
+            PauseMark.Visibility = Visibility.Collapsed;
+            AutomationProperties.SetName(OverlayRoot, $"{_mode} · {state.Message}");
+            ToolTipService.SetToolTip(OverlayRoot, state.Message);
+            return;
+        }
         StatusText.Text = _paused ? "PAUSED" : "RECORDING";
         StatusText.Foreground = new SolidColorBrush(_paused
             ? Color.FromArgb(255, 244, 188, 106) : Color.FromArgb(255, 59, 167, 255));
@@ -252,7 +278,7 @@ public sealed partial class OverlayWindow : Window
         SetJoinedShape(true);
         if (_transcriptWindow is null)
         {
-            _transcriptWindow = new TranscriptPreviewWindow();
+            _transcriptWindow = new TranscriptPreviewWindow(_liveText);
             _transcriptWindow.Collapsed += (_, _) => SetJoinedShape(false);
             _transcriptWindow.Closed += (_, _) =>
             {
@@ -290,7 +316,7 @@ public sealed partial class OverlayWindow : Window
         StatusHost.Width = _mode == PrototypeOverlayMode.Compact ? 42 : 104;
         RecordingLayout.ColumnDefinitions[1].Width = left == PrototypeOverlayWidget.None ? GridLength.Auto : right == PrototypeOverlayWidget.Waveform ? new GridLength(1, GridUnitType.Auto) : new GridLength(1, GridUnitType.Star);
         RecordingLayout.ColumnDefinitions[2].Width = right == PrototypeOverlayWidget.Waveform ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
-        RightWidgetText.MaxWidth = _mode == PrototypeOverlayMode.Compact ? 100 : 150;
+        RightWidgetHost.MaxWidth = _mode == PrototypeOverlayMode.Compact ? 122 : 172;
         UpdateWidgetText(LeftWidgetText, left);
         UpdateWidgetText(RightWidgetText, right);
         // A mandatory status dot remains even when both configurable slots are empty.
@@ -300,16 +326,29 @@ public sealed partial class OverlayWindow : Window
 
     private void UpdateWidgetText(TextBlock text, PrototypeOverlayWidget widget)
     {
-        text.Visibility = widget is PrototypeOverlayWidget.None or PrototypeOverlayWidget.Timer or PrototypeOverlayWidget.Waveform ? Visibility.Collapsed : Visibility.Visible;
+        var host = text == LeftWidgetText ? LeftWidgetHost : RightWidgetHost;
+        var iconHost = text == LeftWidgetText ? LeftAppIconHost : RightAppIconHost;
+        host.Visibility = widget is PrototypeOverlayWidget.None or PrototypeOverlayWidget.Timer or PrototypeOverlayWidget.Waveform ? Visibility.Collapsed : Visibility.Visible;
+        iconHost.Visibility = widget == PrototypeOverlayWidget.AppName ? Visibility.Visible : Visibility.Collapsed;
         text.Text = widget switch
         {
             PrototypeOverlayWidget.Clock => DateTime.Now.ToString("HH:mm"),
-            PrototypeOverlayWidget.Profile => "Default profile",
-            PrototypeOverlayWidget.HotkeyMode => "Toggle",
-            PrototypeOverlayWidget.AppName => "Quick Launch",
-            PrototypeOverlayWidget.Indicator => _paused ? "Paused" : "Recording",
+            PrototypeOverlayWidget.Profile => _runtimeState is null ? "Default profile" : "Parakeet",
+            PrototypeOverlayWidget.HotkeyMode => _runtimeState is null ? "Toggle" : "Hybrid",
+            PrototypeOverlayWidget.AppName => _runtimeState?.Invoke().TargetApp ?? "Quick Launch",
+            PrototypeOverlayWidget.Indicator => _runtimeState?.Invoke().Label ?? (_paused ? "Paused" : "Recording"),
             _ => ""
         };
+    }
+
+    private async Task UpdateTargetIconAsync(uint processId, int request)
+    {
+        LeftAppIcon.Source = RightAppIcon.Source = null;
+        LeftAppFallback.Visibility = RightAppFallback.Visibility = Visibility.Visible;
+        var icon = await TargetAppIcon.LoadAsync(processId);
+        if (_closed || request != _iconRequest) return;
+        LeftAppIcon.Source = RightAppIcon.Source = icon;
+        LeftAppFallback.Visibility = RightAppFallback.Visibility = icon is null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void PositionBottomCenter()
@@ -361,7 +400,7 @@ public sealed partial class OverlayWindow : Window
             ? previous + (normalized - previous) * 0.68f
             : previous + (normalized - previous) * 0.20f;
 
-        DurationText.Text = _duration.Elapsed.ToString(@"mm\:ss");
+        DurationText.Text = (_runtimeState?.Invoke().Duration ?? _duration.Elapsed).ToString(@"mm\:ss");
         if (_mode != PrototypeOverlayMode.Minimal)
         {
             UpdateWidgetText(LeftWidgetText, _layout.Left);
@@ -372,6 +411,13 @@ public sealed partial class OverlayWindow : Window
 
     private void WaveformCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
+        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error } state)
+        {
+            var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 244, 188, 106);
+            var centerY = (float)sender.Size.Height / 2;
+            for (var i = -1; i <= 1; i++) args.DrawingSession.FillCircle((float)sender.Size.Width / 2 + i * 10, centerY, 2.5f, color);
+            return;
+        }
         _diagnosticDrawCount++;
         var size = sender.Size;
         if (size.Width <= 1 || size.Height <= 1)

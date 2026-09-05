@@ -277,7 +277,7 @@ public sealed partial class PrototypeSettingsWindow : Window
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
             if (category == "Audio" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Microphone preferences are live and saved · other audio controls are previews";
+                SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

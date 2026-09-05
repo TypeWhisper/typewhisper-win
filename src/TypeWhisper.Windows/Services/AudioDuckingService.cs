@@ -10,6 +10,9 @@ public sealed class AudioDuckingService : IAudioDuckingService
 {
     private float _savedVolume;
     private bool _isDucked;
+    private string? _duckedDeviceId;
+    private float _duckedVolume;
+    public string? OutputDeviceId { get; set; }
 
     /// <summary>
     /// Ducks audio.
@@ -21,11 +24,14 @@ public sealed class AudioDuckingService : IAudioDuckingService
             if (_isDucked) return;
 
             using var enumerator = new MMDeviceEnumerator();
-            var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            using var device = string.IsNullOrEmpty(OutputDeviceId)
+                ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia) : enumerator.GetDevice(OutputDeviceId);
             var volume = device.AudioEndpointVolume;
 
             _savedVolume = volume.MasterVolumeLevelScalar;
-            volume.MasterVolumeLevelScalar = Math.Clamp(_savedVolume * factor, 0f, 1f);
+            _duckedVolume = Math.Clamp(_savedVolume * factor, 0f, 1f);
+            _duckedDeviceId = device.ID;
+            volume.MasterVolumeLevelScalar = _duckedVolume;
             _isDucked = true;
         }
         catch (Exception ex)
@@ -44,8 +50,10 @@ public sealed class AudioDuckingService : IAudioDuckingService
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            device.AudioEndpointVolume.MasterVolumeLevelScalar = _savedVolume;
+            using var device = enumerator.GetDevice(_duckedDeviceId!);
+            // Respect volume adjustments made by the user during recording.
+            if (Math.Abs(device.AudioEndpointVolume.MasterVolumeLevelScalar - _duckedVolume) < 0.001f)
+                device.AudioEndpointVolume.MasterVolumeLevelScalar = _savedVolume;
         }
         catch (Exception ex)
         {
@@ -54,6 +62,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
         finally
         {
             _isDucked = false;
+            _duckedDeviceId = null;
         }
     }
 }

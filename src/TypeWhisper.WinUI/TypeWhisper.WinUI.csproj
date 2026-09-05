@@ -25,10 +25,14 @@
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="Platform/AudioRecordingService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/SoundService.cs" Link="Platform/SoundService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/AudioDuckingService.cs" Link="Platform/AudioDuckingService.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/MediaPauseService.cs" Link="Platform/MediaPauseService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/WindowsClipboardTransaction.cs" Link="Platform/WindowsClipboardTransaction.cs" />
     <Compile Include="../TypeWhisper.Windows/Native/NativeMethods.Clipboard.cs" Link="Platform/NativeMethods.Clipboard.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="Platform/WasapiAudioInputCapture.cs" />

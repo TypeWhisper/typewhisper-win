@@ -17,6 +17,11 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationOverlayState.cs" Link="DictationOverlayState.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationAudioPreferences.cs" Link="DictationAudioPreferences.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryEntry.cs" Link="PrototypeHistoryEntry.cs" />
   </ItemGroup>

@@ -95,6 +95,7 @@ public sealed partial class MainWindow : Window
         {
             _dictationHotkey = new DictationHotkeyRegistration(this, action =>
             {
+                _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
                 _ = action switch
                 {
                     HybridHotkeyAction.Start => _dictation.StartAsync(),
@@ -118,21 +119,32 @@ public sealed partial class MainWindow : Window
 
     private void UpdateLiveDictation()
     {
+        var revision = ++_overlayRevision;
         MetricsText.Text = _dictation.Status;
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
-        if (_dictation.IsRecording)
+        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error)
         {
+            _overlay?.HidePreview();
             if (_liveOverlay is null)
-                _liveOverlay = new OverlayWindow(false, () => _dictation.CurrentLevel);
+                _liveOverlay = new OverlayWindow(_transcriptPreviewEnabled, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0, () => _dictation.OverlayState, () => _dictation.LivePreviewText);
             _liveOverlay.SetLayout(OverlayPreferences);
             _liveOverlay.SetMode(_overlayMode, DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
             _liveOverlay.ActivateWithoutTakingFocus();
+            _liveOverlay.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
+            _liveOverlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
+            if (_dictation.OverlayState.Phase == DictationPhase.Error) _ = HideErrorOverlayAsync(revision);
         }
         else
         {
             _liveOverlay?.HidePreview();
             if (_historyOpen) _ = HistoryView.RefreshAsync();
         }
+    }
+    private int _overlayRevision;
+    private async Task HideErrorOverlayAsync(int revision)
+    {
+        await Task.Delay(5000);
+        if (_overlayRevision == revision) _liveOverlay?.HidePreview();
     }
     private PrototypeCommand? _selected;
     private OverlayWindow? _overlay;
@@ -156,6 +168,7 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+        LoadOverlayPreferences();
         var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService));
@@ -757,6 +770,33 @@ public sealed partial class MainWindow : Window
     private PrototypeOverlayPreferences _layoutPreferences = new(PrototypeOverlayMode.Standard, true, false);
     private readonly Dictionary<string, string> _settingsValues = new();
     private PrototypeOverlayPreferences OverlayPreferences => _layoutPreferences with { Mode = _overlayMode, LiveText = _transcriptPreviewEnabled, TechnicalDetails = _technicalDetailsEnabled };
+    private static readonly string OverlayPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "overlay.json");
+    private void LoadOverlayPreferences()
+    {
+        try
+        {
+            if (!File.Exists(OverlayPreferencesPath)) return;
+            var preferences = System.Text.Json.JsonSerializer.Deserialize<PrototypeOverlayPreferences>(File.ReadAllText(OverlayPreferencesPath));
+            if (preferences is null || !Enum.IsDefined(preferences.Mode) || !Enum.IsDefined(preferences.Anchor)
+                || !Enum.IsDefined(preferences.Left) || !Enum.IsDefined(preferences.Right)) return;
+            _layoutPreferences = preferences;
+            _overlayMode = preferences.Mode; _transcriptPreviewEnabled = preferences.LiveText;
+            _technicalDetailsEnabled = preferences.TechnicalDetails;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { MetricsText.Text = "Could not load overlay preferences: " + ex.Message; }
+    }
+    private void SaveOverlayPreferences()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(OverlayPreferencesPath)!);
+            File.WriteAllText(OverlayPreferencesPath + ".tmp", System.Text.Json.JsonSerializer.Serialize(OverlayPreferences));
+            File.Move(OverlayPreferencesPath + ".tmp", OverlayPreferencesPath, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { MetricsText.Text = "Could not save overlay preferences: " + ex.Message; }
+    }
 
     internal void OpenSetup()
     {
@@ -829,6 +869,8 @@ public sealed partial class MainWindow : Window
                 _overlayMode = preferences.Mode;
                 _transcriptPreviewEnabled = preferences.LiveText;
                 _technicalDetailsEnabled = preferences.TechnicalDetails;
+                SaveOverlayPreferences();
+                if (_liveOverlay?.IsPreviewVisible == true) UpdateLiveDictation();
                 if (_overlay?.IsPreviewVisible == true)
                 {
                     // Keep the existing overlay's monitor and bottom anchor.
@@ -1072,6 +1114,7 @@ public sealed partial class MainWindow : Window
         if (sender is Button { Tag: string mode } && Enum.TryParse<PrototypeOverlayMode>(mode, out var selected))
         {
             _overlayMode = selected;
+            SaveOverlayPreferences();
             ShowWaveformOverlay();
         }
     }
@@ -1111,10 +1154,12 @@ public sealed partial class MainWindow : Window
     private void TranscriptToggleButton_Click(object sender, RoutedEventArgs e)
     {
         _transcriptPreviewEnabled = !_transcriptPreviewEnabled;
+        SaveOverlayPreferences();
         TranscriptToggleButton.Content = _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
         TranscriptToggleButton.Foreground = (Brush)Application.Current.Resources[
             _transcriptPreviewEnabled ? "AccentBrush" : "MutedBrush"];
         _overlay?.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
+        _liveOverlay?.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
         UpdateOverlayControls();
         MetricsText.Text = _transcriptPreviewEnabled
             ? "Live transcript preview enabled"

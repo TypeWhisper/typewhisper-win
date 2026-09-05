@@ -45,8 +45,20 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Verify populated dictation history, detail/copy behavior and live refresh during daily use.
 - [ ] Connect configurable transcription model/device selection.
 - [x] Connect the Audio microphone picker to real capture device preferences and isolated persistence; reject changes during recording.
+- [x] Wire persisted recording sounds/output selection, whisper mode, output-volume reduction and legacy media Play/Pause behavior into the WinUI dictation lifecycle.
+- [x] Use one shared audio output preference for feedback and volume reduction; future TTS must consume the same preference rather than add a separate device selector.
+- [ ] Verify selected-output sounds, volume restoration, cancellation and unplug scenarios on real audio devices. Media pause currently uses the legacy toggle key and can start already-paused media.
+- [x] Connect persisted energy-based silence auto-stop through the normal stop/transcribe/insert lifecycle, with configurable timeout and modifier-held protection.
+- [ ] Validate silence auto-stop with real speech, quiet microphones, background noise and physical hybrid hotkeys; current detector uses RMS energy, not semantic voice activity detection.
+- [ ] Connect spoken-feedback providers/voices; this control remains explicitly disabled until connected.
 - [ ] Validate microphone switching, unplug/replug fallback and restart persistence with real devices. Model switching and forced-language configuration are not connected; Dictation now shows the actual Parakeet/automatic configuration instead of sample choices.
 - [ ] Connect remaining dictation modes/hotkeys, live transcription, complete cancellation and durable recovery.
+- [x] Wire actual Parakeet preview text into the WinUI transcript window using the legacy local polling approach, with the preview delay reduced to 1.5 seconds plus inference time. Drain preview inference before final decode and reject cancelled results.
+- [ ] Validate real live-preview latency, long recordings and physical hotkey cancellation. Polling is not token streaming and shares the final recognizer.
+- [ ] Port Parakeet vocabulary boosting/CTC as an optional add-on, following the Mac implementation; separate the WPF-bound plugin UI contract before connecting installable add-ons to WinUI.
+- [x] Add a portable net10.0 SDK target alongside the legacy WPF target and an acoustic vocabulary-rescoring contract (audio, token timings, term hints, recording identity and replacement spans).
+- [x] Exercise a separate portable test-plugin assembly: **6 contract tests passed** for framework independence, lifecycle/settings, request data, cancellation and explicit errors. This is not CTC inference or WinUI plugin discovery.
+- [ ] Validate WPF compatibility, package/discovery, host-side result validation, enable/disable persistence, model lifecycle and the actual CTC backend. The portable and WPF SDK targets are not a promise that legacy WPF plugins load unchanged in WinUI.
 - [ ] Connect recorder audio capture, source toggles, playback and persisted history entries.
 - [ ] Connect general settings persistence, native services and model downloads/activation.
 - [ ] Connect workflows, file transcription, dictionary and snippets to real services.
@@ -67,7 +79,7 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 ## Validation at this checkpoint
 
 - WinUI development host built, published and launched through the prescribed dev launcher.
-- Presentation/history/hotkey/paste-coordinator tests: **33 passed**.
+- Presentation/history/hotkey/paste-coordinator/overlay/audio-effects/silence/live-preview tests: **59 passed**. Audio-effects tests use mocks, not actual output-volume or media changes. Silence tests use injected elapsed time and RMS levels, not real microphone input. Preview tests use a fake decoder to verify publication, cancellation/draining and error isolation.
 - Clipboard format-policy regression tests: **5 passed**. The exact current clipboard snapshot failed before the fix and passed afterward without changing its sequence number.
 - The FileContents exception requires an already captured nonempty CF_HDROP; unavailable virtual-file-only, bitmap and unknown representations remain protected.
 - Added native clipboard round-trip fixtures; the expanded isolated suite has not run here because private window-station creation is denied. Do not count it as passed. Full slow-target and restored-file-paste coverage remains pending.

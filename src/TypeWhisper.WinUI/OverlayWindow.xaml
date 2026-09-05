@@ -43,8 +43,22 @@
                 <TextBlock x:Name="DurationText" Text="00:00" FontFamily="Cascadia Mono"
                            FontSize="12" Foreground="{ThemeResource MutedBrush}" Margin="0,2,0,0" />
             </StackPanel>
-            <TextBlock x:Name="LeftWidgetText" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
-            <TextBlock x:Name="RightWidgetText" Grid.Column="2" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />
+            <Grid x:Name="LeftWidgetHost" Grid.Column="1" ColumnSpacing="6" VerticalAlignment="Center" Visibility="Collapsed">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid x:Name="LeftAppIconHost" Width="16" Height="16" Visibility="Collapsed">
+                    <FontIcon x:Name="LeftAppFallback" Glyph="&#xE737;" FontSize="16" Foreground="{ThemeResource MutedBrush}"/>
+                    <Image x:Name="LeftAppIcon" Stretch="Uniform"/>
+                </Grid>
+                <TextBlock x:Name="LeftWidgetText" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}"/>
+            </Grid>
+            <Grid x:Name="RightWidgetHost" Grid.Column="2" ColumnSpacing="6" VerticalAlignment="Center" Visibility="Collapsed">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Grid x:Name="RightAppIconHost" Width="16" Height="16" Visibility="Collapsed">
+                    <FontIcon x:Name="RightAppFallback" Glyph="&#xE737;" FontSize="16" Foreground="{ThemeResource MutedBrush}"/>
+                    <Image x:Name="RightAppIcon" Stretch="Uniform"/>
+                </Grid>
+                <TextBlock x:Name="RightWidgetText" Grid.Column="1" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}"/>
+            </Grid>
         </Grid>
         <TextBlock x:Name="DiagnosticsText" Grid.Row="1" Text="Measuring…" FontFamily="Cascadia Mono" FontSize="8"
                    HorizontalAlignment="Right" Foreground="{ThemeResource MutedBrush}" Visibility="Collapsed" />

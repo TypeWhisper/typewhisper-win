@@ -40,13 +40,15 @@ public sealed partial class TranscriptPreviewWindow : Window
     private int _pixelWidth = OverlayWindow.WindowWidth;
     private double _scale = 1;
     private bool _paused;
+    private readonly Func<string>? _liveText;
     private bool _opensDown;
     private int _recordingHeight;
 
     internal event EventHandler? Collapsed;
 
-    internal TranscriptPreviewWindow()
+    internal TranscriptPreviewWindow(Func<string>? liveText = null)
     {
+        _liveText = liveText;
         InitializeComponent();
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -198,6 +200,17 @@ public sealed partial class TranscriptPreviewWindow : Window
 
     private void UpdateTranscriptContent()
     {
+        if (_liveText is not null)
+        {
+            var text = _liveText();
+            if (TranscriptText.Text != text)
+            {
+                TranscriptText.Text = text;
+                if (_followTranscript)
+                    DispatcherQueue.TryEnqueue(() => { TranscriptScrollViewer.UpdateLayout(); TranscriptScrollViewer.ChangeView(null, TranscriptScrollViewer.ScrollableHeight, null, true); });
+            }
+            return;
+        }
         if (!_streamClock.IsRunning)
             return;
 

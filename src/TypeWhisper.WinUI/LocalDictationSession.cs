@@ -11,6 +11,35 @@ namespace TypeWhisper.WinUI;
 internal sealed class LocalDictationSession : IDisposable
 {
     private readonly AudioRecordingService _audio = new();
+    private readonly SoundService _sounds = new();
+    private readonly AudioDuckingService _ducking = new();
+    private readonly RecordingAudioEffects _effects;
+    private readonly LocalLivePreview _livePreview = new();
+    internal bool LivePreviewEnabled { get; set; } = true;
+    internal string LivePreviewText { get; private set; } = "";
+    internal event Action? LivePreviewChanged;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _silenceTimer;
+    private volatile SilenceAutoStop? _silence;
+    private readonly System.Diagnostics.Stopwatch _silenceClock = new();
+    internal DictationAudioPreferences AudioPreferences { get; private set; } = new();
+    internal string? AudioPreferencesError { get; private set; }
+    private static readonly string AudioPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "audio.json");
+
+    internal string? SaveAudioPreferences(DictationAudioPreferences preferences)
+    {
+        try
+        {
+            preferences = preferences.Validated();
+            Directory.CreateDirectory(Path.GetDirectoryName(AudioPreferencesPath)!);
+            File.WriteAllText(AudioPreferencesPath + ".tmp", System.Text.Json.JsonSerializer.Serialize(preferences));
+            File.Move(AudioPreferencesPath + ".tmp", AudioPreferencesPath, true);
+            AudioPreferences = preferences;
+            AudioPreferencesError = null;
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { return AudioPreferencesError = "Could not save audio preferences: " + ex.Message; }
+    }
     private readonly IHistoryService _history;
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -18,6 +47,12 @@ internal sealed class LocalDictationSession : IDisposable
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;
+    private DictationPhase _phase;
+    private TimeSpan _lastDuration;
+    private string _targetApp = "";
+    private uint _targetProcessId;
+    internal DictationOverlayState OverlayState => new(_phase,
+        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId);
     internal string Status { get; private set; } = "Loading Parakeet…";
     internal string Shortcut { get; set; } = "Ctrl+Shift+F9";
     internal bool IsRecording => _audio.IsRecording;
@@ -62,6 +97,32 @@ internal sealed class LocalDictationSession : IDisposable
     {
         _history = history;
         _inserter = new(owner);
+        _effects = new(_ducking, new MediaPauseService());
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _silenceTimer = dispatcher.CreateTimer();
+        _silenceTimer.Interval = TimeSpan.FromMilliseconds(100);
+        _silenceTimer.Tick += async (_, _) =>
+        {
+            if (_disposed || !_audio.IsRecording) { StopSilenceMonitoring(); return; }
+            if (_silence?.ShouldStop(_silenceClock.Elapsed, ModifiersHeld()) == true)
+                await StopAsync();
+        };
+        _audio.AudioLevelChanged += (_, level) => _silence?.Observe(_silenceClock.Elapsed, level.RmsLevel);
+        _audio.DeviceLost += (_, _) => dispatcher.TryEnqueue(() =>
+        {
+            if (_disposed || _audio.IsRecording) return;
+            StopSilenceMonitoring();
+            _livePreview.Cancel();
+            _effects.End();
+            if (_phase == DictationPhase.Recording) SetStatus("Microphone disconnected · recording stopped", DictationPhase.Error);
+        });
+        try
+        {
+            if (File.Exists(AudioPreferencesPath))
+                AudioPreferences = (System.Text.Json.JsonSerializer.Deserialize<DictationAudioPreferences>(File.ReadAllText(AudioPreferencesPath)) ?? new()).Validated();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { AudioPreferencesError = "Audio preferences could not be loaded. Defaults are in use: " + ex.Message; }
     }
 
     internal async Task InitializeAsync()
@@ -114,11 +175,15 @@ internal sealed class LocalDictationSession : IDisposable
         if (_disposed || !await _gate.WaitAsync(0)) return;
         try
         {
+            StopSilenceMonitoring();
+            _livePreview.Cancel();
             if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            _effects.End();
+            await _livePreview.StopAsync();
             SetStatus("Shortcut cancelled · Parakeet ready");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { SetStatus("Could not cancel recording: " + ex.Message); }
-        finally { _gate.Release(); }
+        finally { _effects.End(); _gate.Release(); }
     }
 
     private async Task SetRecordingAsync(bool? recording)
@@ -137,24 +202,51 @@ internal sealed class LocalDictationSession : IDisposable
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
                 }
+                var preferences = AudioPreferences;
+                await _livePreview.StopAsync();
+                if (_disposed) return;
+                _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
+                LivePreviewText = "";
+                if (LivePreviewEnabled)
+                    _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
+                        DecodeAsync,
+                        text => { LivePreviewText = text; LivePreviewChanged?.Invoke(); },
+                        error => { LivePreviewText = "Live preview unavailable · final transcription will continue."; LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
+                if (preferences.SilenceAutoStopEnabled)
+                {
+                    _silenceClock.Restart();
+                    _silence = new(TimeSpan.FromSeconds(preferences.SilenceAutoStopSeconds));
+                    _silenceTimer.Start();
+                }
+                _sounds.IsEnabled = preferences.SoundFeedbackEnabled;
+                _sounds.OutputDeviceId = preferences.OutputDeviceId;
+                _ducking.OutputDeviceId = preferences.OutputDeviceId;
+                _effects.Begin(preferences);
+                _sounds.PlayStartSound();
                 _started = DateTime.UtcNow;
+                _lastDuration = TimeSpan.Zero;
+                _targetProcessId = processId;
+                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
+                catch (ArgumentException) { _targetApp = "Target app"; }
                 SetStatus($"Recording · {Shortcut} to finish");
                 return;
             }
 
-            SetStatus("Finishing recording…");
+            StopSilenceMonitoring();
+            _livePreview.Cancel();
+            _lastDuration = _audio.RecordingDuration;
+            SetStatus("Finishing recording…", DictationPhase.Processing);
             var samples = await _audio.StopRecordingAsync();
+            _effects.End();
+            _sounds.PlayStopSound();
+            // Native decoding cannot be interrupted; drain the cancelled preview
+            // before the final decode uses the same recognizer.
+            await _livePreview.StopAsync();
             if (samples is null || samples.Length < 1600) { SetStatus("No usable audio captured. Try again."); return; }
-            SetStatus("Transcribing with Parakeet…");
-            var text = await Task.Run(() =>
-            {
-                using var stream = _recognizer.CreateStream();
-                stream.AcceptWaveform(16000, samples);
-                _recognizer.Decode(stream);
-                return stream.Result.Text.Trim();
-            });
+            SetStatus("Transcribing with Parakeet…", DictationPhase.Processing);
+            var text = await DecodeAsync(samples);
             if (string.IsNullOrWhiteSpace(text)) { SetStatus("No speech recognized. Ready to try again."); return; }
             var record = new TranscriptionRecord
             {
@@ -184,28 +276,65 @@ internal sealed class LocalDictationSession : IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                SetStatus("Saved to History · clipboard operation failed; check the target and clipboard: " + ex.Message);
+                SetStatus("Saved to History · clipboard operation failed; check the target and clipboard: " + ex.Message, DictationPhase.Error);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            SetStatus("Dictation failed: " + ex.Message);
+            StopSilenceMonitoring();
+            _livePreview.Cancel();
+            try { if (_audio.IsRecording) await _audio.StopRecordingAsync(); }
+            catch (Exception stopError) when (stopError is not OutOfMemoryException)
+            { System.Diagnostics.Debug.WriteLine(stopError); }
+            finally { _effects.End(); await _livePreview.StopAsync(); }
+            _sounds.PlayErrorSound();
+            SetStatus("Dictation failed: " + ex.Message, DictationPhase.Error);
         }
-        finally { _gate.Release(); }
+        finally { if (!_audio.IsRecording) _effects.End(); _gate.Release(); }
     }
 
     internal string? LastUnsavedText { get; private set; }
-    private void SetStatus(string status) { Status = status; Changed?.Invoke(); }
+    private Task<string> DecodeAsync(float[] samples) => Task.Run(() =>
+    {
+        using var stream = _recognizer!.CreateStream();
+        stream.AcceptWaveform(16000, samples);
+        _recognizer.Decode(stream);
+        return stream.Result.Text.Trim();
+    });
+    private void StopSilenceMonitoring()
+    {
+        _silence = null;
+        _silenceTimer.Stop();
+        _silenceClock.Stop();
+    }
+    private void SetStatus(string status, DictationPhase? phase = null)
+    {
+        Status = status;
+        _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
+        Changed?.Invoke();
+    }
 
     private static bool ModifiersHeld() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
 
     public void Dispose()
     {
         _disposed = true;
+        _livePreview.Dispose();
+        StopSilenceMonitoring();
+        _effects.End();
         _audio.Dispose();
         _inserter.Dispose();
         // Decode cannot be interrupted safely; process shutdown releases it if busy.
-        if (_gate.Wait(0)) { _recognizer?.Dispose(); _recognizer = null; _gate.Release(); }
+        // The preview may still be inside native inference. Drain it before disposing.
+        _ = DisposeRecognizerAsync();
+    }
+
+    private async Task DisposeRecognizerAsync()
+    {
+        await _livePreview.StopAsync();
+        await _gate.WaitAsync();
+        try { _recognizer?.Dispose(); _recognizer = null; }
+        finally { _gate.Release(); }
     }
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();

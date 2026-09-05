@@ -9,20 +9,8 @@ internal sealed class LiveDictationSettings(LocalDictationSession session)
     {
         if (category == "Audio")
         {
-            var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SelectedMicrophoneDevice"));
-            row.Children.Clear();
-            var priorityRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "MicrophonePriorityList"));
-            var priorityIndex = content.Children.IndexOf(priorityRow);
-            // RenderFields emits a separator after each field. Remove the old
-            // fallback field's separator together with the replaced field.
-            if (priorityIndex + 1 < content.Children.Count && content.Children[priorityIndex + 1] is Border { Height: 1 })
-                content.Children.RemoveAt(priorityIndex + 1);
-            content.Children.Remove(priorityRow);
-            var priorities = new MicrophonePriorityEditor(session);
-            row.Children.Add(priorities);
-            pickers.Add(priorities.AddPicker);
-            foreach (var text in content.Children.OfType<TextBlock>().Where(text => text.Text.StartsWith("Settings preview")))
-                text.Text = "Microphone selection and priority are saved and used by dictation. Other controls are previews.";
+            pickers.Clear();
+            new LiveAudioSettings(session).Render(content, pickers);
         }
         if (category == "Dictation")
         {
