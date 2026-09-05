@@ -1,0 +1,57 @@
+<UserControl x:Class="TypeWhisper.WinUI.PrototypeOverlayEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:TypeWhisper.WinUI">
+    <StackPanel Spacing="12">
+        <StackPanel Spacing="7">
+            <TextBlock Text="Overlay editor" FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="Drag the preview to a screen edge. Arrange the two content slots below." FontSize="13" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" Background="{ThemeResource SurfaceBrush}" Padding="10">
+            <Canvas x:Name="ScreenCanvas" Height="118" Background="Transparent" SizeChanged="Canvas_SizeChanged">
+                <TextBlock Text="SCREEN PREVIEW" FontSize="10" Foreground="{ThemeResource MutedBrush}" Canvas.Left="8" Canvas.Top="50" IsHitTestVisible="False" />
+                <Border x:Name="OverlayThumb" Width="126" Height="34" CornerRadius="8" Background="#FF12304A" BorderBrush="{ThemeResource AccentBrush}" BorderThickness="1"
+                    PointerPressed="Thumb_Pressed" PointerMoved="Thumb_Moved" PointerReleased="Thumb_Released" PointerCaptureLost="Thumb_CaptureLost">
+                    <TextBlock x:Name="ThumbText" Text="●  ┃┃┃┃  00:12" FontSize="12" Margin="8,0" TextTrimming="CharacterEllipsis" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" />
+                </Border>
+            </Canvas>
+        </Border>
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <local:PrototypeChoicePicker x:Name="EdgePicker" />
+            <local:PrototypeChoicePicker x:Name="AlignmentPicker" Grid.Column="1" />
+        </Grid>
+        <TextBlock x:Name="PositionSummary" FontSize="11" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
+        <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+        <StackPanel Spacing="7">
+            <TextBlock Text="OVERLAY CONTENT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+            <TextBlock x:Name="ContentHint" Text="Drag a slot across to swap it, or choose a widget. The recording indicator stays visible." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Grid x:Name="WidgetSlots" ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Border x:Name="LeftSlot" Tag="Left" Padding="14" CornerRadius="9" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1"
+                PointerPressed="Slot_Pressed" PointerReleased="Slot_Released" PointerCaptureLost="Slot_CaptureLost">
+                <StackPanel Spacing="6" IsHitTestVisible="False">
+                    <TextBlock Text="LEFT  ·  DRAG TO MOVE" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="LeftLabel" Text="Waveform" FontSize="14" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+            <Border x:Name="RightSlot" Grid.Column="1" Tag="Right" Padding="14" CornerRadius="9" Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1"
+                PointerPressed="Slot_Pressed" PointerReleased="Slot_Released" PointerCaptureLost="Slot_CaptureLost">
+                <StackPanel Spacing="6" IsHitTestVisible="False">
+                    <TextBlock Text="RIGHT  ·  DRAG TO MOVE" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="RightLabel" Text="Timer" FontSize="14" FontWeight="SemiBold" />
+                </StackPanel>
+            </Border>
+        </Grid>
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <local:PrototypeChoicePicker x:Name="LeftWidgetPicker" />
+            <local:PrototypeChoicePicker x:Name="RightWidgetPicker" Grid.Column="1" />
+        </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <local:HandCursorButton x:Name="SwapButton" Content="Swap left and right" Click="Swap_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Swap overlay widgets" />
+            <local:HandCursorButton Content="Reset layout" Click="Reset_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Reset overlay layout" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

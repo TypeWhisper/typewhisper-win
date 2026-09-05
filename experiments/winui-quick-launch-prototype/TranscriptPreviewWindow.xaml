@@ -1,0 +1,52 @@
+<Window
+    x:Class="TypeWhisper.WinUIPrototype.TranscriptPreviewWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="TypeWhisper Live Transcript Prototype">
+
+    <Border x:Name="TranscriptRoot"
+            Background="{ThemeResource SurfaceBrush}"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            CornerRadius="14,14,0,0"
+            Padding="18,11,18,10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Ellipse Width="6" Height="6" Fill="{ThemeResource AccentBrush}"
+                             VerticalAlignment="Center" />
+                    <TextBlock Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
+                               CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"
+                           FontSize="8" Foreground="{ThemeResource MutedBrush}" />
+            </Grid>
+
+            <ScrollViewer x:Name="TranscriptScrollViewer"
+                          Grid.Row="1"
+                          Margin="0,7,0,0"
+                          VerticalScrollMode="Enabled"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalScrollBarVisibility="Disabled"
+                          ViewChanged="TranscriptScrollViewer_ViewChanged"
+                          AutomationProperties.Name="Live transcript text">
+                <TextBlock x:Name="TranscriptText"
+                           Margin="0,0,14,0"
+                           FontSize="13"
+                           LineHeight="18"
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextBrush}" />
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

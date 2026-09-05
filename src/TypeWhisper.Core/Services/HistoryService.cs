@@ -12,6 +12,8 @@ namespace TypeWhisper.Core.Services;
 public sealed class HistoryService : IHistoryService
 {
     private readonly string _filePath;
+    /// <summary>Propagates read/format failures instead of treating them as empty history. Missing files remain empty.</summary>
+    public bool ThrowOnLoadFailure { get; init; }
     private readonly string? _audioDirectory;
     private readonly object _gate = new();
     private List<TranscriptionRecord> _cache = [];
@@ -441,12 +443,14 @@ public sealed class HistoryService : IHistoryService
     {
         try
         {
-            if (!File.Exists(_filePath)) return [];
+            if (!ThrowOnLoadFailure && !File.Exists(_filePath)) return [];
 
             var json = File.ReadAllText(_filePath);
             return JsonSerializer.Deserialize<List<TranscriptionRecord>>(json) ?? [];
         }
-        catch
+        catch (FileNotFoundException) { return []; }
+        catch (DirectoryNotFoundException) { return []; }
+        catch when (!ThrowOnLoadFailure)
         {
             return [];
         }

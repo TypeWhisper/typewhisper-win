@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../winui-quick-launch-prototype/PrototypeHistoryStore.cs" Link="PrototypeHistoryStore.cs" />
+    <Compile Include="../winui-quick-launch-prototype/PrototypeHistoryEntry.cs" Link="PrototypeHistoryEntry.cs" />
+    <Compile Include="../winui-quick-launch-prototype/PrototypeTranscript.cs" Link="PrototypeTranscript.cs" />
+  </ItemGroup>
+</Project>
