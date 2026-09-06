@@ -1,58 +1,73 @@
 # Testing the 1.1 application
 
-Version 1.1 is greenfield. Existing provider logic can be reused, while SDK and application boundaries should make behavior independently testable. Compatibility with old plugin binaries is not a design requirement.
+Current implementation checkpoint: `ff77f43a` (2026-09-06). Functional coverage and outstanding features are tracked in the [Windows and Mac comparison](WINUI-FUNCTIONAL-STATUS.md); passing tests do not imply all displayed features are implemented.
 
 ## Required headless checks
 
-Run the same command locally and in CI:
-
 ```powershell
-./eng/Test-WinUIHeadless.ps1
+& ./eng/Test-WinUIHeadless.ps1 -Configuration Release
 ```
 
-This builds and runs the portable plugin-host and Presentation suites in Release mode. It does not launch TypeWhisper, use Computer Use/UI Automation, open a microphone, load model weights, request provider credentials, or call transcription services. NuGet restore may access the package registry. Tests create isolated temporary files where persistence is part of the behavior under test.
+The runner executes portable host, Presentation and discovered `plugins/*/Tests/*.csproj` suites sequentially and writes TRX files plus `summary.json` under `artifacts/test-results/winui-headless`. No desktop, Computer Use, real microphone, downloaded models or provider credentials are required.
 
-Results are written to `artifacts/test-results/winui-headless/`: one TRX file per suite and `summary.json` with each exit code and elapsed time. Both suites run even if one fails; the script returns failure if either suite fails. Override the path with `-ResultsDirectory`.
+[CI workflow](../.github/workflows/winui-headless.yml) runs on Windows and Ubuntu. At [run 34060774341](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060774341), verified from logs:
 
-`.github/workflows/winui-headless.yml` runs this command on Windows and Linux and uploads the results even on failure. The first remote Linux/Windows matrix execution remains pending until the branch is pushed and CI runs.
+| Suite | Windows passed / skipped | Ubuntu passed / skipped |
+|---|---|---|
+| Portable SDK / host | 112 / 0 | 111 / 0 |
+| Presentation | 96 / 0 | 96 / 0 |
+| Groq plugin | 29 / 0 | 29 / 0 |
+| NVIDIA/Sherpa plugin | 25 / 1 | 21 / 5 |
+| Total | **262 / 1** | **257 / 5** |
 
-## What the checks establish
+The DPAPI test is compiled on Windows only. Five CUDA-specific cases require Windows x64; the complementary unsupported-platform test runs elsewhere. These tests do not install a real GPU runtime. [CodeQL run 34060775205](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060775205) passed. CodeRabbit skipped the draft review; its green status does not establish review completion.
 
-- `PluginManagementController` is used by the actual WinUI Plugins view. Tests supply a package inventory and runtime bindings to exercise state projection, recording/processing guards, duplicate actions, activation failure/retry, invalid package routing and out-of-order refreshes without loading native code.
-- `VocabularyPluginSession` tests use controlled asynchronous completions to verify activation/disable/disposal ordering, draining native work, cancellation and rejection of stale results. They do not rely on arbitrary sleep durations.
-- `VocabularyHostServices` persistence tests reopen the same isolated profile and check enablement, preserved settings, malformed files and failed writes. Asset paths are separate from settings, and these hosts disable production-data migration.
-- Inventory tests inspect actual fixture assembly metadata without resolving or activating the entry point. CTC scoring/token-timing tests exercise managed math and validation without downloading models.
-- Presentation tests cover history, clipboard coordination via injected platform services, hotkey state machines, live-preview cancellation, audio-effects/silence logic, and dictionary/snippet snapshots and persistence.
+## What the tests establish
 
-When adding a provider or feature, place its decisions and state transitions behind portable interfaces first. Test observable outcomes, failed operations and races at that boundary; keep WinUI event handlers responsible for rendering state and forwarding actions.
+- Metadata/identity/compatibility inspection, portable plugin activation/settings, PCM result and token-timing contracts, lifecycle failure/cancellation and disposal behavior using isolated fixtures.
+- Catalog/package parsing, HTTPS/size/SHA-256 validation, unsafe archive rejection, installed-index persistence, staged update/restart and uninstall/data retention. Actual package fixture hooks exercise progress and failed operations; no provider owner's installation is removed.
+- Model selection/persistence/rollback, activation retry, download progress/cancel, HTTP failures, incomplete responses and temporary-file cleanup through controlled dependencies.
+- Real Groq provider multipart/WAV construction, model/language forwarding, auto-language omission, headers, auth/rate-limit/server failures, retry and cancellation through an injected HTTP handler. Windows separately verifies DPAPI persistence/corruption/removal with synthetic secrets.
+- History load/search/projection, clipboard coordination through injected platform services, hotkey state transitions, preview cancellation, audio-effects/silence decisions and dictionary/snippet snapshots/persistence. Provider-first selection covers unavailable providers, missing models and fallback within a provider only.
+- Managed CTC scoring/timing decisions, serialized activation/draining/stale-result handling and automatic parent-dependent enablement. These establish logic, not recognition quality.
 
-## Optional native and UI acceptance
+These suites do not compile/render the full WinUI app, transcribe real cloud audio, validate microphone/keyboard drivers, publish the catalog or prove editor paste consumption. The old WPF/Core test suites are not equivalent to WinUI end-to-end coverage merely because source is shared.
 
-Local model inference is a separate opt-in test: `PortableParakeetTests` in `tests/TypeWhisper.Dictation.AudioTests` loads a published plugin and existing model weights, transcribes locally generated speech and checks CTC token intervals and unload behavior. See that project's README for the required environment variables. A successful native test does not establish real microphone or keyboard-hook behavior.
+## Native builds and inference
 
-Native application builds and launches continue through `F:\typewhisper\typewhisper-dev-tools\build-typewhisper-windows-dev.ps1 --run --winui <checkout>`. UI interaction, screenshots, keyboard focus and DPI require a separate local Windows acceptance pass. They supplement the headless checks and do not block CI on Computer Use availability.
+Local app builds, launches and UI smoke tests must use:
 
-Current local evidence: 126 portable plugin-host tests (including one Windows-only DPAPI case) and 90 Presentation tests passed in Release mode. Linux omits the Windows-only case. The actual CTC service is tested with injected plugin leases and an isolated profile, including reload of enabled/disabled state and failed activation followed by retry. A published sherpa-onnx PCM inference test passed separately.
+```powershell
+& F:/typewhisper/typewhisper-dev-tools/build-typewhisper-windows-dev.ps1 --run --winui <checkout>
+```
 
-Local Computer Use acceptance verified CTC enable/disable with Enter and Space, focus restoration after asynchronous loading/unloading, and enabled/disabled state after real application restarts. The owner separately confirmed a manual plugin toggle cycle. These checks do not establish comprehensive screen-reader or DPI coverage. Plugins is now the only CTC enablement control; the separate Dictation settings switch was removed at the owner's request. Enabled CTC is applied automatically during dictation.
+Use the current checkout/worktree, not a transient build output or the installed production app. Output is `F:/typewhisper/dev-output/typewhisper-win/WinUI`.
 
-Model management: 14 added headless cases cover missing models, activation failure/retry, selection persistence and rollback, download progress/cancel/retry, language persistence/forwarding, HTTP failures, incomplete responses and temporary-file cleanup. Published Parakeet and Canary packages passed two native generated-speech inference cases, including catalog language metadata. The real Canary download completed without a Hugging Face token; plugin settings loaded Canary successfully and displayed the language tooltip. The UI cancel click did not establish a confirmed cancellation before the download completed; cancellation evidence comes from the headless tests.
-The local plugin is presented as “Lokale Modelle”; NVIDIA is shown as the model publisher, while sherpa-onnx remains an internal provider identifier. Language lists are supplied by the plugin metadata (Parakeet's list follows its NVIDIA model card). A real app restart restored the Canary selection, Dictation showed the same model, and selecting Parakeet from Dictation restored the original model. No Hugging Face token UI was added: the public download completed anonymously.
+Optional native inference is documented in [audio tests](../tests/TypeWhisper.Dictation.AudioTests/README.md) and [CTC probe](../tests/TypeWhisper.ParakeetCtc.Probe/README.md). These load published plugin folders and existing isolated weights. They are separate from headless CI and require explicit environment configuration; do not download models or use credentials just to run the default suite.
 
-## Groq cloud transcription
+## Existing bounded native evidence
 
-The portable suite now includes the existing Groq provider regressions plus cloud runtime tests. A controlled HTTP handler verifies the real provider's multipart requests, WAV encoding, model/language forwarding, automatic-language omission, API-key headers, authentication/rate-limit/server failures, retry, cancellation, concurrent-operation rejection and persisted configuration after restart. No request reaches Groq during these checks. Windows additionally verifies real DPAPI encryption, reload, corruption recovery and removal using synthetic credentials in a temporary directory.
+These are earlier implementation-session checks, not rerun during the documentation audit:
 
-The package-load regression uses the actual WinUI host version, now 1.1.0. Native acceptance caught the earlier 0.0.1 value rejecting Groq's minimum host version; this was corrected. The redesigned plugin settings keep the masked key field editable before enablement, and Save & enable performs setup in one operation. Actual UI typing, encrypted save, automatic enablement and removal passed with a synthetic key. The key was removed afterwards, and Parakeet remained selected. The published application was built/launched through the prescribed dev script.
+- The prescribed development build/launch passed. Owner feedback confirmed immediate dictation, hybrid hold/tap, whole-text insertion and plugin toggle behavior.
+- Published Parakeet/Canary generated-speech inference passed, including model/language metadata. Canary downloaded anonymously and selection survived restart. UI cancellation was not confirmed before completion; cancellation evidence comes from headless tests.
+- CTC produced finite emissions for official English fixture audio, accepted a positive correction and rejected the inverse hint through the published portable package. Whole-utterance fixture timings do not prove real TDT/microphone alignment. Broader German, names, vocabulary, false positives and FluidAudio equivalence remain unverified.
+- Earlier timing, adaptive candidate/scoring and diagnostics regressions are covered by the managed/native fixtures. Development diagnostics are bounded/rotating and record alignment/scoring metadata, not additional audio or transcript text. Per-term threshold UI and real vocabulary success need their own acceptance evidence.
+- Earlier enable/disable, keyboard focus and restart checks predate the final internal-CTC presentation. Current headless tests enforce parent-controlled CTC; do not reproduce the removed standalone toggle as today's UI.
+- Synthetic Groq key editing, encrypted save/enable/removal passed during setup development. Later Installed/Discover and provider-settings navigation checks showed the two actual integrations. A configured/ready key is not evidence of a successful live Groq transcription.
+- The uninstall dialog was inspected and canceled. Actual uninstall/reinstall mutations use isolated package fixtures. The last live Discover check returned HTTP 404 for `plugins-v2.json`; published-feed acceptance remains open.
 
-A live Groq transcription with a user-provided key remains unverified. Save a key in Plugins > Groq > Settings, optionally Check connection (GET /models, no audio), then choose Use model. Confirm one completed dictation is sent to Groq, inserted and recorded with engine `groq` and the selected model. Cloud mode does not send live-preview requests. Check switching back to a local model separately. Automated HTTP tests do not establish real network, billing or service availability.
+No personal keys, recordings or weights belong in test fixtures, logs, commits or screenshots. The documentation audit changes no application state.
 
-API-key entry is restricted to Plugins > Groq > Settings at the owner's request. The duplicate Groq configuration section was removed from the global Models page.
+## Outstanding acceptance gates
 
-Seven history display cases cover Parakeet, Canary, both Groq Whisper models, unknown providers/models and missing model metadata. The global Models page has been removed from navigation and settings search. Dictation selects local and cloud models; model downloads and API-key entry remain in plugin settings.
+- [ ] Real local and Groq dictation through install/configure/select/record/insert/history, with accurate metadata, failure/cancel and provider switch-back.
+- [ ] Published v2 install/use/update/restart/uninstall/reinstall, including retained configuration/models and failed hook/update recovery.
+- [ ] Real microphone changes, unplug/replug, sleep/resume, sound devices, media/ducking restoration and short quiet utterances.
+- [ ] Rich clipboard formats, focus changes within/across windows, editor consumption, modifier races and review-first behavior once wired.
+- [ ] Durable recovery, history mutations/retention/audio, real files/recorder/workflows and all remaining data services as they are integrated.
+- [ ] Full keyboard/screen-reader/high-contrast, actual 200% DPI and mixed-monitor transitions. Logical viewport previews are not OS DPI tests.
+- [ ] Actual WinUI release build/installer/update/rollback and each claimed OS/architecture; headless CI is not a WinUI build gate yet.
+- [ ] Deferred controlled legacy-versus-WinUI benchmark for PR #447: same audio/model/backend/thread settings, separate warm-up and steady state, capture onset, insertion latency, memory and explicit uncertainty.
 
-CTC dependency enablement tests now verify that the parent provider state overrides old standalone preferences without writing an independent enablement flag. The two visible plugins are NVIDIA Parakeet and Groq; CTC errors are surfaced through NVIDIA Parakeet. The full headless suite passes 126 plugin-host and 90 Presentation cases.
-
-Provider-first selection: six cases verify disabled/unconfigured providers, missing downloads, an empty catalog, restoration of the provider’s last ready model and fallback within that provider only. Current suite: 126 plugin-host + 96 Presentation tests.
-
-Native UI acceptance verified the Installed/Discover round trip, the two real provider entries, NVIDIA-only model choices, the disabled Groq setup state, direct navigation to Groq settings and Back to Dictation. No credentials were changed and no cloud request was made during this pass.
+For each new feature, test observable state and failure/race outcomes behind portable boundaries first, then validate the Windows adapter separately. Avoid tests that only repeat a UI implementation or use simulated output as transcription evidence.
