@@ -18,6 +18,31 @@ public sealed record PrototypeTranscript(PrototypeHistoryEntry Entry, string Tim
         _ => "Entry"
     };
     public string DeviceLabel => Entry.Content.Origin.DeviceName ?? Entry.Content.Origin.Platform;
+    public string ModelLabel
+    {
+        get
+        {
+            var model = Entry.Content.ModelName?.Trim();
+            if (string.IsNullOrEmpty(model)) return "Model not recorded";
+            var name = model switch
+            {
+                "parakeet-tdt-0.6b" => "Parakeet TDT 0.6B",
+                "canary-180m-flash" => "Canary 180M Flash",
+                "whisper-large-v3" => "Whisper Large V3",
+                "whisper-large-v3-turbo" => "Whisper Large V3 Turbo",
+                _ => model
+            };
+            var provider = Entry.Content.EngineName?.Trim() switch
+            {
+                "groq" => "Groq",
+                "sherpa-onnx" => "Local",
+                null or "" => null,
+                var other => other
+            };
+            return provider is null ? name : $"{provider} · {name}";
+        }
+    }
+    public string ModelMetadata => Entry.HasTranscript ? "Model: " + ModelLabel : "";
     public string AudioDescription => Entry.AudioAvailability switch
     {
         PrototypeAudioAvailability.RemoteOnly => "Audio on another device · sample reference, no download in this prototype",

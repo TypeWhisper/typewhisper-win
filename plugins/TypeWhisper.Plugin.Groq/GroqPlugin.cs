@@ -3,8 +3,10 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+#if WINDOWS
 using System.Windows.Controls;
 using NAudio.Wave;
+#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Helpers;
 using TypeWhisper.PluginSDK.Models;
@@ -14,7 +16,7 @@ namespace TypeWhisper.Plugin.Groq;
 /// <summary>
 /// Provides groq plugin behavior.
 /// </summary>
-public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport
+public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, ILlmRequestHedgingSupport, IApiKeyPlugin, IPluginInstallationLifecycle
 {
     private const string BaseUrl = "https://api.groq.com/openai";
     private const int TranscriptionUploadBitRate = 48_000;
@@ -87,6 +89,22 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// </summary>
     public string PluginVersion => "1.0.6";
 
+    /// <inheritdoc />
+    public Task OnInstallAsync(PluginInstallationContext context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        context.Progress?.Report(new("Groq uses cloud models. Add or review your API key in plugin settings."));
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task OnUninstallAsync(PluginInstallationContext context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        context.Progress?.Report(new("Keeping your Groq API key and preferences for reinstallation."));
+        return Task.CompletedTask;
+    }
+
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
     /// </summary>
@@ -116,10 +134,19 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         return Task.CompletedTask;
     }
 
+    #if WINDOWS
     /// <summary>
     /// Creates the settings view shown by the host, or null when no UI is required.
     /// </summary>
     public UserControl? CreateSettingsView() => new GroqSettingsView(this);
+    #endif
+
+    // Whisper language tokens shared by the two multilingual models.
+    private static readonly IReadOnlyList<string> TranscriptionLanguageCodes =
+        "en zh de es ru ko fr ja pt tr pl ca nl ar sv it id hi fi vi he uk el ms cs ro da hu ta no th ur hr bg lt la mi ml cy sk te fa lv bn sr az sl kn et mk br eu is hy ne mn bs kk sq sw gl mr pa si km sn yo so af oc ka be tg sd gu am yi lo uz fo ht ps tk nn mt sa lb my bo tl mg as tt haw ln ha ba jw su yue".Split(' ');
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> SupportedLanguages => TranscriptionLanguageCodes;
 
     // ITranscriptionEnginePlugin
 
@@ -140,7 +167,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// Gets the transcription models exposed by this provider.
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } =
-        TranscriptionModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName)).ToList();
+        TranscriptionModelEntries.Select(m => new PluginModelInfo(m.Id, m.DisplayName) { Publisher = "OpenAI", LanguageCodes = TranscriptionLanguageCodes, LanguageCount = TranscriptionLanguageCodes.Count }).ToList();
 
     /// <summary>
     /// Gets the currently selected provider model identifier.
@@ -168,9 +195,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     {
         var entry = TranscriptionModelEntries.FirstOrDefault(m => m.Id == modelId)
             ?? throw new ArgumentException($"Unknown model: {modelId}");
+        _host?.SetSetting("selectedModel", modelId);
         _selectedModelId = modelId;
         _selectedApiModelName = entry.ApiModelName;
-        _host?.SetSetting("selectedModel", modelId);
     }
 
     /// <summary>
@@ -181,6 +208,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     {
         if (!IsConfigured || _selectedApiModelName is null)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
+
+        if (translate && !SupportsTranslation)
+            throw new NotSupportedException("This Groq model does not support translation.");
 
         GroqTranscriptionUpload upload;
         try
@@ -268,23 +298,34 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     internal string? SelectedLlmModelId => _selectedLlmModelId;
     internal IReadOnlyList<FetchedLlmModel> FetchedLlmModels => _fetchedLlmModels;
 
-    internal async Task SetApiKeyAsync(string apiKey)
+    /// <inheritdoc />
+    public async Task SetApiKeyAsync(string apiKey)
     {
-        var normalizedApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
+        var normalizedApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
         var wasConfigured = IsConfigured;
         var changed = !string.Equals(_apiKey, normalizedApiKey, StringComparison.Ordinal);
 
-        _apiKey = normalizedApiKey;
         if (_host is not null)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
                 await _host.DeleteSecretAsync("api-key");
             else
-                await _host.StoreSecretAsync("api-key", apiKey);
+                await _host.StoreSecretAsync("api-key", normalizedApiKey!);
+
+            _apiKey = normalizedApiKey;
 
             if (changed && wasConfigured != IsConfigured)
                 _host.NotifyCapabilitiesChanged();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task ValidateConfigurationAsync(CancellationToken ct)
+    {
+        if (!IsConfigured) throw new InvalidOperationException("Save a Groq API key first.");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/models");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        using var response = await OpenAiApiHelper.SendWithErrorHandlingAsync(_httpClient, request, ct);
     }
 
     internal void SelectLlmModel(string modelId)
@@ -341,7 +382,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         try
         {
-            var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -405,6 +446,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         if (wavAudio.Length == 0)
             throw new InvalidOperationException("No WAV audio bytes were provided.");
 
+#if WINDOWS
         using var input = new MemoryStream(wavAudio, writable: false);
         using var reader = new WaveFileReader(input);
         using var output = new MemoryStream();
@@ -415,6 +457,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
             throw new InvalidOperationException("Media Foundation produced an empty AAC upload.");
 
         return new GroqTranscriptionUpload(bytes, "audio.m4a", "audio/mp4");
+#else
+        return CreateWavUpload(wavAudio);
+#endif
     }
 
     private static GroqTranscriptionUpload CreateWavUpload(byte[] wavAudio)

@@ -15,6 +15,7 @@
     <PackageReference Include="System.Speech" Version="10.0.0" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingService.cs" Link="AudioRecordingService.cs" />
     <Compile Include="../../src/TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="WasapiAudioInputCapture.cs" />
     <Compile Include="../../src/TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="AudioRecordingResult.cs" />

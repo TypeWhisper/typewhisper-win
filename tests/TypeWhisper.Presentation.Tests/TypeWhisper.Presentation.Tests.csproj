@@ -24,7 +24,10 @@
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeLexicon.cs" Link="PrototypeLexicon.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeShortcutRules.cs" Link="PrototypeShortcutRules.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryEntry.cs" Link="PrototypeHistoryEntry.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeTranscript.cs" Link="PrototypeTranscript.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictationProviderOption.cs" Link="DictationProviderOption.cs" />
   </ItemGroup>
 </Project>

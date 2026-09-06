@@ -1,9 +1,10 @@
 {
   "id": "com.typewhisper.sherpa-onnx",
-  "name": "Lokale Modelle (sherpa-onnx)",
+  "name": "NVIDIA Parakeet",
   "version": "1.0.5",
   "author": "TypeWhisper",
-  "description": "Offline transcription via sherpa-onnx (NVIDIA NeMo Parakeet + Canary)",
+  "category": "transcription",
+  "description": "Offline transcription with NVIDIA Parakeet and Canary. Audio is processed on your device.",
   "assemblyName": "TypeWhisper.Plugin.SherpaOnnx.dll",
   "pluginClass": "TypeWhisper.Plugin.SherpaOnnx.SherpaOnnxPlugin"
 }

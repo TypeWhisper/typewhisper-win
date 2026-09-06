@@ -1,24 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <UseWPF>true</UseWPF>
+    <UseWPF Condition="'$(TargetFramework)' == 'net10.0-windows'">true</UseWPF>
     <RootNamespace>TypeWhisper.Plugin.SherpaOnnx</RootNamespace>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Tests/**/*.cs" />
+    <InternalsVisibleTo Include="TypeWhisper.Plugin.SherpaOnnx.Tests" />
     <InternalsVisibleTo Include="TypeWhisper.PluginSystem.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
+    <ProjectReference Include="../TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;TargetFramework" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <PackageReference Include="SharpCompress" Version="0.48.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="manifest.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
   <UsingTask TaskName="PatchSherpaOnnxRuntimeImport"
@@ -115,6 +119,7 @@ foreach (var item in SherpaNativeLibraries)
   <Target Name="CopyToAppPlugins" AfterTargets="Build">
     <PropertyGroup>
       <AppOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\src\TypeWhisper.Windows\bin\$(Configuration)\$(TargetFramework)'))</AppOutputDir>
+      <AppOutputDir Condition="'$(TargetFramework)' == 'net10.0'">$(MSBuildProjectDirectory)\bin\$(Configuration)\portable-host</AppOutputDir>
       <PluginOutputDir>$(AppOutputDir)\Plugins\com.typewhisper.sherpa-onnx\</PluginOutputDir>
     </PropertyGroup>
     <MakeDir Directories="$(PluginOutputDir)" />
@@ -169,5 +174,9 @@ foreach (var item in SherpaNativeLibraries)
     </ItemGroup>
     <Error Condition="'$(Configuration)' == 'Release' and !Exists('%(_RequiredRuntimeFiles.Identity)')"
            Text="Missing required sherpa-onnx runtime file: %(_RequiredRuntimeFiles.Identity)" />
+  </Target>
+  <Target Name="BundleDictionaryBoosting" AfterTargets="CopyToAppPlugins" Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup><CtcFiles Include="../TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/**/*" /></ItemGroup>
+    <Copy SourceFiles="@(CtcFiles)" DestinationFiles="@(CtcFiles->'$(PluginOutputDir)Dependencies/com.typewhisper.parakeet-ctc/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

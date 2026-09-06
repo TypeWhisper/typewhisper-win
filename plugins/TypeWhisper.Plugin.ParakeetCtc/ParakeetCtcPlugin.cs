@@ -12,7 +12,7 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
     private bool _disposed;
     private IPluginHostServices? _host;
     public string PluginId => "com.typewhisper.parakeet-ctc";
-    public string PluginName => "Parakeet CTC Vocabulary (experimental)";
+    public string PluginName => "Parakeet CTC Vocabulary";
     public string PluginVersion => "0.1.0";
     public bool IsReady => !_disposed && _model is not null;
 

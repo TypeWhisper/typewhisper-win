@@ -1,11 +1,13 @@
 using TypeWhisper.PluginSDK;
 
-namespace TypeWhisper.PluginHost;
+namespace TypeWhisper.PluginSDK.Helpers;
 
-public static class VocabularyTokenTimings
+/// <summary>Builds valid token intervals from local decoder timing metadata.</summary>
+public static class TranscriptionTokenTimings
 {
     // Transducers may emit several pieces at the same frame. Preserve every
     // piece and share the interval up to the next strictly later timestamp.
+    /// <summary>Preserves shared-frame tokens and rejects invalid timing arrays.</summary>
     public static VocabularyTokenTiming[] Create(string[] tokens, float[] starts, float[]? durations, double audioSeconds)
     {
         if (tokens.Length != starts.Length || !double.IsFinite(audioSeconds) || audioSeconds <= 0) return [];

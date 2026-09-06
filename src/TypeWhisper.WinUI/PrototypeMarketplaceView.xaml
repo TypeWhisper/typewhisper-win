@@ -3,21 +3,25 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:TypeWhisper.WinUI">
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock x:Name="MarketTitle" Text="Marketplace" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="MarketSummary" Grid.Column="1" Text="Sample catalog" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+            <TextBlock x:Name="MarketTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="MarketSummary" Grid.Column="1" Text="Discover" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
-        <Grid x:Name="MarketListPage" Grid.Row="1" RowSpacing="10">
+        <StackPanel x:Name="IntegrationTabs" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="8,0,8,12">
+            <local:HandCursorButton Content="Installed" Click="Installed_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Integrations installed tab" />
+            <local:HandCursorButton Content="Discover" Click="Reset_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Integrations discover tab" />
+        </StackPanel>
+        <Grid x:Name="MarketListPage" Grid.Row="2" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0">
+            <StackPanel x:Name="CatalogFilters" Orientation="Horizontal" Spacing="6" Margin="8,0">
                 <local:HandCursorButton x:Name="AllCategory" Content="All" Tag="" Click="Category_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Marketplace all categories" />
                 <local:HandCursorButton x:Name="TranscriptionCategory" Content="Transcription" Tag="Transcription" Click="Category_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Marketplace transcription category" />
                 <local:HandCursorButton x:Name="ExportCategory" Content="Export" Tag="Export" Click="Category_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Marketplace export category" />
             </StackPanel>
             <local:HandCursorListView x:Name="MarketList" Grid.Row="1" ItemsSource="{x:Bind FilteredItems}" ItemContainerStyle="{StaticResource PrototypeCommandItemStyle}"
-                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Item_Click" TabNavigation="Once" AutomationProperties.Name="Sample marketplace catalog">
+                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Item_Click" TabNavigation="Once" AutomationProperties.Name="Available integrations">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:PrototypeMarketplaceItem">
                         <Grid Padding="12,12" ColumnSpacing="12" AutomationProperties.Name="{x:Bind Title}">
@@ -35,11 +39,12 @@
             </local:HandCursorListView>
             <StackPanel x:Name="MarketEmptyState" Grid.Row="1" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
-                <TextBlock Text="No matching plugins" FontSize="18" FontWeight="SemiBold" />
-                <local:HandCursorButton Content="Reset filters" Click="Reset_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Center" AutomationProperties.Name="Reset marketplace filters" />
+                <TextBlock x:Name="EmptyTitle" Text="No matching plugins" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="EmptyDescription" FontSize="13" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" />
+                <local:HandCursorButton x:Name="ResetFiltersButton" Content="Reset filters" Click="Reset_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Center" AutomationProperties.Name="Reset marketplace filters" />
             </StackPanel>
         </Grid>
-        <ScrollViewer x:Name="MarketDetailPage" Grid.Row="1" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer x:Name="MarketDetailPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="14" Margin="0,0,18,8">
                 <TextBlock x:Name="MarketDescription" FontSize="14" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <TextBlock x:Name="MarketPublisher" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
@@ -47,9 +52,7 @@
                     <StackPanel Spacing="6">
                         <TextBlock x:Name="MarketStatus" FontSize="13" FontWeight="SemiBold" Foreground="{ThemeResource AccentBrush}" AutomationProperties.LiveSetting="Polite" />
                         <TextBlock x:Name="MarketStatusExplanation" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                        <Grid x:Name="InstallProgress" Visibility="Collapsed" Height="3" Background="{ThemeResource HairlineBrush}" SizeChanged="Progress_SizeChanged" AutomationProperties.Name="Simulated installation progress">
-                            <Border x:Name="InstallProgressFill" Background="{ThemeResource AccentBrush}" HorizontalAlignment="Left" CornerRadius="1.5" />
-                        </Grid>
+                        <ProgressBar x:Name="InstallProgress" Visibility="Collapsed" Minimum="0" Maximum="1" IsIndeterminate="True" AutomationProperties.Name="Plugin installation progress" />
                     </StackPanel>
                 </Border>
                 <StackPanel Spacing="6">
@@ -57,17 +60,16 @@
                     <TextBlock x:Name="MarketAccess" FontSize="13" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock x:Name="MarketCompatibility" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                <TextBlock Text="Fictional catalog and signature data. Nothing is downloaded, verified or executed; demo installs only add an entry to Plugins for this session." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
-        <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid Height="48" Padding="2,0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <local:PrototypeBreadcrumbs x:Name="MarketBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock x:Name="MarketNavigationHint" Grid.Column="1" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <local:HandCursorButton x:Name="MarketCancelButton" Content="Cancel" Click="Cancel_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Cancel demo installation" />
-                    <local:HandCursorButton x:Name="MarketPrimaryButton" Content="Install example" Click="Primary_Click" Visibility="Collapsed" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Marketplace primary action" />
+                    <local:HandCursorButton x:Name="MarketCancelButton" Content="Cancel" Click="Cancel_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Cancel installation" />
+                    <local:HandCursorButton x:Name="MarketPrimaryButton" Content="Install" Click="Primary_Click" Visibility="Collapsed" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Marketplace primary action" />
                 </StackPanel>
             </Grid>
         </Border>

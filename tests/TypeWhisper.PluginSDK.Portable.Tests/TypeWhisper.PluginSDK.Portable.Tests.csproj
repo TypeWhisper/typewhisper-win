@@ -14,6 +14,19 @@
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
+    <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalCtcVocabulary.cs" Link="LocalCtcVocabulary.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalTranscriptionPlugin.cs" Link="LocalTranscriptionPlugin.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/CloudTranscriptionPlugin.cs" Link="CloudTranscriptionPlugin.cs" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.Groq/TypeWhisper.Plugin.Groq.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <Compile Remove="WindowsPluginSecretStoreTests.cs" />
   </ItemGroup>
 </Project>

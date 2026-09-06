@@ -4,13 +4,17 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:TypeWhisper.WinUI">
     <Grid PreviewKeyDown="View_PreviewKeyDown">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock x:Name="PluginPageTitle" Text="Plugins" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="PluginSummary" Grid.Column="1" Text="4 plugins · sample data" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+            <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="PluginSummary" Grid.Column="1" Text="Loading installed plugins…" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
-        <Grid x:Name="PluginListPage" Grid.Row="1" RowSpacing="10">
+        <StackPanel x:Name="IntegrationTabs" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="8,0,8,12">
+            <local:HandCursorButton Content="Installed" Click="Reset_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Integrations installed tab" />
+            <local:HandCursorButton Content="Discover" Click="Marketplace_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Integrations discover tab" />
+        </StackPanel>
+        <Grid x:Name="PluginListPage" Grid.Row="2" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0">
                 <local:HandCursorButton x:Name="AllFilter" Content="All" Tag="all" Click="Filter_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="All plugins" />
@@ -18,7 +22,7 @@
                 <local:HandCursorButton x:Name="AttentionFilter" Content="Needs attention" Tag="attention" Click="Filter_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Plugins needing attention" />
             </StackPanel>
             <local:HandCursorListView x:Name="PluginList" Grid.Row="1" ItemsSource="{x:Bind FilteredPlugins}" ItemContainerStyle="{StaticResource PrototypeCommandItemStyle}"
-                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Plugin_Click" TabNavigation="Once" AutomationProperties.Name="Sample installed plugins">
+                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Plugin_Click" TabNavigation="Once" AutomationProperties.Name="Installed plugins">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:PrototypePlugin">
                         <Grid Padding="12,12" ColumnSpacing="12" AutomationProperties.Name="{x:Bind Title}">
@@ -39,7 +43,7 @@
                 <local:HandCursorButton Content="Reset filters" Click="Reset_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Center" AutomationProperties.Name="Reset plugin filters" />
             </StackPanel>
         </Grid>
-        <ScrollViewer x:Name="PluginDetailPage" Grid.Row="1" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer x:Name="PluginDetailPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" Margin="0,0,18,8">
                 <TextBlock x:Name="PluginDescription" FontSize="14" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <Border Background="{ThemeResource SurfaceBrush}" CornerRadius="9" Padding="14,12">
@@ -53,10 +57,11 @@
                     <TextBlock x:Name="PluginPermissions" FontSize="13" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock x:Name="PluginVersion" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                <TextBlock Text="Illustrative plugin only. No code is loaded and no device, network or clipboard access is performed." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <local:HandCursorButton x:Name="UninstallButton" Content="Uninstall" Click="Uninstall_Click" Visibility="Collapsed" HorizontalAlignment="Left" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                <TextBlock x:Name="PluginRuntimeNote" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
-        <ScrollViewer x:Name="PluginSettingsPage" Grid.Row="1" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer x:Name="PluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16" Margin="0,0,18,8">
                 <StackPanel Spacing="6">
                     <TextBlock x:Name="SettingsPluginName" FontSize="14" FontWeight="SemiBold" />
@@ -77,7 +82,8 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
-        <Border x:Name="PluginDiscardPrompt" Grid.Row="1" Visibility="Collapsed" Margin="24" Padding="22" Background="{ThemeResource SurfaceBrush}"
+        <ScrollViewer x:Name="RuntimePluginSettingsPage" Grid.Row="2" Margin="12,0" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsTabStop="True" AutomationProperties.Name="Plugin settings" />
+        <Border x:Name="PluginDiscardPrompt" Grid.Row="2" Visibility="Collapsed" Margin="24" Padding="22" Background="{ThemeResource SurfaceBrush}"
             BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="12" VerticalAlignment="Center">
             <StackPanel Spacing="14">
                 <TextBlock Text="Discard plugin changes?" FontSize="20" FontWeight="SemiBold" />
@@ -88,14 +94,15 @@
                 </StackPanel>
             </StackPanel>
         </Border>
-        <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid Height="48" Padding="2,0" ColumnSpacing="10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <local:PrototypeBreadcrumbs x:Name="PluginBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock x:Name="PluginNavigationHint" Grid.Column="1" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <local:HandCursorButton x:Name="BrowseMarketplaceButton" Content="Browse marketplace" Click="Marketplace_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Browse plugin marketplace" />
-                    <local:HandCursorButton x:Name="PluginToggleButton" Content="Disable" Click="Toggle_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Toggle example plugin" />
+                    <local:HandCursorButton x:Name="BrowseMarketplaceButton" Visibility="Collapsed" Content="Discover" Click="Marketplace_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Browse plugin marketplace" />
+                    <local:HandCursorButton x:Name="ReturnToDictationButton" Content="Back to Dictation" Click="ReturnToDictation_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="PluginToggleButton" Content="Disable" Click="Toggle_Click" Visibility="Collapsed" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Toggle plugin" />
                     <local:HandCursorButton x:Name="PluginPrimaryButton" Content="Settings" Click="Primary_Click" Visibility="Collapsed" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Plugin primary action" />
                 </StackPanel>
             </Grid>

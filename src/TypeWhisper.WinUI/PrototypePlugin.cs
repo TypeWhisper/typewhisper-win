@@ -4,16 +4,20 @@ namespace TypeWhisper.WinUI;
 public sealed record PrototypePlugin(string Id, string Title, string Description, string IconKind,
     string Category, string Permissions, string Version, string MinimumHostVersion)
 {
-    internal static readonly Version DemoHostVersion = new(1, 1);
+    internal static readonly Version DemoHostVersion = new(1, 1, 0);
     public bool Enabled { get; init; } = true;
     public bool RequiresConnection { get; init; }
     public bool Connected { get; init; }
     public string Preference { get; init; } = "balanced";
     public string Language { get; init; } = "auto";
-    public bool Compatible => System.Version.Parse(MinimumHostVersion) <= DemoHostVersion;
-    public string Status => !Compatible ? "Host update required" : !Enabled ? "Disabled"
-        : RequiresConnection && !Connected ? "Setup needed" : "Enabled";
-    public bool NeedsAttention => !Compatible || Enabled && RequiresConnection && !Connected;
+    public string? RuntimeStatus { get; init; }
+    public string? RuntimeExplanation { get; init; }
+    public bool RuntimeCanToggle { get; init; }
+    public bool RuntimeNeedsAttention { get; init; }
+    public bool Compatible => System.Version.TryParse(MinimumHostVersion, out var minimum) && minimum <= DemoHostVersion;
+    public string Status => RuntimeStatus ?? (!Compatible ? "Host update required" : !Enabled ? "Disabled"
+        : RequiresConnection && !Connected ? "Setup needed" : "Enabled");
+    public bool NeedsAttention => RuntimeStatus is not null ? RuntimeNeedsAttention : !Compatible || Enabled && RequiresConnection && !Connected;
 
     internal static IReadOnlyList<PrototypePlugin> Samples =>
     [

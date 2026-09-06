@@ -44,7 +44,7 @@ public sealed partial class PrototypeSettingsWindow : Window
         (string Heading, (string Category, string Icon)[] Items)[] groups =
         [
             ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
-            ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file"), ("Models", "chip")]),
+            ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
             ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Automation", "workflow"), ("Account & about", "info")])
         ];
@@ -276,6 +276,8 @@ public sealed partial class PrototypeSettingsWindow : Window
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
+            if (category == "Dictation" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Provider, model and language are saved";
             if (category == "Audio" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
             if (category == "General")
@@ -292,6 +294,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal void ShowActivity(bool statistics) => ShowCategory(statistics ? "Statistics" : "Home");
     internal void ShowSyncBackup() => ShowCategory("Sync & backup");
     internal void ShowAccount() => ShowCategory("Account & about");
+    internal void ShowIntegrationNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open Integrations. Your current workspace is kept intact.";
     internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e)

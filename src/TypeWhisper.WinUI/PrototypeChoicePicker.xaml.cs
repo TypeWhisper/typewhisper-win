@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace TypeWhisper.WinUI;
 
-public sealed record PrototypeChoice(string Id, string Label, string Description);
+public sealed record PrototypeChoice(string Id, string Label, string Description, bool Enabled = true);
 
 public sealed partial class PrototypeChoicePicker : UserControl
 {
@@ -121,10 +121,11 @@ public sealed partial class PrototypeChoicePicker : UserControl
             grid.Children.Add(check);
             var button = new HandCursorButton { Content = grid, MinHeight = compact ? 36 : 56, Padding = new Thickness(12, compact ? 6 : 9, 12, compact ? 6 : 9),
                 HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"] };
+            button.IsEnabled = option.Enabled;
             if (selected)
             {
                 button.Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 19, 40, 58));
-                _selectedButton = button;
+                if (option.Enabled) _selectedButton = button;
             }
             AutomationProperties.SetName(button, $"{_automationName} option {option.Id}");
             AutomationProperties.SetHelpText(button, $"{option.Label}. {option.Description}");
@@ -143,7 +144,7 @@ public sealed partial class PrototypeChoicePicker : UserControl
     }
 
     private void Choice_Opened(object sender, object e) =>
-        (_selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault())?.Focus(_keyboard ? FocusState.Keyboard : FocusState.Programmatic);
+        (_selectedButton ?? Choices.Children.OfType<HandCursorButton>().FirstOrDefault(button => button.IsEnabled))?.Focus(_keyboard ? FocusState.Keyboard : FocusState.Programmatic);
     private void Choice_Closed(object sender, object e)
     {
         IsPopupOpen = false;
@@ -156,7 +157,7 @@ public sealed partial class PrototypeChoicePicker : UserControl
         if (e.Key == global::Windows.System.VirtualKey.Escape) { ClosePopup(); e.Handled = true; }
         else if (e.Key is global::Windows.System.VirtualKey.Down or global::Windows.System.VirtualKey.Up)
         {
-            var buttons = Choices.Children.OfType<HandCursorButton>().ToList();
+            var buttons = Choices.Children.OfType<HandCursorButton>().Where(button => button.IsEnabled).ToList();
             var index = buttons.FindIndex(button => ReferenceEquals(button, FocusManager.GetFocusedElement(XamlRoot)));
             if (buttons.Count > 0) buttons[Math.Clamp(index + (e.Key == global::Windows.System.VirtualKey.Down ? 1 : -1), 0, buttons.Count - 1)].Focus(FocusState.Keyboard);
             e.Handled = true;

@@ -1,4 +1,4 @@
-# Experimental acoustic vocabulary add-on
+# Parakeet CTC vocabulary add-on
 
 Portable TypeWhisper SDK plugin, loaded through `VocabularyPluginLease`. This is actual CTC inference, not the legacy text-only vocabulary booster. WinUI exposes an opt-in switch under **Dictation > Advanced**. It is off by default. Enabled personal terms and built-in Term Packs become hints; explicit dictionary corrections still run afterward. The legacy text booster is skipped for recordings started with CTC enabled.
 

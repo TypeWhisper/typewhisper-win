@@ -83,11 +83,6 @@ internal static partial class PrototypeSettingsCatalog
         Text("Shortcuts", "WorkflowPaletteHotkeys", "Workflow palette"),
         Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
 
-        Choice("Models", "SelectedModelId", "Default model", "Not selected", "Not selected|Sample local model", "Installed engines and models will supply these choices."),
-        Choice("Models", "LocalModelAcceleration", "Local acceleration", "Automatic", "Automatic|CPU|NVIDIA CUDA|AMD Vulkan|AMD ROCm"),
-        Text("Models", "LocalModelStoragePath", "Model storage folder", "", "Empty uses the default folder. No files are moved in this prototype."),
-        Choice("Models", "ModelAutoUnloadSeconds", "Unload inactive models", "Never", "Never|1 minute|5 minutes|15 minutes|30 minutes"),
-        Choice("Models", "DefaultLlmProvider", "Default text provider", "Not selected", "Not selected|Sample provider", "Provider credentials and plugin-specific options remain in Plugins."),
 
         Choice("Live text", "LiveTranscriptionFontSize", "Text size", "12", "10|11|12|13|14|15|16|17|18", "Catalog preview only; not connected to the overlay yet."),
         Toggle("Live text", "OnlineAsrBatchLiveTranscriptionEnabled", "Live text for online batch engines", false, "Availability depends on the selected engine."),
@@ -136,12 +131,12 @@ internal static partial class PrototypeSettingsCatalog
         Text("Sync & backup", "CloudFolderSyncFolderPath", "Cloud sync folder", "", "Use a shared cloud folder across your devices. No sync or file access occurs here."),
     ];
 
-    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Models", "Live text", "Recorder", "Files & recovery", "Privacy", "Automation", "Sync & backup", "Account & about"];
+    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Automation", "Sync & backup", "Account & about"];
 
     internal static IEnumerable<PrototypeSettingSearchEntry> SearchEntries => Fields.Select(setting => new PrototypeSettingSearchEntry(
         setting.Category == "Live text" ? "Appearance" : setting.Category, setting.Key, setting.Label, setting.Hint,
         ChoiceIcon(setting), string.Join(' ', setting.Choices ?? []))).Append(new(
-            "Dictation", "DictationModel", "Dictation model", "Uses the shared default model from Models.", "chip", "engine default downloaded"));
+            "Dictation", "DictationModel", "Dictation model", "Choose the active dictation model. Downloads and credentials are managed in plugin settings.", "chip", "engine default downloaded"));
 
     private static TextBlock Label(string text, double size = 13, bool muted = false) => new()
     {
@@ -166,17 +161,6 @@ internal static partial class PrototypeSettingsCatalog
         if (category == "Sync & backup")
         {
             target.Children.Add(new PrototypeSyncBackupView(values));
-            return;
-        }
-        if (category == "Models")
-        {
-            target.Children.Add(Label("Choose, download and activate a model. Fictional examples for this preview only.", 13, true));
-            target.Children.Add(new PrototypeModelsView(values));
-            var options = Label("Model options", 16);
-            options.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-            options.Margin = new Thickness(0, 10, 0, 0);
-            target.Children.Add(options);
-            RenderFields(Fields.Where(field => field.Category == "Models" && field.Key != "SelectedModelId"), target, values, pickers, refresh);
             return;
         }
         if (category == "Shortcuts")

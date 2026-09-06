@@ -204,6 +204,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         _opened = entry;
         TranscriptTitle.Text = entry.Title;
         TranscriptMetadata.Text = $"{entry.Time} · {entry.Metadata}";
+        TranscriptModel.Text = entry.ModelMetadata;
         AudioAvailabilityText.Text = entry.AudioDescription;
         TranscriptBody.Text = entry.Entry.HasTranscript ? entry.Text
             : "This demo session has been added to History. No audio was captured and no transcript was generated.";

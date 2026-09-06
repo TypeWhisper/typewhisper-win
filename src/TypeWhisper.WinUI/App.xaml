@@ -82,6 +82,31 @@
                 </Setter>
             </Style>
 
+            <Style x:Key="PrototypeApiKeyPasswordBoxStyle" TargetType="PasswordBox">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{ThemeResource TextBrush}" />
+                <Setter Property="FontFamily" Value="{StaticResource InterfaceFont}" />
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="MinHeight" Value="42" />
+                <Setter Property="PasswordRevealMode" Value="Hidden" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="PasswordBox">
+                            <Grid Background="{TemplateBinding Background}">
+                                <ScrollViewer x:Name="ContentElement" Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                              HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden"
+                                              ZoomMode="Disabled" IsTabStop="False"
+                                              AutomationProperties.AccessibilityView="Raw" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style x:Key="PrototypeHeatmapToolTipStyle" TargetType="ToolTip">
                 <Setter Property="Template">
                     <Setter.Value>

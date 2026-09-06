@@ -109,6 +109,7 @@
             <StackPanel Margin="0,0,0,16" Spacing="7">
                 <TextBlock x:Name="TranscriptTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock x:Name="TranscriptMetadata" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="TranscriptModel" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="AudioAvailabilityText" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
             </StackPanel>

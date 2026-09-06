@@ -8,7 +8,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed class PrototypeLexiconView : UserControl
 {
-    private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath);
+    private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
     private bool _showPacks;
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly StackPanel _rows = new() { Spacing = 6 };
@@ -82,7 +82,7 @@ public sealed class PrototypeLexiconView : UserControl
         var launch = new PrototypeCrumb("Quick Launch", () => Navigate(() => { _draft = _original = null; ExitRequested?.Invoke(); }));
         if (_draft is null) _crumbs.SetItems(launch, new(Section));
         else _crumbs.SetItems(launch, new(Section, () => Navigate(CloseEditor)), new("Editor"));
-        _notice.Text = _store.LastError ?? (_kind == PrototypeLexiconKind.Snippet ? "Snippets remain session-only; expansion is not connected." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
+        _notice.Text = _store.LastError ?? (_kind == PrototypeLexiconKind.Snippet ? "Saved snippets are applied to your next dictation." : "Saved in this development profile · applied to the next dictation using existing Windows dictionary rules.");
         if (_draft is null) RenderList(); else RenderEditor();
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
@@ -162,7 +162,7 @@ public sealed class PrototypeLexiconView : UserControl
         {
             PrototypeLexiconKind.Word => "Save the exact spelling of a name or specialist term.",
             PrototypeLexiconKind.Correction => "When this phrase is recognized, use your preferred spelling instead.",
-            _ => "Say the trigger phrase to insert the text. Expansion is not connected in this preview."
+            _ => "Say the trigger phrase to insert this text when dictation finishes."
         }, 13, true));
         AddField(_kind == PrototypeLexiconKind.Word ? "Word or phrase" : _kind == PrototypeLexiconKind.Correction ? "Recognized phrase" : "Spoken trigger", _draft!.Key, value => _draft = _draft! with { Key = value }, 160);
         if (_kind != PrototypeLexiconKind.Word)
@@ -170,7 +170,7 @@ public sealed class PrototypeLexiconView : UserControl
         if (_kind == PrototypeLexiconKind.Snippet)
         {
             AddField("Tags · optional, separated by commas", _draft.Tags, value => _draft = _draft! with { Tags = value }, 300);
-            _body.Children.Add(Text("Placeholders such as {date} are kept as text here. No clipboard content is accessed.", 11, true));
+            _body.Children.Add(Text("Use {date}, {time}, {datetime}, {day}, {year}, or a format such as {date:dd.MM.yyyy}. {clipboard} inserts clipboard text when the spoken trigger matches.", 11, true));
         }
         AddToggle("Enabled", "Keep this entry available without removing it.", _draft.Enabled, value => _draft = _draft! with { Enabled = value });
         if (_kind == PrototypeLexiconKind.Word) AddBoostingOptions();
@@ -258,7 +258,7 @@ public sealed class PrototypeLexiconView : UserControl
         {
             var error = _store.Save(_draft!);
             if (error is not null) { _notice.Text = error; return; }
-            CloseEditor(); _notice.Text = _kind == PrototypeLexiconKind.Snippet ? "Snippet saved for this session only." : "Dictionary saved for the next dictation.";
+            CloseEditor(); _notice.Text = _kind == PrototypeLexiconKind.Snippet ? "Snippet saved for the next dictation." : "Dictionary saved for the next dictation.";
         }, primary: true));
     }
 

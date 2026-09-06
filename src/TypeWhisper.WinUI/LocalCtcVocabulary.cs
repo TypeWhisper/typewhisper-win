@@ -5,43 +5,45 @@ namespace TypeWhisper.WinUI;
 
 internal sealed class LocalCtcVocabulary : IAsyncDisposable
 {
+    internal const string PluginId = "com.typewhisper.parakeet-ctc";
+    internal static readonly Version HostVersion = new(1, 1, 0);
+    internal event Action? Changed;
+    internal bool Busy { get; private set; }
+    private readonly SemaphoreSlim _settingsGate = new(1, 1);
     private static readonly string DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "TypeWhisper-WinUI-DevUserData", "PluginData", "com.typewhisper.parakeet-ctc");
-    private readonly VocabularyDiagnosticLog _diagnostics = new(Path.Combine(DataDirectory, "ctc-diagnostics.jsonl"));
+    private readonly VocabularyDiagnosticLog _diagnostics;
     private readonly VocabularyHostServices _host;
     private readonly VocabularyPluginSession _session;
     internal bool Enabled => _session.Enabled;
     internal string? Error { get; private set; }
 
-    internal LocalCtcVocabulary()
+    internal LocalCtcVocabulary(string? dataDirectory = null, Func<IPluginHostServices, Task<IVocabularyPluginLease>>? load = null, Func<string>? packageDirectory = null)
     {
-        _host = new(DataDirectory, _diagnostics.Write);
-        _session = new(() => VocabularyPluginLease.LoadAsync(
-            Path.Combine(AppContext.BaseDirectory, "Plugins", "com.typewhisper.parakeet-ctc"), _host, new Version(0, 0, 1)));
+        dataDirectory ??= DataDirectory;
+        _diagnostics = new(Path.Combine(dataDirectory, "ctc-diagnostics.jsonl"));
+        _host = new(dataDirectory, _diagnostics.Write);
+        _session = new(() => load is not null ? load(_host) : VocabularyPluginLease.LoadAsync(
+            packageDirectory?.Invoke() ?? Path.Combine(AppContext.BaseDirectory, "Plugins", PluginId), _host, HostVersion));
     }
     internal void Trace(string message) => _diagnostics.Write(message);
 
-    internal async Task InitializeAsync()
-    {
-        try { if (_host.GetSetting<bool>("Enabled")) await _session.SetEnabledAsync(true); }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { Error = "CTC unavailable: " + ex.GetType().Name; }
-        Trace($"initialize enabled={Enabled} error={Error ?? "none"}");
-    }
-
     internal async Task<string?> SetEnabledAsync(bool enabled)
     {
+        if (!await _settingsGate.WaitAsync(0)) return "A plugin operation is already in progress.";
+        Busy = true; Changed?.Invoke();
         try
         {
-            // Load first. A missing/invalid model must not persist a successful enable.
-            await _session.SetEnabledAsync(enabled);
-            _host.SetSetting("Enabled", enabled);
+            // Enablement is owned by the parent transcription plugin, never a separate preference.
+            await Task.Run(() => _session.SetEnabledAsync(enabled));
             return Error = null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             await _session.SetEnabledAsync(false);
-            return Error = "Could not enable/save CTC: " + ex.GetType().Name + ". Check the local plugin package and model.";
+            return Error = "Dictionary boosting unavailable: " + ex.GetType().Name + ". Check the local plugin package and model.";
         }
+        finally { _settingsGate.Release(); Busy = false; Changed?.Invoke(); }
     }
 
     internal async Task<VocabularyOutcome> RefineAsync(Guid recording, string text, float[] audio,

@@ -2,6 +2,8 @@
 
 ## Decision and boundaries
 
+Version 1.1 is a greenfield application, as confirmed by the owner. Reuse proven provider and plugin source logic, while redesigning the SDK, configuration contracts and packaging where useful. Existing plugin binary compatibility is not a requirement: plugins will be rebuilt and republished for 1.1. A separate distribution path/feed may be introduced; its final URL and publishing workflow are not decided or changed here. Existing WPF targets are source-development aids, not constraints on the 1.1 architecture. Parakeet CTC is presented without an experimental product label.
+
 Preserve the approved prototype UI and behavior 1:1. Its 62 top-level C#/XAML files were transferred to the new host, initially changing only the namespace. The rejected minimal ShellWindow was removed. App lifetime and tray navigation are the first integration changes. The original experiment remains unchanged. The existing WPF application remains the shipping host; no personal data is moved, rewritten or deleted.
 
 Current seams: Core already owns IHistoryService and HistoryService; the WPF HistoryViewModel depends on ICollectionView, Dispatcher, dialogs and Windows-specific services. Presentation logic must not bring those dependencies into the new WinUI host.
@@ -37,7 +39,21 @@ The host loads existing Parakeet files read-only from the legacy development mod
 
 This is an integration slice, not completed dictation parity: model/device selection is not wired to settings, the target guard tracks the top-level window rather than the exact editor field, and complete cancellation, recovery and live transcription remain pending. Keep the target text field focused. User-triggered capture/transcription/insertion is confirmed by owner testing. Synthetic audio reproduces the old first-word loss and verifies immediate capture; native device/hook latency remains a separate validation item. See `tests/TypeWhisper.Dictation.AudioTests/README.md`.
 
+## Snippet integration
+
+The adopted editor now persists snippets in `LocalAppData/TypeWhisper-WinUI-DevUserData/snippets.json` through the existing Core schema and atomic replacement API. It preserves existing IDs, creation timestamps and usage metadata. A malformed catalog blocks writes instead of becoming an empty writable cache. Snippets remain separate from the dictionary catalog.
+
+Each recording loads a read-only snippet snapshot after capture begins. Final dictation applies the existing Windows snippet algorithm after CTC/text vocabulary processing and explicit dictionary corrections, then saves expanded final text alongside the original decoder text in History. The snapshot performs no writes, so a completed recording cannot overwrite edits made during capture. WinUI does not increment snippet usage counts yet.
+
+Date/time/day/year placeholders use the existing local formatting rules. The host requests clipboard text only when expansion encounters a clipboard placeholder in a matching enabled snippet, before starting the existing clipboard paste transaction. Clipboard-read failure or invalid date/time formats preserve the complete pre-snippet transcript and report an expansion warning on completion. Live preview remains the decoder output. Validation covers isolated persistence, restart projections, failed writes, malformed files, case/disabled rules, placeholders and newer edits; real microphone/clipboard/editor acceptance remains pending.
+
 ## Tray and plugin contributions
+
+The Plugins screen discovers packages through the isolated user's installed-package index, initially seeded from the development bundle. It inspects manifests and assembly metadata without activation, isolates corrupt packages, rejects duplicate identities and reports incompatible minimum versions or WPF assembly references. This is discovery of rebuilt packages, not a binary-compatibility bridge for old plugins. The marketplace uses only `plugins-v2.json`; package installation, staged updates and persistent uninstallation are connected. The feed still needs publication before remote installation can be verified. See `PLUGIN-PACKAGES-1.1.md` for plugin-owned builds/tests and SDK lifecycle hooks.
+
+The existing sherpa-onnx plugin source now builds for the portable SDK and powers WinUI Parakeet dictation and live preview. The host no longer owns a separate Sherpa recognizer implementation. `IPcmTranscriptionEnginePlugin` accepts captured float PCM directly and `PluginTranscriptionResult.TokenTimings` supplies the CTC alignment. Shared interval validation lives in the SDK. The plugin supplies its Parakeet/Canary catalog, language lists and downloads to the model view in plugin settings. Downloaded models can also be selected in Dictation. Selection and Canary language preferences are persisted; Parakeet uses automatic language detection. Acceleration selection remains pending and this host uses CPU. Downloads use the existing isolated development asset directory; automatic migration from production model directories is disabled.
+
+Both the local transcription plugin and CTC can be enabled/disabled from Plugins with persisted preferences. The dictation gate prevents unloading the local engine during capture/final processing; live-preview inference drains before disposal. CTC uses a serialized vocabulary session with pending-request draining and stale-result rejection. Loading runs off the UI thread. Plugins is the only enablement control: enabled CTC is applied automatically, with no separate Dictation settings switch.
 
 Quick Launch now shares one activation path for startup, tray and registered hotkeys: restore/show, temporarily topmost, request foreground, focus search; deactivation removes topmost. Settings → Shortcuts contains real global Quick Launch bindings, including alternatives. Bindings are stored separately in LocalAppData/TypeWhisper-WinUI-DevUserData/quick-launch-hotkeys.txt. New registrations are acquired before old ones are released; OS conflicts preserve previous bindings. No silent alternate hotkey is chosen. Other shortcuts remain previews. Cross-application focus and persisted hotkey editing still require interactive validation. Foreground behavior follows https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow and registration follows https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey; Windows foreground restrictions still apply.
 
@@ -59,3 +75,25 @@ The shared registry must scope IDs by plugin ID plus command ID, reject duplicat
 ## Validation
 
 Run `dotnet test tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj` for the first boundary. Local Windows application builds/launches use the prescribed `build-typewhisper-windows-dev.ps1 --run --winui <checkout>` route for the new host; the original WPF route is preserved.
+
+## Groq cloud provider
+
+Groq source is now built for both portable net10.0 and the existing WPF development target. The portable package uses WAV uploads without a platform encoder. WinUI loads it through the portable package host and the new IApiKeyPlugin configuration capability. The existing Whisper parsing and HTTP error handling are reused; LLM processing remains outside the current WinUI dictation integration.
+
+CloudTranscriptionPlugin owns enablement, key management, model/language preferences, connection checks and request cancellation. WindowsPluginSecretStore encrypts credentials with current-user DPAPI in isolated WinUI development storage. Ordinary settings never contain the key; unreadable ciphertext is treated as an unconfigured key so replacement remains possible. Configuration changes are blocked during dictation, and no provider fallback silently uploads audio. Selecting a Groq model explicitly changes the persisted provider; merely enabling or configuring Groq leaves the current local provider selected. Live preview is unavailable in cloud mode.
+
+Groq API-key configuration is available exclusively in its plugin settings. The separate global Models page has been removed from navigation and settings search. Dictation selects the active local or cloud model; downloads and provider configuration remain in each plugin’s settings. The Groq settings view has a masked input styled with the app's existing colors and focus outline, one Save & enable action for first setup, connection/removal actions after saving, and compact model rows. The host reports version 1.1.0; previously reporting 0.0.1 rejected the Groq package before key entry. Headless and UI verification details are in WINUI-TESTING.md.
+
+History shows the stored model and provider in transcript details only; the list keeps its compact layout. Known IDs receive readable labels; unknown IDs are preserved and records without model metadata explicitly say that no model was recorded. The current plugin selection is never substituted for historical metadata.
+
+## Plugin presentation
+
+WinUI exposes two provider plugins: NVIDIA Parakeet (including the existing Canary model option) and Groq. The CTC package is an internal dependency of the NVIDIA plugin, with no separate inventory entry or enablement preference. Its lifetime follows the parent plugin, and dictionary boosting applies automatically to Parakeet dictations. Dependency errors are shown in the parent plugin and its settings.
+
+## Integrations workflow
+
+The macOS Integrations and Dictation views are the interaction reference, with the old Windows capability registry as the runtime reference. Quick Launch has one Integrations entry with Installed and Discover tabs. Discover does not advertise fictional plugins while the 1.1 registry and installer are unconnected.
+
+Dictation presents a provider first, followed by that provider's models only when more than one is offered. Provider snapshots expose readiness and remember each provider's selected model. Disabled or unconfigured providers route to their plugin setup without changing the active provider. After setup, choosing Use provider is explicit. A Back to Dictation action returns from setup. Downloads and credentials remain exclusively in plugin settings.
+
+The initial runtime still registers the two connected provider adapters explicitly; arbitrary plugin activation and capability-driven configuration for future packages remain to be generalized. This change does not claim a working remote registry, installation, or workflow provider integration.

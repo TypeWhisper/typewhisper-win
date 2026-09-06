@@ -25,3 +25,8 @@ Observed locally with Microsoft David Desktop:
 - Delayed: `are yellow. This is a test of immediate recording.`
 
 This covers the state machine, audio buffering/conversion and local recognizer. It does not measure real WASAPI/device startup latency, keyboard-hook dispatch timing, or target-app paste behavior. Those still require a separate device/virtual-input end-to-end test.
+# Portable plugin inference
+
+`PortableParakeetTests` exercises the published 1.1 sherpa-onnx plugin through the portable loader and PCM contract. Set `TYPEWHISPER_TEST_PARAKEET_PACKAGE` to its published package directory and `TYPEWHISPER_TEST_PARAKEET_MODEL` to the existing `parakeet-tdt-0.6b` model directory. It generates local English speech, checks transcription/token intervals, then verifies unload behavior. It never downloads models or migrates production data.
+
+The portable inference filter now runs both Parakeet and Canary cases. Download Canary through the development app first; both models must be in the same development plugin asset directory. It verifies real inference and catalog language metadata without recording a microphone.

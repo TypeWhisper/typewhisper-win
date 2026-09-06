@@ -3,7 +3,9 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+#if WINDOWS
 using System.Windows.Controls;
+#endif
 using SherpaOnnx;
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
@@ -13,12 +15,15 @@ namespace TypeWhisper.Plugin.SherpaOnnx;
 /// <summary>
 /// Provides sherpa onnx plugin behavior.
 /// </summary>
-public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEnginePlugin
+public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEnginePlugin
 {
     private const string ParakeetRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main";
     private const string CanaryRepo = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8/resolve/main";
 
     private static readonly IReadOnlyList<string> CanarySupportedLanguages = ["en", "de", "fr", "es"];
+    // NVIDIA model card: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+    private static readonly IReadOnlyList<string> ParakeetSupportedLanguages =
+        ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"];
 
     private static readonly IReadOnlyList<ModelDefinition> Models =
     [
@@ -94,7 +99,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// <summary>
     /// Performs modelle.
     /// </summary>
-    public string PluginName => "Lokale Modelle (sherpa-onnx)";
+    public string PluginName => "NVIDIA Parakeet";
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
@@ -108,7 +113,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// <summary>
     /// Gets the provider display name.
     /// </summary>
-    public string ProviderDisplayName => "Lokal (sherpa-onnx)";
+    public string ProviderDisplayName => "NVIDIA Parakeet";
     /// <summary>
     /// Gets whether the provider has the configuration required to run.
     /// </summary>
@@ -150,12 +155,14 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// Gets the transcription models.
     /// </summary>
     public IReadOnlyList<PluginModelInfo> TranscriptionModels { get; } = Models.Select(m =>
-        new PluginModelInfo(m.Id, m.DisplayName)
-        {
+          new PluginModelInfo(m.Id, m.DisplayName)
+          {
+              Publisher = "NVIDIA",
             SizeDescription = m.SizeDescription,
             EstimatedSizeMB = m.EstimatedSizeMB,
             IsRecommended = m.IsRecommended,
             LanguageCount = m.LanguageCount,
+            LanguageCodes = m.Id == "canary-180m-flash" ? CanarySupportedLanguages : ParakeetSupportedLanguages,
         }).ToList();
 
     /// <summary>
@@ -181,7 +188,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 host.PluginAssetDirectory);
         }
         SherpaOnnxNativeRuntime.RegisterResolver();
-        MigrateModelFiles();
+        if (host.AllowLegacyDataMigration) MigrateModelFiles();
         return Task.CompletedTask;
     }
 
@@ -194,10 +201,12 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         return Task.CompletedTask;
     }
 
+#if WINDOWS
     /// <summary>
     /// Creates the settings view shown by the host, or null when no UI is required.
     /// </summary>
     public UserControl? CreateSettingsView() => null;
+#endif
 
     /// <summary>
     /// Sets acceleration preference.
@@ -229,7 +238,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     {
         var model = GetModelDefinition(modelId);
         var dir = GetModelDirectory(modelId);
-        return model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName)));
+        return model.Files.All(f => File.Exists(Path.Combine(dir, f.FileName)) && new FileInfo(Path.Combine(dir, f.FileName)).Length > 0);
     }
 
     /// <summary>
@@ -241,49 +250,25 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
         var dir = GetModelDirectory(modelId);
         Directory.CreateDirectory(dir);
 
-        var totalBytes = model.Files.Sum(f => (long)f.EstimatedSizeMB * 1024 * 1024);
-        long cumulativeBytesRead = 0;
-
+        var total = model.Files.Sum(f => f.EstimatedSizeMB);
+        double completed = 0;
         foreach (var file in model.Files)
         {
-            var filePath = Path.Combine(dir, file.FileName);
-            if (File.Exists(filePath)) continue;
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, file.DownloadUrl);
-            using var response = await _httpClient.SendAsync(request,
-                HttpCompletionOption.ResponseHeadersRead, ct);
-            response.EnsureSuccessStatusCode();
-
-            var buffer = new byte[81920];
-            long fileBytesRead = 0;
-            var lastReport = DateTime.UtcNow;
-
-            await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            await using (var fileStream = new FileStream(filePath + ".tmp", FileMode.Create,
-                FileAccess.Write, FileShare.None, 81920, true))
-            {
-                int read;
-                while ((read = await contentStream.ReadAsync(buffer, ct)) > 0)
-                {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, read), ct);
-                    fileBytesRead += read;
-
-                    var now = DateTime.UtcNow;
-                    if ((now - lastReport).TotalMilliseconds > 250 && totalBytes > 0)
-                    {
-                        progress?.Report((double)(cumulativeBytesRead + fileBytesRead) / totalBytes);
-                        lastReport = now;
-                    }
-                }
-            }
-
-            File.Move(filePath + ".tmp", filePath, overwrite: true);
-            cumulativeBytesRead += fileBytesRead;
+            ct.ThrowIfCancellationRequested();
+            var destination = Path.Combine(dir, file.FileName);
+            var start = completed;
+            if (!File.Exists(destination) || new FileInfo(destination).Length == 0)
+                await TypeWhisper.PluginSDK.Helpers.ModelFileDownloader.DownloadAsync(_httpClient, file.DownloadUrl, destination,
+                    new DownloadProgress(value => progress?.Report((start + value * file.EstimatedSizeMB) / total)), ct);
+            completed += file.EstimatedSizeMB;
+            progress?.Report(completed / total);
         }
-
-        progress?.Report(1.0);
     }
 
+    private sealed class DownloadProgress(Action<double> report) : IProgress<double>
+    {
+        public void Report(double value) => report(value);
+    }
     /// <summary>
     /// Removes the downloaded files for the requested model.
     /// </summary>
@@ -419,12 +404,17 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
     /// <summary>
     /// Transcribes PCM audio using the selected provider configuration.
     /// </summary>
-    public Task<PluginTranscriptionResult> TranscribeAsync(
+    public async Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct)
+        => await TranscribePcmAsync(DecodeWav(wavAudio), language, translate, ct);
+
+    /// <inheritdoc />
+    public Task<PluginTranscriptionResult> TranscribePcmAsync(
+        ReadOnlyMemory<float> samples, string? language, bool translate, CancellationToken cancellationToken)
     {
         return Task.Run(() =>
         {
-            var audioSamples = DecodeWav(wavAudio);
+            var audioSamples = samples.ToArray();
             var audioDuration = audioSamples.Length / 16000.0;
 
             lock (_sync)
@@ -441,15 +431,20 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, ITranscriptionEngineP
                 stream.AcceptWaveform(16000, audioSamples);
                 _recognizer.Decode(stream);
 
-                var rawText = stream.Result.Text.Trim();
+                var result = stream.Result;
+                var rawText = result.Text.Trim();
 
                 var (text, detectedLanguage) = model.SupportsTranslation
                     ? ParseCanaryResult(rawText)
                     : (rawText, (string?)null);
 
-                return new PluginTranscriptionResult(text, detectedLanguage, audioDuration, NoSpeechProbability: null);
+                return new PluginTranscriptionResult(text, detectedLanguage, audioDuration, NoSpeechProbability: null)
+                {
+                    TokenTimings = !model.SupportsTranslation && result.Tokens is not null && result.Timestamps is not null
+                        ? TypeWhisper.PluginSDK.Helpers.TranscriptionTokenTimings.Create(result.Tokens, result.Timestamps, result.Durations, audioDuration) : []
+                };
             }
-        }, ct);
+        }, cancellationToken);
     }
 
     /// <summary>

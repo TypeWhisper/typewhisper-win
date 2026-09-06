@@ -2,7 +2,19 @@
 
 ## Summary
 
+Version 1.1 is greenfield: reuse existing plugin/provider source, but allow SDK and package-contract changes without legacy binary compatibility. Plugins will be rebuilt and republished; the dedicated catalog is `https://typewhisper.github.io/typewhisper-win/plugins-v2.json`, with no community feed in WinUI.
+
 Preserve the approved Windows UI prototype and progressively connect it to the existing application services. This is a draft checkpoint, **not ready to merge or ship**. The WPF host remains available. UI completion does not mean production functionality is connected.
+
+## Plugin package lifecycle checkpoint
+
+- WinUI reads only the v2 feed and renders real catalog entries, installation errors, updates and restart requirements. The endpoint currently returns HTTP 404; no remote catalog or release was published by this change.
+- Installed packages live in isolated user storage with an atomic index. One-time dev bundle import preserves the existing two providers. Uninstall persists across relaunches/builds, drains and disables the provider, and keeps keys, settings and models. Unused DLL folders are collected on startup.
+- Plugins own their build descriptors, output folders and test projects. The WinUI project discovers portable builds without provider assembly references. Parakeet owns its nested CTC dependency.
+- Optional SDK `OnInstallAsync` / `OnUninstallAsync` hooks complement existing `ActivateAsync` / `DeactivateAsync` / `Dispose`; verified installation and runtime activation remain separate phases. Plugins can report their own plain-text status and optional step progress through `PluginInstallationContext.Progress`; Groq includes setup/data-retention messages.
+- **262 headless tests passed**: 112 SDK/host, 96 presentation, 29 Groq-owned and 25 Parakeet-owned checks. New fixtures cover checksums, unsafe paths, cancellation, identity/architecture rejection, persistent uninstall/reinstall, pending updates and lifecycle failure handling.
+- Prescribed dev build and launch passed. Native UI inspection confirmed both providers, the uninstall confirmation/cancel path and the retryable catalog-unavailable state. Actual package mutations were exercised with isolated fixtures, not by removing the owner's active provider or secrets. Live feed installation remains pending publication.
+- Package format, lifecycle responsibilities and feed fields: [PLUGIN-PACKAGES-1.1.md](PLUGIN-PACKAGES-1.1.md).
 
 ## Version 1.1 branch workflow
 
@@ -51,7 +63,10 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Validate real microphone/driver latency and native keyboard-hook timing with a physical or virtual input end-to-end.
 - [ ] Validate bitmap/HTML/file clipboard round-trips and slow target applications end-to-end.
 - [ ] Verify populated dictation history, detail/copy behavior and live refresh during daily use.
-- [ ] Connect configurable transcription model/device selection.
+- [x] Connect Groq cloud dictation through the portable provider: protected API-key settings, Whisper Large V3/Turbo selection, persisted provider/language, and real HTTP transport covered by headless tests. Audio uploads occur only after recording.
+- [x] Correct the portable host version to 1.1.0 and remove the disabled-key-field setup dead end. Verify masked input, Save & enable, encrypted storage and key removal in the native app using a synthetic key.
+- [ ] Verify a real Groq dictation with the owner's key; no live Groq transcription was performed during the synthetic acceptance checks.
+- [x] Connect local Parakeet/Canary model selection and downloads to the existing plugin, with shared model management in plugin settings and Settings > Models, persisted selection, failed-switch rollback and per-model language tooltips. Canary language selection is available in Dictation; acceleration selection remains pending.
 - [x] Connect the Audio microphone picker to real capture device preferences and isolated persistence; reject changes during recording.
 - [x] Wire persisted recording sounds/output selection, whisper mode, output-volume reduction and legacy media Play/Pause behavior into the WinUI dictation lifecycle.
 - [x] Use one shared audio output preference for feedback and volume reduction; future TTS must consume the same preference rather than add a separate device selector.
@@ -63,19 +78,25 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Connect remaining dictation modes/hotkeys, live transcription, complete cancellation and durable recovery.
 - [x] Wire actual Parakeet preview text into the WinUI transcript window using the legacy local polling approach, with the preview delay reduced to 1.5 seconds plus inference time. Drain preview inference before final decode and reject cancelled results.
 - [ ] Validate real live-preview latency, long recordings and physical hotkey cancellation. Polling is not token streaming and shares the final recognizer.
-- [x] Add an experimental optional Parakeet CTC plugin and wire it after final WinUI decoding with audio, token timings and dictionary/Term Pack hints. Publish it as a separate portable package. Persist opt-in under Dictation > Advanced; skip the legacy text booster while CTC is selected and retain explicit corrections afterward.
+- [x] Add an optional Parakeet CTC plugin and wire it after final WinUI decoding with audio, token timings and dictionary/Term Pack hints. Publish it as a separate portable package. Persist enablement in Plugins; use the enabled plugin automatically; skip the legacy text booster while CTC is selected and retain explicit corrections afterward.
 - [x] Validate actual English CTC emissions with official fixture audio, a positive correction (`live` to `love`) and rejection of the inverse incorrect hint. Activate the published package through the portable loader and repeat the positive control successfully.
 - [ ] Validate real microphone/TDT-token alignment, WinUI enable/disable/restart interaction and German/name/TypeWhisper vocabulary accuracy. The English-trained 110M model, managed features and approximate BPE tokenizer are experimental, not a Mac/FluidAudio parity claim. Calibrate variable-length acoustic scoring before recommending general use.
 - [x] Add a portable net10.0 SDK target alongside the legacy WPF target and an acoustic vocabulary-rescoring contract (audio, token timings, term hints, recording identity and replacement spans).
 - [x] Exercise a separate portable test-plugin assembly: **6 contract tests passed** for framework independence, lifecycle/settings, request data, cancellation and explicit errors. This is not CTC inference or WinUI plugin discovery.
-- [x] Add an independently tested portable package loader using the existing Windows `manifest.json` convention, shared SDK identity and collectible assembly contexts. The portable suite now has **21 passing tests**, including actual separate-assembly activation/unload and host-side vocabulary result validation. This loader is not yet connected to the WinUI Plugins screen.
+- [x] Add an independently tested portable package loader using the Windows `manifest.json` convention, shared SDK identity and collectible assembly contexts. Initial coverage included **21 passing tests** for separate-assembly activation/unload and host-side vocabulary result validation.
 - [x] Extend portable host coverage to **27 passing tests** with serialized vocabulary-plugin activation, disable/dispose draining, stale-result rejection, activation retry and cancellation. Prepare normalized dictionary catalogs off the UI thread and run final dictionary processing on a worker. These remain distinct from actual CTC inference and WinUI plugin discovery.
-- [x] Connect personal dictionary entries, corrections and the 12 existing built-in Term Packs to isolated development persistence. Keep per-pack ownership so disabling a pack preserves personal terms and overlapping terms from other packs. Commercial/remote packs and snippet expansion remain unconnected.
+- [x] Connect personal dictionary entries, corrections and the 12 existing built-in Term Packs to isolated development persistence. Keep per-pack ownership so disabling a pack preserves personal terms and overlapping terms from other packs. Commercial/remote packs remain unconnected.
+- [x] Connect snippet create/edit/delete, tags, enabled/case-sensitive preferences and isolated persistence. Apply the existing Windows snippet rules after final dictionary processing using a per-recording snapshot, preserving raw History text and newer editor changes. Date/time and clipboard placeholders are connected; usage-count increments remain deferred.
+- [ ] Validate spoken snippet triggers, clipboard placeholders and editor restart behavior interactively in WinUI. Automated coverage uses isolated files and supplied clipboard text, not real microphone or native clipboard input.
 - [x] Reuse the existing Windows text-based vocabulary algorithm and correction rules after final Parakeet decoding. Preserve raw text separately in History; use a per-recording read-only dictionary snapshot so processing cannot overwrite newer edits. Persist opt-in vocabulary boosting under Dictation > Advanced. This is not acoustic CTC rescoring.
 - [ ] Validate full WPF compatibility and general plugin discovery/install UI. Portable package activation, result validation, lifecycle and real CTC controls are tested independently; complete WinUI acceptance remains pending. The portable and WPF SDK targets are not a promise that legacy WPF plugins load unchanged in WinUI.
 - [ ] Connect recorder audio capture, source toggles, playback and persisted history entries.
+- [x] Replace the Plugins sample inventory with actual package discovery and connect persisted activation/deactivation for CTC and local transcription. Inspect metadata without executing plugin code; show package errors independently and disable simulated marketplace installation into the real inventory.
+- [x] Rebuild the existing sherpa-onnx plugin for the portable SDK and use it for WinUI dictation/live preview. Add float-PCM input and token timing metadata for CTC; remove the separate WinUI recognizer implementation. Read development model assets without running legacy production-data migration.
+- [x] Owner confirmed a successful manual plugin disable/re-enable cycle in WinUI.
+- [x] Verify CTC enable/disable with Enter and Space, focus restoration after asynchronous operations, and enabled/disabled persistence after real app restarts using local Computer Use. Plugins is the only enablement control; remove the separate Dictation settings switch and use enabled CTC automatically. Comprehensive accessibility/DPI acceptance remains pending.
 - [ ] Connect general settings persistence, native services and model downloads/activation.
-- [ ] Connect workflows, file transcription and snippet expansion to real services; add licensed remote dictionary packs after license integration.
+- [ ] Connect workflows and file transcription to real services; add licensed remote dictionary packs after license integration.
 - [ ] Connect plugin discovery/lifecycle and the shared command registry to both tray and Quick Launch.
 - [ ] Handle plugin capability changes, unload, command identity, disabled state, cancellation and failures.
 - [ ] Connect real dashboard/statistics data, onboarding checks, licensing and updates.
@@ -92,6 +113,12 @@ Preserve the approved Windows UI prototype and progressively connect it to the e
 - [ ] Replace the default shipping host only after real end-to-end validation.
 
 ## Validation at this checkpoint
+
+- Headless testability is the current priority before more provider integration. The Plugins view now uses a portable `PluginManagementController`; lifecycle/persistence failures and concurrency are tested without WinUI or native models. `eng/Test-WinUIHeadless.ps1` passed **82 plugin-host tests and 83 Presentation tests** in Release mode and writes TRX plus JSON results. A Windows/Linux CI matrix is configured; its first remote execution is pending. See `docs/WINUI-TESTING.md`.
+
+- Plugin integration: **52 portable SDK/host tests passed**, including nine metadata-inventory cases. The published portable sherpa-onnx package passed a real local inference test with generated English speech, nonempty valid CTC token intervals and explicit failure after unloading. This is generated audio, not a real microphone or UI-click test. WinUI built, published and launched via the prescribed launcher, and the subsequent CTC initialization journal reported success.
+
+- Snippet integration: **83 Presentation tests passed** (including 10 new snippet persistence/snapshot cases) and **21 existing Core SnippetService tests passed**. WinUI built, published and launched through the prescribed launcher. Corrupt snippet files block editor writes and retain the transcript; failed writes preserve the editor catalog. Actual microphone-triggered expansion and clipboard restoration remain manual acceptance items.
 
 - Owner confirmed real Windows dictation of TypeWhisper with Strong and Auto. The diagnostic journal recorded an applied CTC replacement; the neutral sentence “Ich benutze diese App jeden Tag” remained unchanged. This is one successful live positive/negative pair, not comprehensive German accuracy validation. Latest portable suite: **43 passed**; Presentation suite: **73 passed**. WinUI was built, published and relaunched through the prescribed launcher, with CTC initialization succeeding.
 

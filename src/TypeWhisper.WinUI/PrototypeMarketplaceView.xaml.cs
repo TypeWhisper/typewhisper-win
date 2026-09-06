@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using TypeWhisper.PluginHost;
+using TypeWhisper.PluginSDK;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -9,17 +11,22 @@ namespace TypeWhisper.WinUI;
 
 public sealed partial class PrototypeMarketplaceView : UserControl
 {
-    private readonly IReadOnlyList<PrototypeMarketplaceItem> _catalog = PrototypeMarketplaceItem.Samples;
+    private IReadOnlyList<PrototypeMarketplaceItem> _catalog = [];
+    private LocalDictationSession? _runtime;
+    private IReadOnlyList<PortableCatalogEntry> _entries = [];
+    private bool _fetching;
+    private string? _error;
+    private string? _operationMessage;
     private Func<string, bool> _isInstalled = _ => false;
-    private Action<PrototypePlugin>? _install;
     private PrototypeMarketplaceItem? _opened;
     private string _query = string.Empty;
     private string _category = string.Empty;
     private bool _reviewing;
     private CancellationTokenSource? _installation;
-    private double _progress;
     internal bool IsDetail { get; private set; }
     internal ObservableCollection<PrototypeMarketplaceItem> FilteredItems { get; } = [];
+    internal event EventHandler? InstalledRequested;
+    private void Installed_Click(object sender, RoutedEventArgs e) => InstalledRequested?.Invoke(this, EventArgs.Empty);
     internal event EventHandler? ExitRequested;
     internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
@@ -33,11 +40,42 @@ public sealed partial class PrototypeMarketplaceView : UserControl
         Filter(string.Empty);
     }
 
-    internal void ConfigureInventory(Func<string, bool> isInstalled, Action<PrototypePlugin> install)
+    internal void ConfigureRuntime(LocalDictationSession runtime)
     {
-        _isInstalled = isInstalled;
-        _install = install;
-        Filter(_query);
+        _runtime = runtime;
+        _isInstalled = runtime.Packages.Store.IsInstalled;
+        CatalogFilters.Visibility = Visibility.Collapsed;
+        ResetFiltersButton.Content = "Retry";
+        Loaded += async (_, _) => await RefreshCatalogAsync();
+        runtime.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsDetail) UpdateDetail(); else Filter(_query); });
+    }
+
+    private async Task RefreshCatalogAsync()
+    {
+        if (_runtime is null || _fetching || _installation is not null) return;
+        _fetching = true; _error = null;
+        EmptyTitle.Text = "Loading integrations…";
+        EmptyDescription.Text = "";
+        ResetFiltersButton.Visibility = Visibility.Collapsed;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            _entries = await _runtime.Packages.Catalog.FetchAsync(timeout.Token);
+            _catalog = _entries.Select(entry => new PrototypeMarketplaceItem(new(entry.Id, entry.Name, entry.Description,
+                "plugin", entry.Category, "Plugins run with your Windows user's permissions. Install only publishers you trust.",
+                entry.Version, entry.MinHostVersion), entry.Author)
+                { Supported = entry.Supports(LocalCtcVocabulary.HostVersion, PortablePluginCatalog.Architecture) }).ToArray();
+            EmptyTitle.Text = _catalog.Count == 0 ? "No integrations published yet" : "No matching integrations";
+            EmptyDescription.Text = _catalog.Count == 0 ? "The catalog is ready. Plugins will appear here when they are published." : "Try another search.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _catalog = []; _entries = [];
+            EmptyTitle.Text = "Catalog unavailable";
+            EmptyDescription.Text = "The plugin catalog could not be loaded. Your installed plugins remain available. Try again shortly.";
+            System.Diagnostics.Debug.WriteLine("Plugin catalog: " + ex.GetType().Name);
+        }
+        finally { _fetching = false; ResetFiltersButton.Visibility = Visibility.Visible; Filter(_query); }
     }
 
     internal void Filter(string query)
@@ -49,9 +87,10 @@ public sealed partial class PrototypeMarketplaceView : UserControl
         foreach (var item in _catalog.Where(item => item.Category.StartsWith(_category, StringComparison.OrdinalIgnoreCase)
             && (item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || item.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || item.Category.Contains(query, StringComparison.OrdinalIgnoreCase))))
-            FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id) });
+            FilteredItems.Add(item with { Installed = _isInstalled(item.Plugin.Id),
+                UpdateAvailable = HasUpdate(item), PendingRestart = _runtime?.Packages.Store.PendingRestart(item.Plugin.Id) == true });
         MarketList.SelectedItem = FilteredItems.FirstOrDefault(item => item.Plugin.Id == selectedId) ?? FilteredItems.FirstOrDefault();
-        MarketSummary.Text = $"{FilteredItems.Count} plugins · sample catalog";
+        MarketSummary.Text = $"{FilteredItems.Count} integrations";
         MarketEmptyState.Visibility = FilteredItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateBreadcrumbs();
     }
@@ -66,8 +105,9 @@ public sealed partial class PrototypeMarketplaceView : UserControl
     internal void OpenSelected()
     {
         if (IsDetail || MarketList.SelectedItem is not PrototypeMarketplaceItem item) return;
-        _opened = item;
+        _opened = item; _error = null;
         IsDetail = true;
+        IntegrationTabs.Visibility = Visibility.Collapsed;
         MarketListPage.Visibility = Visibility.Collapsed;
         MarketDetailPage.Visibility = Visibility.Visible;
         DetailModeChanged?.Invoke(true);
@@ -78,34 +118,34 @@ public sealed partial class PrototypeMarketplaceView : UserControl
 
     private void Item_Click(object sender, ItemClickEventArgs e) { MarketList.SelectedItem = e.ClickedItem; OpenSelected(); }
 
+    private bool HasUpdate(PrototypeMarketplaceItem item) => _runtime?.Packages.Store.InstalledVersion(item.Plugin.Id) is { } current &&
+        Version.TryParse(current, out var installed) && Version.TryParse(item.Plugin.Version, out var available) && available > installed;
+
     private void UpdateDetail(bool updateBreadcrumbs = true)
     {
-        if (_opened is not { } item) return;
+        if (_opened is not { } item || _runtime is null) return;
         var installed = _isInstalled(item.Plugin.Id);
+        var update = HasUpdate(item);
+        var pending = _runtime.Packages.Store.PendingRestart(item.Plugin.Id);
         var busy = _installation is not null;
-        var blocked = !item.Trusted || !item.Plugin.Compatible;
-        MarketTitle.Text = _reviewing ? "Review installation" : item.Title;
-        MarketSummary.Text = "Demo only";
-        MarketDescription.Text = _reviewing ? $"Add {item.Title} to your example plugins?" : item.Description;
+        MarketTitle.Text = item.Title;
+        MarketSummary.Text = "Discover";
+        MarketDescription.Text = item.Description;
         MarketPublisher.Text = item.Publisher;
         MarketAccess.Text = item.Plugin.Permissions;
-        MarketCompatibility.Text = $"Version {item.Plugin.Version} · Minimum host {item.Plugin.MinimumHostVersion} · "
-            + (item.Trusted ? "Sample signature: valid" : "Sample signature: unavailable");
-        MarketStatus.Text = busy ? "Simulating installation…" : installed ? "Installed in this session" : !item.Trusted ? "Installation blocked"
-            : !item.Plugin.Compatible ? "Host update required" : _reviewing ? "Review requested access" : "Available to try";
-        MarketStatus.Foreground = blocked ? new SolidColorBrush(Colors.Orange) : (Brush)Application.Current.Resources["AccentBrush"];
-        MarketStatusExplanation.Text = busy ? "No download is running. Cancel or go back to stop this preview."
-            : installed ? "Open this example in Plugins to change its settings or disable it."
-            : !item.Trusted ? "The signature fixture is untrusted. This example cannot be installed."
-            : !item.Plugin.Compatible ? $"This example requires TypeWhisper {item.Plugin.MinimumHostVersion} or later. The prototype represents host 1.1."
-            : _reviewing ? "Confirm only after reviewing the access below. This adds an in-memory example, not an executable plugin."
-            : "Inspect its requested access before adding it to your example plugins.";
+        MarketCompatibility.Text = $"Version {item.Plugin.Version} · Minimum host {item.Plugin.MinimumHostVersion}";
+        MarketStatus.Text = busy ? "Installing…" : _error is not null ? "Installation failed" : pending ? "Restart required" : !item.Supported ? "Not compatible" : update ? "Update available" : installed ? "Installed" : "Available";
+        MarketStatusExplanation.Text = _error ?? (busy ? _operationMessage ?? "Preparing installation…"
+            : pending ? "Restart TypeWhisper to use the update. The current version remains available until then."
+            : !item.Supported ? "This package does not support your TypeWhisper version or Windows architecture."
+            : installed && !update ? "Open plugin settings to finish setup or manage its models."
+            : "The package is downloaded over HTTPS and checked against the catalog checksum.");
         MarketPrimaryButton.Visibility = Visibility.Visible;
-        MarketPrimaryButton.Content = installed ? "Open in Plugins" : busy ? "Installing…" : _reviewing ? "Confirm demo install" : "Install example";
-        MarketPrimaryButton.IsEnabled = !busy && (installed || !blocked);
-        MarketCancelButton.Visibility = _reviewing || busy ? Visibility.Visible : Visibility.Collapsed;
+        MarketPrimaryButton.Content = busy ? "Installing…" : pending ? "Restart required" : update ? "Update" : installed ? "Open in Installed" : "Install";
+        MarketPrimaryButton.IsEnabled = !busy && !pending && item.Supported && _runtime.Packages.Store.Initialized;
+        MarketCancelButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         InstallProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        MarketNavigationHint.Text = _reviewing || busy ? "Esc Cancel" : "⌫ / Esc Back";
+        MarketNavigationHint.Text = busy ? "Esc Cancel" : "⌫ / Esc Back";
         if (updateBreadcrumbs) UpdateBreadcrumbs();
     }
 
@@ -116,10 +156,10 @@ public sealed partial class PrototypeMarketplaceView : UserControl
             ShowList(true);
             LauncherRequested?.Invoke(this, EventArgs.Empty);
         }, "Marketplace breadcrumb Quick Launch") };
-        if (!IsDetail) crumbs.Add(new("Marketplace"));
+        if (!IsDetail) crumbs.Add(new("Integrations"));
         else
         {
-            crumbs.Add(new("Marketplace", () => ShowList(true), "Marketplace breadcrumb catalog"));
+            crumbs.Add(new("Integrations", () => ShowList(true), "Marketplace breadcrumb catalog"));
             if (_reviewing)
             {
                 crumbs.Add(new(_opened?.Title ?? "Plugin", CancelInstall, "Marketplace breadcrumb detail"));
@@ -135,7 +175,8 @@ public sealed partial class PrototypeMarketplaceView : UserControl
         CancelPending();
         _reviewing = false;
         IsDetail = false;
-        MarketTitle.Text = "Marketplace";
+        IntegrationTabs.Visibility = Visibility.Visible;
+        MarketTitle.Text = "Integrations";
         MarketListPage.Visibility = Visibility.Visible;
         MarketDetailPage.Visibility = Visibility.Collapsed;
         MarketPrimaryButton.Visibility = MarketCancelButton.Visibility = Visibility.Collapsed;
@@ -161,7 +202,6 @@ public sealed partial class PrototypeMarketplaceView : UserControl
     private void CancelPending()
     {
         _installation?.Cancel();
-        _installation = null;
     }
 
     private void CancelInstall()
@@ -176,42 +216,33 @@ public sealed partial class PrototypeMarketplaceView : UserControl
 
     private async void Primary_Click(object sender, RoutedEventArgs e)
     {
-        if (_opened is not { } item || _installation is not null) return;
-        if (_isInstalled(item.Plugin.Id)) { ManageRequested?.Invoke(item.Plugin.Id); return; }
-        if (!item.Trusted || !item.Plugin.Compatible || _install is null) return;
-        if (!_reviewing)
-        {
-            _reviewing = true;
-            UpdateDetail();
-            MarketDetailPage.ChangeView(null, 0, null, true);
-            return;
-        }
+        if (_runtime is null || _opened is not { } item || _installation is not null) return;
+        if (_isInstalled(item.Plugin.Id) && !HasUpdate(item)) { ManageRequested?.Invoke(item.Plugin.Id); return; }
+        if (!item.Supported) return;
+        var entry = _entries.Single(entry => entry.Id == item.Plugin.Id);
         using var operation = new CancellationTokenSource();
-        _installation = operation;
-        SetProgress(0.15);
-        // The navigation path is unchanged while progress begins. Keep its
-        // controls stable for both pointer input and accessibility clients.
+        _installation = operation; _error = null; _operationMessage = "Preparing installation…"; SetProgress(0);
         UpdateDetail(updateBreadcrumbs: false);
-        MarketCancelButton.Focus(FocusState.Programmatic);
         try
         {
-            // Leave enough time to inspect and cancel this intentionally fake
-            // progress preview; this is not an installation-speed benchmark.
-            await Task.Delay(1500, operation.Token);
-            SetProgress(0.65);
-            await Task.Delay(1500, operation.Token);
-            operation.Token.ThrowIfCancellationRequested();
-            _install(item.Plugin);
-            _reviewing = false;
+            var restart = await _runtime.Packages.Store.InstallAsync(entry, new Progress<PluginInstallationProgress>(value =>
+            {
+                if (!ReferenceEquals(_installation, operation)) return;
+                _operationMessage = value.Message;
+                SetProgress(value.Fraction);
+                if (IsDetail) MarketStatusExplanation.Text = value.Message;
+            }), operation.Token);
+            if (!restart && ReferenceEquals(_installation, operation)) ManageRequested?.Invoke(item.Plugin.Id);
         }
         catch (OperationCanceledException) { }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _error = ex.Message; }
         finally
         {
             if (ReferenceEquals(_installation, operation))
             {
                 _installation = null;
-                UpdateDetail();
-                MarketPrimaryButton.Focus(FocusState.Programmatic);
+                if (IsDetail) { UpdateDetail(); MarketPrimaryButton.Focus(FocusState.Programmatic); }
+                else Filter(_query);
             }
         }
     }
@@ -233,12 +264,11 @@ public sealed partial class PrototypeMarketplaceView : UserControl
         }
     }
 
-    private void Reset_Click(object sender, RoutedEventArgs e) => ShowList(true);
-    private void SetProgress(double progress)
+    private async void Reset_Click(object sender, RoutedEventArgs e) { ShowList(true); await RefreshCatalogAsync(); }
+    private void SetProgress(double? progress)
     {
-        _progress = progress;
-        InstallProgressFill.Width = InstallProgress.ActualWidth * progress;
+        InstallProgress.IsIndeterminate = progress is null || !double.IsFinite(progress.Value);
+        if (!InstallProgress.IsIndeterminate) InstallProgress.Value = Math.Clamp(progress!.Value, 0, 1);
     }
-    private void Progress_SizeChanged(object sender, SizeChangedEventArgs e) => SetProgress(_progress);
     internal void ResetNavigation() => ShowList(true);
 }

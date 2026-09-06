@@ -48,8 +48,7 @@ public sealed partial class MainWindow : Window
         new("Pinned", "history", "History", "Browse, search, copy, and export transcriptions", "H", "Opens History in workspace mode. Full transcript search remains inside this explicit scope."),
         new("Pinned", "recorder", "Recorder", "Record microphone and system audio", "R", "Opens the recorder workspace without interrupting active dictation."),
         new("Pinned", "workflow", "Workflows", "Run and manage reusable text workflows", "W", "Choose a workflow, inspect its provider, and run it against selected or dictated text."),
-        new("Suggested", "plugin", "Plugins", "Manage integrations and plugin settings", "", "Shows installed plugins, their health, permissions, settings, and updates."),
-        new("Suggested", "market", "Marketplace", "Discover signed TypeWhisper plugins", "", "Browse verified plugins without leaving Quick Launch."),
+        new("Suggested", "plugin", "Integrations", "Discover plugins and manage provider settings", "", "Shows installed plugins, their health, permissions, settings, and updates."),
         new("Suggested", "settings", "Settings", "Audio, hotkeys, privacy, account, and updates", "Ctrl ,", "Opens the dedicated Settings surface for global application configuration."),
         new("Suggested", "file", "Transcribe file", "Drop or choose audio and video files", "", "Opens the file transcription queue in workspace mode."),
         new("Suggested", "dictionary", "Dictionary", "Your words and preferred spellings", "D", "Manage words and correction rules used by TypeWhisper."),
@@ -121,6 +120,7 @@ public sealed partial class MainWindow : Window
     {
         var revision = ++_overlayRevision;
         MetricsText.Text = _dictation.Status;
+        UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
         if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error)
         {
@@ -173,6 +173,7 @@ public sealed partial class MainWindow : Window
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
@@ -192,7 +193,7 @@ public sealed partial class MainWindow : Window
         PluginsView.ExitRequested += (_, _) => ClosePlugins();
         PluginsView.LauncherRequested += (_, _) => { ClosePlugins(); SearchBox.Text = string.Empty; };
         PluginsView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
-        MarketplaceView.ConfigureInventory(PluginsView.ContainsPlugin, PluginsView.InstallSample);
+        MarketplaceView.ConfigureRuntime(_dictation);
         MarketplaceView.ExitRequested += (_, _) => CloseMarketplace();
         MarketplaceView.LauncherRequested += (_, _) => { CloseMarketplace(); SearchBox.Text = string.Empty; };
         MarketplaceView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
@@ -203,18 +204,19 @@ public sealed partial class MainWindow : Window
             SearchSurface.IsHitTestVisible = !detail;
             SearchSurface.Opacity = detail ? 0.5 : 1;
         };
-        MarketplaceView.ManageRequested += id =>
+        MarketplaceView.ManageRequested += async id =>
         {
             CloseMarketplace();
             SearchBox.Text = string.Empty;
             OpenPlugins();
-            PluginsView.OpenEntry(id);
+            await PluginsView.OpenInstalledAsync(id);
         };
-        PluginsView.MarketplaceRequested += (_, _) =>
+        PluginsView.MarketplaceRequested += (_, _) => SwitchIntegrationTab(discover: true);
+        MarketplaceView.InstalledRequested += (_, _) => SwitchIntegrationTab(discover: false);
+        PluginsView.ReturnToDictationRequested += (_, _) =>
         {
-            ClosePlugins();
-            SearchBox.Text = string.Empty;
-            OpenMarketplace();
+            if (_pluginsOpen) ClosePlugins();
+            OpenSettings();
         };
         PluginsView.DetailModeChanged += detail =>
         {
@@ -557,10 +559,8 @@ public sealed partial class MainWindow : Window
             OpenRecorder();
         else if (_selected?.Title == "Workflows")
             OpenWorkflows();
-        else if (_selected?.Title == "Plugins")
+        else if (_selected?.Title == "Integrations")
             OpenPlugins();
-        else if (_selected?.Title == "Marketplace")
-            OpenMarketplace();
         else if (_selected?.Title == "Transcribe file")
             OpenFileTranscription();
         else if (_selected?.Title == "Dictionary")
@@ -849,7 +849,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
-            _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation).Configure;
+            _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation, OpenProviderSettings).Configure;
             _settingsWindow.HistoryRequested += () =>
             {
                 if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }
@@ -915,6 +915,29 @@ public sealed partial class MainWindow : Window
         _settingsWindow!.ShowSelectComparison();
     }
 
+    private void SwitchIntegrationTab(bool discover)
+    {
+        var launcherQuery = _launcherQuery;
+        if (_pluginsOpen) ClosePlugins();
+        if (_marketplaceOpen) CloseMarketplace();
+        if (discover) OpenMarketplace(); else OpenPlugins();
+        _launcherQuery = launcherQuery;
+    }
+
+    private async void OpenProviderSettings(string pluginId)
+    {
+        if (_historyOpen || _recorderOpen || _workflowsOpen || LexiconOpen || FileTranscriptionOpen)
+        {
+            _settingsWindow?.ShowIntegrationNavigationHint();
+            return;
+        }
+        _settingsWindow?.AppWindow.Hide();
+        ShowFromActivation();
+        if (_marketplaceOpen) SwitchIntegrationTab(discover: false);
+        else if (!_pluginsOpen) OpenPlugins();
+        await PluginsView.OpenProviderSettingsAsync(pluginId);
+    }
+
     private void OpenMarketplace()
     {
         _launcherQuery = SearchBox.Text;
@@ -942,7 +965,7 @@ public sealed partial class MainWindow : Window
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
-        var command = FilteredItems.FirstOrDefault(item => item.Title == "Marketplace");
+        var command = FilteredItems.FirstOrDefault(item => item.Title == "Integrations");
         if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
         _isSearchEditing = false;
         UpdateSearchPresentation();
@@ -967,6 +990,7 @@ public sealed partial class MainWindow : Window
     private void ClosePlugins()
     {
         _pluginsOpen = false;
+        PluginsView.EndSetupNavigation();
         PluginsView.Visibility = Visibility.Collapsed;
         SearchBox.IsEnabled = SearchSurface.IsHitTestVisible = true;
         SearchSurface.Opacity = 1;
@@ -975,7 +999,7 @@ public sealed partial class MainWindow : Window
         SearchPlaceholder.Text = "Search commands, recordings, workflows…";
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(SearchBox, "Quick Launch search");
         SearchBox.Text = _launcherQuery;
-        var command = FilteredItems.FirstOrDefault(item => item.Title == "Plugins");
+        var command = FilteredItems.FirstOrDefault(item => item.Title == "Integrations");
         if (command is not null) { CompactResults.SelectedItem = command; UpdateDetail(command); }
         _isSearchEditing = false;
         UpdateSearchPresentation();
@@ -1145,11 +1169,16 @@ public sealed partial class MainWindow : Window
         }
         PausePreviewButton.Content = _overlay?.IsPaused == true ? "Resume" : "Pause";
         var minimal = _overlayMode == PrototypeOverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
-        TranscriptToggleButton.IsEnabled = !minimal;
-        TranscriptToggleButton.Content = minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
+        UpdateTranscriptToggle();
         OverlayPreviewHint.Text = minimal
             ? "Minimal: indicator only at the screen edge · live-text preference remembered"
             : "Microphone level only · transcript is sample text · no audio saved";
+    }
+    private void UpdateTranscriptToggle()
+    {
+        var minimal = _overlayMode == PrototypeOverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
+        TranscriptToggleButton.IsEnabled = !minimal && !_dictation.UsesGroq;
+        TranscriptToggleButton.Content = _dictation.UsesGroq ? "Live text · Local only" : minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
     }
     private void TranscriptToggleButton_Click(object sender, RoutedEventArgs e)
     {

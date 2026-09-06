@@ -4,7 +4,7 @@
   "version": "1.0.6",
   "minHostVersion": "1.0.9",
   "author": "TypeWhisper",
-  "description": "Groq Whisper transcription and Llama translation",
+  "description": "Cloud transcription with OpenAI Whisper models hosted by Groq.",
   "category": "transcription",
   "categories": ["transcription", "llm"],
   "assemblyName": "TypeWhisper.Plugin.Groq.dll",

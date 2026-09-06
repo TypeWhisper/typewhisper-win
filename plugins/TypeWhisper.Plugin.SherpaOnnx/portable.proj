@@ -1,0 +1,8 @@
+<Project DefaultTargets="Build">
+  <Target Name="Build">
+    <MSBuild Projects="TypeWhisper.Plugin.SherpaOnnx.csproj" Targets="Restore;Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" RemoveProperties="RuntimeIdentifier;RuntimeIdentifiers;Platform" />
+  </Target>
+  <Import Project="../../eng/PortablePlugin.targets" />
+  <Target Name="GetTargetFrameworks" />
+  <Target Name="GetTargetPath" />
+</Project>

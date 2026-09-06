@@ -1,0 +1,38 @@
+name: WinUI headless checks
+
+on:
+  pull_request:
+  push:
+    branches: [seofood/release-1.1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: winui-headless-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless:
+    name: Plugin and presentation logic (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run without desktop, microphone, models or provider credentials
+        shell: pwsh
+        run: ./eng/Test-WinUIHeadless.ps1 -Configuration Release
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: winui-headless-${{ matrix.os }}
+          path: artifacts/test-results/winui-headless/
+          if-no-files-found: warn

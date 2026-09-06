@@ -6,12 +6,13 @@ namespace TypeWhisper.PluginHost;
 
 // Restricted host for the first local vocabulary capability. Unconnected SDK
 // services fail explicitly; this is not yet a general-purpose plugin host.
-public sealed class VocabularyHostServices(string dataDirectory, Action<string>? diagnosticSink = null) : IPluginHostServices
+public sealed class VocabularyHostServices(string dataDirectory, Action<string>? diagnosticSink = null, string? assetDirectory = null, IPluginSecretStore? secrets = null) : IPluginHostServices
 {
     private readonly object _sync = new();
     private string SettingsPath => Path.Combine(PluginDataDirectory, "settings.json");
     public string PluginDataDirectory { get; } = Path.GetFullPath(dataDirectory);
-    public string PluginAssetDirectory => PluginDataDirectory;
+    public string PluginAssetDirectory => assetDirectory is null ? PluginDataDirectory : Path.GetFullPath(assetDirectory);
+    public bool AllowLegacyDataMigration => false;
     public string? ActiveAppName => null;
     public string? ActiveAppProcessName => null;
     public IReadOnlyList<string> AvailableProfileNames => [];
@@ -40,9 +41,9 @@ public sealed class VocabularyHostServices(string dataDirectory, Action<string>?
             File.Move(SettingsPath + ".tmp", SettingsPath, true);
         }
     }
-    public Task StoreSecretAsync(string key, string value) => throw new NotSupportedException("Secrets are not connected in the vocabulary host.");
-    public Task<string?> LoadSecretAsync(string key) => throw new NotSupportedException("Secrets are not connected in the vocabulary host.");
-    public Task DeleteSecretAsync(string key) => throw new NotSupportedException("Secrets are not connected in the vocabulary host.");
+    public Task StoreSecretAsync(string key, string value) => (secrets ?? throw new NotSupportedException("Secret storage is not connected.")).StoreAsync(key, value);
+    public Task<string?> LoadSecretAsync(string key) => (secrets ?? throw new NotSupportedException("Secret storage is not connected.")).LoadAsync(key);
+    public Task DeleteSecretAsync(string key) => (secrets ?? throw new NotSupportedException("Secret storage is not connected.")).DeleteAsync(key);
     public IPluginEventBus EventBus => throw new NotSupportedException("Event bus is not connected in the vocabulary host.");
     public IPluginLocalization Localization => throw new NotSupportedException("Plugin localization is not connected in the vocabulary host.");
 }

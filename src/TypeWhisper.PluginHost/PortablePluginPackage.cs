@@ -13,6 +13,7 @@ public sealed class PortablePluginPackage : IAsyncDisposable
 {
     private readonly PackageContext _context;
     private bool _disposed;
+    private bool _activated;
     public ITypeWhisperPlugin Plugin { get; }
     private PortablePluginPackage(PackageContext context, ITypeWhisperPlugin plugin)
     { _context = context; Plugin = plugin; }
@@ -31,6 +32,19 @@ public sealed class PortablePluginPackage : IAsyncDisposable
     }
 
     public static async Task<PortablePluginPackage> LoadAsync(string directory, IPluginHostServices services, Version hostVersion)
+        => await OpenAsync(directory, services, hostVersion, activate: true);
+
+    public static async Task RunInstallationHookAsync(string directory, IPluginHostServices services, Version hostVersion,
+        string? previousVersion, bool uninstall, CancellationToken ct, IProgress<PluginInstallationProgress>? progress = null)
+    {
+        await using var package = await OpenAsync(directory, services, hostVersion, activate: false);
+        if (package.Plugin is not IPluginInstallationLifecycle lifecycle) return;
+        var context = new PluginInstallationContext(services, previousVersion, progress);
+        if (uninstall) await lifecycle.OnUninstallAsync(context, ct);
+        else await lifecycle.OnInstallAsync(context, ct);
+    }
+
+    private static async Task<PortablePluginPackage> OpenAsync(string directory, IPluginHostServices services, Version hostVersion, bool activate)
     {
         var manifest = ReadManifest(directory);
         if (manifest.MinHostVersion is not null &&
@@ -50,14 +64,14 @@ public sealed class PortablePluginPackage : IAsyncDisposable
             plugin = (ITypeWhisperPlugin)Activator.CreateInstance(type)!;
             if (plugin.PluginId != manifest.Id || plugin.PluginVersion != manifest.Version)
                 throw new InvalidDataException("Plugin identity does not match its manifest.");
-            await plugin.ActivateAsync(services);
-            return new(context, plugin);
+            if (activate) await plugin.ActivateAsync(services);
+            return new(context, plugin) { _activated = activate };
         }
         catch
         {
             if (plugin is not null)
             {
-                try { await plugin.DeactivateAsync(); } catch { /* Preserve the activation error. */ }
+                if (activate) try { await plugin.DeactivateAsync(); } catch { /* Preserve the activation error. */ }
                 try { plugin.Dispose(); } catch { /* Preserve the activation error. */ }
             }
             context.Unload();
@@ -70,7 +84,7 @@ public sealed class PortablePluginPackage : IAsyncDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        try { await Plugin.DeactivateAsync(); }
+        try { if (_activated) await Plugin.DeactivateAsync(); }
         finally { try { Plugin.Dispose(); } finally { _context.Unload(); } }
     }
 

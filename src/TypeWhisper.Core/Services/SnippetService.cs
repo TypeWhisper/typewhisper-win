@@ -105,7 +105,14 @@ public sealed partial class SnippetService : ISnippetService
     {
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
-        var activeSnippets = _cache
+        return ApplySnippetsSnapshot(text, _cache.ToArray(), clipboardProvider, IncrementUsageCount);
+    }
+
+    /// <summary>Expands a recording's fixed snippet catalog without reading or writing storage.</summary>
+    public static string ApplySnippetsSnapshot(string text, IReadOnlyList<Snippet> snippets,
+        Func<string>? clipboardProvider = null, Action<string>? onApplied = null)
+    {
+        var activeSnippets = snippets
             .Where(s => s.IsEnabled)
             .OrderByDescending(s => s.Trigger.Length);
 
@@ -123,7 +130,7 @@ public sealed partial class SnippetService : ISnippetService
             var options = snippet.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
             text = Regex.Replace(text, pattern, expanded.Replace("$", "$$"), options);
 
-            IncrementUsageCount(snippet.Id);
+            onApplied?.Invoke(snippet.Id);
         }
 
         return text;

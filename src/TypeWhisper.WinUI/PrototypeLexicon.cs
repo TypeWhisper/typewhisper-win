@@ -8,7 +8,7 @@ namespace TypeWhisper.WinUI;
 
 internal enum PrototypeLexiconKind { Word, Correction, Snippet }
 
-// Dictionary entries use isolated development storage; snippets remain session-only.
+// Dictionary entries and snippets use isolated development storage.
 internal sealed record PrototypeLexiconEntry(Guid Id, PrototypeLexiconKind Kind, string Key,
     string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null);
 
@@ -16,10 +16,23 @@ internal sealed class PrototypeLexicon
 {
     private readonly List<PrototypeLexiconEntry> _entries = [];
     private readonly DictionaryService? _dictionary;
+    private readonly SnippetService? _snippets;
+    private string? _snippetLoadError;
     private string? _loadError;
     internal string? LastError { get; private set; }
-    internal PrototypeLexicon(string? dictionaryPath = null)
+    internal PrototypeLexicon(string? dictionaryPath = null, string? snippetPath = null)
     {
+        if (snippetPath is not null)
+        {
+            try
+            {
+                _ = DictationSnippetSnapshot.ReadEntries(snippetPath);
+                _snippets = new(snippetPath);
+                RefreshSnippets();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            { LastError = _snippetLoadError = "Snippets could not be loaded: " + ex.Message; }
+        }
         if (dictionaryPath is null) return;
         try
         {
@@ -38,6 +51,13 @@ internal sealed class PrototypeLexicon
     }
 
     private static Guid UiId(string id) => new(SHA256.HashData(Encoding.UTF8.GetBytes(id)).AsSpan(0, 16));
+    private void RefreshSnippets()
+    {
+        if (_snippets is null) return;
+        _entries.RemoveAll(e => e.Kind == PrototypeLexiconKind.Snippet);
+        _entries.AddRange(_snippets.Snippets.Select(e => new PrototypeLexiconEntry(UiId(e.Id),
+            PrototypeLexiconKind.Snippet, e.Trigger, e.Replacement, e.Tags, e.CaseSensitive, e.IsEnabled)));
+    }
     private void RefreshDictionary()
     {
         if (_dictionary is null) return;
@@ -72,6 +92,7 @@ internal sealed class PrototypeLexicon
 
     internal string? Save(PrototypeLexiconEntry draft)
     {
+        if (_snippetLoadError is not null && draft.Kind == PrototypeLexiconKind.Snippet) return LastError = _snippetLoadError;
         if (_loadError is not null && draft.Kind != PrototypeLexiconKind.Snippet) return LastError = _loadError;
         if (draft.FromPack) return "Manage this term through its term pack.";
         if (draft.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity < .4f || similarity > .95f))
@@ -87,6 +108,16 @@ internal sealed class PrototypeLexicon
             entry.Key.Equals(key, entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             return "This word or trigger already exists in this section.";
         var normalized = draft with { Key = key, Value = draft.Kind == PrototypeLexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };
+        if (_snippets is not null && draft.Kind == PrototypeLexiconKind.Snippet)
+        {
+            var existing = _snippets.Snippets.FirstOrDefault(e => UiId(e.Id) == draft.Id);
+            var entry = (existing ?? new Snippet { Id = draft.Id.ToString(), Trigger = key, Replacement = draft.Value })
+                with { Trigger = key, Replacement = draft.Value, Tags = normalized.Tags, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, UpdatedAt = DateTime.UtcNow };
+            try { _ = SnippetService.ApplySnippetsSnapshot(key, [entry with { IsEnabled = true }], () => ""); }
+            catch (FormatException) { return "Check the date or time placeholder format."; }
+            if (!_snippets.TryReplaceAll(_snippets.Snippets.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = "Could not save snippet.";
+            RefreshSnippets(); LastError = null; return null;
+        }
         if (_dictionary is not null && draft.Kind != PrototypeLexiconKind.Snippet)
         {
             var existing = _dictionary.Entries.FirstOrDefault(e => UiId(e.Id) == draft.Id);
@@ -104,6 +135,11 @@ internal sealed class PrototypeLexicon
     {
         var entry = _entries.FirstOrDefault(e => e.Id == id);
         if (entry is null || entry.FromPack) return false;
+        if (entry.Kind == PrototypeLexiconKind.Snippet && _snippets is not null)
+        {
+            if (!_snippets.TryReplaceAll(_snippets.Snippets.Where(e => UiId(e.Id) != id).ToArray())) { LastError = "Could not delete snippet."; return false; }
+            RefreshSnippets(); LastError = null; return true;
+        }
         if (entry.Kind != PrototypeLexiconKind.Snippet && _dictionary is not null)
         {
             if (!_dictionary.TryReplaceAll(_dictionary.Entries.Where(e => UiId(e.Id) != id).ToArray())) { LastError = "Could not delete entry."; return false; }

@@ -19,13 +19,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.0" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
-    <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;TargetFramework" />
+    <ProjectReference Include="../TypeWhisper.PluginSDK/TypeWhisper.PluginSDK.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
     <Content Include="Assets/Fonts/*" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Sounds/*.wav" Link="Resources/Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../TypeWhisper.Windows/Resources/Icons/app.ico" Link="app.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -50,10 +50,11 @@
     </ItemGroup>
     <Copy SourceFiles="@(WinUIResource)" DestinationFiles="@(WinUIResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
-  <Target Name="PublishVocabularyPlugin" AfterTargets="Publish">
-    <ItemGroup>
-      <VocabularyPluginFiles Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/bin/$(Configuration)/net10.0/**/*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(VocabularyPluginFiles)" DestinationFiles="@(VocabularyPluginFiles->'$(PublishDir)Plugins/com.typewhisper.parakeet-ctc/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  <Target Name="BuildPortablePlugins" BeforeTargets="Publish">
+    <ItemGroup><PortablePluginProject Include="../../plugins/*/portable.proj" /></ItemGroup>
+    <MSBuild Projects="@(PortablePluginProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" BuildInParallel="false" />
+  </Target>
+  <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
+    <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
   </Target>
 </Project>
