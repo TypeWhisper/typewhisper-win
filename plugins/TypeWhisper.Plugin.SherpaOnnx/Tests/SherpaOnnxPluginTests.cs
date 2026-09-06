@@ -69,6 +69,22 @@ public class SherpaOnnxPluginTests
         Assert.Equal(expectedProvider, provider);
     }
 
+    [CudaPlatformFact(supported: false)]
+    public async Task ResolveProviderForLoadAsync_UnsupportedCudaPlatformRejectsBeforeInstallation()
+    {
+        var installer = new FakeCudaRuntimeInstaller(isInstalled: false);
+        using var sut = new SherpaOnnxPlugin(installer);
+        sut.SetAccelerationPreference(TranscriptionAccelerationPreference.NvidiaCuda);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.ResolveProviderForLoadAsync(CancellationToken.None));
+
+        Assert.Contains("only available on Windows x64", error.Message);
+        Assert.False(installer.EnsureInstalledCalled);
+        Assert.Equal(TranscriptionAccelerationBackend.Cpu, sut.AccelerationStatus.ActiveBackend);
+        Assert.Equal("CUDA unavailable", sut.AccelerationStatus.DisplayText);
+    }
+
     [Fact]
     public async Task ResolveProviderForLoadAsync_AutoUsesCpuWithoutInstallingCudaRuntime()
     {
@@ -85,7 +101,7 @@ public class SherpaOnnxPluginTests
         Assert.Contains("CUDA runtime is not installed", sut.AccelerationStatus.Detail);
     }
 
-    [Fact]
+    [CudaPlatformFact]
     public async Task ResolveProviderForLoadAsync_ExplicitCudaInstallsRuntimeAndUsesCuda()
     {
         var installer = new FakeCudaRuntimeInstaller(isInstalled: false);
@@ -101,7 +117,7 @@ public class SherpaOnnxPluginTests
         Assert.Equal("Using CUDA", sut.AccelerationStatus.DisplayText);
     }
 
-    [Fact]
+    [CudaPlatformFact]
     public async Task ResolveProviderForLoadAsync_ExplicitCudaInstallFailureSetsUnavailableStatus()
     {
         var installer = new FakeCudaRuntimeInstaller(
@@ -120,7 +136,7 @@ public class SherpaOnnxPluginTests
         Assert.Contains("download blocked", sut.AccelerationStatus.Detail);
     }
 
-    [Fact]
+    [CudaPlatformFact]
     public async Task LoadModelAsync_ExplicitCudaProviderFailureSetsUnavailableStatus()
     {
         var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-load-{Guid.NewGuid():N}");
@@ -152,7 +168,7 @@ public class SherpaOnnxPluginTests
         }
     }
 
-    [Fact]
+    [CudaPlatformFact]
     public async Task LoadModelAsync_ExplicitCudaProbeFailure_DoesNotLoadNativeRuntimeInHostProcess()
     {
         var tempDir = Path.Join(Path.GetTempPath(), $"tw-sherpa-probe-{Guid.NewGuid():N}");
@@ -312,7 +328,7 @@ public class SherpaOnnxPluginTests
         }
     }
 
-    [Fact]
+    [CudaPlatformFact]
     public async Task ResolveProviderForLoadAsync_BackendSwitchAfterNativeLoadRequiresRestart()
     {
         var installer = new FakeCudaRuntimeInstaller(isInstalled: true);
@@ -606,5 +622,17 @@ public class SherpaOnnxPluginTests
         public IReadOnlyList<string> AvailableLanguages => ["en"];
         public string GetString(string key) => key;
         public string GetString(string key, params object[] args) => string.Format(key, args);
+    }
+}
+
+// Exercise supported CUDA behavior on Windows x64 and its rejection elsewhere.
+// The CPU and package tests remain part of both platform runs.
+public sealed class CudaPlatformFactAttribute : FactAttribute
+{
+    public CudaPlatformFactAttribute(bool supported = true)
+    {
+        var available = OperatingSystem.IsWindows() && RuntimeInformation.ProcessArchitecture == Architecture.X64;
+        if (available != supported)
+            Skip = supported ? "CUDA provider requires Windows x64." : "Unsupported-platform check runs outside Windows x64.";
     }
 }
