@@ -4,7 +4,7 @@ namespace TypeWhisper.PluginSDK.PortableFixture;
 
 /// <summary>A portable multi-capability package used only by runtime ownership tests.</summary>
 public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, IApiKeyPlugin,
-    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider, IPostProcessorPlugin
+    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider, IPostProcessorPlugin, IActionPlugin
 {
     private IPluginHostServices? _host;
     private bool _active;
@@ -82,6 +82,21 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <inheritdoc />
     public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
         => ProcessAsync("", text, "llm", ct);
+
+    /// <inheritdoc />
+    public string ActionId => "write-fixture";
+    /// <inheritdoc />
+    public string ActionName => "Write fixture";
+    /// <inheritdoc />
+    public string? ActionIcon => null;
+    /// <inheritdoc />
+    public async Task<ActionResult> ExecuteAsync(string input, ActionContext context, CancellationToken ct)
+    {
+        await ProcessAsync("", input, "llm", ct);
+        _host!.SetSetting("actionWrites", _host.GetSetting<int>("actionWrites") + 1);
+        if (_host.GetSetting<bool>("ActionThrows")) throw new IOException("private action failure");
+        return new(true, "Committed fixture", "https://must-not-open.invalid/");
+    }
 
     /// <inheritdoc />
     public Task SetApiKeyAsync(string apiKey)

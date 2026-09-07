@@ -262,6 +262,52 @@ public sealed class PortablePluginRuntimeRegistryTests : IDisposable
         Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
     }
 
+    [Fact]
+    public async Task ActionSuccessSurvivesDisableAfterItsCommitAndOwnerStillDrains()
+    {
+        var store = await Store(); await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("Hold", true);
+        var request = registry.ExecuteActionAsync(Assert.Single(registry.Actions), "input", new(null, null, null, null, null));
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var disable = registry.SetEnabledAsync(Id, false);
+        Assert.False(disable.IsCompleted);
+        Assert.Empty(registry.Actions);
+        Assert.Equal(0, Host(Id).GetSetting<int>("disposals"));
+        Host(Id).Release.TrySetResult(null);
+        Assert.Equal(PortableActionStatus.Succeeded, (await request).Status);
+        Assert.Null(await disable);
+        Assert.Equal(1, Host(Id).GetSetting<int>("actionWrites"));
+        Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
+    }
+
+    [Fact]
+    public async Task ActionExceptionIsUncertainAndNeverAutomaticallyRetried()
+    {
+        var store = await Store(); await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("ActionThrows", true);
+        var result = await registry.ExecuteActionAsync(Assert.Single(registry.Actions), "input", new(null, null, null, null, null));
+        Assert.Equal(PortableActionStatus.CompletionUnknown, result.Status);
+        Assert.DoesNotContain("private action failure", result.Message);
+        Assert.Equal(1, Host(Id).GetSetting<int>("actionWrites"));
+    }
+
+    [Fact]
+    public async Task ActionCanceledBeforeAdmissionDoesNotInvokeAndReenabledSnapshotIsRejected()
+    {
+        var store = await Store(); await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var selected = Assert.Single(registry.Actions);
+        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => registry.ExecuteActionAsync(selected, "input", new(null, null, null, null, null), canceled.Token));
+        Assert.Equal(0, Host(Id).GetSetting<int>("actionWrites"));
+        Assert.Null(await registry.SetEnabledAsync(Id, false));
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await registry.ExecuteActionAsync(selected, "input", new(null, null, null, null, null)));
+        Assert.Equal(0, Host(Id).GetSetting<int>("actionWrites"));
+    }
+
     public void Dispose()
     {
         _http.Dispose();

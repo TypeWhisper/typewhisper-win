@@ -16,6 +16,23 @@ public sealed record PortableLlmProvider(string PluginId, string SelectionId, st
 /// <summary>An enabled text processor bound to one exact package activation.</summary>
 public sealed record PortablePostProcessor(string PluginId, string Name, string Version, int Priority, long Generation);
 
+/// <summary>An action identity bound to one exact package activation.</summary>
+public sealed record PortablePluginAction(string PluginId, string ActionId, string Name, string Version, long Generation);
+
+/// <summary>The known completion state of an explicitly invoked action.</summary>
+public enum PortableActionStatus
+{
+    /// <summary>The plugin confirmed successful completion, even if cancellation arrived after its commit.</summary>
+    Succeeded,
+    /// <summary>The plugin explicitly reported failure.</summary>
+    Failed,
+    /// <summary>The invocation started but did not provide a reliable result; side effects may have occurred.</summary>
+    CompletionUnknown
+}
+
+/// <summary>An action result without an automatically followed URL or retry instruction.</summary>
+public sealed record PortableActionOutcome(PortableActionStatus Status, string Message);
+
 /// <summary>
 /// Owns each activated package once and serializes all capability/configuration calls.
 /// The host initializes package storage first and must route runtime calls through this owner.
@@ -37,11 +54,13 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
     }
     private sealed record TranscriptionRole(Slot Owner, ITranscriptionEnginePlugin Engine);
     private sealed record LlmRole(Slot Owner, ILlmProviderPlugin Provider);
+    private sealed record ActionRole(Slot Owner, IActionPlugin Action, PortablePluginAction Snapshot);
     private sealed record PostProcessorRole(Slot Owner, IPostProcessorPlugin Processor, PortablePostProcessor Snapshot);
     private sealed record Index(Dictionary<string, TranscriptionRole> Transcription, Dictionary<string, LlmRole> Llm,
         PortableTranscriptionProvider[] TranscriptionSnapshots, PortableLlmProvider[] LlmSnapshots)
     {
         internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, ActionRole> Actions { get; init; } = new(StringComparer.Ordinal);
     }
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
@@ -74,6 +93,17 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
             lock (_sync) return _index.PostProcessors.Values.Where(role => role.Owner.Accepting)
                 .Select(role => role.Snapshot with { Generation = role.Owner.Generation }).OrderBy(item => item.Priority)
                 .ThenBy(item => item.PluginId, StringComparer.Ordinal).ToArray();
+        }
+    }
+
+    /// <summary>Returns explicit manual actions; listing never invokes an action.</summary>
+    public IReadOnlyList<PortablePluginAction> Actions
+    {
+        get
+        {
+            lock (_sync) return _index.Actions.Values.Where(role => role.Owner.Accepting)
+                .Select(role => role.Snapshot with { Generation = role.Owner.Generation })
+                .OrderBy(item => item.PluginId, StringComparer.Ordinal).ThenBy(item => item.ActionId, StringComparer.Ordinal).ToArray();
         }
     }
 
@@ -242,6 +272,42 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
     }
 
     /// <summary>
+    /// Invokes one manually selected action. Cancellation before invocation prevents it; after invocation,
+    /// a confirmed result is preserved and an exception reports uncertain completion. No URL is opened or action retried.
+    /// </summary>
+    public Task<PortableActionOutcome> ExecuteActionAsync(PortablePluginAction expected, string text,
+        ActionContext context, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        Slot owner;
+        lock (_sync)
+        {
+            if (!_index.Actions.TryGetValue(expected.PluginId, out var role) || !role.Owner.Accepting
+                || (role.Snapshot with { Generation = role.Owner.Generation }) != expected)
+                throw new InvalidOperationException("The selected action is no longer available.");
+            owner = role.Owner;
+        }
+        return UseAsync(owner, async token =>
+        {
+            if (!_index.Actions.TryGetValue(expected.PluginId, out var current) || current.Owner != owner
+                || (current.Snapshot with { Generation = owner.Generation }) != expected)
+                throw new InvalidOperationException("The selected action changed before execution.");
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                var result = await current.Action.ExecuteAsync(text, context, token).ConfigureAwait(false);
+                return new PortableActionOutcome(result.Success ? PortableActionStatus.Succeeded : PortableActionStatus.Failed,
+                    string.IsNullOrWhiteSpace(result.Message) ? result.Success ? "Action completed." : "The action reported a failure." : result.Message);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                return new PortableActionOutcome(PortableActionStatus.CompletionUnknown,
+                    "The action's completion could not be confirmed. Check its destination before running it again.");
+            }
+        }, cancellationToken, preserveCompletedResult: true);
+    }
+
+    /// <summary>
     /// Serializes host-rendered configuration with requests, including IApiKeyPlugin operations.
     /// The callback must not retain the plugin reference or activate/dispose the plugin itself.
     /// </summary>
@@ -257,7 +323,7 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
         return UseAsync(owner, token => use(owner.Package!.Plugin, token), cancellationToken);
     }
 
-    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken)
+    private async Task<T> UseAsync<T>(Slot slot, Func<CancellationToken, Task<T>> use, CancellationToken cancellationToken, bool preserveCompletedResult = false)
     {
         long generation;
         lock (_sync)
@@ -276,9 +342,12 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
                 request = slot.Request = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             }
             var result = await use(request.Token).ConfigureAwait(false);
-            request.Token.ThrowIfCancellationRequested();
-            lock (_sync)
-                if (_disposed || !slot.Accepting || generation != slot.Generation) throw new OperationCanceledException("Plugin selection changed.");
+            if (!preserveCompletedResult)
+            {
+                request.Token.ThrowIfCancellationRequested();
+                lock (_sync)
+                    if (_disposed || !slot.Accepting || generation != slot.Generation) throw new OperationCanceledException("Plugin selection changed.");
+            }
             return result;
         }
         finally
@@ -327,9 +396,16 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();
         var llmSnapshots = new List<PortableLlmProvider>();
         var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
+        var actions = new Dictionary<string, ActionRole>(StringComparer.Ordinal);
         foreach (var slot in slots)
         {
             var plugin = slot.Package!.Plugin;
+            if (plugin is IActionPlugin action)
+            {
+                if (action.PluginId != slot.Id || string.IsNullOrWhiteSpace(action.ActionId))
+                    throw new CapabilityCollisionException("Action identity is invalid or does not match its package.");
+                actions.Add(slot.Id, new(slot, action, new(slot.Id, action.ActionId, action.ActionName, action.PluginVersion, slot.Generation)));
+            }
             if (plugin is IPostProcessorPlugin processor)
             {
                 if (processor.PluginId != slot.Id)
@@ -361,7 +437,7 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
                 llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray())));
             }
         }
-        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors };
+        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors, Actions = actions };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }
