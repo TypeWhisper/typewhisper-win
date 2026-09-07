@@ -45,3 +45,13 @@ At `ff77f43a`, [headless CI](https://github.com/TypeWhisper/typewhisper-win/acti
 Earlier local build/launch, native inference, owner feedback and focused UI checks are scoped in [testing](WINUI-TESTING.md). The last live v2 Discover check returned HTTP 404. Package operations have fixture coverage, not published-feed acceptance. No full real Groq dictation acceptance is recorded. This documentation audit does not rerun native tests.
 
 Version 1.1 is greenfield: no legacy plugin binary compatibility promise, no required old-history import and no automatic production-data migration. The current WinUI host uses isolated development storage and targets Windows build 26100; it is not replacement-ready.
+
+## 2026-09-07: portable runtime and additional connected behavior
+
+- Portable transcription/LLM roles share one runtime owner; Groq and dynamic provider/API-key settings consume it. NVIDIA/CTC keep their existing dedicated owner. Workflows and other capability consumers remain separate work.
+- Real dictionary/snippet JSON transfer, verified Mac dictionary import, preserved metadata and explicit replacement; usage counters update successful snippet expansion without overwriting concurrent edits.
+- Saved spoken-command profiles and optional target-app formatting now reach the ordered text pipeline.
+- Bounded shortcut coordination preserves stop/cancel during asynchronous startup and prevents later recordings from queued processing-time presses.
+- Named Debug test profiles isolate preferences, data, keys, packages and model assets for native restart/mutation tests. Native dictionary/snippet import and multiline editor checks passed.
+
+Latest focused validation: Host 133 and Presentation 285 passing cases; prescribed Debug build/launch passed. This is incremental evidence, not a new complete release acceptance run.

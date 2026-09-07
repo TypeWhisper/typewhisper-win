@@ -96,6 +96,26 @@ The combined Presentation suite passed 153 cases, including mode state transitio
 
 The full portable headless run passed 373 cases and one platform skip (Host 115, Presentation 204, Groq 29, NVIDIA 25). The new Groq request regression was then moved into the actual plugin-owned suite and all 32 Groq cases passed. Source-kind/filter cases brought the subsequent Presentation run to 215 passing cases. This is incremental evidence; do not describe it as one 387-case full run.
 
-The prescribed Debug build/launch passed with an opt-in `TYPEWHISPER_WINUI_HISTORY_FIXTURE=1`. In Debug only, this creates one synthetic entry in a new temporary history store and opens History; normal startup and Release never seed it. Computer Use opened details and the editor, confirmed both paragraphs, inserted a test prefix and saved it. Reading the temporary JSON confirmed the edit persisted while raw text and model/app metadata stayed unchanged. No personal history, audio or provider request was used for this editing test. Delete/export storage failures and restart behavior are covered by portable fixtures; native delete/export acceptance remains separate.
+The prescribed Debug build/launch passed with an opt-in `TYPEWHISPER_WINUI_HISTORY_FIXTURE=1`. In Debug only, this creates one synthetic entry in a new temporary history store and opens History; normal startup and Release never seed it. Computer Use opened details and the editor, confirmed both paragraphs, inserted a test prefix and saved it. Reading the temporary JSON confirmed the edit persisted while raw text and model/app metadata stayed unchanged. No personal history, audio or provider request was used for this editing test. The same fixture was exported through the native save picker to a new test artifact: both paragraphs survived. Confirmed deletion removed only the temporary entry, verified by reading the empty fixture JSON. The app was then relaunched without the fixture. Failure and restart behavior are covered separately by portable tests.
 
 Native translation reuses provider capability metadata. Groq translation requests omit the input-language field, following the [Groq API reference](https://console.groq.com/docs/api-reference) and [speech-to-text guide](https://console.groq.com/docs/speech-to-text); transcription still sends the selected input language. Unsupported models reject translation before audio encoding/inference.
+
+## Lexicon transfer, 2026-09-07
+
+The Presentation suite passed 232 cases after adding dictionary/snippet import/export coverage, including verified Mac dictionary JSON, preserved metadata, duplicate/conflict rejection, explicit replacement, pack retention and atomic export failure cleanup. The prescribed WinUI Debug build/launch passed. Native import/replacement acceptance remains to be exercised with a fully isolated test profile.
+
+## Isolated native profiles
+
+Debug builds accept `TYPEWHISPER_WINUI_TEST_PROFILE=<name>` when launching through the prescribed script. Use a unique name of up to 64 ASCII letters, digits, hyphens or underscores. Preferences, history, lexicon, plugin registrations, secrets and model assets then live under `%TEMP%/TypeWhisper-WinUI-TestProfiles/<name>`. Restart with the same name to verify persistence; omit it to return to the normal development profile. Release ignores this variable. Test profiles do not reuse the normal model asset directory or existing credentials. The older history-only fixture remains available for focused transcript tests.
+
+The normal profile's recording mode was restored to Hybrid through the real picker and its JSON was verified. Statistics rendered actual retained-history totals and the history-based limitation text.
+
+## Runtime ownership and snippet usage, 2026-09-07
+
+All 133 portable host cases passed after adding actual registry-backed cloud adapter tests, including saved configuration, failed writes, serializing requests/configuration, cancellation/draining before uninstall, shared LLM ownership and a pumping UI synchronization context. No HTTP requests or real credentials were used. The app built and launched with the named temporary profile. The separate Presentation run passed 252 cases for profile isolation and snippet usage/concurrent edits; subsequent formatting regressions passed 271 cases.
+
+Computer Use imported a synthetic dictionary containing an umlaut term and a correction, then a multiline snippet into `smoke-20260907`. The temporary JSON retained both dictionary records and the exact two-line replacement; the initial snippet usage count was zero. Personal profile files were not changed.
+
+## Formatting and asynchronous shortcut intent, 2026-09-07
+
+The Presentation suite passed 285 cases, including engine/model/language-specific formatting profiles, output-language handling, ordered application/command steps, immutable saved choices and 14 asynchronous input coordination cases. The prescribed Debug build/launch passed after wiring the real settings UI. The input coordinator retains a release or cancellation while capture starts, gives cancellation precedence and discards starts during final processing instead of queuing a later recording. Real microphone tap/hold acceptance remains separate from these deterministic task/dispatch tests.
