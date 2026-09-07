@@ -46,7 +46,7 @@ public sealed class AutomaticWorkflowTests
         try
         {
             var path = Path.Combine(directory, "workflows.json");
-            var foreign = Rule("foreign", new() { Kind = WorkflowTriggerKind.Website, WebsitePatterns = ["example.com"] });
+            var foreign = Rule("foreign", new() { Kind = WorkflowTriggerKind.Hotkey, WebsitePatterns = ["example.com"] });
             Assert.True(new WorkflowService(path).TryReplaceAll([foreign]));
             var draft = PrototypeWorkflow.FromStored(Rule("app", WorkflowTrigger.App("notepad"), -5));
             var store = new ManualWorkflowStore(path);
@@ -57,7 +57,7 @@ public sealed class AutomaticWorkflowTests
             Assert.Equal("notepad", restored.AppProcesses);
             Assert.Equal(-5, restored.Priority);
             var preserved = saved.Single(item => item.Id == "foreign");
-            Assert.Equal(WorkflowTriggerKind.Website, preserved.Trigger.Kind);
+            Assert.Equal(WorkflowTriggerKind.Hotkey, preserved.Trigger.Kind);
             Assert.Equal(foreign.Trigger.WebsitePatterns, preserved.Trigger.WebsitePatterns);
             Assert.Equal(foreign.Behavior.FineTuning, preserved.Behavior.FineTuning);
             Assert.Throws<InvalidOperationException>(() => store.Delete("foreign", allowAutomatic: true));

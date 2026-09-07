@@ -32,11 +32,14 @@ public sealed class AutomaticWorkflowSnapshot
     /// <summary>Creates a review-only result when the catalog cannot be read safely.</summary>
     public static AutomaticWorkflowSnapshot Unavailable() => new(null, "Workflows could not be loaded. Review your transcript; nothing was pasted.");
 
-    /// <summary>Selects only App and Global rules; manual, website and hotkey triggers remain outside this slice.</summary>
-    public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName)
+    /// <summary>Selects App, Website and Global rules using a one-time browser hostname; manual and hotkey rules remain separate.</summary>
+    public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName, string? browserHost = null)
     {
         var match = WorkflowService.MatchSnapshot(workflows.Where(w =>
-            w.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Global), processName, null);
+            w.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global)
+            .Select(workflow => workflow with { Trigger = workflow.Trigger with
+            { WebsitePatterns = workflow.Trigger.WebsitePatterns.Select(pattern => BrowserWorkflowContext.NormalizePattern(pattern) ?? pattern).ToArray() } }),
+            processName, BrowserWorkflowContext.NormalizeHost(browserHost));
         if (match is null) return null;
         return new(match.Workflow, UnsupportedReason(match.Workflow));
     }
@@ -46,8 +49,10 @@ public sealed class AutomaticWorkflowSnapshot
     {
         var behavior = workflow.Behavior;
         var output = workflow.Output;
-        if ((workflow.Trigger.Kind == WorkflowTriggerKind.Global && workflow.Trigger.HasAppBindings)
-            || !Enum.IsDefined(workflow.Template) || workflow.Trigger.HasWebsiteBindings || workflow.Trigger.Hotkeys.Count != 0
+        if ((workflow.Trigger.Kind == WorkflowTriggerKind.Global && (workflow.Trigger.HasAppBindings || workflow.Trigger.HasWebsiteBindings))
+            || !Enum.IsDefined(workflow.Template) || !Enum.IsDefined(workflow.Trigger.ContextMatchMode)
+            || workflow.Trigger.WebsitePatterns.Any(pattern => BrowserWorkflowContext.NormalizePattern(pattern) is null)
+            || workflow.Trigger.Hotkeys.Count != 0
             || behavior.Settings.Count != 0 || !string.IsNullOrWhiteSpace(behavior.InputLanguage)
             || behavior.InputLanguageHints.Count != 0 || !string.IsNullOrWhiteSpace(behavior.SelectedTask)
             || behavior.WhisperModeOverride is not null || !string.IsNullOrWhiteSpace(behavior.TranscriptionModelOverride)

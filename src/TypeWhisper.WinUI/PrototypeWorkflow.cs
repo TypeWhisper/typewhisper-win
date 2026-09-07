@@ -22,6 +22,10 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     public WorkflowTriggerKind TriggerKind { get; init; } = WorkflowTriggerKind.Manual;
     /// <summary>Comma-separated Windows process names for App activation.</summary>
     public string AppProcesses { get; init; } = "";
+    /// <summary>Comma-separated domains; matching uses only the captured browser hostname.</summary>
+    public string WebsiteDomains { get; init; } = "";
+    /// <summary>Whether configured app and website components must both match or either may match.</summary>
+    public WorkflowContextMatchMode ContextMatchMode { get; init; } = WorkflowContextMatchMode.All;
     /// <summary>Lower numbers win among equally specific rules.</summary>
     public int Priority { get; init; }
     internal bool IsEditable => Stored is null || TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(Stored);
@@ -45,7 +49,10 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
         Trigger = TriggerKind == WorkflowTriggerKind.Manual && Stored?.Trigger.Kind == WorkflowTriggerKind.Manual
             ? Stored.Trigger : TriggerKind switch
             {
-                WorkflowTriggerKind.App => WorkflowTrigger.App(AppProcesses.Split(',', StringSplitOptions.RemoveEmptyEntries)),
+                WorkflowTriggerKind.App => WorkflowTrigger.App(AppProcesses.Split(',', StringSplitOptions.RemoveEmptyEntries)) with
+                { WebsitePatterns = DomainPatterns(), ContextMatchMode = ContextMatchMode },
+                WorkflowTriggerKind.Website => WorkflowTrigger.Website(DomainPatterns()) with
+                { ProcessNames = AppProcesses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ContextMatchMode = ContextMatchMode },
                 WorkflowTriggerKind.Global => WorkflowTrigger.Global(),
                 _ => WorkflowTrigger.Manual()
             },
@@ -53,11 +60,17 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
         { FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget }
     };
 
+    private string[] DomainPatterns() => WebsiteDomains.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(value => TypeWhisper.Presentation.BrowserWorkflowContext.NormalizePattern(value)
+            ?? throw new InvalidOperationException("Enter domains without paths, query strings or credentials."))
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
     internal static PrototypeWorkflow FromStored(Workflow workflow) => new(workflow.Id, workflow.Name,
         (workflow.IsEnabled ? "" : "Disabled · ") + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : "Unsupported - ") + workflow.Trigger.Kind + " · " + (Enum.IsDefined(workflow.Template) ? workflow.Definition.Name : "Unknown template"), "workflow", workflow.Behavior.FineTuning)
     {
         ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
         TriggerKind = workflow.Trigger.Kind, AppProcesses = string.Join(", ", workflow.Trigger.ProcessNames), Priority = workflow.SortOrder,
+        WebsiteDomains = string.Join(", ", workflow.Trigger.WebsitePatterns), ContextMatchMode = workflow.Trigger.ContextMatchMode,
         Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, Stored = workflow
     };
 }

@@ -522,6 +522,14 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     private async Task SetRecordingAsync(bool? recording)
     {
         if (_disposed || !await _gate.WaitAsync(0)) return;
+#if DEBUG
+        if (WorkflowProbeEnabled && !_audio.IsRecording)
+        {
+            try { if (recording != false) await RunWorkflowProbeAsync(); }
+            finally { _gate.Release(); }
+            return;
+        }
+#endif
         try
         {
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
@@ -544,10 +552,22 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
                 }
+                _targetProcessId = processId;
+                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
+                catch (ArgumentException) { _targetApp = "Target app"; }
+                await CaptureWorkflowAtStartAsync();
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
                 var preferences = AudioPreferences;
                 await _livePreview.StopAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
+                GetWindowThreadProcessId(_target, out var currentTargetProcessId);
+                if (GetForegroundWindow() != _target || currentTargetProcessId != processId)
+                {
+                    SetStatus("The target changed before recording. Focus your text field and try again.");
+                    return;
+                }
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _outputAtStart = OutputPreferences.Current;
                 _textAtStart = TextPreferences.Current;
@@ -578,10 +598,6 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _sounds.PlayStartSound();
                 _started = DateTime.UtcNow;
                 _lastDuration = TimeSpan.Zero;
-                _targetProcessId = processId;
-                try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
-                catch (ArgumentException) { _targetApp = "Target app"; }
-                CaptureWorkflowAtStart();
                 SetStatus($"Recording · {Shortcut} to finish");
                 return;
             }
@@ -651,7 +667,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 EngineUsed = _engineAtStart, ModelUsed = _modelAtStart, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
                 Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart),
                 AppName = _targetApp == "Target app" ? null : _targetApp,
-                AppProcessName = _targetApp == "Target app" ? null : _targetApp
+                AppProcessName = _targetApp == "Target app" ? null : _targetApp,
+                AppUrl = _targetHostAtStart
             };
             var delivery = new DictationOutputDelivery(_history);
             var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null ? _outputAtStart : _outputAtStart with { AutoPaste = false },

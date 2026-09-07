@@ -19,10 +19,11 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
         && workflow.Trigger.Kind == WorkflowTriggerKind.Manual && workflow.Behavior.Settings.Count == 0
         && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId);
 
-    /// <summary>Identifies manual or supported App/Global workflows that the editor can preserve and execute.</summary>
+    /// <summary>Identifies manual or supported App/Website/Global workflows that the editor can preserve and execute.</summary>
     public static bool IsEditable(Workflow workflow) => IsSupported(workflow) ||
-        (workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Global
+        (workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Website or WorkflowTriggerKind.Global
             && (workflow.Trigger.Kind != WorkflowTriggerKind.App || workflow.Trigger.ProcessNames.Count > 0)
+            && (workflow.Trigger.Kind != WorkflowTriggerKind.Website || workflow.Trigger.WebsitePatterns.Count > 0)
             && AutomaticWorkflowSnapshot.UnsupportedReason(workflow) is null);
 
     /// <summary>Reads the current snapshot, preserving workflows outside the manual editor.</summary>

@@ -117,13 +117,26 @@
                     <StackPanel Spacing="7">
                         <TextBlock Text="ACTIVATION" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                         <local:PrototypeChoicePicker x:Name="ConfigTrigger" />
-                        <TextBlock Text="App rules take precedence over the global fallback. Website and workflow-hotkey triggers, recording overrides and action plugins are not supported here; existing unsupported entries are preserved. Lower priority numbers win; equal priorities use the workflow name." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Workflow hotkeys, recording overrides and action plugins remain unsupported." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigAppSection" Spacing="7" Visibility="Collapsed">
                         <TextBlock Text="WINDOWS PROCESS NAMES" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
-                        <TextBox x:Name="ConfigAppProcesses" PlaceholderText="notepad, chrome (without .exe)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow process names" />
+                        <TextBox x:Name="ConfigAppProcesses" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="1000" PlaceholderText="notepad, chrome (without .exe)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow process names" />
+                        <TextBlock Text="Required for App activation; optional for Website activation. Separate process names with commas." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
-                    <TextBox x:Name="ConfigPriority" Header="Priority (lower wins)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
+                    <StackPanel x:Name="ConfigWebsiteSection" Spacing="7" Visibility="Collapsed">
+                        <TextBlock Text="WEBSITE DOMAINS" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigWebsiteDomains" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="2000" PlaceholderText="example.com, docs.example.org" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow website domains" />
+                        <TextBlock Text="Required for Website activation; optional for App activation. Domains include subdomains (example.com also matches mail.example.com). Use commas, without paths or query strings. The browser address is read once before recording; only the hostname can enter saved History. Chrome, Edge, Brave, Chromium and Firefox require a recognized address bar. Missing context leaves app/global fallback rules available." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel x:Name="ConfigContextSection" Spacing="7" Visibility="Collapsed">
+                        <local:PrototypeChoicePicker x:Name="ConfigContextMode" />
+                        <TextBlock Text="Match all requires an app from your list AND a domain from your list. Match any allows either component, so the app rule can still run when a browser address is unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel Spacing="7">
+                        <TextBlock Text="PRIORITY (LOWER WINS)" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigPriority" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="11" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
+                    </StackPanel>
                     <StackPanel Spacing="7">
                         <TextBlock Text="TEMPLATE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                         <local:PrototypeChoicePicker x:Name="ConfigTemplate" />

@@ -90,6 +90,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         };
         ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
+        ConfigContextMode.Configure("App and website conditions", "workflow", "Workflow context match mode");
+        ConfigContextMode.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTemplate.Configure("Template", "workflow", "Workflow template");
         ConfigTemplate.SelectionChanged += _ => UpdateConfigurationState();
         ConfigProvider.Configure("Provider", "plugin", "Workflow provider");
@@ -145,7 +147,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-            else if (!ConfigTrigger.IsPopupOpen && !ConfigTemplate.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigOutput.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigTemplate.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigOutput.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
         }
         else if (_page == Page.Result) WorkflowPrimaryButton.Focus(FocusState.Programmatic);
     }
@@ -183,7 +185,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            foreach (var picker in new[] { ConfigTrigger, ConfigTemplate, ConfigProvider, ConfigModel, ConfigOutput })
+            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigTemplate, ConfigProvider, ConfigModel, ConfigOutput })
                 if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { _afterConfigurationExit = null; DismissDiscard(); return; }
             if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -321,12 +323,17 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         .Select(m => new PrototypeChoice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigTrigger.SelectedId != _opened.TriggerKind.ToString() || ConfigAppProcesses.Text != _opened.AppProcesses
+        || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
         || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigOutput.SelectedId != _opened.OutputTarget || ConfigEnabled.IsOn != _opened.IsEnabled);
     private string? ConfigurationError => string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
-        : ConfigTrigger.SelectedId == "App" && (string.IsNullOrWhiteSpace(ConfigAppProcesses.Text)
-            || ConfigAppProcesses.Text.Split(',').Any(value => string.IsNullOrWhiteSpace(value) || value.Trim().IndexOfAny(['/', '\\', ':', '*', '?']) >= 0 || value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase))) ? "Enter process names such as notepad, chrome (without paths or .exe)."
+        : ConfigTrigger.SelectedId == "App" && string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) ? "Enter at least one Windows process name."
+        : ConfigTrigger.SelectedId is "App" or "Website" && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text)
+            && ConfigAppProcesses.Text.Split(',').Any(value => string.IsNullOrWhiteSpace(value) || value.Trim().IndexOfAny(['/', '\\', ':', '*', '?']) >= 0 || value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) ? "Enter process names such as notepad, chrome (without paths or .exe)."
+        : ConfigTrigger.SelectedId == "Website" && string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? "Enter at least one website domain."
+        : ConfigTrigger.SelectedId is "App" or "Website" && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text)
+            && ConfigWebsiteDomains.Text.Split(',').Any(value => BrowserWorkflowContext.NormalizePattern(value) is null) ? "Enter comma-separated domains without paths, query strings or credentials."
         : !int.TryParse(ConfigPriority.Text, out _) ? "Enter a whole-number priority. Lower numbers win."
         : !Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template) || !Enum.IsDefined(template) ? "Choose a workflow template."
         : template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(ConfigInstruction.Text) ? "Add instructions for this custom workflow."
@@ -366,8 +373,11 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigTrigger.SetOptions([
             new("Manual", "Manual", "Run explicitly with source text"),
             new("App", "App", "Apply to dictation in matching Windows processes"),
-            new("Global", "Global fallback", "Apply when no app rule matches")], _opened.TriggerKind.ToString());
+            new("Website", "Website", "Apply to dictation on matching browser domains"),
+            new("Global", "Global fallback", "Apply when no app or website rule matches")], _opened.TriggerKind.ToString());
         ConfigAppProcesses.Text = _opened.AppProcesses;
+        ConfigWebsiteDomains.Text = _opened.WebsiteDomains;
+        ConfigContextMode.SetOptions([new("All", "Match all", "App AND website"), new("Any", "Match any", "App OR website")], _opened.ContextMatchMode.ToString());
         ConfigPriority.Text = _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture);
         ConfigTemplate.SetOptions(WorkflowTemplateCatalog.All.Select(definition => new PrototypeChoice(
             definition.Template.ToString(), definition.Name, definition.Description)).ToArray(), _opened.Template.ToString());
@@ -401,7 +411,9 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void UpdateConfigurationState()
     {
         if (_loadingConfiguration) return;
-        ConfigAppSection.Visibility = ConfigTrigger.SelectedId == "App" ? Visibility.Visible : Visibility.Collapsed;
+        var contextual = ConfigTrigger.SelectedId is "App" or "Website";
+        ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
+        ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
         ConfigOutputSection.Visibility = ConfigTrigger.SelectedId == "Manual" ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
@@ -422,6 +434,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         if (_closing || _opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
         var updated = _opened with { Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
             TriggerKind = Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId), AppProcesses = ConfigAppProcesses.Text.Trim(),
+            WebsiteDomains = ConfigWebsiteDomains.Text.Trim(), ContextMatchMode = Enum.Parse<WorkflowContextMatchMode>(ConfigContextMode.SelectedId),
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),

@@ -22,6 +22,7 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WinUIEx" Version="2.9.3" />
+    <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
     <ProjectReference Include="../TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
     <ProjectReference Include="../TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
