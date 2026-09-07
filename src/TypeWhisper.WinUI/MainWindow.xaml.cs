@@ -20,7 +20,9 @@ public sealed partial class MainWindow : Window
 
     private string? ChangeLauncherHotkeys(string value)
     {
+        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
         if (_hotkeyRegistration is null) return "Global hotkey service is unavailable. Restart the app.";
+        if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
         var previous = _hotkeyRegistration.Value;
         var error = _hotkeyRegistration.TryChange(value);
         if (error is not null) return error;
@@ -32,6 +34,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             var rollbackError = _hotkeyRegistration.TryChange(previous);
+            _settingsValues["QuickLaunchHotkeys"] = _hotkeyRegistration.Value;
             HotkeyHint.Text = _hotkeyRegistration.DisplayText;
             return rollbackError ?? $"Could not save the shortcut: {ex.Message}";
         }
@@ -62,12 +65,15 @@ public sealed partial class MainWindow : Window
     private readonly Stopwatch _activationStopwatch = Stopwatch.StartNew();
     private readonly PrototypeHotkeyRegistration? _hotkeyRegistration;
     private DictationHotkeyRegistration? _dictationHotkey;
+    private ProcessingCancelHotkeyRegistration? _cancelProcessingHotkey;
     private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
     private Action? _observeInputMode;
     private static string DictationHotkeyPath => Path.Combine(Path.GetDirectoryName(LauncherHotkeyPath)!, "dictation-hotkeys.txt");
     private string? ChangeDictationHotkeys(string value)
     {
+        if (_closing || _profileRestoreClosing) return "The app is shutting down.";
         if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
+        if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
         if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
         var previous = _dictationHotkey.Value;
         var error = _dictationHotkey.TryChange(value);
@@ -81,6 +87,8 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             var rollback = _dictationHotkey.TryChange(previous);
+            _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
+            _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
             return rollback ?? $"Could not save the shortcut: {ex.Message}";
         }
         _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
@@ -126,7 +134,21 @@ public sealed partial class MainWindow : Window
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
             _dictation.Shortcut = string.IsNullOrEmpty(_dictationHotkey.Value) ? "No shortcut assigned" : _dictationHotkey.Value;
             if (error is not null) { MetricsText.Text = error; DictationChanged?.Invoke(error, false); return; }
+            string? cancelError;
+            try
+            {
+                _cancelProcessingHotkey = new(this, () => CanCancelProcessing, _dictation.RequestCancel,
+                    () => _hotkeyRegistration?.Value ?? "", () => _dictationHotkey?.Value ?? "");
+                cancelError = _cancelProcessingHotkey.Initialize();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                System.Diagnostics.Trace.TraceError("Cancel shortcut registration failed: {0}", ex);
+                cancelError = "Cancel shortcuts are unavailable. Dictation can still be used; assign cancellation again in Settings.";
+            }
+            _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey?.Value ?? "";
             await _dictation.InitializeAsync();
+            if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
     }
@@ -144,6 +166,7 @@ public sealed partial class MainWindow : Window
     private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
     internal async Task ShutdownDictationAsync()
     {
+        _cancelProcessingHotkey?.Dispose();
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
         var reviews = DrainReviewWindowsAsync();
         await Task.WhenAll(RecorderView.ShutdownAsync(), reviews);
@@ -152,6 +175,7 @@ public sealed partial class MainWindow : Window
     private Task ShutdownCoreAsync() => _shutdown.Run(async () =>
     {
         _closing = true;
+        _cancelProcessingHotkey?.Dispose();
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
@@ -981,6 +1005,14 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
+            _settingsWindow.CommitCancelProcessingHotkeys = value =>
+            {
+                if (_closing || _profileRestoreClosing) return "The app is shutting down.";
+                if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
+                var error = _cancelProcessingHotkey.TryChange(value);
+                _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;
+                return error;
+            };
             _settingsWindow.CreateSetupWizard = exit => new PrototypeSetupWizard(_settingsValues, exit,
                 value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
                 _dictation, OpenProviderSettings);
@@ -991,6 +1023,8 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
+                    content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")
                 {
                     content.Children.Clear(); pickers.Clear();

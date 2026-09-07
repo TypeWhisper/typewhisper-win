@@ -74,6 +74,7 @@ internal static partial class PrototypeSettingsCatalog
         Choice("Audio", "SilenceAutoStopSeconds", "Silence timeout", "10 seconds", "3 seconds|5 seconds|10 seconds|15 seconds|30 seconds"),
 
         Text("Shortcuts", "MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9"),
+        Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing. Does nothing while idle or recording."),
         Text("Shortcuts", "QuickLaunchHotkeys", "Quick Launch", "Alt+Space"),
         Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
         Text("Shortcuts", "ToggleOnlyHotkeys", "Toggle recording"),
@@ -141,7 +142,7 @@ internal static partial class PrototypeSettingsCatalog
     internal static IEnumerable<(string Key, string Label, string Value)> ShortcutBindings(Dictionary<string, string> values) =>
         Fields.Where(field => field.Category == "Shortcuts").Select(field => (field.Key, field.Label, values.GetValueOrDefault(field.Key, field.Value)));
 
-    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null)
+    internal static void Render(string category, StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers, Action? refresh = null, Func<string, string?>? commitLauncherHotkeys = null, Func<string, string?>? commitDictationHotkeys = null, Func<string, string?>? commitCancelProcessingHotkeys = null)
     {
         target.Children.Clear();
         var title = Label(category, 24);
@@ -160,13 +161,13 @@ internal static partial class PrototypeSettingsCatalog
         if (category == "Shortcuts")
         {
             var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);
-            ToolTipService.SetToolTip(guide, "Quick Launch shortcuts are registered globally and saved for this development app. A main key is required; unavailable combinations keep your previous bindings. Other actions remain session-only previews.");
+            ToolTipService.SetToolTip(guide, "Quick Launch, main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and acts only during final dictation processing. Other actions are unavailable.");
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
             (string Title, string[] Keys)[] groups =
             [
                 ("Quick Launch", ["QuickLaunchHotkeys"]),
-                ("Dictation", ["MainDictationHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
+                ("Dictation", ["MainDictationHotkeys", "CancelProcessingHotkeys", "PushToTalkHotkey", "ToggleOnlyHotkeys", "HoldOnlyHotkeys"]),
                 ("Recent transcriptions", ["RecentTranscriptionsHotkeys", "CopyLastTranscriptionHotkeys"]),
                 ("Workflow palette", ["WorkflowPaletteHotkeys"]),
                 ("Recorder", ["RecorderToggleHotkeys"])
@@ -189,9 +190,11 @@ internal static partial class PrototypeSettingsCatalog
                     var field = Fields.Single(f => f.Key == key);
                     // Preserve field tags so search results still scroll to the exact action.
                     var item = new StackPanel { Tag = field.Key };
+                    var commit = field.Key switch { "QuickLaunchHotkeys" => commitLauncherHotkeys,
+                        "MainDictationHotkeys" => commitDictationHotkeys, "CancelProcessingHotkeys" => commitCancelProcessingHotkeys, _ => null };
                     item.Children.Add(new PrototypeShortcutRecorder(field.Key, field.Label, field.Value, values,
                         () => Fields.Where(f => f.Category == "Shortcuts").Select(f =>
-                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), field.Key switch { "QuickLaunchHotkeys" => commitLauncherHotkeys, "MainDictationHotkeys" => commitDictationHotkeys, _ => null }));
+                            (f.Key, f.Label, values.GetValueOrDefault(f.Key, f.Value))), commit) { IsEnabled = commit is not null });
                     rows.Children.Add(item);
                 }
                 section.Children.Add(new Border
@@ -203,7 +206,7 @@ internal static partial class PrototypeSettingsCatalog
                 list.Children.Add(section);
             }
             target.Children.Add(list);
-            target.Children.Add(Label("Quick Launch and dictation shortcuts are global and saved. Other shortcuts are unavailable.", 12, true));
+            target.Children.Add(Label("Quick Launch, main dictation and cancel processing shortcuts are global and saved. Other shortcuts are unavailable.", 12, true));
             return;
         }
         if (category == "Dictation")

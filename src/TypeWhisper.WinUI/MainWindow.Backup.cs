@@ -16,6 +16,7 @@ public sealed partial class MainWindow
         _closing = true;
         _hotkeyRegistration?.Dispose();
         _dictationHotkey?.Dispose();
+        _cancelProcessingHotkey?.Dispose();
         _dictationInput?.Dispose();
         _dictation.RequestCancel();
         // Close admission immediately, including when recorder saving will need a retry.

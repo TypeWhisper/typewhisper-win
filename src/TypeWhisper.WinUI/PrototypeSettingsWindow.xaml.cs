@@ -16,6 +16,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal Func<Action<bool>, PrototypeSetupWizard>? CreateSetupWizard { get; set; }
     internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
+    internal Func<string, string?>? CommitCancelProcessingHotkeys { get; set; }
     internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal Action<PrototypeActivityView>? ConfigureActivity { get; set; }
     internal Func<TypeWhisper.Core.Services.PersistedProfileBackup, TypeWhisper.Core.Services.PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
@@ -305,7 +306,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "Statistics reflect retained history · deletion and retention reduce these totals";
                 return;
             }
-            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
+            PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys, CommitCancelProcessingHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";
@@ -326,7 +327,7 @@ public sealed partial class PrototypeSettingsWindow : Window
             if (category == "Files & recovery" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Recovery audio requires opt-in · retry and deletion are explicit";
             if (category == "Shortcuts" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Quick Launch and main dictation shortcuts are saved · other actions are unavailable";
+                SessionHint.Text = "Quick Launch, main dictation and cancel processing shortcuts are saved · other actions are unavailable";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

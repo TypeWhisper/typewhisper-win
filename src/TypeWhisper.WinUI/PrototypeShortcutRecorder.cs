@@ -14,6 +14,18 @@ public sealed class PrototypeShortcutRecorder : UserControl
 {
     private static WeakReference<PrototypeShortcutRecorder>? _active;
     internal static bool AnyEditing => _active?.TryGetTarget(out var recorder) == true && recorder.IsEditing;
+    // RegisterHotKey consumes the main key before XAML can capture it. Keep the
+    // reservation and route its actual chord to the open editor instead of running it.
+    internal static bool CaptureRegisteredShortcut(string chord)
+    {
+        if (_active is null || !_active.TryGetTarget(out var recorder) || !recorder.IsEditing || !recorder.IsLoaded) return false;
+        if (recorder.IsCapturing)
+        {
+            recorder._hasMainKey = true;
+            recorder.Candidate(chord);
+        }
+        return true;
+    }
     private readonly string _key;
     private readonly Func<string, string?>? _commit;
     private readonly string _defaultValue;
@@ -35,6 +47,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
     private readonly HashSet<string> _downModifiers = [];
     private bool _hasMainKey;
     private bool _startingCapture;
+    private bool _commitRefreshQueued;
     internal bool IsCapturing { get; private set; }
     internal bool IsEditing { get; private set; }
 
@@ -88,6 +101,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         {
             "QuickLaunchHotkeys" => ("search", "Open from any app · saved global shortcut"),
             "MainDictationHotkeys" => ("microphone", "Your everyday dictation"),
+            "CancelProcessingHotkeys" => ("keyboard", "Cancel final processing · inactive while idle or recording"),
             "PushToTalkHotkey" => ("run", "Speak while holding"),
             "ToggleOnlyHotkeys" => ("pause", "Press to start or stop"),
             "HoldOnlyHotkeys" => ("keyboard", "Record while held down"),
@@ -111,6 +125,8 @@ public sealed class PrototypeShortcutRecorder : UserControl
         var copy = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         var heading = Text(label, 14); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         copy.Children.Add(heading); copy.Children.Add(Text(description, 12, true));
+        if (key == "CancelProcessingHotkeys") ToolTipService.SetToolTip(copy,
+            "Saved global shortcut. Requests cancellation of final dictation processing without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported.");
         Grid.SetColumn(copy, 1); layout.Children.Add(copy);
         Grid.SetColumn(panel, 2); layout.Children.Add(panel);
         _shell = new Border
@@ -202,6 +218,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
     }
     private void Begin(int index = -1)
     {
+        if (_commitRefreshQueued) return;
         if (_active?.TryGetTarget(out var previous) == true && !ReferenceEquals(previous, this)) previous.Cancel(false);
         _active = new(this);
         _editingIndex = index;
@@ -239,19 +256,30 @@ public sealed class PrototypeShortcutRecorder : UserControl
     }
     private void SetValue(string value)
     {
+        if (_commitRefreshQueued) return;
         var conflict = PrototypeShortcutRules.Split(value).Select(chord => PrototypeShortcutRules.Conflict(chord, _key, _bindings())).FirstOrDefault(error => error is not null);
         if (conflict is not null) { _hint.Text = conflict; _hint.Visibility = Visibility.Visible; return; }
         var commitError = _commit?.Invoke(value);
-        if (commitError is not null) { _hint.Text = commitError; _hint.Visibility = Visibility.Visible; return; }
-        _values[_key] = value; Cancel(false); Refresh();
+        // Main may update _values to the actual native binding even on rollback failure.
+        // Rebuild chips only after the current input callback has returned.
+        if (commitError is null) _values[_key] = value;
+        _commitRefreshQueued = true;
+        _apply.IsEnabled = false;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _commitRefreshQueued = false;
+            if (!IsLoaded) return;
+            if (IsEditing) Cancel(false); else Refresh();
+            if (commitError is not null) { _hint.Text = commitError; _hint.Visibility = Visibility.Visible; }
+        });
     }
     private void Apply()
     {
         if (_candidate.Length == 0 || Validate(_candidate) is not null) return;
         SetValue(PrototypeShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
-    // Match the regular Windows shortcut page: every action accepts modifier-only chords.
-    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: true)
+    // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
+    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key != "CancelProcessingHotkeys")
         ?? PrototypeShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? PrototypeShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)

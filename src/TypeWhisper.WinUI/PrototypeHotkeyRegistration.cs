@@ -79,8 +79,10 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
         nuint subclassId,
         IntPtr referenceData)
     {
-        if (message == WmHotkey && _bindings.ContainsValue(wParam.ToInt32()))
-            _callback();
+        if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
+        {
+            if (!PrototypeShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback();
+        }
 
         return DefSubclassProc(hwnd, message, wParam, lParam);
     }
