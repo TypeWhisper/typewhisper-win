@@ -101,9 +101,9 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         host.SetSetting("Language", language); Changed?.Invoke();
     }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples, bool translate = false)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool translate = false)
     {
-        (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage) result = ("", [], null);
+        (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability) result = ("", [], null, null);
         await RunAsync(async () =>
         {
             if (!Ready) throw new InvalidOperationException("Add an API key in Plugins > Groq > Settings.");
@@ -113,7 +113,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
                 Language == "auto" ? null : Language, translate, null, _shutdown.Token)
                 : await _registry.UseTranscriptionAsync(PluginId, (engine, ct) => engine.TranscribeAsync(wav,
                     Language == "auto" ? null : Language, translate, null, ct), _shutdown.Token);
-            result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage);
+            result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage, response.NoSpeechProbability);
         });
         return result;
     }

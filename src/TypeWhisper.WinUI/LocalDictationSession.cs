@@ -360,7 +360,7 @@ internal sealed class LocalDictationSession : IDisposable
         }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
-    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeRegistryAsync(float[] samples)
+    private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
     {
         var language = Language == "auto" ? null : Language;
         var translate = _taskAtStart == TranscriptionTask.Translate;
@@ -370,7 +370,7 @@ internal sealed class LocalDictationSession : IDisposable
             return engine is IPcmTranscriptionEnginePlugin pcm ? pcm.TranscribePcmAsync(samples, language, translate, ct)
                 : engine.TranscribeAsync(CloudTranscriptionPlugin.EncodeWav(samples, int.MaxValue), language, translate, null, ct);
         });
-        return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage);
+        return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
     internal event Action? Changed;
     private List<MicrophonePriorityItem> _microphones = [];
@@ -591,6 +591,10 @@ internal sealed class LocalDictationSession : IDisposable
             SetStatus($"Transcribing with {ActiveModelName}…", DictationPhase.Processing);
             var decoded = await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples));
             var rawText = decoded.Text;
+            if (FinalSpeechPolicy.ShouldReject(rawText, decoded.NoSpeechProbability,
+                _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively))
+            { SetStatus("No speech recognized. Ready to try again."); return; }
+            // Empty final output does not reuse preview text or its unrelated token timings.
             if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
             var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
             var refinedText = rawText;
@@ -682,7 +686,7 @@ internal sealed class LocalDictationSession : IDisposable
 
     internal string? LastUnsavedText { get; private set; }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
-    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
+    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
         UsesGroq ? Groq.DecodeAsync(samples, _taskAtStart == TranscriptionTask.Translate)
             : UsesRegistryProvider ? DecodeRegistryAsync(samples)
             : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate);

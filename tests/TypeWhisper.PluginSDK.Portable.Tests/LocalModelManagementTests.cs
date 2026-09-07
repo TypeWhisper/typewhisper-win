@@ -123,16 +123,19 @@ public sealed class LocalModelManagementTests : IDisposable
         Assert.Contains("offline", runtime.Error); Assert.True(runtime.Ready);
         _downloaded.Add("canary"); await runtime.DownloadAsync("canary"); Assert.Null(runtime.Error);
     }
-    [Fact]
-    public async Task SelectedLanguageIsPersistedAndPassedToTranscription()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.95f)]
+    public async Task SelectedLanguageIsPersistedAndPassedToTranscription(float? probability)
     {
         _engine.SetupGet(e => e.SupportedLanguages).Returns(["en", "de", "fr", "es"]);
         _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), "de", false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PluginTranscriptionResult("Hallo", "de", 1, null));
+            .ReturnsAsync(new PluginTranscriptionResult("Hallo", "de", 1, probability));
         await using var runtime = Create(); await runtime.InitializeAsync(); runtime.SelectLanguage("de");
         var result = await runtime.DecodeAsync([0f], false);
         Assert.Equal("Hallo", result.Text);
         Assert.Equal("de", result.DetectedLanguage);
+        Assert.Equal(probability, result.NoSpeechProbability);
         Assert.Equal("de", new VocabularyHostServices(_root).GetSetting<string>("Language"));
         Assert.Throws<ArgumentException>(() => runtime.SelectLanguage("xx"));
     }

@@ -27,6 +27,20 @@ public sealed class CloudTranscriptionTests : IDisposable
     });
 
     [Fact]
+    public async Task ProviderProbabilitySurvivesActualGroqResponseAndHostAdapter()
+    {
+        _respond = (_, _) => Task.FromResult(Json("""
+            {"text":"Hello","language":"english","duration":1,
+             "segments":[{"text":"Hello","start":0,"end":1,"no_speech_prob":0.95}]}
+            """));
+        await using var runtime = Create();
+        await runtime.SetEnabledAsync(true); await runtime.SaveKeyAsync("key");
+        var result = await runtime.DecodeAsync([0.1f]);
+        Assert.Equal("Hello", result.Text);
+        Assert.Equal(0.95f, result.NoSpeechProbability);
+    }
+
+    [Fact]
     public async Task NativeTranslationUsesTranslationEndpointAndOmitsInputLanguageFormField()
     {
         _respond = (_, _) => Task.FromResult(Json("{\"text\":\"Good morning\",\"language\":\"english\",\"duration\":1}"));
@@ -85,6 +99,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         var result = await restarted.DecodeAsync([0, 0.5f, -0.5f]);
         Assert.Equal("Guten Morgen", result.Text);
         Assert.Equal("german", result.DetectedLanguage);
+        Assert.Null(result.NoSpeechProbability);
         var request = Assert.Single(_requests);
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.Equal("https://api.groq.com/openai/v1/audio/transcriptions", request.Uri);

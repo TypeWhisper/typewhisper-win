@@ -169,13 +169,13 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal void CancelDownload() => _download?.Cancel();
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false)
     {
         if (!Ready) throw new InvalidOperationException("Choose and load a model before dictating.");
         if (translate && !SupportsTranslation)
             throw new NotSupportedException("The selected local model cannot translate audio to English. Choose a translation-capable model or switch to Transcribe.");
         var result = await _lease!.Engine.TranscribePcmAsync(samples, Language == "auto" ? null : Language, translate, CancellationToken.None);
-        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage);
+        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
     }
 
     private async Task ReleaseAsync()

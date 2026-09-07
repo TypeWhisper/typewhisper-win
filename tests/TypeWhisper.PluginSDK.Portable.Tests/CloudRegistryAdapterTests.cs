@@ -71,6 +71,7 @@ public sealed class CloudRegistryAdapterTests : IDisposable
             Assert.Equal("second", cloud.ModelId); Assert.True(cloud.SupportsTranslation);
             var decoded = await cloud.DecodeAsync([0, .25f], translate: true);
             Assert.Equal("fixture transcript", decoded.Text); Assert.Equal("de", decoded.DetectedLanguage);
+            Assert.Null(decoded.NoSpeechProbability);
             Assert.Equal("de", _host.GetSetting<string>("lastLanguage"));
             Assert.Equal("second", _host.GetSetting<string>("lastModel"));
             Assert.True(_host.GetSetting<bool>("lastTranslate"));
