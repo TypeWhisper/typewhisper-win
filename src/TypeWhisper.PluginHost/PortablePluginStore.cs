@@ -26,8 +26,12 @@ public sealed class PortablePluginStore
     public PortablePluginStore(string root, Version host, HttpClient http, Func<string, IPluginHostServices>? services = null)
     { Root = Path.GetFullPath(root); _host = host; _http = http; _services = services; }
 
-    public async Task InitializeAsync(string? bundledRoot = null, CancellationToken ct = default)
+    /// <summary>Initializes the authoritative installation index. Optional bootstrap IDs select bundle directories only when no index exists.</summary>
+    public async Task InitializeAsync(string? bundledRoot = null, CancellationToken ct = default,
+        IReadOnlyCollection<string>? bootstrapPluginIds = null)
     {
+        var bootstrap = bootstrapPluginIds?.Distinct(StringComparer.Ordinal).ToArray();
+        if (bootstrap is not null) foreach (var id in bootstrap) PortableCatalogEntry.ValidateId(id);
         await _operation.WaitAsync(ct);
         try
         {
@@ -50,10 +54,14 @@ public sealed class PortablePluginStore
             }
             else if (bundledRoot is not null && Directory.Exists(bundledRoot))
             {
-                foreach (var package in PortablePluginInventory.Scan(bundledRoot, _host))
+                foreach (var package in bootstrap is null ? PortablePluginInventory.Scan(bundledRoot, _host)
+                    : bootstrap.Where(id => Directory.Exists(Path.Combine(bundledRoot, id)))
+                        .Select(id => PortablePluginInventory.Inspect(Path.Combine(bundledRoot, id), _host)).ToArray())
                 {
                     if (package.Error is not null) throw new InvalidDataException(package.Error);
                     var manifest = package.Manifest!;
+                    if (bootstrap is not null && manifest.Id != Path.GetFileName(package.Directory))
+                        throw new InvalidDataException("A selected bundle identity does not match its directory.");
                     // Old dev outputs may still contain this once-separate dependency.
                     if (manifest.Id == "com.typewhisper.parakeet-ctc") continue;
                     var token = Guid.NewGuid().ToString("N");

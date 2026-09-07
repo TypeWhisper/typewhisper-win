@@ -78,6 +78,61 @@ public sealed class PortablePluginStoreTests : IDisposable
         Assert.Empty(restarted.Inventory());
     }
 
+    private string BootstrapBundles(bool corruptFuture = false)
+    {
+        var bundled = Path.Combine(_root, "bundled"); Directory.CreateDirectory(bundled);
+        Directory.Move(Package(), Path.Combine(bundled, Id));
+        var future = Path.Combine(bundled, "com.test.future"); Directory.CreateDirectory(future);
+        if (corruptFuture) File.WriteAllText(Path.Combine(future, "manifest.json"), "broken");
+        else
+        {
+            File.Copy(typeof(LifecycleProbePlugin).Assembly.Location, Path.Combine(future, "plugin.dll"));
+            File.WriteAllText(Path.Combine(future, "manifest.json"), JsonSerializer.Serialize(new PluginManifest
+                { Id = "com.test.future", Name = "Future", Version = "1.0.0", AssemblyName = "plugin.dll", PluginClass = typeof(LifecycleProbePlugin).FullName! }));
+        }
+        return bundled;
+    }
+
+    [Fact]
+    public async Task DefaultBootstrapStillImportsEveryValidBundle()
+    {
+        var store = Store(); await store.InitializeAsync(BootstrapBundles());
+        Assert.Equal(new[] { Id, "com.test.future" }.Order(), store.Inventory().Select(item => item.Manifest!.Id).Order());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SelectedBootstrapIgnoresFutureOrMalformedUnselectedPackages(bool corruptFuture)
+    {
+        var store = Store();
+        await store.InitializeAsync(BootstrapBundles(corruptFuture), bootstrapPluginIds: [Id, "com.test.unknown"]);
+        Assert.Equal(Id, Assert.Single(store.Inventory()).Manifest!.Id);
+        Assert.Single(Directory.GetDirectories(Path.Combine(store.Root, "packages")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExistingIndexNeverReceivesNewBootstrapSelections(bool initiallyEmpty)
+    {
+        var bundles = BootstrapBundles();
+        var store = Store(); await store.InitializeAsync(bundles, bootstrapPluginIds: initiallyEmpty ? [] : [Id]);
+        var before = File.ReadAllText(Path.Combine(store.Root, "installed.json"));
+        var restarted = Store();
+        await restarted.InitializeAsync(bundles, bootstrapPluginIds: [Id, "com.test.future"]);
+        Assert.Equal(initiallyEmpty ? 0 : 1, restarted.Inventory().Count);
+        Assert.Equal(before, File.ReadAllText(Path.Combine(store.Root, "installed.json")));
+    }
+
+    [Fact]
+    public async Task SelectedMalformedBundleStillFailsWithoutCommittingAnIndex()
+    {
+        var store = Store();
+        await Assert.ThrowsAsync<InvalidDataException>(() => store.InitializeAsync(BootstrapBundles(true), bootstrapPluginIds: ["com.test.future"]));
+        Assert.False(File.Exists(Path.Combine(store.Root, "installed.json")));
+    }
+
     [Fact]
     public async Task UpdatePreservesRunningVersionUntilRestart()
     {
