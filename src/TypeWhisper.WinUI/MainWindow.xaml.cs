@@ -145,7 +145,8 @@ public sealed partial class MainWindow : Window
     internal async Task ShutdownDictationAsync()
     {
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
-        await RecorderView.ShutdownAsync();
+        var reviews = DrainReviewWindowsAsync();
+        await Task.WhenAll(RecorderView.ShutdownAsync(), reviews);
         await ShutdownCoreAsync();
     }
     private Task ShutdownCoreAsync() => _shutdown.Run(async () =>
@@ -155,6 +156,7 @@ public sealed partial class MainWindow : Window
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
         MetricsText.Text = "Finishing shutdown…";
+        var reviews = DrainReviewWindowsAsync();
         // Finish settings confirmations, preference writes and recovery retries before
         // session shutdown disposes the recovery store they use.
         await DrainRecoveryViewsAsync();
@@ -164,10 +166,9 @@ public sealed partial class MainWindow : Window
         var history = HistoryView.ShutdownAsync();
         var workflows = WorkflowsView.ShutdownAsync();
         var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
-        await Task.WhenAll(session, files, history, workflows, lexicon, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
+        await Task.WhenAll(session, files, history, workflows, lexicon, reviews, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask);
         _liveOverlay?.Close();
-        foreach (var review in _reviewWindows.ToArray()) review.Close();
     });
     internal void ShowShutdownFailure()
     {
@@ -255,13 +256,20 @@ public sealed partial class MainWindow : Window
 
     internal void ShowOutputReview(TypeWhisper.Presentation.DictationOutputResult result)
     {
-        var review = new DictationReviewWindow(result);
+        if (_closing || _profileRestoreClosing || _reviewAdmissionClosed) return;
+        var review = new DictationReviewWindow(result, _dictation.PluginRuntime);
         _reviewWindows.Add(review);
         review.Closed += (_, _) => _reviewWindows.Remove(review);
         review.Activate();
     }
 
     private readonly List<DictationReviewWindow> _reviewWindows = [];
+    private bool _reviewAdmissionClosed;
+    private Task DrainReviewWindowsAsync()
+    {
+        _reviewAdmissionClosed = true;
+        return Task.WhenAll(_reviewWindows.ToArray().Select(review => review.ShutdownAsync()));
+    }
 
     internal MainWindow()
     {

@@ -22,6 +22,7 @@ public sealed partial class MainWindow
         // These drains can wait for the recorder's reservation without blocking this call.
         _profileUiDrain = Task.WhenAll(HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
             DrainRecoveryViewsAsync(),
+            DrainReviewWindowsAsync(),
             _lexicon?.ShutdownAsync() ?? Task.CompletedTask,
             _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask,
             _dictation.HistoryRetention.CloseAndDrainAsync(),
@@ -29,7 +30,6 @@ public sealed partial class MainWindow
         _settingsWindow?.Close();
         _overlay?.Close();
         _liveOverlay?.HidePreview();
-        foreach (var review in _reviewWindows.ToArray()) review.Close();
         if (Content is Microsoft.UI.Xaml.UIElement content) content.IsHitTestVisible = false;
         AppWindow.Hide();
     }
