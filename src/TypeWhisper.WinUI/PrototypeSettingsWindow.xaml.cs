@@ -306,6 +306,8 @@ public sealed partial class PrototypeSettingsWindow : Window
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
+            if (category == "General" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";
             if (category == "Sync & backup")
             {
                 Descendants(CatalogContent).OfType<PrototypeSyncBackupView>().FirstOrDefault()?.ConnectRestore(RestoreProfile);

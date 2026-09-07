@@ -55,6 +55,21 @@
     <ItemGroup><PortablePluginProject Include="../../plugins/*/portable.proj" /></ItemGroup>
     <MSBuild Projects="@(PortablePluginProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" BuildInParallel="false" />
   </Target>
+  <Target Name="WriteDevelopmentStartupReceipt" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <PropertyGroup>
+      <_StartupSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..'))</_StartupSourceRoot>
+      <_StartupOutputRoot>$([System.IO.Path]::GetFullPath('$(PublishDir)', '$(MSBuildProjectDirectory)'))</_StartupOutputRoot>
+      <_StartupSourcePrefix>$([MSBuild]::EnsureTrailingSlash('$(_StartupSourceRoot)'))</_StartupSourcePrefix>
+      <_StartupInsideSource>$([System.String]::Copy('$(_StartupOutputRoot)').StartsWith('$(_StartupSourcePrefix)', System.StringComparison.OrdinalIgnoreCase))</_StartupInsideSource>
+      <_StartupSourceJson>$(_StartupSourceRoot.Replace('\', '/'))</_StartupSourceJson>
+      <_StartupOutputJson>$(_StartupOutputRoot.Replace('\', '/'))</_StartupOutputJson>
+    </PropertyGroup>
+    <Delete Files="$(_StartupOutputRoot)/typewhisper-dev-publication.json" />
+    <WriteLinesToFile File="$(_StartupOutputRoot)/typewhisper-dev-publication.json"
+      Lines="{&quot;Version&quot;:1,&quot;Identity&quot;:&quot;TypeWhisper.WinUI.Dev&quot;,&quot;SourceRoot&quot;:&quot;$(_StartupSourceJson)&quot;,&quot;OutputDirectory&quot;:&quot;$(_StartupOutputJson)&quot;}"
+      Overwrite="true" Encoding="UTF-8"
+      Condition="'$(Configuration)' == 'Debug' and '$(_StartupInsideSource)' != 'True' and '$(_StartupOutputRoot)' != '$(_StartupSourceRoot)' and Exists('$(_StartupOutputRoot)/TypeWhisper.WinUI.exe')" />
+  </Target>
   <Target Name="PublishPortablePlugins" AfterTargets="Publish" DependsOnTargets="BuildPortablePlugins">
     <MSBuild Projects="@(PortablePluginProject)" Targets="CopyPackage" Properties="Configuration=$(Configuration);PluginDestination=$([System.IO.Path]::GetFullPath('$(PublishDir)Plugins'))" RemoveProperties="TargetFramework;RuntimeIdentifier;RuntimeIdentifiers;Platform" />
   </Target>

@@ -203,7 +203,7 @@ internal static partial class PrototypeSettingsCatalog
                 list.Children.Add(section);
             }
             target.Children.Add(list);
-            target.Children.Add(Label("Quick Launch shortcuts are global and saved. Other shortcuts are preview-only.", 12, true));
+            target.Children.Add(Label("Quick Launch and dictation shortcuts are global and saved. Other shortcuts are unavailable.", 12, true));
             return;
         }
         if (category == "Dictation")
@@ -211,7 +211,7 @@ internal static partial class PrototypeSettingsCatalog
             RenderDictation(target, values, pickers);
             return;
         }
-        target.Children.Add(Label("Settings preview · changes are remembered for this session only. No production settings are changed.", 12, true));
+        target.Children.Add(Label("Available settings are saved for this development build. Unavailable controls are disabled.", 12, true));
         if (category == "Audio")
         {
             RenderAudio(target, values, pickers);

@@ -970,7 +970,13 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
-            _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation, OpenProviderSettings).Configure;
+            var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
+            var startup = WindowsStartupRegistration.Create();
+            _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
+            {
+                dictationSettings.Configure(category, content, pickers);
+                LiveStartupSettings.Configure(category, content, pickers, startup);
+            };
             _settingsWindow.RestoreProfile = RestoreProfile;
             _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
             _settingsWindow.HistoryRequested += () =>

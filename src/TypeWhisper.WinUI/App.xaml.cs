@@ -5,7 +5,7 @@ namespace TypeWhisper.WinUI;
 
 public partial class App : Application
 {
-    private const string InstanceKey = "TypeWhisper.WinUI.Primary";
+    private const string InstanceKey = "TypeWhisper.WinUI.Dev.Primary";
     private MainWindow? _window;
     private AppInstance? _mainInstance;
     private TrayIconService? _tray;
@@ -30,17 +30,23 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
+        var launch = TypeWhisper.Presentation.StartupLaunchPolicy.Evaluate(Environment.GetCommandLineArgs(),
+            activation.Kind == ExtendedActivationKind.StartupTask);
         _mainInstance = AppInstance.FindOrRegisterForKey(InstanceKey);
         if (!_mainInstance.IsCurrent)
         {
-            var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
-            await _mainInstance.RedirectActivationToAsync(activation);
+            if (launch.NotifyExisting) await _mainInstance.RedirectActivationToAsync(activation);
             Exit();
             return;
         }
 
-        _mainInstance.Activated += (_, _) =>
+        _mainInstance.Activated += (_, redirected) =>
         {
+            var redirectedLaunch = redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
+                ? TypeWhisper.Presentation.StartupLaunchPolicy.EvaluateCommandLine(launchArgs.Arguments)
+                : TypeWhisper.Presentation.StartupLaunchPolicy.Evaluate([], redirected.Kind == ExtendedActivationKind.StartupTask);
+            if (!redirectedLaunch.NotifyExisting) return;
             if (_profileOperation is { } operation)
             {
                 operation.DispatcherQueue.TryEnqueue(operation.Activate);
@@ -66,7 +72,7 @@ public partial class App : Application
         }
         _window = new MainWindow();
         _window.RestoreProfile = RestoreProfileAsync;
-        _window.ShowFromActivation();
+        if (launch.ShowWindow) _window.ShowFromActivation();
         _tray = new TrayIconService(
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
