@@ -119,3 +119,12 @@ Computer Use imported a synthetic dictionary containing an umlaut term and a cor
 ## Formatting and asynchronous shortcut intent, 2026-09-07
 
 The Presentation suite passed 285 cases, including engine/model/language-specific formatting profiles, output-language handling, ordered application/command steps, immutable saved choices and 14 asynchronous input coordination cases. The prescribed Debug build/launch passed after wiring the real settings UI. The input coordinator retains a release or cancellation while capture starts, gives cancellation precedence and discards starts during final processing instead of queuing a later recording. Real microphone tap/hold acceptance remains separate from these deterministic task/dispatch tests.
+
+
+## 2026-09-07: manual workflows and quiet-recording policy
+
+At `a28367e3`, the complete local headless command passed **517 tests**: Host 135, Presentation 325, Groq 32 and NVIDIA 25. One platform-dependent NVIDIA case was skipped. The prescribed Debug build and launch also passed. These results cover the committed quiet-clip policy, provider no-speech metadata and manual workflow slice together.
+
+Computer Use in the named `smoke-20260907` profile created a custom workflow with two instruction paragraphs, saved it without a provider, verified that Run stayed disabled with source text, relaunched the app, observed the persisted workflow, disabled and saved it, then confirmed deletion. The profile JSON retained both instruction lines, recorded `IsEnabled: false` after the toggle, and contained an empty array after deletion. No cloud request or personal credentials were used. Provider execution, exact selection, cancellation, empty/error results and persistence failures have portable coverage; a successful live Groq workflow request remains acceptance work.
+
+Quiet recognition defaults off, matching the previous Windows capture policy. Captures below 40 ms are skipped; pre-gain RMS thresholds are 0.003 below one second and 0.006 otherwise. Silence padding is applied only to decoder input, preserving original history duration and CTC sample positions. Final provider no-speech probabilities are preserved and filtered at the previous Windows threshold; missing values stay unknown. Empty final text is still discarded instead of substituting preview text. Real microphone/quiet-speech acceptance is not established by these policy tests.

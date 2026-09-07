@@ -55,3 +55,10 @@ Version 1.1 is greenfield: no legacy plugin binary compatibility promise, no req
 - Named Debug test profiles isolate preferences, data, keys, packages and model assets for native restart/mutation tests. Native dictionary/snippet import and multiline editor checks passed.
 
 Latest focused validation: Host 133 and Presentation 285 passing cases; prescribed Debug build/launch passed. This is incremental evidence, not a new complete release acceptance run.
+
+
+## 2026-09-07: real manual workflows and silence filtering
+
+- Custom manual workflows now persist prompts, exact provider/model and enabled state, with confirmed deletion and protected unsupported entries. Run invokes registered LLM providers and preserves source text on cancellation/failure. Automatic triggers, selected-text capture, templates and full override editing remain open.
+- Saved quiet-clip handling, original-sample thresholds, decoder-only padding and actual final no-speech metadata now reach dictation processing.
+- Complete headless validation at `a28367e3`: 517 passed, one platform skip; prescribed Debug build/launch passed. Native workflow create/save/restart/disable/delete checks passed in an isolated named profile. No successful live cloud workflow request is claimed.
