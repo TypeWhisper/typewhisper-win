@@ -1,6 +1,6 @@
 # Windows 1.1 progress
 
-Current implementation checkpoint: `3728d98` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
+Current implementation checkpoint: `25cc018` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
 
 The authoritative feature inventory is now the [full comparison against both previous Windows and Mac](WINUI-FUNCTIONAL-STATUS.md). This replaces the accumulated, contradictory milestone checklist. Historical test counts and superseded UI decisions remain available in Git history; they are not current completion claims.
 
@@ -20,7 +20,10 @@ Automatic paste / Review first and Save to history now persist and control actua
 - Isolated history read/search/raw-final details/copy/edit, selected export/delete, confirmed clear-history and explicit retention and actual usage aggregation. Model, provider and app/task appear in details only.
 - Integrations with Installed and Discover. Only NVIDIA Parakeet and Groq have connected runtime bindings. Plugin settings own model downloads and credentials; Dictation selects provider/model. There is no global Models settings page or independent CTC integration.
 - Persistent package installation/uninstallation, staged updates, checksums and extraction/identity validation. Plugin-owned output folders/tests and optional install/uninstall hooks with status messages. See [package contract](PLUGIN-PACKAGES-1.1.md).
-- Headless CI for portable host, presentation and plugin-owned suites on Windows and Ubuntu.
+- All eight workflow templates, explicit manual execution and App/Global dictation rules with start snapshots and mandatory review on processing failure. Domain rules, workflow shortcuts, selected-text capture and broader overrides remain open.
+- Opt-in file queue restart recovery, a real recording library and persisted recorder source/output-device choices.
+- Local backup export and reviewed category merge for dictionary, snippets, workflows and text History. All writers drain before publication and closing; startup recovery blocks profile access on failure. Device sync remains unavailable.
+- Headless CI for shared Core, portable host, presentation and plugin-owned suites on Windows and Ubuntu.
 
 ## Remaining release work
 
@@ -30,9 +33,9 @@ These are major implementation areas, not final polish. Detailed per-feature gap
 - [x] Connect recording mode, native task, number/punctuation/regional preferences and explicit retention.
 - [ ] Connect language hints and remaining runtime settings; make other preview controls unambiguous.
 - [ ] Connect complete text processing, generic plugin capabilities, cancellation, queued jobs, durable recovery and accurate provenance.
-- [ ] Replace workflow examples with persistent workflows, triggers, LLM processing, selected-text execution and retry.
-- [ ] Extend connected file decoding and microphone/system recording with durable jobs, recording-library management, pause/tracks, remaining formats and watch folders.
-- [ ] Complete remaining history audio actions, correction learning, backup and sync; bulk mutation/export/clear, retention and statistics are connected.
+- [ ] Extend workflows with domain rules, shortcuts, selected-text execution, remaining overrides and retry; verify live provider calls.
+- [ ] Extend connected file decoding and microphone/system recording with durable dictation/capture jobs, pause/tracks, remaining formats and watch folders.
+- [ ] Complete remaining history audio actions, correction learning, broader backup categories and sync; bulk mutation/export/clear, retention and statistics are connected.
 - [ ] Generalize provider/settings/contribution integration and rebuild the selected additional plugins; publish and verify the single v2 catalog end to end.
 - [ ] Connect onboarding, licensing, updates, autostart, localization, API/CLI and Windows shell activation.
 - [ ] Decide which Mac additions belong in Windows: Inbox/audio sync, meeting automation, live field text, media imports and platform-specific alternatives.
@@ -97,3 +100,10 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - Recorder microphone/system choices and an explicit output endpoint persist and are shared by the recorder and settings. Missing selected devices fail visibly. The capture adapter owns the endpoint and retains cleanup state for retry if disposal fails.
 - Complete local validation: **673 passed, one NVIDIA platform skip** (Host 160, Presentation 456, Groq 32, NVIDIA 25), plus **68 Windows audio tests passed** in Debug. Prescribed build/launch passed. Native restart restored a completed file result without changing History or usage. Recovery off erased the checkpoint while retaining the visible result. The selected Creative endpoint survived restart and produced a non-silent 33.208-second mono 16 kHz WAV titled `Gerätetest`.
 - Windows/Ubuntu headless CI and CodeQL passed at the previous pushed checkpoint `e45abf6f`. Durable dictation/capture recovery, watch folders, pause/tracks and broader device acceptance remain open.
+
+## 2026-09-07: workflow rules and reviewed local backup
+
+- Eight shared Core templates now persist in the editor, including an explicit translation target and optional fine-tuning. App rules outrank Global fallback; enabled state and priority participate in matching. Prompt/provider/model and language are captured at dictation start. A required LLM failure retains the transcript for review and cannot auto-paste, whether History is enabled or disabled.
+- Backup export and merge preview use the real four category stores. Confirmed restore stops admission, drains runtime work, retention, History mutations and open transfer operations, publishes with a recoverable journal, and closes the app. Startup opens no stores if recovery fails. Existing recordings, credentials and device preferences are outside the backup.
+- The expanded CI suite now includes Core. At `77763cfd`, Windows passed **1,214 tests with one skip**, and Ubuntu passed **1,205 with five skips**. The initial Ubuntu run exposed an older Windows-only path separator assumption; platform-independent device-ID validation fixed it. Native build/launch passed for `25cc018`.
+- Native Translation create/reopen/discard and real backup export/preview/default Cancel/confirmed merge passed in the isolated profile. Restoring added one item to each selected category, kept History byte-for-byte unchanged and closed the app. A malformed journal showed only the themed recovery window and created no profile stores. Live cloud processing and native forced-crash/save-failure acceptance remain open.
