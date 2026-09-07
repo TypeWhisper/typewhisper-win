@@ -1,6 +1,6 @@
 # Windows 1.1 progress
 
-Current implementation checkpoint: `25cc018` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
+Current implementation checkpoint: `9e4f7f7` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
 
 The authoritative feature inventory is now the [full comparison against both previous Windows and Mac](WINUI-FUNCTIONAL-STATUS.md). This replaces the accumulated, contradictory milestone checklist. Historical test counts and superseded UI decisions remain available in Git history; they are not current completion claims.
 
@@ -37,7 +37,7 @@ These are major implementation areas, not final polish. Detailed per-feature gap
 - [ ] Extend connected file decoding and microphone/system recording with durable dictation/capture jobs, pause/tracks, remaining formats and watch folders.
 - [ ] Complete remaining history audio actions, correction learning, broader backup categories and sync; bulk mutation/export/clear, retention and statistics are connected.
 - [ ] Generalize provider/settings/contribution integration and rebuild the selected additional plugins; publish and verify the single v2 catalog end to end.
-- [ ] Connect onboarding, licensing, updates, autostart, localization, API/CLI and Windows shell activation.
+- [ ] Complete first-dictation onboarding acceptance, licensing, updates, production startup identity, localization, API/CLI and Windows shell activation.
 - [ ] Decide which Mac additions belong in Windows: Inbox/audio sync, meeting automation, live field text, media imports and platform-specific alternatives.
 - [ ] Complete OS/architecture/distribution decisions, native accessibility/DPI/device/editor acceptance and the deferred legacy-versus-WinUI benchmark.
 
@@ -107,3 +107,10 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - Backup export and merge preview use the real four category stores. Confirmed restore stops admission, drains runtime work, retention, History mutations and open transfer operations, publishes with a recoverable journal, and closes the app. Startup opens no stores if recovery fails. Existing recordings, credentials and device preferences are outside the backup.
 - The expanded CI suite now includes Core. At `77763cfd`, Windows passed **1,214 tests with one skip**, and Ubuntu passed **1,205 with five skips**. The initial Ubuntu run exposed an older Windows-only path separator assumption; platform-independent device-ID validation fixed it. Native build/launch passed for `25cc018`.
 - Native Translation create/reopen/discard and real backup export/preview/default Cancel/confirmed merge passed in the isolated profile. Restoring added one item to each selected category, kept History byte-for-byte unchanged and closed the app. A malformed journal showed only the themed recovery window and created no profile stores. Live cloud processing and native forced-crash/save-failure acceptance remain open.
+
+## 2026-09-07: real setup, startup and workflow visibility
+
+- Setup now uses actual microphone priority, shortcuts/mode, ready provider/model choices, supported languages and output/history preferences. Model downloads and API keys stay in plugin settings. Navigation progress persists; Finish requires a ready configuration and records no synthetic transcription. The setup layout uses the existing theme and a distinct primary action.
+- Development startup registration has an explicit published-output identity and verified readback. Test profiles never access the registry. Silent launches keep the tray and shortcuts available; production startup identity and updater integration remain open.
+- Unsupported workflows remain visible and can be enabled or disabled while preserving their other metadata. History details now show the stored workflow name and processing failure.
+- At `85d53e2`, Windows CI passed **1,251 tests with one skip**; Ubuntu passed **1,242 with five skips**. CodeQL passed. Native setup selected the real QuadCast microphone, Toggle, German and Review first; Finish persisted and reopening retained those choices. An imported unsupported workflow could be enabled/disabled with all other stored metadata unchanged.
