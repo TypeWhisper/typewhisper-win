@@ -17,10 +17,17 @@ internal static class HistoryEntryAdapter
         var text = record.DisplayText;
         var title = string.IsNullOrWhiteSpace(text) ? "Untitled transcript" : text.Replace('\r', ' ').Replace('\n', ' ');
         if (title.Length > 80) title = title[..80] + "…";
+        var kind = record.SourceKind switch
+        {
+            "dictation" => PrototypeHistoryEntryKind.Dictation,
+            "recording" => PrototypeHistoryEntryKind.Recording,
+            "file" => PrototypeHistoryEntryKind.ImportedFile,
+            _ => PrototypeHistoryEntryKind.Unknown
+        };
         return new PrototypeHistoryEntry(id,
             new PrototypeHistoryContent(timestamp, timestamp,
                 new PrototypeHistoryOrigin("unknown", "Unknown", "Unknown device"),
-                "legacy", PrototypeHistoryEntryKind.Unknown, title,
+                string.IsNullOrWhiteSpace(record.SourceKind) ? "legacy" : record.SourceKind, kind, title,
                 double.IsFinite(record.DurationSeconds) ? Math.Max(0, record.DurationSeconds) : 0,
                 record.Status == TranscriptionRecordStatus.Succeeded ? PrototypeHistoryProcessingState.Ready : PrototypeHistoryProcessingState.Failed,
                 new PrototypeHistoryTranscript(record.RawText, text), record.Language,

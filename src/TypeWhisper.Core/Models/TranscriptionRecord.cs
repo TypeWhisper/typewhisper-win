@@ -39,6 +39,13 @@ public sealed record TranscriptionRecord
     /// </summary>
     public required string FinalText { get; init; }
     /// <summary>
+    /// Gets the explicitly recorded local source kind: dictation, recording, or file.
+    /// Missing and unfamiliar values do not imply a source kind. This optional field
+    /// does not define a cross-platform history synchronization contract.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceKind { get; init; }
+    /// <summary>
     /// Gets or sets the app name value.
     /// </summary>
     public string? AppName { get; init; }

@@ -515,6 +515,7 @@ internal sealed class LocalDictationSession : IDisposable
             var record = new TranscriptionRecord
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
+                SourceKind = "dictation",
                 RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
                 EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
                 Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),

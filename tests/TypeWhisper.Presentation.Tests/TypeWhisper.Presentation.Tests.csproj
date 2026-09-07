@@ -13,6 +13,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
     <PackageReference Include="Moq" Version="4.*" />
     <ProjectReference Include="../../src/TypeWhisper.Presentation/TypeWhisper.Presentation.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeHistoryStore.cs" Link="PrototypeHistoryStore.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HistoryEntryAdapter.cs" Link="HistoryEntryAdapter.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />

@@ -191,7 +191,7 @@ public sealed partial class MainWindow : Window
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             historyService.TryAddRecord(new TypeWhisper.Core.Models.TranscriptionRecord
             {
-                Id = "history-ui-fixture", Timestamp = DateTime.UtcNow,
+                Id = "history-ui-fixture", Timestamp = DateTime.UtcNow, SourceKind = "dictation",
                 RawText = "Synthetic history test.\nSecond paragraph.",
                 FinalText = "Synthetic history test.\n\nSecond paragraph for editing and export.",
                 AppName = "UI test fixture", AppProcessName = "fixture", Language = "en",
