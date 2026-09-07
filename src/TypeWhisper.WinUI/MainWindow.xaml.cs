@@ -178,6 +178,7 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+        NativeWindowAppearance.ApplyAppTitleBar(this);
         LoadOverlayPreferences();
         var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };

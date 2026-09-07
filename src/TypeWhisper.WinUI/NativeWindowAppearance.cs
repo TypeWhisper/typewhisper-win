@@ -1,10 +1,33 @@
 using System.Runtime.InteropServices;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace TypeWhisper.WinUI;
 
 internal static class NativeWindowAppearance
 {
+    // Apply before showing every app window, including secondary windows. XAML's
+    // RequestedTheme alone does not theme the native Windows caption.
+    internal static void ApplyAppTitleBar(Window window)
+    {
+        if (!AppWindowTitleBar.IsCustomizationSupported()) return;
+        var titleBar = window.AppWindow.TitleBar;
+        titleBar.PreferredTheme = Application.Current.RequestedTheme == ApplicationTheme.Dark
+            ? TitleBarTheme.Dark : TitleBarTheme.Light;
+        var background = ((SolidColorBrush)Application.Current.Resources["InkBrush"]).Color;
+        var foreground = ((SolidColorBrush)Application.Current.Resources["TextBrush"]).Color;
+        var muted = ((SolidColorBrush)Application.Current.Resources["MutedBrush"]).Color;
+        titleBar.BackgroundColor = titleBar.InactiveBackgroundColor = background;
+        titleBar.ForegroundColor = foreground;
+        titleBar.InactiveForegroundColor = muted;
+        titleBar.ButtonBackgroundColor = titleBar.ButtonInactiveBackgroundColor = background;
+        titleBar.ButtonForegroundColor = titleBar.ButtonHoverForegroundColor = titleBar.ButtonPressedForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = muted;
+        titleBar.ButtonHoverBackgroundColor = ((SolidColorBrush)Application.Current.Resources["ElevatedBrush"]).Color;
+        titleBar.ButtonPressedBackgroundColor = ((SolidColorBrush)Application.Current.Resources["HairlineBrush"]).Color;
+    }
+
     private const int GwlStyle = -16;
     private const long WsCaption = 0x00C00000L;
     private const long WsThickframe = 0x00040000L;

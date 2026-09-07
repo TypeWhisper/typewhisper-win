@@ -65,3 +65,7 @@ The app owns single-instance redirection, launcher activation, tray navigation/s
 Recorder, file queue, workflows, usage statistics, onboarding, account, backup and sync still contain demo behavior. Autostart, localization, HTTP/CLI, shell activation and the production update/licensing composition are missing. Linking existing audio platform classes into the project does not make the recorder functional.
 
 Prefer portable services for decisions, jobs and state transitions, with narrow Windows adapters for capture, hotkeys, clipboard, windows and dialogs. The next integrated slice should include persistence and failed-operation behavior, not just a rendered control. Use [headless checks and separate native acceptance](WINUI-TESTING.md).
+
+## Window appearance
+
+Every WinUI window calls `NativeWindowAppearance.ApplyAppTitleBar` before it is shown, including secondary review windows. New windows must use the same helper. It applies the app theme and shared palette to native captions and caption buttons in active, inactive, hover and pressed states. Existing frameless launcher, settings, tray and overlay layouts remain frameless. Setting the XAML application theme alone does not style a native caption; the helper uses the supported [AppWindow title-bar APIs](https://learn.microsoft.com/en-us/windows/apps/develop/title-bar?tabs=winui3).

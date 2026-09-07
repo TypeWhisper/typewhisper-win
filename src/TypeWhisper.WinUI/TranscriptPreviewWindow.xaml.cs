@@ -50,6 +50,7 @@ public sealed partial class TranscriptPreviewWindow : Window
     {
         _liveText = liveText;
         InitializeComponent();
+        NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;

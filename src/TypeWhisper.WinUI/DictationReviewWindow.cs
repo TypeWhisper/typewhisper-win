@@ -12,6 +12,7 @@ internal sealed class DictationReviewWindow : Window
 {
     internal DictationReviewWindow(DictationOutputResult result)
     {
+        NativeWindowAppearance.ApplyAppTitleBar(this);
         Title = "Review dictation · TypeWhisper";
         AppWindow.Resize(new SizeInt32(680, 460));
         var body = new Grid { Padding = new Thickness(24), RowSpacing = 16,

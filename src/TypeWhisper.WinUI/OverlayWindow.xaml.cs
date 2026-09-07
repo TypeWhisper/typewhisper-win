@@ -65,6 +65,7 @@ public sealed partial class OverlayWindow : Window
         _runtimeState = runtimeState;
         _transcriptPreviewEnabled = transcriptPreviewEnabled;
         InitializeComponent();
+        NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;

@@ -37,6 +37,7 @@ public sealed partial class PrototypeSettingsWindow : Window
         _values = values;
         _preferences = preferences;
         InitializeComponent();
+        NativeWindowAppearance.ApplyAppTitleBar(this);
         CatalogContent.LayoutUpdated += (_, _) => PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
         PrototypeToggleSwitch.Configure(LiveTextToggle);
         PrototypeToggleSwitch.Configure(DetailsToggle);
