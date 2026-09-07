@@ -23,6 +23,13 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal Func<TypeWhisper.Core.Services.PersistedProfileBackup, TypeWhisper.Core.Services.PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
     internal Task RefreshActivityAsync() => _activity?.RefreshAsync() ?? Task.CompletedTask;
     private bool _updating = true;
+    private bool _liveTranscriptionAvailable = true;
+    internal void SetLiveTranscriptionAvailability(bool available)
+    {
+        if (_liveTranscriptionAvailable == available) return;
+        _liveTranscriptionAvailable = available;
+        SetPreferences(_preferences);
+    }
     private uint _dpi;
     private bool _positioning;
     private bool _changingSearch;
@@ -161,13 +168,15 @@ public sealed partial class PrototypeSettingsWindow : Window
             button.Style = (Style)Application.Current.Resources[selected ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"];
             AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
         }
-        LiveTextToggle.IsOn = preferences.LiveText;
+        LiveTextToggle.IsOn = _liveTranscriptionAvailable && preferences.LiveText;
         DetailsToggle.IsOn = preferences.TechnicalDetails;
         var minimal = preferences.Mode == PrototypeOverlayMode.Minimal;
         var standard = preferences.Mode == PrototypeOverlayMode.Standard;
-        LiveTextToggle.IsEnabled = !minimal;
+        LiveTextToggle.IsEnabled = !minimal && _liveTranscriptionAvailable;
         DetailsToggle.IsEnabled = standard;
-        LiveTextDescription.Text = minimal
+        LiveTextDescription.Text = !_liveTranscriptionAvailable
+            ? "Unavailable for the selected provider or task. Text arrives after recording stops. Your live-text preference is kept for supported models."
+            : minimal
             ? "Hidden in Minimal. Your preference is kept for Standard and Compact."
             : "Show streaming text beside the recording block. Longer text scrolls.";
         DetailsDescription.Text = standard
@@ -187,7 +196,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     private void Preference_Changed(object sender, RoutedEventArgs e)
     {
         if (_updating) return;
-        Publish(_preferences with { LiveText = LiveTextToggle.IsOn, TechnicalDetails = DetailsToggle.IsOn });
+        Publish(_preferences with { LiveText = _liveTranscriptionAvailable ? LiveTextToggle.IsOn : _preferences.LiveText, TechnicalDetails = DetailsToggle.IsOn });
     }
 
     private void Publish(PrototypeOverlayPreferences preferences)

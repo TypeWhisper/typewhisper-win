@@ -55,6 +55,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal event Action<DictationOutputResult>? ReviewRequested;
     internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
+    // Availability describes the host's connected preview path, not just an SDK streaming declaration.
+    internal bool SupportsLiveTranscription => !UsesRegistryProvider &&
+        TranscriptionTaskPreferences.Current == TranscriptionTask.Transcribe;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _silenceTimer;
@@ -578,7 +581,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
                 LivePreviewText = "";
                 _hasConfirmedPreviewText = false;
-                if (LivePreviewEnabled && !UsesRegistryProvider && _taskAtStart == TranscriptionTask.Transcribe)
+                if (LivePreviewEnabled && SupportsLiveTranscription)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },

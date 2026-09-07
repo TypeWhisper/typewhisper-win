@@ -5,6 +5,21 @@ using Xunit;
 public sealed class DictationOverlayStateTests
 {
     [Theory]
+    [InlineData(1, true, false, false)]
+    [InlineData(2, true, false, false)]
+    [InlineData(3, true, false, false)]
+    [InlineData(5, true, false, true)]
+    [InlineData(5, false, false, false)]
+    [InlineData(1, true, true, true)]
+    [InlineData(1, false, true, false)]
+    [InlineData(4, true, true, false)]
+    public void TranscriptWindowRespectsLiveCapabilityWithoutHidingCompletedOutput(int phase, bool enabled, bool supported, bool visible)
+    {
+        var state = new DictationOverlayState((DictationPhase)phase, TimeSpan.Zero, "Status", "Notepad");
+        Assert.Equal(visible, state.ShouldShowTranscript(enabled, supported));
+    }
+
+    [Theory]
     [InlineData(RecordingMode.Hybrid, "Hybrid")]
     [InlineData(RecordingMode.Toggle, "Toggle")]
     [InlineData(RecordingMode.Hold, "Hold")]

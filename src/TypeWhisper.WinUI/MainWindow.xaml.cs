@@ -237,12 +237,14 @@ public sealed partial class MainWindow : Window
         if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed)
         {
             _overlay?.HidePreview();
+            var showTranscript = _dictation.OverlayState.ShouldShowTranscript(_transcriptPreviewEnabled, _dictation.SupportsLiveTranscription);
             if (_liveOverlay is null)
-                _liveOverlay = new OverlayWindow(_transcriptPreviewEnabled, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0, () => _dictation.OverlayState, () => _dictation.LivePreviewText);
+                _liveOverlay = new OverlayWindow(showTranscript, () => _dictation.IsRecording ? _dictation.CurrentLevel : 0, () => _dictation.OverlayState, () => _dictation.LivePreviewText);
+            // Apply before showing a reused overlay, so a cloud recording cannot flash its old text window.
+            _liveOverlay.SetTranscriptPreviewEnabled(showTranscript);
             _liveOverlay.SetLayout(OverlayPreferences);
             _liveOverlay.SetMode(_overlayMode, DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary));
             _liveOverlay.ActivateWithoutTakingFocus();
-            _liveOverlay.SetTranscriptPreviewEnabled(_transcriptPreviewEnabled);
             _liveOverlay.SetTechnicalDetailsEnabled(_technicalDetailsEnabled);
             if (_dictation.OverlayState.Phase == DictationPhase.Error) _ = HideErrorOverlayAsync(revision);
         }
@@ -1045,6 +1047,7 @@ public sealed partial class MainWindow : Window
         if (_settingsWindow is null)
         {
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
+            _settingsWindow.SetLiveTranscriptionAvailability(_dictation.SupportsLiveTranscription);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
@@ -1426,11 +1429,16 @@ public sealed partial class MainWindow : Window
     private void UpdateTranscriptToggle()
     {
         var minimal = _overlayMode == PrototypeOverlayMode.Minimal && _overlay?.IsPreviewVisible == true;
-        TranscriptToggleButton.IsEnabled = !minimal && !_dictation.UsesGroq;
-        TranscriptToggleButton.Content = _dictation.UsesGroq ? "Live text · Local only" : minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
+        var available = _dictation.SupportsLiveTranscription;
+        TranscriptToggleButton.IsEnabled = !minimal && available;
+        TranscriptToggleButton.Content = !available ? "Live text · Unavailable" : minimal ? "Live text  —" : _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
+        ToolTipService.SetToolTip(TranscriptToggleButton, available ? "Show text during recording." :
+            "Live transcription is unavailable for the selected provider or task. Text arrives after recording stops.");
+        _settingsWindow?.SetLiveTranscriptionAvailability(available);
     }
     private void TranscriptToggleButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!_dictation.SupportsLiveTranscription) return;
         _transcriptPreviewEnabled = !_transcriptPreviewEnabled;
         SaveOverlayPreferences();
         TranscriptToggleButton.Content = _transcriptPreviewEnabled ? "Live text  On" : "Live text  Off";
