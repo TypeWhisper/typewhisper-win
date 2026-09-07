@@ -12,6 +12,7 @@ public sealed class AudioDuckingService : IAudioDuckingService
     private bool _isDucked;
     private string? _duckedDeviceId;
     private float _duckedVolume;
+    /// <summary>Gets or sets the output endpoint to attenuate; null or empty selects the default multimedia endpoint.</summary>
     public string? OutputDeviceId { get; set; }
 
     /// <summary>

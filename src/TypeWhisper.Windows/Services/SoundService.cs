@@ -20,6 +20,7 @@ public sealed class SoundService
     /// Gets or sets the is enabled value.
     /// </summary>
     public bool IsEnabled { get; set; } = true;
+    /// <summary>Gets or sets the output endpoint for feedback sounds; null or empty selects the default multimedia endpoint.</summary>
     public string? OutputDeviceId { get; set; }
 
     /// <summary>
