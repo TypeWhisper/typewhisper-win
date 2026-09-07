@@ -2,14 +2,29 @@ using TypeWhisper.Core.Models;
 
 namespace TypeWhisper.WinUI;
 
+/// <summary>A manual workflow editor draft retaining the original Core metadata.</summary>
 public sealed record PrototypeWorkflow(string Id, string Title, string Description, string IconKind,
     string Instruction)
 {
+    /// <summary>The exact selected LLM provider.</summary>
     public string ProviderId { get; init; } = "none";
+    /// <summary>The exact selected provider model.</summary>
     public string ModelId { get; init; } = "";
+    /// <summary>The manual result review destination.</summary>
     public string OutputTarget { get; init; } = "preview";
+    /// <summary>Whether manual execution is enabled.</summary>
     public bool IsEnabled { get; init; } = true;
+    /// <summary>The shared Core prompt template.</summary>
+    public WorkflowTemplate Template { get; init; } = WorkflowTemplate.Custom;
+    /// <summary>The translation language; null uses Core's English default.</summary>
+    public string? TranslationTarget { get; init; }
     internal Workflow? Stored { get; init; }
+    internal string InstructionDescription => string.Join("\n", new[]
+    {
+        Template == WorkflowTemplate.Custom ? null : WorkflowTemplateCatalog.DefinitionFor(Template).Description,
+        Template == WorkflowTemplate.Translation ? "Target language: " + (string.IsNullOrWhiteSpace(TranslationTarget) ? "English" : TranslationTarget) : null,
+        string.IsNullOrWhiteSpace(Instruction) ? null : Instruction
+    }.Where(text => text is not null));
 
     internal Workflow ToStored() => (Stored ?? new Workflow
     {
@@ -17,13 +32,16 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     }) with
     {
         Name = Title,
+        Template = Template,
         IsEnabled = IsEnabled,
-        Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with { FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId }
+        Behavior = (Stored?.Behavior ?? new WorkflowBehavior()) with
+        { FineTuning = Instruction, ProviderOverride = ProviderId, ModelOverride = ModelId, TranslationTarget = TranslationTarget }
     };
 
     internal static PrototypeWorkflow FromStored(Workflow workflow) => new(workflow.Id, workflow.Name,
-        workflow.IsEnabled ? "Manual workflow" : "Disabled manual workflow", "workflow", workflow.Behavior.FineTuning)
+        (workflow.IsEnabled ? "" : "Disabled · ") + workflow.Definition.Name, "workflow", workflow.Behavior.FineTuning)
     {
-        ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled, Stored = workflow
+        ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
+        Template = workflow.Template, TranslationTarget = workflow.Behavior.TranslationTarget, Stored = workflow
     };
 }

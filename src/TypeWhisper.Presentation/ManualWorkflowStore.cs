@@ -15,7 +15,7 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true, WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
     /// <summary>Identifies workflows whose semantics this manual editor supports.</summary>
-    public static bool IsSupported(Workflow workflow) => workflow.Template == WorkflowTemplate.Custom
+    public static bool IsSupported(Workflow workflow) => Enum.IsDefined(workflow.Template)
         && workflow.Trigger.Kind == WorkflowTriggerKind.Manual && workflow.Behavior.Settings.Count == 0
         && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId);
 
@@ -59,8 +59,10 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     {
         ArgumentNullException.ThrowIfNull(workflow);
         if (!IsSupported(workflow)) throw new InvalidOperationException("This workflow cannot be edited here.");
-        if (string.IsNullOrWhiteSpace(workflow.Id) || string.IsNullOrWhiteSpace(workflow.Name) || string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning))
-            throw new ArgumentException("A name and instructions are required.", nameof(workflow));
+        if (string.IsNullOrWhiteSpace(workflow.Id) || string.IsNullOrWhiteSpace(workflow.Name))
+            throw new ArgumentException("A workflow name is required.", nameof(workflow));
+        if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning))
+            throw new ArgumentException("Custom workflows require instructions.", nameof(workflow));
         lock (MutationLock)
         {
             var items = Read().ToList();

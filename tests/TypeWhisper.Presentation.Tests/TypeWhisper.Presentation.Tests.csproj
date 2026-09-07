@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/TypeWhisper.WinUI/PrototypeOverlayLayout.cs" Link="PrototypeOverlayLayout.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/PrototypeWorkflow.cs" Link="PrototypeWorkflow.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />

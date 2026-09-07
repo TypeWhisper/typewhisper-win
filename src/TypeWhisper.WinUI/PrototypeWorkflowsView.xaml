@@ -114,7 +114,19 @@
                             Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
                     </StackPanel>
                     <StackPanel Spacing="7">
-                        <TextBlock Text="INSTRUCTIONS" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBlock Text="TEMPLATE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <local:PrototypeChoicePicker x:Name="ConfigTemplate" />
+                        <TextBlock x:Name="ConfigTemplateDescription" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel x:Name="ConfigTranslationSection" Spacing="7" Visibility="Collapsed">
+                        <TextBlock Text="TRANSLATION LANGUAGE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigTranslationTarget" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
+                            Height="44" MaxLength="100" PlaceholderText="English (default)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow translation target language" />
+                        <TextBlock Text="Leave empty to translate into English. This is a text workflow using the selected LLM provider."
+                            TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel Spacing="7">
+                        <TextBlock x:Name="ConfigInstructionLabel" Text="INSTRUCTIONS (REQUIRED)" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                         <TextBox x:Name="ConfigInstruction" Style="{StaticResource WorkflowEditorStyle}" Height="80" MaxLength="8000"
                             TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow instructions" />
                     </StackPanel>
