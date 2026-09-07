@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using TypeWhisper.PluginSDK;
 
 namespace TypeWhisper.WinUI;
@@ -46,7 +47,6 @@ internal sealed class LivePluginTextSettings : UserControl
         _content.Children.Add(new TextBlock { Text = field.Description, TextWrapping = TextWrapping.Wrap });
         var input = new TextBox
         {
-            Text = field.Value,
             AcceptsReturn = field.IsMultiline,
             TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
             MinHeight = field.IsMultiline ? 100 : 40,
@@ -54,11 +54,22 @@ internal sealed class LivePluginTextSettings : UserControl
             Padding = new Thickness(10, 8, 10, 8),
             Style = (Style)Application.Current.Resources[field.IsMultiline
                 ? "PrototypeLexiconMultilineStyle" : "PrototypeSearchTextBoxStyle"],
-            MaxLength = Math.Clamp(field.MaxLength, 1, 32768)
+            MaxLength = Math.Clamp(field.MaxLength, 1, 32768),
+            Text = field.Value
         };
         AutomationProperties.SetName(input, field.Title);
         AutomationProperties.SetHelpText(input, field.Description);
-        _content.Children.Add(input);
+        var fieldBorder = new Border
+        {
+            Child = input,
+            Background = (Brush)Application.Current.Resources["SurfaceBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8)
+        };
+        input.GotFocus += (_, _) => fieldBorder.BorderBrush = (Brush)Application.Current.Resources["AccentBrush"];
+        input.LostFocus += (_, _) => fieldBorder.BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"];
+        _content.Children.Add(fieldBorder);
         var save = new HandCursorButton { Content = "Save " + field.Title, HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
         var saving = false;

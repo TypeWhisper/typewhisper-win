@@ -12,6 +12,25 @@ public sealed class PortableFillerWordsTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "filler-portable-" + Guid.NewGuid().ToString("N"));
 
+    [Theory]
+    [InlineData("\r")]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task MultilineSettingsRetainEveryWordAcrossHostRestart(string newline)
+    {
+        var words = string.Join(newline, "ähm", "sozusagen", "quasi");
+        using (var plugin = new FillerWordsPlugin())
+        {
+            await plugin.ActivateAsync(new VocabularyHostServices(_root));
+            await plugin.SaveTextSettingAsync("words", words, default);
+        }
+        using var restarted = new FillerWordsPlugin();
+        await restarted.ActivateAsync(new VocabularyHostServices(_root));
+        Assert.Equal(words, Assert.Single(restarted.TextSettings).Value);
+        Assert.Equal(3, restarted.Settings!.WordCount);
+        Assert.Equal("Das ist gut.", await restarted.ProcessAsync("Das ist ähm sozusagen quasi gut.", new(), default));
+    }
+
     [Fact]
     public async Task SavedTextSettingSurvivesRealHostRestartAndControlsProcessing()
     {

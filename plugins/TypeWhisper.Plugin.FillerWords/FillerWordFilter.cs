@@ -70,7 +70,7 @@ public static class FillerWordFilter
     /// </summary>
     public static IReadOnlyList<string> NormalizeWords(string text)
     {
-        var lines = text.Split('\n');
+        var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         var parts = new List<string>(lines.Length);
         foreach (var line in lines)
             parts.AddRange(line.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries));
