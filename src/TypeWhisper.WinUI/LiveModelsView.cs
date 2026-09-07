@@ -17,7 +17,8 @@ internal sealed class LiveModelsView : UserControl
     private readonly TextBlock _feedback = Copy("", 12, true);
     private readonly List<ModelRow> _rows = [];
     private string? _message;
-    private sealed record ModelRow(PluginModelInfo Model, Border Card, TextBlock Status, HandCursorButton Action, HandCursorButton Cancel, Border Progress, Border Fill);
+    private bool _confirmingRemoval;
+    private sealed record ModelRow(PluginModelInfo Model, Border Card, TextBlock Status, HandCursorButton Action, HandCursorButton Remove, HandCursorButton Cancel, Border Progress, Border Fill);
 
     internal LiveModelsView(LocalDictationSession session)
     {
@@ -70,11 +71,18 @@ internal sealed class LiveModelsView : UserControl
         {
             var state = states.Single(s => s.Model.Id == row.Model.Id);
             var downloading = models.DownloadingModelId == row.Model.Id;
-            var active = !_session.UsesGroq && models.ActiveModelId == row.Model.Id;
-            row.Status.Text = downloading ? $"Downloading · {models.Progress:P0}" : active ? "Active · ready for dictation" : state.Downloaded ? "Downloaded · ready to activate" : "Available to download";
+            var removing = models.RemovingModelId == row.Model.Id;
+            var active = !_session.UsesRegistryProvider && models.ActiveModelId == row.Model.Id;
+            row.Status.Text = removing ? "Removing downloaded files…" : downloading ? $"Downloading · {models.Progress:P0}" : active ? "Active · ready for dictation" : state.Downloaded ? "Downloaded · ready to activate" : "Available to download";
             row.Action.Content = downloading ? $"{models.Progress:P0}" : active ? "Active" : state.Downloaded ? "Use model" : "Download";
-            row.Action.IsEnabled = !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
-            row.Cancel.Visibility = row.Progress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
+            row.Action.IsEnabled = !_confirmingRemoval && !models.Busy && !active && (!state.Downloaded || _session.CanSelectModel);
+            row.Remove.Visibility = models.SupportsModelRemoval && state.Downloaded ? Visibility.Visible : Visibility.Collapsed;
+            row.Remove.IsEnabled = !_confirmingRemoval && !models.Busy && _session.CanChangeProvider && models.CanRemoveModel(row.Model.Id);
+            ToolTipService.SetToolTip(row.Remove, models.CanRemoveModel(row.Model.Id)
+                ? "Remove downloaded files for this model." : "Select a different model in this plugin before removing this one.");
+            row.Cancel.Visibility = downloading || removing ? Visibility.Visible : Visibility.Collapsed;
+            AutomationProperties.SetName(row.Cancel, "Cancel " + row.Model.DisplayName + (removing ? " removal" : " download"));
+            row.Progress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
             row.Fill.Width = row.Progress.ActualWidth * models.Progress;
             row.Card.BorderBrush = Brush(active ? "AccentBrush" : "HairlineBrush");
             AutomationProperties.SetName(row.Action, $"{row.Action.Content} {row.Model.DisplayName}");
@@ -132,8 +140,38 @@ internal sealed class LiveModelsView : UserControl
             if (IsLoaded) { Update(); action.Focus(FocusState.Programmatic); }
         };
         var cancel = Button("Cancel", "Cancel " + model.DisplayName + " download");
-        cancel.Click += (_, _) => _session.Models.CancelDownload();
-        actions.Children.Add(action); actions.Children.Add(cancel);
+        cancel.Click += async (_, _) =>
+        {
+            if (_session.Models.RemovingModelId == model.Id)
+            {
+                try { await _session.CancelRegistryModelDownloadAsync(); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { _message = "The model operation could not finish stopping. Wait before retrying."; }
+                if (IsLoaded) Update();
+            }
+            else _session.Models.CancelDownload();
+        };
+        var remove = Button("Remove model", "Remove " + model.DisplayName);
+        remove.Click += async (_, _) =>
+        {
+            if (_confirmingRemoval || !remove.IsEnabled) return;
+            var expectedGeneration = _session.Models.Generation;
+            _confirmingRemoval = true; Update();
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
+                    Title = "Remove " + model.DisplayName + "?",
+                    Content = "Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.",
+                    PrimaryButtonText = "Remove model", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary || !IsLoaded) return;
+                _message = await _session.RemoveLocalModelAsync(model.Id, expectedGeneration);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { _message = ex.Message; }
+            finally { _confirmingRemoval = false; if (IsLoaded) Update(); }
+        };
+        actions.Children.Add(action); actions.Children.Add(remove); actions.Children.Add(cancel);
         Grid.SetColumn(actions, 1); layout.Children.Add(actions);
         var card = new Border { Child = layout, Padding = new Thickness(16), CornerRadius = new CornerRadius(10),
             Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1) };
@@ -144,7 +182,7 @@ internal sealed class LiveModelsView : UserControl
             Grid.SetColumn(actions, narrow ? 0 : 1); Grid.SetRow(actions, narrow ? 1 : 0);
             actions.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(0);
         };
-        _rows.Add(new(model, card, status, action, cancel, progress, fill));
+        _rows.Add(new(model, card, status, action, remove, cancel, progress, fill));
         return card;
     }
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];

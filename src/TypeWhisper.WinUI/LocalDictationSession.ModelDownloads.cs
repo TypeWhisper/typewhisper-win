@@ -49,6 +49,60 @@ internal sealed partial class LocalDictationSession
 
     internal Task CancelRegistryModelDownloadAsync() => RegistryModelDownload.CancelAndDrainAsync();
 
+    internal async Task<string?> RemoveLocalModelAsync(string modelId, long expectedGeneration)
+    {
+        if (!CanChangeProvider || Models.Busy || RegistryModelDownload.State.IsClosing || !_gate.Wait(0))
+            return "Finish dictation and model operations before removing a model.";
+        try
+        {
+            SetStatus("Removing model…", DictationPhase.Configuring);
+            await RegistryModelDownload.RunRemovalAsync(async ct =>
+            {
+                await _livePreview.StopAsync();
+                ct.ThrowIfCancellationRequested();
+                await Models.RemoveAsync(modelId, expectedGeneration, ct);
+            });
+            return RegistryModelDownload.State.Succeeded ? null : Models.Error ?? RegistryModelDownload.State.Message;
+        }
+        finally
+        {
+            _gate.Release();
+            if (!_disposed) SetStatus(IsReady ? ActiveModelName + " ready" : "Choose a downloaded model in Dictation.", DictationPhase.Idle);
+        }
+    }
+
+    internal async Task<string?> RemoveRegistryModelAsync(PortableDownloadableModel model)
+    {
+        if (!Packages.Store.IsInstalled(model.PluginId)) return "This plugin is no longer installed.";
+        if (!CanChangeProvider || Models.Busy || RegistryModelDownload.State.IsClosing || !_gate.Wait(0))
+            return "Finish dictation and model operations before removing a model.";
+        ActiveRegistryModelDownload = model;
+        try
+        {
+            SetStatus("Removing " + model.DisplayName + "…", DictationPhase.Configuring);
+            await RegistryModelDownload.RunRemovalAsync(async ct =>
+            {
+                await _livePreview.StopAsync();
+                ct.ThrowIfCancellationRequested();
+                await PluginRuntime.RemoveModelAsync(model, ct);
+            });
+            if (_disposed) return "The application is shutting down.";
+            await PluginRuntime.RefreshCapabilitiesAsync();
+            return RegistryModelDownload.State.Succeeded ? null : RegistryModelDownload.State.Message;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return "The model operation could not finish. Refresh its status before trying again.";
+        }
+        finally
+        {
+            ActiveRegistryModelDownload = null;
+            _gate.Release();
+            if (!_disposed)
+                SetStatus(IsReady ? ActiveModelName + " ready" : "Choose and configure a transcription provider in Dictation.", DictationPhase.Idle);
+        }
+    }
+
     internal async Task<string?> UseRegistryModelAsync(PortableDownloadableModel model)
     {
         string? saveError = null;

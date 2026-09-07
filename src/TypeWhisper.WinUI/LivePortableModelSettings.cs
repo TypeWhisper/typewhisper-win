@@ -122,6 +122,7 @@ internal sealed class LivePortableModelSettings : UserControl
             var captured = row;
             row.Download.Click += async (_, _) => await DownloadAsync(captured);
             row.Use.Click += async (_, _) => await UseAsync(captured);
+            row.Remove.Click += async (_, _) => await RemoveAsync(captured);
             row.Cancel.Click += async (_, _) => await CancelAsync(captured);
         }
         row.Model = model;
@@ -129,6 +130,9 @@ internal sealed class LivePortableModelSettings : UserControl
         row.Requirements.Text = string.Join("\n", model.Requirements.Select(r =>
             $"{r.Title} · {(r.IsRequired ? "Required" : "Optional")} · {(r.IsSatisfied ? "Satisfied" : "Not satisfied")}\n{r.Description}"));
         row.Requirements.Visibility = model.Requirements.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        row.RemovalNote.Text = model.RemovalBlockedReason ?? "";
+        row.RemovalNote.Visibility = model.SupportsRemoval && model.Downloaded && model.RemovalBlockedReason is not null
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private bool Current(CancellationTokenSource lifetime) => IsLoaded && ReferenceEquals(_lifetime, lifetime) && !lifetime.IsCancellationRequested;
@@ -175,11 +179,37 @@ internal sealed class LivePortableModelSettings : UserControl
         try
         {
             await _session.CancelRegistryModelDownloadAsync();
-            if (Current(lifetime)) _status.Text = _session.RegistryModelDownload.State.Message ?? "Download stopped.";
+            if (Current(lifetime)) _status.Text = _session.RegistryModelDownload.State.Message ?? "Model operation stopped.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { if (Current(lifetime)) _status.Text = "The download could not finish stopping. Wait before retrying."; }
+        { if (Current(lifetime)) _status.Text = "The model operation could not finish stopping. Wait before retrying."; }
         finally { _canceling = false; if (IsLoaded) RequestRefresh(); }
+    }
+
+    private async Task RemoveAsync(Row row)
+    {
+        if (_working || _reading || _lifetime is not { } lifetime || !row.Remove.IsEnabled) return;
+        var expected = row.Model;
+        _working = true; UpdateButtons();
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                RequestedTheme = ActualTheme,
+                Title = "Remove " + expected.DisplayName + "?",
+                Content = "Downloaded files for this model will be removed. You will need to download it again before using it. The plugin and its settings will be kept.",
+                PrimaryButtonText = "Remove model",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || !Current(lifetime)) return;
+            var error = await _session.RemoveRegistryModelAsync(expected);
+            if (Current(lifetime)) _status.Text = error ?? "Model removed. Download it again to use it.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { if (Current(lifetime)) _status.Text = "The model could not be removed. Refresh its status before trying again."; }
+        finally { _working = false; if (IsLoaded) RequestRefresh(); }
     }
 
     private bool IsActive(PortableDownloadableModel model) => _session.ActiveRegistryModelDownload is { } active && SameOwner(active, model);
@@ -204,7 +234,12 @@ internal sealed class LivePortableModelSettings : UserControl
             row.Use.Content = selected ? "Active model" : "Use model";
             row.Use.IsEnabled = available && provider is not null && !selected &&
                 (model.SupportsDownload ? model.Downloaded : provider.Ready);
+            row.Remove.Visibility = model.SupportsRemoval && model.Downloaded ? Visibility.Visible : Visibility.Collapsed;
+            row.Remove.IsEnabled = available && provider is not null && !selected && model.RemovalBlockedReason is null;
+            ToolTipService.SetToolTip(row.Remove, model.RemovalBlockedReason ?? "Remove downloaded files for this model.");
+            AutomationProperties.SetHelpText(row.Remove, model.RemovalBlockedReason ?? "Remove downloaded files for this model.");
             row.Cancel.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+            row.Cancel.Content = state.IsRemoval ? "Cancel removal" : "Cancel download";
             row.Cancel.IsEnabled = !_canceling && active && state.IsBusy && !state.IsClosing;
             row.Progress.Visibility = active && state.IsBusy ? Visibility.Visible : Visibility.Collapsed;
             row.Progress.IsIndeterminate = state.Progress is null;
@@ -223,17 +258,21 @@ internal sealed class LivePortableModelSettings : UserControl
         internal readonly TextBlock Title = Label("");
         internal readonly TextBlock Requirements = Label("");
         internal readonly TextBlock State = Label("");
+        internal readonly TextBlock RemovalNote = Label("");
         internal readonly ProgressBar Progress = new() { Minimum = 0, Maximum = 100 };
         internal readonly HandCursorButton Download = Button("Download model");
         internal readonly HandCursorButton Use = Button("Use model");
-        internal readonly HandCursorButton Cancel = Button("Cancel download");
+        internal readonly HandCursorButton Remove = Button("Remove model");
+        internal readonly HandCursorButton Cancel = Button("Cancel operation");
         internal Row(PortableDownloadableModel model)
         {
             Model = model;
-            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Cancel);
-            Panel.Children.Add(Title); Panel.Children.Add(Requirements); Panel.Children.Add(State); Panel.Children.Add(Progress); Panel.Children.Add(actions);
-            AutomationProperties.SetName(Progress, model.DisplayName + " download progress");
+            var actions = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left };
+            Panel.SizeChanged += (_, e) => actions.Orientation = e.NewSize.Width < 440 ? Orientation.Vertical : Orientation.Horizontal;
+            actions.Children.Add(Download); actions.Children.Add(Use); actions.Children.Add(Remove); actions.Children.Add(Cancel);
+            Panel.Children.Add(Title); Panel.Children.Add(Requirements); Panel.Children.Add(State); Panel.Children.Add(RemovalNote); Panel.Children.Add(Progress); Panel.Children.Add(actions);
+            AutomationProperties.SetName(Progress, model.DisplayName + " model operation progress");
+            AutomationProperties.SetName(Remove, "Remove " + model.DisplayName);
         }
     }
     private static TextBlock Label(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12 };
