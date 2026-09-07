@@ -16,6 +16,7 @@ internal sealed class RecorderCaptureAdapter : IDisposable
     private float[]? _pendingMicrophone;
     private readonly System.Diagnostics.Stopwatch _timeline = new();
     private TimeSpan? _stopAt;
+    private string? _outputDeviceId;
     internal float Level => Math.Max(_micLevel, _systemLevel);
     internal string? Warning { get; private set; }
     internal RecorderCaptureAdapter(AudioRecordingService microphone, DispatcherQueue dispatcher)
@@ -29,7 +30,7 @@ internal sealed class RecorderCaptureAdapter : IDisposable
             return Task.CompletedTask;
         }, () =>
         {
-            _system.StartCapture(timelineOffset: _timeline.Elapsed);
+            _system.StartCapture(_outputDeviceId, timelineOffset: _timeline.Elapsed);
             if (!_system.IsRecording) throw new InvalidOperationException("System audio capture could not start.");
             return Task.CompletedTask;
         }, async () =>
@@ -50,8 +51,9 @@ internal sealed class RecorderCaptureAdapter : IDisposable
             { throw new RecorderCleanupException("System audio cleanup failed. Retry stopping before starting another recording.", ex); }
         });
     }
-    internal async Task StartAsync(bool microphone, bool system)
+    internal async Task StartAsync(bool microphone, bool system, string? outputDeviceId)
     {
+        _outputDeviceId = outputDeviceId;
         _generation++;
         Warning = null;
         _timeline.Restart();

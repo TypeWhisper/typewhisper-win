@@ -350,35 +350,33 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
     public IReadOnlyList<SystemAudioOutputDevice> GetAvailableDevices()
     {
         using var enumerator = new MMDeviceEnumerator();
-        var renderDevices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
-            .Select(device => new SystemAudioOutputDevice(device.ID, device.FriendlyName))
-            .ToList();
-        var captureMixDevices = enumerator
-            .EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
-            .Where(IsSystemAudioCaptureMix)
-            .Select(device => new SystemAudioOutputDevice(
-                CaptureDevicePrefix + device.ID,
-                device.FriendlyName))
-            .ToList();
-
-        return [.. renderDevices.Concat(captureMixDevices)];
+        var devices = new List<SystemAudioOutputDevice>();
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
+            using (device) devices.Add(new(device.ID, device.FriendlyName));
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
+            using (device)
+                if (IsSystemAudioCaptureMix(device)) devices.Add(new(CaptureDevicePrefix + device.ID, device.FriendlyName));
+        return devices;
     }
 
     public ISystemAudioLoopbackCapture Create(string? deviceId)
     {
-        if (string.IsNullOrWhiteSpace(deviceId))
-            return new WasapiCaptureAdapter(new WasapiLoopbackCapture());
-
-        using var enumerator = new MMDeviceEnumerator();
-        if (deviceId.StartsWith(CaptureDevicePrefix, StringComparison.OrdinalIgnoreCase))
+        MMDevice? selected = null;
+        try
         {
-            var captureDevice = enumerator.GetDevice(deviceId[CaptureDevicePrefix.Length..]);
-            return new WasapiCaptureAdapter(new WasapiCapture(captureDevice));
+            using var enumerator = new MMDeviceEnumerator();
+            var useDefault = string.IsNullOrWhiteSpace(deviceId);
+            var captureMix = !useDefault && deviceId!.StartsWith(CaptureDevicePrefix, StringComparison.OrdinalIgnoreCase);
+            selected = useDefault ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)
+                : enumerator.GetDevice(captureMix ? deviceId![CaptureDevicePrefix.Length..] : deviceId!);
+            if (selected.State != DeviceState.Active) throw new InvalidOperationException("The selected audio endpoint is not active.");
+            return new WasapiCaptureAdapter(captureMix ? new WasapiCapture(selected) : new WasapiLoopbackCapture(selected), selected);
         }
-
-        var renderDevice = enumerator.GetDevice(deviceId);
-        return new WasapiCaptureAdapter(new WasapiLoopbackCapture(renderDevice));
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            selected?.Dispose();
+            throw new InvalidOperationException("The selected system audio device is unavailable. Reconnect it or choose another device in Recorder settings. No fallback output was selected.", ex);
+        }
     }
 
     private static bool IsSystemAudioCaptureMix(MMDevice device)
@@ -394,11 +392,14 @@ internal sealed class WasapiLoopbackCaptureFactory : ISystemAudioLoopbackCapture
 
 internal sealed class WasapiCaptureAdapter : ISystemAudioLoopbackCapture
 {
-    private readonly WasapiCapture _capture;
+    private readonly IWaveIn _capture;
+    private IDisposable? _ownedDevice;
+    private bool _captureDisposed;
 
-    public WasapiCaptureAdapter(WasapiCapture capture)
+    public WasapiCaptureAdapter(IWaveIn capture, IDisposable? ownedDevice = null)
     {
         _capture = capture;
+        _ownedDevice = ownedDevice;
         _capture.DataAvailable += OnDataAvailable;
         _capture.RecordingStopped += OnRecordingStopped;
     }
@@ -408,15 +409,23 @@ internal sealed class WasapiCaptureAdapter : ISystemAudioLoopbackCapture
 
     public WaveFormat WaveFormat => _capture.WaveFormat;
 
-    public void StartRecording() => _capture.StartRecording();
+    public void StartRecording() { ObjectDisposedException.ThrowIf(_captureDisposed, this); _capture.StartRecording(); }
 
-    public void StopRecording() => _capture.StopRecording();
+    public void StopRecording() { if (!_captureDisposed) _capture.StopRecording(); }
 
     public void Dispose()
     {
         _capture.DataAvailable -= OnDataAvailable;
         _capture.RecordingStopped -= OnRecordingStopped;
-        _capture.Dispose();
+        if (!_captureDisposed)
+        {
+            _capture.Dispose();
+            _captureDisposed = true;
+        }
+        // NAudio releases its AudioClient but does not own the supplied MMDevice.
+        // Only release the endpoint after native capture has drained; retain it on a failed release.
+        _ownedDevice?.Dispose();
+        _ownedDevice = null;
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e) =>

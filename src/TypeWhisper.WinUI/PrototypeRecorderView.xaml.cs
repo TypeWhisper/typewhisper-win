@@ -17,6 +17,9 @@ public sealed partial class PrototypeRecorderView : UserControl
     private bool _automaticStop;
     private string _recordingTitle = "";
     private bool _recordingDeleted;
+    private RecorderPreferencesStore? _recorderPreferences;
+    private RecorderPreferences _preferencesAtStart = new();
+    private bool _updatingRecorderPreferences;
     internal string SessionTitle { get; set; } = "";
     internal event EventHandler? ExitRequested;
     internal event EventHandler? LauncherRequested;
@@ -47,8 +50,10 @@ public sealed partial class PrototypeRecorderView : UserControl
     internal void Connect(LocalDictationSession session)
     {
         if (_recorder is not null) return;
+        _recorderPreferences = session.RecorderPreferences;
+        _recorderPreferences.Changed += OnRecorderPreferencesChanged;
         _capture = session.CreateRecorderCapture();
-        _recorder = new(session.ReserveRecorder, _capture.StartAsync, _capture.StopAsync,
+        _recorder = new(session.ReserveRecorder, (microphone, system) => _capture.StartAsync(microphone, system, _preferencesAtStart.OutputDeviceId), _capture.StopAsync,
             samples => RecorderWavStore.SaveAsync(WinUIProfile.DataPath("recordings"), samples, _recordingTitle));
         _recorder.Changed += Refresh;
         Refresh();
@@ -65,6 +70,7 @@ public sealed partial class PrototypeRecorderView : UserControl
         if (_recorder is null) return;
         await _recorder.ShutdownAsync();
         await ShutdownLibraryAsync();
+        if (_recorderPreferences is not null) _recorderPreferences.Changed -= OnRecorderPreferencesChanged;
         _timer.Stop(); _capture?.Dispose();
     }
     private void Refresh()
@@ -73,6 +79,13 @@ public sealed partial class PrototypeRecorderView : UserControl
         var state = _recorder?.State ?? RecorderState.Ready;
         var busy = _recorder?.Busy == true;
         var active = state == RecorderState.Recording;
+        if (!busy && !active && state != RecorderState.SaveFailed && _recorderPreferences is not null)
+        {
+            _updatingRecorderPreferences = true;
+            MicrophoneSource.IsChecked = _recorderPreferences.Current.MicrophoneEnabled;
+            SystemSource.IsChecked = _recorderPreferences.Current.SystemAudioEnabled;
+            _updatingRecorderPreferences = false;
+        }
         var saved = state == RecorderState.Saved && _recorder?.Error is null;
         if (saved && _librarySavedPath != _recorder?.FilePath)
         {
@@ -85,7 +98,9 @@ public sealed partial class PrototypeRecorderView : UserControl
             RecorderState.SaveFailed => "Could not save. Audio is retained for retry.", RecorderState.Saved => "Recording saved", _ => "Ready to record"
         });
         RecorderDuration.Text = (active ? _elapsed.Elapsed : _recorder?.Duration ?? TimeSpan.Zero).ToString(@"hh\:mm\:ss");
-        SessionHint.Text = _capture?.Warning ?? "WAV · default system output · maximum 60 minutes, then automatic stop and save. Pause and source changes during recording are unavailable.";
+        var selectedPreferences = active || busy || state == RecorderState.SaveFailed ? _preferencesAtStart : _recorderPreferences?.Current;
+        var outputHint = selectedPreferences?.OutputDeviceId is null ? "default system output" : "selected system output (Recorder settings)";
+        SessionHint.Text = _recorderPreferences?.Error ?? _capture?.Warning ?? $"WAV · {outputHint} · maximum 60 minutes, then automatic stop and save. Pause and source changes during recording are unavailable.";
         MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneState.Text = MicrophoneSource.IsChecked == true ? "On" : "Off";
         SystemState.Text = SystemSource.IsChecked == true ? "On" : "Off";
@@ -115,7 +130,8 @@ public sealed partial class PrototypeRecorderView : UserControl
             {
                 _recordingTitle = RecorderWavStore.NormalizeTitle(SessionTitle);
                 _recordingDeleted = false;
-                await _recorder.StartAsync(MicrophoneSource.IsChecked == true, SystemSource.IsChecked == true);
+                _preferencesAtStart = _recorderPreferences?.Current ?? new RecorderPreferences();
+                await _recorder.StartAsync(_preferencesAtStart.MicrophoneEnabled, _preferencesAtStart.SystemAudioEnabled);
                 _elapsed.Restart(); _automaticStop = false; _timer.Start();
             }
         }
@@ -130,7 +146,19 @@ public sealed partial class PrototypeRecorderView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder saving failed: {0}", ex); }
         Refresh();
     }
-    private void Source_Changed(object sender, RoutedEventArgs e) => Refresh();
+    private void Source_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_updatingRecorderPreferences) return;
+        if (_initialized && _recorderPreferences is not null && _recorder?.Busy != true && _recorder?.State is not (RecorderState.Recording or RecorderState.SaveFailed))
+            _recorderPreferences.Save(_recorderPreferences.Current with
+            { MicrophoneEnabled = MicrophoneSource.IsChecked == true, SystemAudioEnabled = SystemSource.IsChecked == true });
+        Refresh();
+    }
+    private void OnRecorderPreferencesChanged()
+    {
+        if (DispatcherQueue.HasThreadAccess) Refresh();
+        else DispatcherQueue.TryEnqueue(Refresh);
+    }
     private void ViewHistory_Click(object sender, RoutedEventArgs e)
     { if (_recorder?.FilePath is { } path) RequestTranscribe(path); }
     private void OpenFolder_Click(object sender, RoutedEventArgs e)

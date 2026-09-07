@@ -312,6 +312,8 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "Dictation, recording and text processing choices are saved";
             if (category == "Audio" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
+            if (category == "Recorder" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Recorder source choices are saved · changes apply to the next recording";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

@@ -6,6 +6,51 @@ namespace TypeWhisper.PluginSystem.Tests;
 public sealed class SystemAudioCleanupTests
 {
     [Fact]
+    public void AdapterRetainsEndpointUntilNativeCaptureReleaseSucceeds()
+    {
+        var native = new WaveCapture { FailDispose = true };
+        var endpoint = new Endpoint();
+        var adapter = new WasapiCaptureAdapter(native, endpoint);
+        Assert.Throws<InvalidOperationException>(adapter.Dispose);
+        Assert.Equal(0, endpoint.Disposals);
+        native.FailDispose = false;
+        adapter.Dispose();
+        Assert.Equal(2, native.Disposals);
+        Assert.Equal(1, endpoint.Disposals);
+        adapter.Dispose();
+        Assert.Equal(1, endpoint.Disposals);
+    }
+
+    [Fact]
+    public void AdapterRetriesEndpointFailureWithoutReleasingCaptureTwice()
+    {
+        var native = new WaveCapture();
+        var endpoint = new Endpoint { FailDispose = true };
+        var adapter = new WasapiCaptureAdapter(native, endpoint);
+        Assert.Throws<InvalidOperationException>(adapter.Dispose);
+        Assert.Equal(1, native.Disposals);
+        endpoint.FailDispose = false;
+        adapter.StopRecording();
+        adapter.Dispose();
+        Assert.Equal(1, native.Disposals);
+        Assert.Equal(2, endpoint.Disposals);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("capture:")]
+    public void MissingExplicitEndpointNeverFallsBackToDefaultOutput(string prefix)
+    {
+        var factory = new WasapiLoopbackCaptureFactory();
+        var error = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var capture = factory.Create(prefix + "typewhisper-missing-endpoint-" + Guid.NewGuid());
+        });
+        Assert.Contains("selected system audio device is unavailable", error.Message);
+        Assert.Contains("No fallback output was selected", error.Message);
+    }
+
+    [Fact]
     public void LoopbackPreservesInitialSilenceGapsTailAndMixerPosition()
     {
         var now = TimeSpan.Zero;
@@ -95,6 +140,23 @@ public sealed class SystemAudioCleanupTests
     {
         public IReadOnlyList<SystemAudioOutputDevice> GetAvailableDevices() => [];
         public ISystemAudioLoopbackCapture Create(string? deviceId) => capture;
+    }
+    private sealed class WaveCapture : IWaveIn
+    {
+        public bool FailDispose;
+        public int Disposals;
+        public WaveFormat WaveFormat { get; set; } = new(16000, 16, 1);
+        public event EventHandler<WaveInEventArgs>? DataAvailable { add { } remove { } }
+        public event EventHandler<StoppedEventArgs>? RecordingStopped { add { } remove { } }
+        public void StartRecording() { }
+        public void StopRecording() { }
+        public void Dispose() { Disposals++; if (FailDispose) throw new InvalidOperationException("native release failed"); }
+    }
+    private sealed class Endpoint : IDisposable
+    {
+        public bool FailDispose;
+        public int Disposals;
+        public void Dispose() { Disposals++; if (FailDispose) throw new InvalidOperationException("endpoint release failed"); }
     }
     private sealed class Capture : ISystemAudioLoopbackCapture
     {
