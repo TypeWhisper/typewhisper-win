@@ -185,6 +185,7 @@ public sealed partial class MainWindow : Window
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _dictation.ReviewRequested += ShowOutputReview;
+        historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () => { if (_historyOpen) await HistoryView.RefreshAsync(); });
         PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();

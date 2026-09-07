@@ -67,6 +67,20 @@ internal sealed class LocalDictationSession : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { return AudioPreferencesError = "Could not save audio preferences: " + ex.Message; }
     }
+    internal HistoryRetentionController HistoryRetention { get; }
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _retentionTimer;
+    private bool _applyingRetention;
+    private async Task ApplyHistoryRetentionAsync()
+    {
+        if (_disposed || _applyingRetention) return;
+        _applyingRetention = true;
+        try
+        {
+            var error = await Task.Run(HistoryRetention.ApplyAsync);
+            if (!_disposed && error is not null && _phase == DictationPhase.Idle) SetStatus(error, DictationPhase.Idle);
+        }
+        finally { _applyingRetention = false; }
+    }
     private readonly IHistoryService _history;
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -272,9 +286,15 @@ internal sealed class LocalDictationSession : IDisposable
             throw new NotSupportedException("This cloud plugin does not provide transcription and API key settings.");
         });
         _history = history;
+        HistoryRetention = new(history, new HistoryRetentionPreferencesStore(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "TypeWhisper-WinUI-DevUserData", "history-retention.json")));
         _inserter = new(owner);
         _effects = new(_ducking, new MediaPauseService());
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _retentionTimer = dispatcher.CreateTimer();
+        _retentionTimer.Interval = TimeSpan.FromMinutes(1);
+        _retentionTimer.Tick += async (_, _) => await ApplyHistoryRetentionAsync();
         _silenceTimer = dispatcher.CreateTimer();
         _silenceTimer.Interval = TimeSpan.FromMilliseconds(100);
         _silenceTimer.Tick += async (_, _) =>
@@ -303,6 +323,8 @@ internal sealed class LocalDictationSession : IDisposable
 
     internal async Task InitializeAsync()
     {
+        await ApplyHistoryRetentionAsync();
+        _retentionTimer.Start();
         await _gate.WaitAsync();
         try
         {
@@ -527,6 +549,7 @@ internal sealed class LocalDictationSession : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _retentionTimer.Stop();
         _ = CtcVocabulary.DisposeAsync();
         _ = Groq.DisposeAsync();
         _livePreview.Dispose();

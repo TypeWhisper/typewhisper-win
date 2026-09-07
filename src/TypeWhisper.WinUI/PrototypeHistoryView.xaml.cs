@@ -23,7 +23,8 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     internal async Task RefreshAsync()
     {
-        if (_reader is null || _loading) return;
+        if (_reader is null || _loading || _acting) return;
+        var openedId = IsReading ? _opened?.Entry.RecordId : null;
         _loading = true;
         _loadError = null;
         ApplyFilters();
@@ -38,7 +39,15 @@ public sealed partial class PrototypeHistoryView : UserControl
             System.Diagnostics.Debug.WriteLine(ex);
             _store = new PrototypeHistoryStore([]);
         }
-        finally { _loading = false; ApplyFilters(); }
+        finally
+        {
+            _loading = false; ApplyFilters();
+            if (openedId is { } id && FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == id) is { } opened)
+            {
+                Entries.SelectedItem = opened;
+                OpenSelected();
+            }
+        }
     }
     private string _query = string.Empty;
     private PrototypeHistoryEntryKind? _kind;
