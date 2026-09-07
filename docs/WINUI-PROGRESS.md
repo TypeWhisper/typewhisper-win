@@ -1,5 +1,13 @@
 # Windows 1.1 progress
 
+## Verified CI for `a28986cd`, 2026-09-07
+
+[Headless run 34158614534](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34158614534) and [CodeQL run 34158615082](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34158615082) both completed successfully. Both runs report exact head SHA `a28986cd28b1c9d22ba889c5e853dd463b6c049b`; all three CodeQL language jobs passed.
+
+Downloaded TRX artifacts (`artifacts/ci-a28986cd/`) establish **1,632 passed and one skipped on Windows**, and **1,623 passed and five skipped on Ubuntu**. Counts were read from individual test results, including `NotExecuted` results, because the TRX summary's `notExecuted` counter is zero despite platform skips. Presentation passed 743 cases on both systems. Ubuntu omits five Windows-only Host cases and skips five Windows CUDA cases; Windows skips the unsupported-CUDA-platform case. These are platform-specific complete CI suite results, not local native acceptance.
+
+History footer/keyboard behavior, the revised History guard, Groq live-window gating, local preference restoration and shutdown still await Marco's manual checks. This CI evidence belongs to the exact SHA above; subsequent documentation-only commits are not represented as separately validated code.
+
 ## Manual-test fixes through `2864ed3c`, 2026-09-07
 
 - `2864ed3c`: History list/detail actions occupy a fixed footer. Enter opens/copies; E edits, X exports and Delete opens confirmation. Audio and selection actions also expose keyboard shortcuts. Text inputs, modifiers, dialogs and flyouts retain their keyboard behavior; a tab-focused button keeps normal Enter invocation. Native visual and keyboard acceptance is pending.
