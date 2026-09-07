@@ -137,6 +137,12 @@ Native checks in the named profile saved text size 14 and result duration Immedi
 
 Ordered language hints use the new explicit SDK capability; an explicit language takes precedence. Audited Gemini/Meta/Soniox source implementations advertise it but are not yet portable WinUI packages. NVIDIA/Groq correctly keep the controls unavailable. Overlay text size and successful-paste duration persist; zero hides immediately, while errors remain visible for five seconds.
 
-Ubuntu CI at `09bc34b6` exposed two workflow tests relying on Windows file-share locks. Commit `eadf18b` replaces their failure injection and checks unchanged snapshots/bytes. The focused Presentation suite passed locally; fresh Ubuntu CI acceptance remains to be checked.
+Ubuntu CI at `09bc34b6` exposed two workflow tests relying on Windows file-share locks. Commit `eadf18b` replaces their failure injection and checks unchanged snapshots/bytes. The focused Presentation suite passed locally; Ubuntu then passed at `1c253f13`. The same run exposed a Windows-only Groq test teardown lifetime issue, corrected by `be1e0498` with an explicit collectible-context release assertion.
 
 File requests are limited to 20 queued files and 60 minutes per file. They use the selected provider and real SDK segments, optionally save file-source History and never auto-paste. Queue persistence, watch folders and file-specific CTC/dictionary/snippet stages remain open.
+
+## 2026-09-07: cancellation and application shutdown
+
+The complete local headless run for `beee306` passed **569 tests** (Host 147, Presentation 365, Groq 32, NVIDIA 25) with one NVIDIA platform skip. The prescribed Debug build/launch passed. New coverage exercises cancellation before output, linked file requests, repeated/reentrant shutdown, late native completion and permanent queue closure. Application shutdown cancels all owners and awaits initialization, active processing and file/hotkey drains before releasing audio, insertion and plugin resources. The tray exposes Cancel processing independently from capture state. Durable recovery is not part of this slice.
+
+Commit `be1e0498` fixes Groq package test teardown by ending the package-owning stack frame and asserting actual collectible load-context release before directory deletion. All 17 focused cloud tests passed. Fresh Windows CI remains pending; no cleanup exception is suppressed.

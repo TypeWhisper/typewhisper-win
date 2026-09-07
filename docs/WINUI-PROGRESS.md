@@ -69,3 +69,9 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - Explicit SDK language-hint capability replaces implicit first-language fallback. Connected NVIDIA/Groq providers do not advertise it.
 - Overlay text size and successful-output duration persist, including immediate dismissal at zero; unavailable online batch preview is hidden.
 - Latest complete local run: 560 passed, one platform skip; prescribed Debug build/launch passed. Native file selection/removal/readiness and overlay preference persistence were checked in an isolated profile. Ubuntu workflow fault injection was corrected after CI exposed Windows-only lock assumptions.
+
+## 2026-09-07: final cancellation and awaited shutdown
+
+- Tray cancellation reaches final processing immediately; linked tokens guard provider, CTC, formatting and output stages. Native work is drained before disposal.
+- Exit waits for initialization, active session work, file queue and shortcut coordination. Shutdown permanently rejects new queue jobs and reports cleanup failures. Durable recovery remains open.
+- Complete local validation: 569 passed, one platform skip; prescribed Debug build/launch passed. Groq package unload now has an explicit collection assertion after Windows CI exposed a test-lifetime issue; its 17 focused tests passed.
