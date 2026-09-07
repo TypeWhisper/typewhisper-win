@@ -13,6 +13,7 @@ namespace TypeWhisper.WinUI;
 public sealed partial class PrototypeSettingsWindow : Window
 {
     private PrototypeOverlayPreferences _preferences;
+    internal Func<Action<bool>, PrototypeSetupWizard>? CreateSetupWizard { get; set; }
     internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
     internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
@@ -347,10 +348,11 @@ public sealed partial class PrototypeSettingsWindow : Window
 
     internal void ShowSetup()
     {
+        if (CreateSetupWizard is null) return;
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
         SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Collapsed;
-        SetupHost.Child = new PrototypeSetupWizard(_values, ExitSetup, CommitDictationHotkeys);
+        SetupHost.Child = CreateSetupWizard(ExitSetup);
         SetupHost.Visibility = Visibility.Visible;
     }
 

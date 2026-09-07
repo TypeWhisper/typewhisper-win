@@ -970,6 +970,9 @@ public sealed partial class MainWindow : Window
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
+            _settingsWindow.CreateSetupWizard = exit => new PrototypeSetupWizard(_settingsValues, exit,
+                value => _closing || _profileRestoreClosing ? "The app is shutting down." : ChangeDictationHotkeys(value),
+                _dictation, OpenProviderSettings);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
             var startup = WindowsStartupRegistration.Create();
             _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
