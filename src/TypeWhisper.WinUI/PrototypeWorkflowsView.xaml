@@ -48,11 +48,11 @@
         <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="16">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="WorkflowPageTitle" Text="Workflows" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="WorkflowSummary" Grid.Column="1" Text="4 examples · no AI calls" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+            <TextBlock x:Name="WorkflowSummary" Grid.Column="1" Text="Manual workflows" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
         <Grid x:Name="WorkflowListPage" Grid.Row="1">
             <local:HandCursorListView x:Name="WorkflowList" ItemsSource="{x:Bind FilteredWorkflows}" ItemContainerStyle="{StaticResource PrototypeCommandItemStyle}"
-                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Workflow_Click" TabNavigation="Once" AutomationProperties.Name="Workflow examples">
+                SelectionMode="Single" IsItemClickEnabled="True" ItemClick="Workflow_Click" TabNavigation="Once" AutomationProperties.Name="Saved workflows">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:PrototypeWorkflow">
                         <Grid Padding="12,14" ColumnSpacing="12" AutomationProperties.Name="{x:Bind Title}">
@@ -68,7 +68,7 @@
             </local:HandCursorListView>
             <StackPanel x:Name="WorkflowEmptyState" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
-                <TextBlock Text="No matching workflows" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="No manual workflows found" FontSize="18" FontWeight="SemiBold" />
                 <local:HandCursorButton Content="Clear search" Click="ClearSearch_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}"
                     HorizontalAlignment="Center" AutomationProperties.Name="Clear workflow search" />
             </StackPanel>
@@ -77,12 +77,10 @@
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <StackPanel Spacing="6">
                 <TextBlock x:Name="WorkflowInstruction" FontSize="13" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
-                <TextBlock x:Name="WorkflowExecutionSummary" Text="No provider connected · nothing leaves this prototype" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="WorkflowExecutionSummary" Text="Choose a provider and model in Edit workflow." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
             <Grid Grid.Row="1">
                 <TextBlock Text="SOURCE TEXT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
-                <local:HandCursorButton x:Name="UseExampleButton" Content="Use example text" Click="Example_Click" HorizontalAlignment="Right"
-                    Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Use workflow example text" />
             </Grid>
             <Grid Grid.Row="2" MinHeight="65">
                 <TextBox x:Name="WorkflowSource" Style="{StaticResource WorkflowEditorStyle}" TextChanged="Source_Changed"
@@ -90,14 +88,14 @@
                 <TextBlock x:Name="SourceWatermark" Text="Paste or type your text…" Margin="15,13,15,0" VerticalAlignment="Top"
                     FontSize="14" Foreground="{ThemeResource MutedBrush}" IsHitTestVisible="False" Visibility="Collapsed" />
             </Grid>
-            <TextBlock x:Name="WorkflowInputHint" Grid.Row="3" Text="Preview uses a fixed example result, not your edited text." FontSize="11"
+            <TextBlock x:Name="WorkflowInputHint" Grid.Row="3" Text="Paste or type the text to process." FontSize="11"
                 Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
         </Grid>
         <Grid x:Name="WorkflowResultPage" Grid.Row="1" Margin="12,0,12,0" Visibility="Collapsed" RowSpacing="14">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <StackPanel Spacing="7">
-                <TextBlock Text="EXAMPLE RESULT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
-                <TextBlock Text="Fixed sample output · not generated from your input" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="RESULT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
+                <TextBlock Text="Generated by the selected provider. Review before using." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <Border Height="1" Margin="0,5,0,0" Background="{ThemeResource HairlineBrush}" />
             </StackPanel>
             <ScrollViewer x:Name="WorkflowResultScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -108,6 +106,8 @@
             <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <ScrollViewer x:Name="ConfigurationScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="ConfigurationFields" Spacing="10" Margin="0,0,16,8">
+                    <ToggleSwitch x:Name="ConfigEnabled" Header="Enable workflow" OnContent="Enabled" OffContent="Disabled"
+                        Toggled="ConfigEnabled_Toggled" AutomationProperties.Name="Enable workflow" />
                     <StackPanel Spacing="7">
                         <TextBlock Text="NAME" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                         <TextBox x:Name="ConfigName" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
@@ -133,8 +133,11 @@
                             <local:PrototypeChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="Demo configuration only. Providers are examples; output destinations are not executed." FontSize="11"
+                    <TextBlock Text="Workflows run only when you choose Run. Cloud providers receive your source text and instructions." FontSize="11"
                         Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                    <local:HandCursorButton x:Name="DeleteWorkflowButton" Content="Delete workflow" Click="DeleteWorkflow_Click"
+                        HorizontalAlignment="Left" Style="{StaticResource PrototypeDestructiveConfirmButtonStyle}"
+                        AutomationProperties.Name="Delete workflow" />
                 </StackPanel>
             </ScrollViewer>
             <TextBlock x:Name="ConfigurationValidation" Grid.Row="1" FontSize="11" TextWrapping="Wrap"
@@ -166,7 +169,7 @@
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit selected workflow" />
                 <local:HandCursorButton x:Name="NewWorkflowButton" Content="+  New workflow" Click="NewWorkflow_Click"
                     Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Create new workflow" />
-                <local:HandCursorButton x:Name="WorkflowPrimaryButton" Content="Preview example" Click="Primary_Click" Visibility="Collapsed"
+                <local:HandCursorButton x:Name="WorkflowPrimaryButton" Content="Run workflow" Click="Primary_Click" Visibility="Collapsed"
                     Style="{StaticResource PrototypePrimaryButtonStyle}" VerticalAlignment="Center" AutomationProperties.Name="Workflow primary action" />
                 </StackPanel>
             </Grid>
