@@ -55,6 +55,8 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
     internal void Stop() { _queue.Cancel(); }
+    internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
+        string.Equals(job.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
     internal Task CancelAndDrainAsync() => _queue.CancelAndDrainAsync();
     internal Task ShutdownAsync() => _queue.ShutdownAsync();
     internal void GoBack()
@@ -113,7 +115,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     {
         if (_session is null || !_session.CanTranscribeFile || _queue.Running) return;
         _notice.Text = "Transcribing with the model selected in Dictation…";
-        try { await _queue.RunAsync(_session.TranscribeFileAsync); }
+        try { await _queue.RunAsync(_session.TranscribeFileAsync, _session.AcceptFileResult); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
         _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
         Render();
@@ -150,6 +152,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         {
             formats.Add(new("srt", "Subtitles · SRT", "Provider timestamps"));
             formats.Add(new("vtt", "Subtitles · WebVTT", "Provider timestamps"));
+            _body.Children.Add(Text("TXT includes dictionary corrections and snippet expansion. SRT and WebVTT preserve the provider’s original segment text and timing.", 12, true));
         }
         else { _format = "txt"; _body.Children.Add(Text("Subtitle export is unavailable because this provider did not return usable timing.", 12, true)); }
         _formatPicker.SetOptions(formats, _format);

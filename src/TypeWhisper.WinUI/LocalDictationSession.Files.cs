@@ -35,6 +35,10 @@ internal sealed partial class LocalDictationSession
             var task = TranscriptionTaskPreferences.Current;
             var textPreferences = TextPreferences.Current;
             var outputPreferences = OutputPreferences.Current;
+            var ctcReady = CtcVocabulary.Enabled;
+            var boostVocabulary = DictionaryBoostingPreferences.Load();
+            var lexicon = await Task.Run(() => DictationLexiconSnapshot.Load(
+                DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath), ct);
             var translate = task == TranscriptionTask.Translate;
             if (translate && !SupportsTranslation)
                 throw new NotSupportedException("This model cannot translate audio to English. Choose Transcribe or a translation-capable model.");
@@ -60,29 +64,45 @@ internal sealed partial class LocalDictationSession
                 textPreferences.TranscribeShortQuietClipsAggressively) || string.IsNullOrWhiteSpace(decoded.Text))
                 throw new InvalidOperationException("No speech was recognized in this file.");
             Report("Formatting transcript…");
-            var processed = await DictationTextPipeline.ProcessAsync(decoded.Text, textPreferences, language,
-                detectedLanguage: DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language),
-                ct: ct, task: task, engineId: engineId, modelId: modelId);
+            var refinedText = decoded.Text;
+            var useCtc = DictationLexiconSnapshot.CanRefineWithCtc(task, registryProvider, modelId,
+                ctcReady && CtcVocabulary.Enabled, decoded.TokenTimings.Count);
+            var ctcWarnings = new List<string>();
+            if (useCtc && lexicon.Dictionary is { EnabledCtcEntries.Count: > 0 } dictionary)
+            {
+                Report("Checking vocabulary with CTC…");
+                var refined = await CtcVocabulary.RefineAsync(Guid.NewGuid(), decoded.Text, samples,
+                    decoded.TokenTimings, dictionary.EnabledCtcEntries, ct);
+                refinedText = refined.Text;
+                if (refined.Error is not null) ctcWarnings.Add("Acoustic vocabulary checking was unavailable. The decoded transcript was retained.");
+            }
+            var processed = await lexicon.ProcessAsync(refinedText, textPreferences, language,
+                DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language), boostVocabulary && !useCtc,
+                ReadSnippetClipboardAsync, ct, task, null, engineId, modelId);
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             var warnings = processed.Warnings.ToList();
+            if (string.IsNullOrWhiteSpace(processed.Text))
+                throw new InvalidOperationException("Text processing produced an empty transcript.");
+            warnings.AddRange(ctcWarnings);
             var duration = samples.Length / 16000.0;
+            TranscriptionRecord? pendingHistory = null;
             if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory)
             {
-                Report("Saving to History…");
+                Report("Preparing History…");
                 try
                 {
                     await _history.EnsureLoadedAsync();
                     ct.ThrowIfCancellationRequested();
                     ObjectDisposedException.ThrowIf(_disposed, this);
-                    if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory && !_history.TryAddRecord(new()
+                    if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory) pendingHistory = new()
                     {
                         Id = Guid.NewGuid().ToString(), Timestamp = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                         SourceKind = "file", RawText = decoded.Text, FinalText = processed.Text, DurationSeconds = duration,
                         EngineUsed = engineId, ModelUsed = modelId,
                         TranscriptionTaskUsed = translate ? "translate" : "transcribe",
                         Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language)
-                    })) warnings.Add("History could not be saved. Your transcript remains available here for export.");
+                    };
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (ObjectDisposedException) when (_disposed) { throw; }
@@ -92,7 +112,11 @@ internal sealed partial class LocalDictationSession
             return new(processed.Text, engineId, modelId ?? modelName, duration,
                 decoded.Segments.Select(segment => new TranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray(),
                 warnings.Count == 0 ? null : string.Join(" · ", warnings))
-            { DisplayName = registryProvider ? modelName : "NVIDIA · " + modelName };
+            {
+                DisplayName = registryProvider ? modelName : "NVIDIA · " + modelName,
+                AppliedSnippetIds = processed.AppliedSnippetIds,
+                PendingHistory = pendingHistory
+            };
         }
         finally
         {
@@ -100,5 +124,16 @@ internal sealed partial class LocalDictationSession
             _gate.Release();
             Changed?.Invoke();
         }
+    }
+
+    internal string? AcceptFileResult(FileTranscriptionOutput result) => FileTranscriptionAcceptance.Commit(
+        result, _history, OutputPreferences.Current,
+        ids => DictationLexiconSnapshot.RecordUsage(DictationSnippetSnapshot.StoragePath, ids));
+
+    private static async Task<string> ReadSnippetClipboardAsync(CancellationToken ct)
+    {
+        var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+        return clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
+            ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
     }
 }

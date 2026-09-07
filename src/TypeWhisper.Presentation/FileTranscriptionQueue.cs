@@ -24,6 +24,10 @@ public sealed record FileTranscriptionOutput(string Text, string Provider, strin
 {
     /// <summary>Provider/model label captured when processing began, independent of later selection changes.</summary>
     public string? DisplayName { get; init; }
+    /// <summary>Snippet IDs actually expanded, pending usage recording when the queue accepts this result.</summary>
+    public IReadOnlyList<string> AppliedSnippetIds { get; init; } = [];
+    /// <summary>Immutable history data prepared only when saving was allowed at request start. No write occurs until acceptance.</summary>
+    public TranscriptionRecord? PendingHistory { get; init; }
 }
 
 /// <summary>One file selected by the user; the queue never deletes source media.</summary>
@@ -80,18 +84,22 @@ public sealed class FileTranscriptionQueue
     }
 
     /// <summary>Processes queued files serially, preserving completed results on failure or cancellation.</summary>
-    public Task RunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process)
+    /// <param name="process">Decodes and formats one file without writing history or snippet usage.</param>
+    /// <param name="onAccepted">Optional synchronous persistence commit, called once per accepted result. Its returned warning is shown with the result; failures never discard accepted text.</param>
+    public Task RunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process,
+        Func<FileTranscriptionOutput, string?>? onAccepted = null)
     {
         if (_shutdown || Running || !_jobs.Any(j => j.Status == FileTranscriptionStatus.Queued)) return Task.CompletedTask;
         var cancellation = new CancellationTokenSource();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _runCompletion = completion.Task;
         _run = cancellation;
-        _ = ExecuteRunAsync(process, cancellation, completion);
+        _ = ExecuteRunAsync(process, onAccepted, cancellation, completion);
         return completion.Task;
     }
 
     private async Task ExecuteRunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process,
+        Func<FileTranscriptionOutput, string?>? onAccepted,
         CancellationTokenSource cancellation, TaskCompletionSource completion)
     {
         Exception? failure = null;
@@ -112,6 +120,14 @@ public sealed class FileTranscriptionQueue
                     cancellation.Token.ThrowIfCancellationRequested();
                     if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException("No speech was recognized.");
                     job.Result = result; job.Status = FileTranscriptionStatus.Ready; job.Stage = "Ready";
+                    // Acceptance is final before committing usage. No await or UI notification
+                    // separates this check from the commit on the owning thread.
+                    string? warning = null;
+                    try { warning = onAccepted?.Invoke(result); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    { warning = "Result usage could not be saved. Your transcript is unchanged."; }
+                    if (warning is not null) job.Result = result with
+                    { Warning = result.Warning is null ? warning : result.Warning + " · " + warning };
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }

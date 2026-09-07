@@ -626,41 +626,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             else CtcVocabulary.Trace($"{recordingId} host-skipped enabledAtStart={_ctcAtStart} enabledNow={CtcVocabulary.Enabled} dictionaryLoaded={dictionary is not null}");
             var boostVocabulary = _boostVocabulary && !_ctcAtStart;
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
-            var notices = new List<string>();
-            if (dictionary?.Error is { } dictionaryError) notices.Add(dictionaryError);
-            string[] appliedSnippetIds = [];
-            var processed = await DictationTextPipeline.ProcessAsync(refinedText, _textAtStart, Language,
-                detectedLanguage: DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
-                expandSnippets: snippets is null ? null : async (input, ct) =>
-                {
-                    string? clipboardText = null;
-                    if (await Task.Run(() => snippets.NeedsClipboard(input), ct))
-                    {
-                        try
-                        {
-                            var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-                            clipboardText = clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
-                                ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
-                        }
-                        catch (OperationCanceledException) { throw; }
-                        catch (Exception ex) when (ex is not OutOfMemoryException)
-                        { System.Diagnostics.Debug.WriteLine("Snippet clipboard text unavailable: " + ex.Message); }
-                    }
-                    var expansion = await Task.Run(() => snippets.ApplyWithUsage(input, clipboardText is null ? null : () => clipboardText), ct);
-                    if (expansion.Error is { } error) notices.Add(error);
-                    appliedSnippetIds = expansion.AppliedIds;
-                    return expansion.Text;
-                },
-                boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
-                correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
-                ct: _operationCancellation.Token, task: _taskAtStart, targetProcessName: _targetApp, engineId: _engineAtStart, modelId: _modelAtStart);
-            notices.AddRange(processed.Warnings);
+            var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, Language,
+                DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language), boostVocabulary,
+                ReadSnippetClipboardAsync, _operationCancellation.Token, _taskAtStart, _targetApp, _engineAtStart, _modelAtStart);
+            var notices = processed.Warnings.ToList();
             var text = processed.Text;
             _operationCancellation.Token.ThrowIfCancellationRequested();
             if (_disposed) return;
-            try { TypeWhisper.Core.Services.SnippetUsageRecorder.Record(DictationSnippetSnapshot.StoragePath, appliedSnippetIds); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OverflowException)
-            { notices.Add("Snippet usage could not be saved. Your transcript is unchanged."); }
+            if (DictationLexiconSnapshot.RecordUsage(DictationSnippetSnapshot.StoragePath, processed.AppliedSnippetIds) is { } usageError)
+                notices.Add(usageError);
             var snippetError = notices.Count == 0 ? null : string.Join(" · ", notices);
             var record = new TranscriptionRecord
             {
