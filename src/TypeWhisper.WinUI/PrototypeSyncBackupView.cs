@@ -126,7 +126,7 @@ internal sealed class PrototypeSyncBackupView : UserControl
         foreach (var pair in preview.Merge.Categories)
             _review.Children.Add(Copy($"{pair.Key}: {pair.Value.Imported} to add · {pair.Value.Skipped} skipped · {pair.Value.Conflicts} conflicts", 13));
         foreach (var warning in preview.Merge.Warnings) _review.Children.Add(Copy(warning, 12, true));
-        _review.Children.Add(Copy($"{preview.ChangedFileCount} profile files will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", 13, true));
+        _review.Children.Add(Copy($"{preview.ChangedFileCount} profile {(preview.ChangedFileCount == 1 ? "file" : "files")} will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", 13, true));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(Button("Cancel restore", () => { InvalidatePreview(); _notice.Text = "Restore canceled. No data changed."; return Task.CompletedTask; }));
         actions.Children.Add(Button("Restore and close app…", () => RunAsync(ConfirmRestoreAsync), primary: true));
@@ -140,7 +140,7 @@ internal sealed class PrototypeSyncBackupView : UserControl
         _dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = "Restore and close TypeWhisper?",
-            Content = $"Apply the reviewed merge to {preview.ChangedFileCount} profile files. Active work will stop. Reopen TypeWhisper after it closes.",
+            Content = $"Apply the reviewed merge to {preview.ChangedFileCount} profile {(preview.ChangedFileCount == 1 ? "file" : "files")}. Active work will stop. Reopen TypeWhisper after it closes.",
             PrimaryButtonText = "Restore and close app", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
         };
         ContentDialogResult choice;
