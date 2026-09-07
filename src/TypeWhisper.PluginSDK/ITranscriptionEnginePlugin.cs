@@ -32,6 +32,10 @@ public interface ITranscriptionEnginePlugin : ITypeWhisperPlugin
     Task<PluginTranscriptionResult> TranscribeAsync(
         byte[] wavAudio, string? language, bool translate, string? prompt, CancellationToken ct);
 
+    /// <summary>Whether the selected model consumes multiple ordered language hints through the WAV method.</summary>
+    /// <remarks>False by default: the compatibility method only selects the first language and is not multi-language detection.</remarks>
+    bool SupportsLanguageHints => false;
+
     /// <summary>Transcribes WAV audio with ordered language hints.</summary>
     Task<PluginTranscriptionResult> TranscribeWithLanguageHintsAsync(
         byte[] wavAudio, IReadOnlyList<string> languageHints, bool translate, string? prompt, CancellationToken ct) =>

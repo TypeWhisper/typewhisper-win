@@ -146,6 +146,9 @@ public sealed class GeminiPlugin :
     /// <inheritdoc />
     public string ProviderId => "gemini";
 
+    /// <summary>Gemini transcription consumes ordered language hints in its audio prompt.</summary>
+    public bool SupportsLanguageHints => true;
+
     /// <inheritdoc />
     public string ProviderDisplayName => "Google Gemini";
 

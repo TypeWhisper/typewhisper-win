@@ -7,6 +7,8 @@ namespace TypeWhisper.Presentation;
 /// <summary>Immutable text-processing choices captured when recording starts.</summary>
 public sealed record DictationTextPreferences
 {
+    /// <summary>Ordered preferred ISO language codes separated by commas; empty means unrestricted detection.</summary>
+    public string PreferredLanguageHints { get; init; } = "";
     /// <summary>Allows quiet captures of at least forty milliseconds to reach final transcription.</summary>
     public bool TranscribeShortQuietClipsAggressively { get; init; }
     /// <summary>Converts recognized spoken numbers using the transcript language.</summary>
@@ -22,7 +24,11 @@ public sealed record DictationTextPreferences
     /// <summary>Spoken formatting overrides keyed by engine, model and language; absent profiles retain engine output.</summary>
     public IReadOnlyList<DictationSpokenFormattingProfile> SpokenFormattingProfiles { get; init; } = [];
 
-    internal bool IsValid => Enum.IsDefined(EnglishOutputVariant) &&
+    internal bool IsValid => PreferredLanguageHints is not null &&
+        (PreferredLanguageHints.Length == 0 || (PreferredLanguageHints.Split(',').Length <= 2 &&
+            PreferredLanguageHints.Split(',').All(code => code.Length is 2 or 3 && code.All(c => c is >= 'a' and <= 'z')) &&
+            PreferredLanguageHints.Split(',').Distinct(StringComparer.Ordinal).Count() == PreferredLanguageHints.Split(',').Length)) &&
+        Enum.IsDefined(EnglishOutputVariant) &&
         (GermanOutputVariant is GermanOutputVariant.AsTranscribed or GermanOutputVariant.Switzerland) &&
         SpokenFormattingProfiles is not null && SpokenFormattingProfiles.All(profile => profile is not null &&
             !string.IsNullOrWhiteSpace(profile.EngineId) && SpokenFormattingLanguageNormalizer.Normalize(profile.LanguageCode) is not null) &&

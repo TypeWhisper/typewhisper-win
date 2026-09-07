@@ -8,7 +8,7 @@ public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, s
 /// <summary>A transcription role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableTranscriptionProvider(string PluginId, string SelectionId, string Name,
     bool Ready, string? SelectedModelId, IReadOnlyList<PluginModelInfo> Models, bool SupportsTranslation, bool SupportsPcm,
-    IReadOnlyList<string>? SupportedLanguages = null, string? EngineId = null);
+    IReadOnlyList<string>? SupportedLanguages = null, string? EngineId = null, bool SupportsLanguageHints = false);
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableLlmProvider(string PluginId, string SelectionId, string Name,
     bool Ready, IReadOnlyList<PluginModelInfo> Models);
@@ -299,7 +299,7 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
                     throw new CapabilityCollisionException("Transcription capability identity collision or invalid owner: " + id);
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
-                    Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId));
+                    Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints));
             }
             var providers = (plugin is ILlmProviderPlugin directLlm ? new[] { directLlm } : [])
                 .Concat(plugin is IAdditionalLlmProvidersProvider additionalLlm ? additionalLlm.AdditionalLlmProviders : [])

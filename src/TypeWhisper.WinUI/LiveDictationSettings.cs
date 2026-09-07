@@ -17,6 +17,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         LiveRecordingModeSettings.Configure(category, content, pickers, session);
         LiveTextProcessingSettings.Configure(category, content, pickers, session);
         LiveShortClipSettings.Configure(category, content, session);
+        LiveLanguageHintSettings.Configure(category, content, pickers, session);
         LiveSpokenFormattingSettings.Configure(category, content, pickers, session);
         LiveTranscriptionTaskSettings.Configure(category, content, pickers, session);
         if (category == "Audio")

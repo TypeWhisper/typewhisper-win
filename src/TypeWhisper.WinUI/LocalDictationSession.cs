@@ -33,6 +33,7 @@ internal sealed class LocalDictationSession : IDisposable
         finally { _gate.Release(); Changed?.Invoke(); }
     }
     internal DictationTextPreferencesStore TextPreferences { get; } = new(WinUIProfile.DataPath("dictation-text.json"));
+    internal bool SupportsLanguageHints => UsesRegistryProvider && ActiveRegistryProvider?.SupportsLanguageHints == true;
     internal TranscriptionTaskPreferencesStore TranscriptionTaskPreferences { get; } = new(WinUIProfile.DataPath("transcription-task.json"));
     internal bool SupportsTranslation => UsesRegistryProvider ? ActiveRegistryProvider?.SupportsTranslation == true : Models.SupportsTranslation;
     private TranscriptionTask _taskAtStart;
@@ -367,9 +368,9 @@ internal sealed class LocalDictationSession : IDisposable
         var translate = _taskAtStart == TranscriptionTask.Translate;
         var result = await PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(_providerId), (engine, ct) =>
         {
-            if (translate && !engine.SupportsTranslation) throw new NotSupportedException("This provider cannot translate audio to English.");
-            return engine is IPcmTranscriptionEnginePlugin pcm ? pcm.TranscribePcmAsync(samples, language, translate, ct)
-                : engine.TranscribeAsync(CloudTranscriptionPlugin.EncodeWav(samples, int.MaxValue), language, translate, null, ct);
+            return LanguageHintTranscription.DecodeAsync(engine, samples,
+                () => CloudTranscriptionPlugin.EncodeWav(samples, int.MaxValue), language,
+                _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct);
         });
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }

@@ -165,6 +165,9 @@ public sealed class MetaPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
     /// <inheritdoc />
     public string ProviderId => "meta";
 
+    /// <summary>Muse Voice transcription consumes multiple preferred languages in its request.</summary>
+    public bool SupportsLanguageHints => true;
+
     /// <inheritdoc />
     public string ProviderDisplayName => "Meta";
 

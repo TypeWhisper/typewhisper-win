@@ -24,6 +24,7 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var next = new DictationTextPreferences
         {
             TranscribeShortQuietClipsAggressively = true,
+            PreferredLanguageHints = "de,en",
             TranscriptionNumberNormalizationEnabled = false,
             ShortUtterancePunctuationEnabled = false,
             EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom,
@@ -68,7 +69,7 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var capturedCurrent = store.Current;
         File.Delete(PreferencesPath);
         Directory.CreateDirectory(PreferencesPath);
-        Assert.NotNull(store.Save(saved with { TranscriptionNumberNormalizationEnabled = false, TranscribeShortQuietClipsAggressively = true }));
+        Assert.NotNull(store.Save(saved with { TranscriptionNumberNormalizationEnabled = false, TranscribeShortQuietClipsAggressively = true, PreferredLanguageHints = "de,en" }));
         Assert.Same(capturedCurrent, store.Current);
         AssertContentEqual(saved, store.Current);
         Assert.Empty(Directory.GetFiles(_directory));
@@ -85,8 +86,25 @@ public sealed class DictationTextPreferencesTests : IDisposable
         Assert.False(File.Exists(PreferencesPath));
     }
 
+    [Theory]
+    [InlineData("de,de")]
+    [InlineData("de,en,fr")]
+    [InlineData("de,")]
+    [InlineData("DE")]
+    [InlineData("auto")]
+    public void InvalidPreferredLanguagesDoNotReplaceSavedChoices(string hints)
+    {
+        var store = new DictationTextPreferencesStore(PreferencesPath);
+        Assert.Null(store.Save(new() { PreferredLanguageHints = "en,de" }));
+        var captured = store.Current;
+        Assert.NotNull(store.Save(captured with { PreferredLanguageHints = hints }));
+        Assert.Same(captured, store.Current);
+        Assert.Equal("en,de", new DictationTextPreferencesStore(PreferencesPath).Current.PreferredLanguageHints);
+    }
+
     private static void AssertContentEqual(DictationTextPreferences expected, DictationTextPreferences actual)
     {
+        Assert.Equal(expected.PreferredLanguageHints, actual.PreferredLanguageHints);
         Assert.Equal(expected.TranscribeShortQuietClipsAggressively, actual.TranscribeShortQuietClipsAggressively);
         Assert.Equal(expected.TranscriptionNumberNormalizationEnabled, actual.TranscriptionNumberNormalizationEnabled);
         Assert.Equal(expected.ShortUtterancePunctuationEnabled, actual.ShortUtterancePunctuationEnabled);
