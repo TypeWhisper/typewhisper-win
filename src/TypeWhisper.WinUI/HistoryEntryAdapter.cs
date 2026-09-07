@@ -33,7 +33,8 @@ internal static class HistoryEntryAdapter
                 new PrototypeHistoryTranscript(record.RawText, text), record.Language,
                 EngineName: record.EngineUsed, ModelName: record.ModelUsed,
                 FailureMessage: record.WorkflowFailureMessage, AppName: record.AppName,
-                AppProcessName: record.AppProcessName, TranscriptionTaskUsed: record.TranscriptionTaskUsed),
+                AppProcessName: record.AppProcessName, TranscriptionTaskUsed: record.TranscriptionTaskUsed,
+                WorkflowName: record.ProfileName, WorkflowId: record.WorkflowId),
             new PrototypeHistoryInbox(timestamp)) { PersistedRecordId = record.Id };
     }
 }

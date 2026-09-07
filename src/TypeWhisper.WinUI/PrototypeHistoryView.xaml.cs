@@ -293,6 +293,10 @@ public sealed partial class PrototypeHistoryView : UserControl
         TranscriptModel.Text = entry.ModelMetadata;
         var details = entry.Entry.Content;
         TranscriptProvenance.Text = $"App: {details.AppName ?? details.AppProcessName ?? "Not recorded"} · Task: {details.TranscriptionTaskUsed ?? "Not recorded"}";
+        if (!string.IsNullOrWhiteSpace(details.WorkflowName) || !string.IsNullOrWhiteSpace(details.WorkflowId))
+            TranscriptProvenance.Text += "\nWorkflow: " + (string.IsNullOrWhiteSpace(details.WorkflowName) ? details.WorkflowId : details.WorkflowName);
+        if (details.ProcessingState == PrototypeHistoryProcessingState.Failed)
+            TranscriptProvenance.Text += "\nProcessing failed: " + (details.FailureMessage ?? "The result needs review.");
         EntryActions.Visibility = _actions is not null && entry.Entry.PersistedRecordId is not null ? Visibility.Visible : Visibility.Collapsed;
         ActionNotice.Text = "";
         AudioAvailabilityText.Text = entry.AudioDescription;

@@ -6,6 +6,25 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class HistoryModelDisplayTests
 {
+    [Fact]
+    public void FailedWorkflowKeepsStoredIdentityAndOriginalTranscriptForDetails()
+    {
+        var record = new TranscriptionRecord
+        {
+            Id = "failed-workflow", Timestamp = DateTime.UtcNow, RawText = "Original dictation", FinalText = "",
+            WorkflowId = "removed-rule", ProfileName = "Saved workflow name",
+            Status = TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+            WorkflowFailureMessage = "The selected provider is unavailable."
+        };
+        var entry = HistoryEntryAdapter.FromRecord(record);
+        Assert.Equal("removed-rule", entry.Content.WorkflowId);
+        Assert.Equal("Saved workflow name", entry.Content.WorkflowName);
+        Assert.Equal(PrototypeHistoryProcessingState.Failed, entry.Content.ProcessingState);
+        Assert.Equal(record.WorkflowFailureMessage, entry.Content.FailureMessage);
+        Assert.Equal("Original dictation", entry.Content.Transcript!.FinalText);
+        Assert.Equal("Original dictation", entry.Content.Transcript.RawText);
+    }
+
     [Theory]
     [InlineData("sherpa-onnx", "parakeet-tdt-0.6b", "Local · Parakeet TDT 0.6B")]
     [InlineData("sherpa-onnx", "canary-180m-flash", "Local · Canary 180M Flash")]

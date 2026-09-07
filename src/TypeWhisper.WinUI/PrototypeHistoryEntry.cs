@@ -45,7 +45,9 @@ public sealed record PrototypeHistoryContent(
     string? FailureMessage = null,
     string? AppName = null,
     string? AppProcessName = null,
-    string? TranscriptionTaskUsed = null);
+    string? TranscriptionTaskUsed = null,
+    string? WorkflowName = null,
+    string? WorkflowId = null);
 
 public sealed record PrototypeHistoryInbox(
     DateTimeOffset UpdatedAt,
