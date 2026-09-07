@@ -132,14 +132,27 @@ public sealed class CloudFolderSyncTests : IDisposable
         Assert.Equal(0, result.MutationsApplied);
     }
 
-    [Fact]
-    public async Task InvalidDeviceIdIsRejectedBeforeCreatingDeviceFolder()
+    [Theory]
+    [InlineData(@"..\outside")]
+    [InlineData("../outside")]
+    [InlineData(@"nested\device")]
+    [InlineData("nested/device")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData(@"C:\outside")]
+    [InlineData("C:outside")]
+    [InlineData("device:stream")]
+    [InlineData("device?")]
+    [InlineData("device.")]
+    [InlineData("device ")]
+    [InlineData("device\u0000")]
+    public async Task InvalidDeviceIdIsRejectedBeforeCreatingDeviceFolder(string deviceId)
     {
         var store = new InMemoryUserDataSyncStore(dictionaryEntries:
         [
             DictionaryEntry(original: "TypeWhisper", updatedAt: Date(10))
         ]);
-        var state = new CloudFolderSyncState { DeviceId = @"..\outside" };
+        var state = new CloudFolderSyncState { DeviceId = deviceId };
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             CloudFolderSyncEngine.SyncAsync(

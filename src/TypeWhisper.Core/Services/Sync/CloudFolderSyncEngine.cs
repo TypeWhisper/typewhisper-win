@@ -663,8 +663,11 @@ public static class CloudFolderSyncEngine
     {
         if (string.IsNullOrWhiteSpace(segment) ||
             Path.IsPathRooted(segment) ||
-            segment.Contains(Path.DirectorySeparatorChar) ||
-            segment.Contains(Path.AltDirectorySeparatorChar))
+            segment is "." or ".." ||
+            segment.EndsWith('.') || segment.EndsWith(' ') ||
+            // Sync folders move between platforms. Linux's two separator constants
+            // are both '/', so validate Windows separators and filename syntax too.
+            segment.Any(character => char.IsControl(character) || "\\/<>:\"|?*".Contains(character)))
         {
             throw new ArgumentException("Expected a relative file name segment.", parameterName);
         }
