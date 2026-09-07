@@ -1,7 +1,11 @@
 namespace TypeWhisper.PluginSDK;
 
 /// <summary>A bounded text setting rendered by the host without a framework-specific plugin view.</summary>
-public sealed record PluginTextSetting(string Id, string Title, string Description, string Value, int MaxLength = 32768);
+public sealed record PluginTextSetting(string Id, string Title, string Description, string Value, int MaxLength = 32768)
+{
+    /// <summary>Gets whether the host should allow multiple lines. Defaults to a single-line field.</summary>
+    public bool IsMultiline { get; init; }
+}
 
 /// <summary>Provides persistent text settings. Hosts call this capability within the package configuration lease.</summary>
 public interface IPluginTextSettings

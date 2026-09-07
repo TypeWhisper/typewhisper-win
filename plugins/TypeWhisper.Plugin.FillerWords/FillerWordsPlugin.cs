@@ -73,7 +73,7 @@ public sealed class FillerWordsPlugin : IPostProcessorPlugin, IPluginTextSetting
 
     /// <inheritdoc />
     public IReadOnlyList<PluginTextSetting> TextSettings => Settings is null ? [] :
-        [new("words", "Filler words", "Enter one word or phrase per line. An empty list leaves text unchanged.", Settings.WordsText)];
+        [new("words", "Filler words", "Enter one word or phrase per line. An empty list leaves text unchanged.", Settings.WordsText) { IsMultiline = true }];
 
     /// <inheritdoc />
     public Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken)

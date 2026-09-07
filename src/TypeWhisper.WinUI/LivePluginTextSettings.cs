@@ -8,28 +8,35 @@ namespace TypeWhisper.WinUI;
 internal sealed class LivePluginTextSettings : UserControl
 {
     private readonly StackPanel _content = new() { Spacing = 10 };
-    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly LocalDictationSession _session;
     private readonly string _id;
     private bool _loaded;
+    private int _generation;
 
     internal LivePluginTextSettings(LocalDictationSession session, string id)
     {
         _session = session; _id = id;
         _content.Children.Add(_status); Content = _content;
+        Unloaded += (_, _) => _generation++;
         Loaded += async (_, _) =>
         {
             if (_loaded) return;
-            _loaded = true;
+            var generation = ++_generation;
             try
             {
                 var fields = await session.PluginRuntime.UseConfigurationAsync(id, (plugin, _) =>
                     Task.FromResult(plugin is IPluginTextSettings settings ? settings.TextSettings.ToArray() : []));
-                if (!IsLoaded) { _loaded = false; return; }
+                if (!IsLoaded || generation != _generation) return;
                 foreach (var field in fields) AddField(field);
+                _loaded = true;
+                SetStatus(string.Empty);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _status.Text = "Plugin settings could not be loaded. Reopen this page to retry."; }
+            {
+                if (IsLoaded && generation == _generation)
+                    SetStatus("Plugin settings could not be loaded. Reopen this page to retry.");
+            }
         };
     }
 
@@ -37,24 +44,56 @@ internal sealed class LivePluginTextSettings : UserControl
     {
         _content.Children.Add(new TextBlock { Text = field.Title, FontSize = 16 });
         _content.Children.Add(new TextBlock { Text = field.Description, TextWrapping = TextWrapping.Wrap });
-        var input = new TextBox { Text = field.Value, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
-            MinHeight = 100, MaxHeight = 240, MaxLength = Math.Clamp(field.MaxLength, 1, 32768) };
+        var input = new TextBox
+        {
+            Text = field.Value,
+            AcceptsReturn = field.IsMultiline,
+            TextWrapping = field.IsMultiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
+            MinHeight = field.IsMultiline ? 100 : 40,
+            MaxHeight = field.IsMultiline ? 240 : 40,
+            Padding = new Thickness(10, 8, 10, 8),
+            Style = (Style)Application.Current.Resources[field.IsMultiline
+                ? "PrototypeLexiconMultilineStyle" : "PrototypeSearchTextBoxStyle"],
+            MaxLength = Math.Clamp(field.MaxLength, 1, 32768)
+        };
         AutomationProperties.SetName(input, field.Title);
+        AutomationProperties.SetHelpText(input, field.Description);
         _content.Children.Add(input);
         var save = new HandCursorButton { Content = "Save " + field.Title, HorizontalAlignment = HorizontalAlignment.Left,
             Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
+        var saving = false;
+        input.Loaded += (_, _) => input.IsEnabled = !saving;
+        save.Loaded += (_, _) => save.IsEnabled = !saving;
         save.Click += async (_, _) =>
         {
+            if (saving || !IsLoaded) return;
+            saving = true;
+            var generation = _generation;
             save.IsEnabled = input.IsEnabled = false;
+            SetStatus(string.Empty);
             try
             {
                 var error = await _session.SavePluginTextSettingAsync(_id, field.Id, input.Text);
-                _status.Text = error ?? "Saved. The setting applies to the next transcription.";
+                if (IsLoaded && generation == _generation)
+                    SetStatus(error ?? "Saved. The setting applies the next time this plugin runs.");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
-            { _status.Text = "The setting could not be saved. The previous saved value is unchanged."; }
-            finally { save.IsEnabled = input.IsEnabled = true; }
+            {
+                if (IsLoaded && generation == _generation)
+                    SetStatus("The setting could not be saved. The previous saved value is unchanged.");
+            }
+            finally
+            {
+                saving = false;
+                if (IsLoaded) save.IsEnabled = input.IsEnabled = true;
+            }
         };
         _content.Children.Add(save);
+    }
+
+    private void SetStatus(string message)
+    {
+        _status.Text = message;
+        _status.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
     }
 }
