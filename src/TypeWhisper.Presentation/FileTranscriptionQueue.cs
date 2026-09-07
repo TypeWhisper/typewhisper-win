@@ -20,7 +20,11 @@ public enum FileTranscriptionStatus
 
 /// <summary>Real text and optional provider timing, with the configuration actually used.</summary>
 public sealed record FileTranscriptionOutput(string Text, string Provider, string Model, double Duration,
-    IReadOnlyList<TranscriptionSegment> Segments, string? Warning = null);
+    IReadOnlyList<TranscriptionSegment> Segments, string? Warning = null)
+{
+    /// <summary>Provider/model label captured when processing began, independent of later selection changes.</summary>
+    public string? DisplayName { get; init; }
+}
 
 /// <summary>One file selected by the user; the queue never deletes source media.</summary>
 public sealed class FileTranscriptionJob(string path)

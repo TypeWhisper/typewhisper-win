@@ -91,7 +91,8 @@ internal sealed partial class LocalDictationSession
             }
             return new(processed.Text, engineId, modelId ?? modelName, duration,
                 decoded.Segments.Select(segment => new TranscriptionSegment(segment.Text, segment.Start, segment.End)).ToArray(),
-                warnings.Count == 0 ? null : string.Join(" · ", warnings));
+                warnings.Count == 0 ? null : string.Join(" · ", warnings))
+            { DisplayName = registryProvider ? modelName : "NVIDIA · " + modelName };
         }
         finally
         {

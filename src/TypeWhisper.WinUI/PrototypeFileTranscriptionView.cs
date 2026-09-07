@@ -94,11 +94,12 @@ public sealed class PrototypeFileTranscriptionView : UserControl
             finally { drop.BorderBrush = Brush("HairlineBrush"); deferral.Complete(); }
         };
         _body.Children.Add(drop);
-        if (_session?.CanTranscribeFile != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
+        if (_session?.IsReady != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
+        else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text("Finish the current recording or model operation before starting.", 12, true));
         if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Results stay in this queue until you close the app.", 13, true));
         else
         {
-            _body.Children.Add(Text($"{_queue.Jobs.Count} files · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
+            _body.Children.Add(Text($"{_queue.Jobs.Count} {(_queue.Jobs.Count == 1 ? "file" : "files")} · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
             foreach (var job in _queue.Jobs) AddRow(job);
         }
         if (_queue.Running) _actions.Children.Add(Button("Cancel run", () => { Stop(); _notice.Text = "Canceling… Waiting for the current decoder to stop. Completed results are kept."; Render(); }, destructive: true));
@@ -129,7 +130,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         if (job.Status == FileTranscriptionStatus.Ready) actions.Children.Add(Button("View result", () => { _result = job; _scroll.ChangeView(null, 0, null, true); Render(); }));
         if (job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)
         {
-            var retry = Button("Retry", () => { _queue.Retry(job); Render(); }); retry.IsEnabled = !_queue.Running; actions.Children.Add(retry);
+            var retry = Button("Retry", () => { if (_queue.Retry(job)) _notice.Text = "Queued again. Choose Start transcription to retry."; Render(); }); retry.IsEnabled = !_queue.Running; actions.Children.Add(retry);
         }
         var remove = Button("×", () => { _queue.Remove(job); _notice.Text = "Removed from the queue. The original file is unchanged."; Render(); }, destructive: true);
         AutomationProperties.SetName(remove, $"Remove {job.Name} from queue"); remove.IsEnabled = !_queue.Running && !_picking; actions.Children.Add(remove);
@@ -138,7 +139,9 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     }
     private void RenderResult(FileTranscriptionJob job)
     {
-        _body.Children.Add(Text(job.Name, 16)); _body.Children.Add(Text($"{job.Result!.Provider} · {job.Result.Model} · {TimeSpan.FromSeconds(job.Result.Duration):g}", 12, true));
+        _body.Children.Add(Text(job.Name, 16));
+        var duration = TimeSpan.FromSeconds(job.Result!.Duration).ToString(@"hh\:mm\:ss");
+        _body.Children.Add(Text($"{job.Result.DisplayName ?? job.Result.Model} · {duration}", 12, true));
         if (job.Result.Warning is { } warning) _body.Children.Add(Text(warning, 12, true));
         _body.Children.Add(new Border { Child = new TextBlock { Text = job.Result!.Text, FontSize = 14, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Foreground = Brush("TextBrush") }, Padding = new Thickness(18), Background = Brush("SurfaceBrush"), CornerRadius = new CornerRadius(10) });
         _formatPicker = new PrototypeChoicePicker(); _formatPicker.Configure("Export format", "file", "File export format");
@@ -153,11 +156,12 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
         _actions.Children.Add(Button("Export transcript…", async () => await Export(job), primary: true));
     }
+    internal void AddRecording(string path) => AddPaths([path]);
     private void AddPaths(IEnumerable<string> paths)
     {
         var added = 0; var errors = new List<string>();
         foreach (var path in paths) { var error = _queue.Add(path); if (error is null) added++; else errors.Add(error); }
-        _notice.Text = $"{added} file(s) added. " + string.Join(' ', errors.Distinct()); Render();
+        _notice.Text = $"{added} {(added == 1 ? "file" : "files")} added. " + string.Join(' ', errors.Distinct()); Render();
     }
     private async Task ChooseFiles()
     {
