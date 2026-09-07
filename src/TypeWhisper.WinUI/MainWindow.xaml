@@ -216,7 +216,7 @@
                     Click="TranscriptToggleButton_Click" Foreground="{ThemeResource AccentBrush}"
                     Style="{StaticResource PrototypeIconButtonStyle}"
                     AutomationProperties.Name="Toggle live transcript preview" />
-            <local:HandCursorButton Grid.Column="2" Content="Test overlay" Click="TestWaveformButton_Click"
+            <local:HandCursorButton x:Name="TestOverlayButton" Grid.Column="2" Content="Test overlay" Click="TestWaveformButton_Click"
                     Style="{StaticResource PrototypeIconButtonStyle}"
                     AutomationProperties.Name="Test waveform" />
             <TextBlock x:Name="NavigationHint" Grid.Column="3" Text="↑↓ Navigate   Enter Run   Ctrl K Actions   Esc Hide"

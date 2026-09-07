@@ -14,7 +14,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     private bool _disposed;
     internal string Value { get; private set; } = "";
     internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
-        Func<RecordingMode>? recordingMode = null)
+        Func<RecordingMode>? recordingMode = null, Func<bool>? paused = null)
     {
         recordingMode ??= () => RecordingMode.Hybrid;
         // Reserve ordinary chords, but use the hook for both press and release.
@@ -45,7 +45,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode));
+                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode, paused?.Invoke() == true));
                     }
                 }
             }
@@ -54,6 +54,8 @@ internal sealed class DictationHotkeyRegistration : IDisposable
         _hook = SetWindowsHookEx(13, _callback, GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero) { _regular.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
     }
+    internal void ObservePause() => _state.Suspend();
+
     internal string? TryChange(string value)
     {
         var chords = PrototypeShortcutRules.Split(value).Select(PrototypeShortcutRules.Normalize).Distinct().ToArray();

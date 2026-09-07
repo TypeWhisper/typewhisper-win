@@ -87,14 +87,25 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenFilesFromTray),
             () => _window.DispatcherQueue.TryEnqueue(ExitFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()));
+            () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()),
+            () => _window.DispatcherQueue.TryEnqueue(_window.ToggleDictationHotkeyPause),
+            () => _window.DispatcherQueue.TryEnqueue(_window.OpenRecoveryFromTray));
+        void UpdateTrayActions() => _tray?.UpdateHotkeyPause(_window.DictationHotkeysPaused,
+            _window.CanChangeDictationHotkeyPause, _window.DictationHotkeyPauseError);
+        _window.TrayActionsChanged += UpdateTrayActions;
+#if DEBUG
+        _window.TrayProbeRequested += () => _tray?.PresentProbe();
+#endif
+        UpdateTrayActions();
         _window.DictationChanged += (status, recording) =>
         {
             _tray?.UpdateDictation(status, recording);
             _tray?.UpdateProcessing(_window.CanCancelProcessing);
+            UpdateTrayActions();
         };
         var initialization = _window.InitializeDictationAsync();
         await initialization;
+        UpdateTrayActions();
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray);

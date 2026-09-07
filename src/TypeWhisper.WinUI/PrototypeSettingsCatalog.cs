@@ -75,7 +75,7 @@ internal static partial class PrototypeSettingsCatalog
         Choice("Audio", "SilenceAutoStopSeconds", "Silence timeout", "10 seconds", "3 seconds|5 seconds|10 seconds|15 seconds|30 seconds"),
 
         Text("Shortcuts", "MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9"),
-        Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing. Does nothing while idle or recording."),
+        Text("Shortcuts", "CancelProcessingHotkeys", "Cancel processing", "", "Cancel final dictation processing or an active selected-text workflow. Does nothing while idle or recording."),
         Text("Shortcuts", "QuickLaunchHotkeys", "Quick Launch", "Alt+Space"),
         Text("Shortcuts", "PushToTalkHotkey", "Push to talk"),
         Text("Shortcuts", "ToggleOnlyHotkeys", "Toggle recording"),
@@ -163,7 +163,7 @@ internal static partial class PrototypeSettingsCatalog
         if (category == "Shortcuts")
         {
             var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);
-            ToolTipService.SetToolTip(guide, "Quick Launch, main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and acts only during final dictation processing. Other actions are unavailable.");
+            ToolTipService.SetToolTip(guide, "Quick Launch, main dictation and cancel processing shortcuts are global and saved for this development profile. Cancel processing requires a main key and cancels final dictation processing or an active selected-text workflow. Configure selected-text shortcuts in Workflows. Disabled actions here are unavailable.");
             target.Children.Add(guide);
             var list = new StackPanel { Spacing = 24 };
             (string Title, string[] Keys)[] groups =
@@ -208,7 +208,7 @@ internal static partial class PrototypeSettingsCatalog
                 list.Children.Add(section);
             }
             target.Children.Add(list);
-            target.Children.Add(Label("Quick Launch, main dictation and cancel processing shortcuts are global and saved. Other shortcuts are unavailable.", 12, true));
+            target.Children.Add(Label("These global shortcuts are saved. Configure selected-text shortcuts in Workflows. Disabled shortcut controls are unavailable.", 12, true));
             return;
         }
         if (category == "Dictation")

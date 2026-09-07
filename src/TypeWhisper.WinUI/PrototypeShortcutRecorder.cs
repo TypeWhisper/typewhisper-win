@@ -101,7 +101,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         {
             "QuickLaunchHotkeys" => ("search", "Open from any app · saved global shortcut"),
             "MainDictationHotkeys" => ("microphone", "Your everyday dictation"),
-            "CancelProcessingHotkeys" => ("keyboard", "Cancel final processing · inactive while idle or recording"),
+            "CancelProcessingHotkeys" => ("keyboard", "Cancel final dictation processing or an active selected-text workflow"),
             "PushToTalkHotkey" => ("run", "Speak while holding"),
             "ToggleOnlyHotkeys" => ("pause", "Press to start or stop"),
             "HoldOnlyHotkeys" => ("keyboard", "Record while held down"),

@@ -327,7 +327,7 @@ public sealed partial class PrototypeSettingsWindow : Window
             if (category == "Files & recovery" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Recovery audio requires opt-in · retry and deletion are explicit";
             if (category == "Shortcuts" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Quick Launch, main dictation and cancel processing shortcuts are saved · other actions are unavailable";
+                SessionHint.Text = "Global shortcuts are saved · selected-text shortcuts are configured in Workflows";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,
@@ -341,6 +341,12 @@ public sealed partial class PrototypeSettingsWindow : Window
 
     internal void ShowActivity(bool statistics) => ShowCategory(statistics ? "Statistics" : "Home");
     internal void ShowSyncBackup() => ShowCategory("Sync & backup");
+    internal void ShowRecoveryFromTray(bool allowNavigation)
+    {
+        if (_currentCategory == "Files & recovery") return;
+        if (allowNavigation) ShowCategory("Files & recovery");
+        else SessionHint.Text = "Open Files & recovery from the sidebar to review saved audio. Your current settings are kept intact.";
+    }
     internal void ShowAccount() => ShowCategory("Account & about");
     internal void ShowIntegrationNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open Integrations. Your current workspace is kept intact.";
     internal void ShowHistoryNavigationHint() => SessionHint.Text = "Return to Quick Launch first to open History. Your current workspace is kept intact.";

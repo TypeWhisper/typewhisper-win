@@ -110,7 +110,7 @@ public sealed partial class MainWindow : Window
             _dictationInput = new(
                 () => { _dictation.LivePreviewEnabled = _transcriptPreviewEnabled; return _dictation.StartAsync(); },
                 _dictation.StopAsync, _dictation.CancelAsync,
-                () => _dictation.IsRecording, () => _dictation.CanChangeProvider && _dictation.IsReady,
+                () => _dictation.IsRecording, () => !DictationHotkeysPaused && _dictation.CanChangeProvider && _dictation.IsReady,
                 () => _dictation.RecordingModePreferences.Current,
                 dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
                 reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name));
@@ -130,7 +130,8 @@ public sealed partial class MainWindow : Window
                     HybridHotkeyAction.Cancel => TypeWhisper.Presentation.DictationInputAction.Cancel,
                     _ => TypeWhisper.Presentation.DictationInputAction.Toggle
                 });
-            }, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current);
+            }, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current,
+                () => DictationHotkeysPaused);
             var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
@@ -217,7 +218,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closing) return;
         var revision = ++_overlayRevision;
-        MetricsText.Text = _dictation.Status;
+        if (IsNormalLauncherStatus) MetricsText.Text = DictationStatusForDisplay;
         UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
         if (_dictation.OverlayState.Phase != DictationPhase.Completed) _completedPreviewExpired = false;
@@ -304,6 +305,9 @@ public sealed partial class MainWindow : Window
     internal MainWindow()
     {
         InitializeComponent();
+#if DEBUG
+        ConfigureTrayProbe();
+#endif
         NativeWindowAppearance.ApplyAppTitleBar(this);
         LoadOverlayPreferences();
         var historyPath = WinUIProfile.DataPath("history.json");
@@ -461,7 +465,7 @@ public sealed partial class MainWindow : Window
         if (_profileRestoreClosing) return;
         if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
             !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen)
-            MetricsText.Text = _dictation.Status;
+            MetricsText.Text = DictationStatusForDisplay;
         _isSearchEditing = false;
         UpdateSearchPresentation();
         PlaceOnInvocationMonitor();
@@ -760,7 +764,7 @@ public sealed partial class MainWindow : Window
         else if (_selected?.Title is "Dashboard" or "Statistics")
             OpenDashboard(_selected.Title == "Statistics");
         else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
-            MetricsText.Text = _dictation.Status;
+            MetricsText.Text = DictationStatusForDisplay;
         else if (_selected is not null)
             MetricsText.Text = $"Executed {_selected.Title} · prototype data only";
     }
@@ -1358,7 +1362,17 @@ public sealed partial class MainWindow : Window
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
         ((OverlappedPresenter)AppWindow.Presenter).Minimize();
     private void HideButton_Click(object sender, RoutedEventArgs e) => AppWindow.Hide();
-    private void TestWaveformButton_Click(object sender, RoutedEventArgs e) => ShowWaveformOverlay();
+    private void TestWaveformButton_Click(object sender, RoutedEventArgs e)
+    {
+#if DEBUG
+        if (TrayProbeEnabled)
+        {
+            if (!_closing && !_profileRestoreClosing) TrayProbeRequested?.Invoke();
+            return;
+        }
+#endif
+        ShowWaveformOverlay();
+    }
     private void OverlayMode_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string mode } && Enum.TryParse<PrototypeOverlayMode>(mode, out var selected))

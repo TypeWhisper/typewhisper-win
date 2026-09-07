@@ -16,13 +16,15 @@ internal sealed class TrayIconService : IDisposable
     private readonly MenuFlyoutItem _recordingAction;
     private readonly MenuFlyoutItem _cancelProcessing;
     private readonly MenuFlyoutItem _exitAction;
-    private readonly MenuFlyout _menu;
     private bool _closing;
+    private readonly MenuFlyoutItem _pauseHotkeys;
+    private string _dictationStatus = "Loading…";
+    private bool _hotkeysPaused;
+    private string? _pauseError;
 
-    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing)
+    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing, Action togglePause, Action recovery)
     {
         var menu = new MenuFlyout();
-        _menu = menu;
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
         presenterStyle.Setters.Add(new Setter(FrameworkElement.RequestedThemeProperty, ElementTheme.Dark));
         presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 43, 43, 43))));
@@ -49,16 +51,15 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(Unavailable("Error log", "\uE9CE"));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Label("Transcription"));
-        menu.Items.Add(Unavailable("Pause dictation hotkeys", "\uE769"));
+        _pauseHotkeys = CreateItem("Pause dictation hotkeys", "\uE769", togglePause);
+        _pauseHotkeys.IsEnabled = false;
+        menu.Items.Add(_pauseHotkeys);
         menu.Items.Add(CreateItem("Transcribe file…", "\uE8A5", files));
-        menu.Items.Add(Unavailable("Recover last recording", "\uE777"));
+        menu.Items.Add(CreateItem("Review recovery recordings…", "\uE777", recovery));
         var recent = new MenuFlyoutSubItem { Text = "Last transcription", IsEnabled = false, FontSize = 13 };
         recent.Items.Add(Unavailable("Copy", "\uE8C8"));
         recent.Items.Add(Unavailable("Read back", "\uE767"));
         menu.Items.Add(recent);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(Label("Integrations"));
-        menu.Items.Add(Label("Plugin actions not connected yet"));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Unavailable("Check for updates…", "\uE895"));
         menu.Items.Add(new MenuFlyoutSeparator());
@@ -83,20 +84,40 @@ internal sealed class TrayIconService : IDisposable
         _menuWindow.Close();
     }
 
+#if DEBUG
+    internal void PresentProbe()
+    {
+        if (!_closing && WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_TRAY_PROBE") == "1")
+            _menuWindow.Present();
+    }
+#endif
+
     internal void UpdateDictation(string status, bool recording)
     {
         if (_closing) return;
-        _status.Text = recording ? "Recording" : status;
-        ToolTipService.SetToolTip(_status, status);
+        _dictationStatus = recording ? "Recording" : status;
+        _status.Text = _pauseError ?? (_hotkeysPaused ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictationStatus);
         _recordingAction.Text = recording ? "Finish dictation" : "Start with dictation shortcut";
         _recordingAction.IsEnabled = recording;
-        _icon.ToolTipText = recording ? "TypeWhisper · Recording" : "TypeWhisper · " + status[..Math.Min(status.Length, 90)];
+        ToolTipService.SetToolTip(_status, _status.Text);
+        _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
+    }
+
+    internal void UpdateHotkeyPause(bool paused, bool canChange, string? error)
+    {
+        if (_closing) return;
+        _hotkeysPaused = paused; _pauseError = error;
+        _pauseHotkeys.Text = paused ? "Resume dictation hotkeys" : "Pause dictation hotkeys";
+        _pauseHotkeys.IsEnabled = canChange;
+        _status.Text = error ?? (paused ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictationStatus);
+        ToolTipService.SetToolTip(_status, _status.Text);
+        _icon.ToolTipText = "TypeWhisper · " + _status.Text[..Math.Min(_status.Text.Length, 90)];
     }
 
     internal void SetShutdownState(string status)
     {
         _closing = true;
-        foreach (var item in _menu.Items) item.IsEnabled = false;
+        _menuWindow.DisableActions();
         _status.Text = status;
         _icon.ToolTipText = "TypeWhisper · " + status;
     }

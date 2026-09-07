@@ -97,6 +97,11 @@ internal sealed class TrayMenuWindow : Window
         };
     }
 
+    internal void DisableActions()
+    {
+        foreach (var item in _presenter.Items.OfType<MenuFlyoutItemBase>()) item.IsEnabled = false;
+    }
+
     internal void Present()
     {
         _opening = true;

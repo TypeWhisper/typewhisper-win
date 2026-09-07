@@ -15,8 +15,13 @@ internal sealed class HybridHotkeyState
     private bool _blocked;
     private RecordingMode? _mode;
 
+    internal void Suspend()
+    {
+        _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+    }
+
     internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
-        RecordingMode mode = RecordingMode.Hybrid)
+        RecordingMode mode = RecordingMode.Hybrid, bool paused = false)
     {
         HybridHotkeyAction? action = null;
         if (_mode is not null && _mode != mode)
@@ -28,6 +33,7 @@ internal sealed class HybridHotkeyState
         _mode = mode;
         if (down && !_down.Add(key)) return action;
         if (!down) _down.Remove(key);
+        if (paused) { Suspend(); return null; }
         var chord = Chord();
         if (_armed is not null && chord != _armed)
         {
