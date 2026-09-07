@@ -500,6 +500,7 @@ public sealed partial class MainWindow : Window
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
     {
+        if (_closing || _profileRestoreClosing) return;
         if (args.WindowActivationState == WindowActivationState.Deactivated)
         {
             if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsAlwaysOnTop = false;
@@ -524,6 +525,7 @@ public sealed partial class MainWindow : Window
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
     {
+        if (_closing || _profileRestoreClosing) return;
         if (args.DidVisibilityChange)
             RecorderView.SetPresented(_recorderOpen && sender.IsVisible);
         if (!args.DidPositionChange)
