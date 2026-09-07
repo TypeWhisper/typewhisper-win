@@ -10,22 +10,28 @@ internal sealed record CloudTranscriptionLease(ITranscriptionEnginePlugin Engine
 // Owns package/configuration operations independently of the UI so CI can test them.
 internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Task<CloudTranscriptionLease>> load) : IAsyncDisposable
 {
+    private readonly PortablePluginRuntimeRegistry? _registry;
+    internal CloudTranscriptionPlugin(IPluginHostServices host, PortablePluginRuntimeRegistry registry)
+        : this(host, () => throw new InvalidOperationException("Registry owns this package."))
+    { _registry = registry; registry.Changed += OnRegistryChanged; }
+    private void OnRegistryChanged() => Changed?.Invoke();
+    private PortableTranscriptionProvider? RegistryProvider => _registry?.TranscriptionProviders.FirstOrDefault(provider => provider.PluginId == PluginId && provider.SelectionId == PluginId);
     internal const string PluginId = "com.typewhisper.groq";
     private readonly SemaphoreSlim _operations = new(1, 1);
     private CloudTranscriptionLease? _lease;
     private readonly CancellationTokenSource _shutdown = new();
     private bool _disposed;
     internal event Action? Changed;
-    internal bool Enabled => _lease is not null;
-    internal bool Ready => _lease?.Configuration.IsConfigured == true;
+    internal bool Enabled => !_disposed && (_registry is null ? _lease is not null : _registry.Snapshot().Any(state => state.PluginId == PluginId && state.Enabled));
+    internal bool Ready => !_disposed && (_registry is null ? _lease?.Configuration.IsConfigured == true : RegistryProvider?.Ready == true);
     internal bool Busy { get; private set; }
     internal string? Error { get; private set; }
     internal string? Feedback { get; private set; }
-    internal IReadOnlyList<PluginModelInfo> Models => _lease?.Engine.TranscriptionModels ?? [];
-    internal string? ModelId => _lease?.Engine.SelectedModelId;
-    internal bool SupportsTranslation => _lease?.Engine.SupportsTranslation == true;
+    internal IReadOnlyList<PluginModelInfo> Models => _registry is null ? _lease?.Engine.TranscriptionModels ?? [] : RegistryProvider?.Models ?? [];
+    internal string? ModelId => _registry is null ? _lease?.Engine.SelectedModelId : RegistryProvider?.SelectedModelId;
+    internal bool SupportsTranslation => _registry is null ? _lease?.Engine.SupportsTranslation == true : RegistryProvider?.SupportsTranslation == true;
     internal string ModelName => Models.FirstOrDefault(m => m.Id == ModelId)?.DisplayName ?? "Groq";
-    internal IReadOnlyList<string> Languages => _lease?.Engine.SupportedLanguages ?? [];
+    internal IReadOnlyList<string> Languages => _registry is null ? _lease?.Engine.SupportedLanguages ?? [] : RegistryProvider?.SupportedLanguages ?? [];
     internal string Language => host.GetSetting<string>("Language") is { } language && Languages.Contains(language) ? language : "auto";
 
     internal async Task InitializeAsync()
@@ -35,6 +41,11 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
 
     internal Task SetEnabledAsync(bool enabled) => RunAsync(async () =>
     {
+        if (_registry is not null)
+        {
+            if (await _registry.SetEnabledAsync(PluginId, enabled) is { } error) throw new InvalidOperationException(error);
+            return;
+        }
         if (enabled)
         {
             await EnableCoreAsync();
@@ -49,13 +60,20 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     internal Task SaveKeyAsync(string key) => RunAsync(async () =>
     {
         if (!Enabled && !string.IsNullOrWhiteSpace(key)) await EnableCoreAsync();
-        await RequireLease().Configuration.SetApiKeyAsync(key);
+        if (_registry is null) await RequireLease().Configuration.SetApiKeyAsync(key);
+        else await _registry.UseConfigurationAsync(PluginId, async (plugin, _) => { await ((IApiKeyPlugin)plugin).SetApiKeyAsync(key); return true; });
+        if (_registry is not null) await _registry.RefreshCapabilitiesAsync();
         Feedback = Ready ? "API key saved. Check connection to verify it." : "API key removed.";
     });
 
     private async Task EnableCoreAsync()
     {
         if (Enabled) return;
+        if (_registry is not null)
+        {
+            if (await _registry.SetEnabledAsync(PluginId, true) is { } error) throw new InvalidOperationException(error);
+            return;
+        }
         var lease = await load();
         try { host.SetSetting("Enabled", true); }
         catch { await lease.Lifetime.DisposeAsync(); throw; }
@@ -64,14 +82,15 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
 
     internal Task ValidateAsync() => RunAsync(async () =>
     {
-        await RequireLease().Configuration.ValidateConfigurationAsync(_shutdown.Token);
+        if (_registry is null) await RequireLease().Configuration.ValidateConfigurationAsync(_shutdown.Token);
+        else await _registry.UseConfigurationAsync(PluginId, async (plugin, ct) => { await ((IApiKeyPlugin)plugin).ValidateConfigurationAsync(ct); return true; }, _shutdown.Token);
         Feedback = "Connected to Groq. No audio was uploaded.";
     });
 
-    internal Task SelectModelAsync(string id) => RunAsync(() =>
+    internal Task SelectModelAsync(string id) => RunAsync(async () =>
     {
-        RequireLease().Engine.SelectModel(id);
-        return Task.CompletedTask;
+        if (_registry is null) RequireLease().Engine.SelectModel(id);
+        else await _registry.UseTranscriptionAsync(PluginId, (engine, _) => { engine.SelectModel(id); return Task.FromResult(true); });
     });
 
     internal void SelectLanguage(string language)
@@ -89,19 +108,22 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         {
             if (!Ready) throw new InvalidOperationException("Add an API key in Plugins > Groq > Settings.");
             if (translate && !SupportsTranslation) throw new NotSupportedException("Native English translation is unavailable for the selected Groq model.");
-            var response = await RequireLease().Engine.TranscribeAsync(EncodeWav(samples),
-                Language == "auto" ? null : Language, translate, null, _shutdown.Token);
+            var wav = EncodeWav(samples);
+            var response = _registry is null ? await RequireLease().Engine.TranscribeAsync(wav,
+                Language == "auto" ? null : Language, translate, null, _shutdown.Token)
+                : await _registry.UseTranscriptionAsync(PluginId, (engine, ct) => engine.TranscribeAsync(wav,
+                    Language == "auto" ? null : Language, translate, null, ct), _shutdown.Token);
             result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage);
         });
         return result;
     }
 
     // Mono 16 kHz PCM16 avoids platform codecs and keeps uploads small.
-    internal static byte[] EncodeWav(float[] samples)
+    internal static byte[] EncodeWav(float[] samples, int maximumBytes = 25_000_000)
     {
         if (samples.Length == 0) throw new ArgumentException("No audio captured.");
-        if (samples.LongLength * 2 + 44 > 25_000_000)
-            throw new PluginRequestException("Recording exceeds Groq's 25 MB upload limit. Use a shorter recording.", PluginRequestFailureKind.RequestTooLarge);
+        if (samples.LongLength * 2 + 44 > maximumBytes)
+            throw new PluginRequestException(maximumBytes == 25_000_000 ? "Recording exceeds Groq's 25 MB upload limit. Use a shorter recording." : "Recording is too large to encode as WAV.", PluginRequestFailureKind.RequestTooLarge);
         using var stream = new MemoryStream(44 + samples.Length * 2);
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
         writer.Write("RIFF"u8); writer.Write(36 + samples.Length * 2); writer.Write("WAVEfmt "u8);
@@ -128,7 +150,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
             // Provider response bodies may contain sensitive input; expose only classified errors.
             throw new InvalidOperationException(Error);
         }
-        finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+        finally { if (_registry is not null) await _registry.RefreshCapabilitiesAsync(); Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
     internal static string DescribeError(Exception ex) => ex switch
     {
@@ -159,6 +181,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     {
         if (_disposed) return;
         _disposed = true; _shutdown.Cancel();
+        if (_registry is not null) _registry.Changed -= OnRegistryChanged;
         await _operations.WaitAsync();
         try { await ReleaseAsync(); }
         finally { _operations.Release(); _shutdown.Dispose(); }

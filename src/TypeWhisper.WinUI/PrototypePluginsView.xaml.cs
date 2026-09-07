@@ -27,13 +27,8 @@ public sealed partial class PrototypePluginsView : UserControl
     {
         _runtime = runtime;
         var root = runtime.Packages.Store.InventoryRoot;
-        _management = new(root,
-        [
-            new(LocalTranscriptionPlugin.PluginId, () => runtime.Models.Enabled, () => runtime.Models.Busy || runtime.CtcVocabulary.Busy,
-                () => runtime.LocalPluginError ?? runtime.CtcVocabulary.Error, runtime.SetLocalPluginEnabledAsync),
-            new(CloudTranscriptionPlugin.PluginId, () => runtime.Groq.Enabled, () => runtime.Groq.Busy,
-                () => runtime.Groq.Error, runtime.SetGroqEnabledAsync)
-        ], () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring),
+        _management = new(root, runtime.GetPluginBinding,
+            () => !runtime.IsRecording && runtime.OverlayState.Phase is not (DictationPhase.Processing or DictationPhase.Configuring),
             () => Task.Run(runtime.Packages.Store.Inventory));
         runtime.CtcVocabulary.Changed += () => DispatcherQueue.TryEnqueue(() => _ = RefreshRuntimeAsync());
         runtime.Groq.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded) _ = RefreshRuntimeAsync(); });
@@ -83,8 +78,8 @@ public sealed partial class PrototypePluginsView : UserControl
                     ? enabled ? "NVIDIA Parakeet powers local dictation, live preview and automatic dictionary boosting. Open Settings to manage models."
                         : "Enable for local dictation and model downloads. Your downloaded models are kept."
                     : enabled
-                    ? "Loaded and connected to dictation. Vocabulary preferences are set per term in Dictionary."
-                    : "Disabled. Enable to load the local CTC model and refine future dictations. Your saved vocabulary preferences are kept.")
+                    ? "Enabled. Open Settings to configure the capabilities provided by this package."
+                    : "Disabled. Enable this package to inspect and configure its available providers. Saved preferences are kept.")
             });
         }
         if (_opened is not null)
@@ -272,7 +267,7 @@ public sealed partial class PrototypePluginsView : UserControl
             {
                 PluginStatusExplanation.Text = plugin.RuntimeExplanation;
                 PluginVersion.Text = $"Plugin {plugin.Version} · Minimum host {plugin.MinimumHostVersion} · Portable host {LocalCtcVocabulary.HostVersion}";
-                PluginPrimaryButton.Visibility = Path.GetFileName(plugin.Id) is LocalTranscriptionPlugin.PluginId or CloudTranscriptionPlugin.PluginId ? Visibility.Visible : Visibility.Collapsed;
+                PluginPrimaryButton.Visibility = Visibility.Visible;
                 AutomationProperties.SetName(PluginPrimaryButton, "Settings for " + plugin.Title);
                 PluginRuntimeNote.Text = _runtime.Packages.Store.PendingRestart(Path.GetFileName(plugin.Id))
                     ? "An update is ready. Restart TypeWhisper to use it."
@@ -379,7 +374,7 @@ public sealed partial class PrototypePluginsView : UserControl
             {
                 LocalTranscriptionPlugin.PluginId => new LiveModelsView(_runtime),
                 CloudTranscriptionPlugin.PluginId => new LiveCloudSettingsView(_runtime),
-                _ => null
+                _ => new LivePortablePluginSettings(_runtime, Path.GetFileName(_opened.Id))
             };
             if (RuntimePluginSettingsPage.Content is null) return;
             ShowPage(Page.Settings);

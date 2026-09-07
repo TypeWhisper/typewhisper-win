@@ -13,6 +13,7 @@ public sealed class PluginManagementController
     private readonly string _root;
     private readonly Func<Task<IReadOnlyList<InstalledPluginPackage>>> _scan;
     private readonly IReadOnlyDictionary<string, ManagedPluginBinding> _bindings;
+    private readonly Func<string, ManagedPluginBinding?>? _bindingResolver;
     private readonly Func<bool> _canChange;
     private readonly object _sync = new();
     private IReadOnlyList<InstalledPluginPackage> _packages = [];
@@ -29,6 +30,11 @@ public sealed class PluginManagementController
         _canChange = canChange;
         _scan = scan;
     }
+
+    /// <summary>Resolves runtime bindings dynamically so newly installed packages can be enabled.</summary>
+    public PluginManagementController(string root, Func<string, ManagedPluginBinding?> bindingResolver,
+        Func<bool> canChange, Func<Task<IReadOnlyList<InstalledPluginPackage>>> scan)
+        : this(root, Array.Empty<ManagedPluginBinding>(), canChange, scan) => _bindingResolver = bindingResolver;
 
     public async Task RefreshAsync()
     {
@@ -99,7 +105,9 @@ public sealed class PluginManagementController
 
     private ManagedPluginBinding? Resolve(InstalledPluginPackage package)
     {
-        if (package.Manifest is not { } manifest || !_bindings.TryGetValue(manifest.Id, out var binding)) return null;
+        if (package.Manifest is not { } manifest) return null;
+        var binding = _bindingResolver?.Invoke(manifest.Id) ?? _bindings.GetValueOrDefault(manifest.Id);
+        if (binding is null) return null;
         var expected = Path.Combine(_root, manifest.Id);
         return string.Equals(Path.GetFullPath(package.Directory), expected,
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ? binding : null;

@@ -102,8 +102,8 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 if (!languageRow.IsLoaded) return;
                 var options = session.SupportedLanguages.Select(code => new PrototypeChoice(code,
                     LanguageName(code), "Supported by the active model")).ToArray();
-                language.SetOptions(options.Length == 0 || session.UsesGroq ? new PrototypeChoice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
-                language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesGroq ? session.Groq.Ready : session.CanSelectModel) && options.Length > 0;
+                language.SetOptions(options.Length == 0 || session.UsesRegistryProvider ? new PrototypeChoice[] { new("auto", "Automatic", "Language detection by the model") }.Concat(options).ToArray() : options, session.Language);
+                language.IsEnabled = selectedProviderId == session.ActiveProviderId && session.CanChangeProvider && (session.UsesRegistryProvider ? session.IsReady : session.CanSelectModel) && options.Length > 0;
             });
             languageRow.Loaded += (_, _) => { session.Models.Changed += RefreshLanguage; session.Groq.Changed += RefreshLanguage; session.Changed += RefreshLanguage; RefreshLanguage(); };
             languageRow.Unloaded += (_, _) => { session.Models.Changed -= RefreshLanguage; session.Groq.Changed -= RefreshLanguage; session.Changed -= RefreshLanguage; };
