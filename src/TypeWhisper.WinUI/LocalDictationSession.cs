@@ -688,6 +688,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             if (_disposed) return;
             _operationCancellation.Token.ThrowIfCancellationRequested();
+            _lastCompletedDictation.TryPublish(outcome, _operationCancellation.Token);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,

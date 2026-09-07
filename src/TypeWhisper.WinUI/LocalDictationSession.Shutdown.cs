@@ -20,6 +20,7 @@ internal sealed partial class LocalDictationSession
     internal Task ShutdownAsync() => _shutdown.Run(() =>
     {
         _disposed = true;
+        _lastCompletedDictation.Close();
         CtcVocabulary.RequestCancelActivation();
         try { _operationCancellation.Close(); }
         catch (AggregateException ex) { System.Diagnostics.Trace.TraceError("Shutdown cancellation callback failed: {0}", ex); }
