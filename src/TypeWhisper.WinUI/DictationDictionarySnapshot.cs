@@ -35,6 +35,9 @@ internal sealed class DictationDictionarySnapshot
         { return new([], "Dictionary unavailable · original transcript retained."); }
     }
 
+    internal string ApplyBoosting(string text) => _boosting.Apply(text);
+    internal string ApplyCorrections(string text) => DictionaryService.ApplyCorrectionsSnapshot(text, _entries);
+
     internal string Apply(string rawText, bool boostVocabulary = false)
     {
         // This is the existing Windows text heuristic, not acoustic CTC scoring.

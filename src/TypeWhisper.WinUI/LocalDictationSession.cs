@@ -36,6 +36,10 @@ internal sealed class LocalDictationSession : IDisposable
         try { return RecordingModePreferences.Save(mode); }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
+    internal DictationTextPreferencesStore TextPreferences { get; } = new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "TypeWhisper-WinUI-DevUserData", "dictation-text.json"));
+    private DictationTextPreferences _textAtStart = new();
     private DictationOutputPreferences _outputAtStart = new();
     internal event Action<DictationOutputResult>? ReviewRequested;
     internal bool LivePreviewEnabled { get; set; } = true;
@@ -372,6 +376,7 @@ internal sealed class LocalDictationSession : IDisposable
                 if (_disposed) return;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _outputAtStart = OutputPreferences.Current;
+                _textAtStart = TextPreferences.Current;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
@@ -431,28 +436,35 @@ internal sealed class LocalDictationSession : IDisposable
             }
             else CtcVocabulary.Trace($"{recordingId} host-skipped enabledAtStart={_ctcAtStart} enabledNow={CtcVocabulary.Enabled} dictionaryLoaded={dictionary is not null}");
             var boostVocabulary = _boostVocabulary && !_ctcAtStart;
-            var text = dictionary is null ? refinedText : await Task.Run(() => dictionary.Apply(refinedText, boostVocabulary));
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
-            string? snippetError = null;
-            if (snippets is not null)
-            {
-                string? clipboardText = null;
-                if (await Task.Run(() => snippets.NeedsClipboard(text)))
+            var notices = new List<string>();
+            if (dictionary?.Error is { } dictionaryError) notices.Add(dictionaryError);
+            var processed = await DictationTextPipeline.ProcessAsync(refinedText, _textAtStart, Language,
+                detectedLanguage: DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
+                expandSnippets: snippets is null ? null : async (input, ct) =>
                 {
-                    try
+                    string? clipboardText = null;
+                    if (await Task.Run(() => snippets.NeedsClipboard(input), ct))
                     {
-                        var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-                        clipboardText = clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
-                            ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2)) : "";
+                        try
+                        {
+                            var clipboard = global::Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+                            clipboardText = clipboard.Contains(global::Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text)
+                                ? await clipboard.GetTextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2), ct) : "";
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex) when (ex is not OutOfMemoryException)
+                        { System.Diagnostics.Debug.WriteLine("Snippet clipboard text unavailable: " + ex.Message); }
                     }
-                    catch (Exception ex) when (ex is not OutOfMemoryException)
-                    { System.Diagnostics.Debug.WriteLine("Snippet clipboard text unavailable: " + ex.Message); }
-                }
-                var input = text;
-                var expansion = await Task.Run(() => snippets.Apply(input, clipboardText is null ? null : () => clipboardText));
-                text = expansion.Text;
-                snippetError = expansion.Error;
-            }
+                    var expansion = await Task.Run(() => snippets.Apply(input, clipboardText is null ? null : () => clipboardText), ct);
+                    if (expansion.Error is { } error) notices.Add(error);
+                    return expansion.Text;
+                },
+                boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
+                correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null);
+            notices.AddRange(processed.Warnings);
+            var text = processed.Text;
+            var snippetError = notices.Count == 0 ? null : string.Join(" · ", notices);
             if (_disposed) return;
             var record = new TranscriptionRecord
             {

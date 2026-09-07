@@ -14,6 +14,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
     {
         LiveOutputSettings.Configure(category, content, pickers, session);
         LiveRecordingModeSettings.Configure(category, content, pickers, session);
+        LiveTextProcessingSettings.Configure(category, content, pickers, session);
         if (category == "Audio")
         {
             pickers.Clear();
@@ -22,7 +23,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         if (category == "Dictation")
         {
             var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Preview only"));
-            if (previewNote is not null) previewNote.Text = "Model, language and output choices are saved. Other options on this page may still be previews.";
+            if (previewNote is not null) previewNote.Text = "Model, language, recording mode, output and text formatting choices are saved. Other options on this page may still be previews.";
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "DictationModel"));
             row.Children.Clear();
             var provider = new PrototypeChoicePicker();
