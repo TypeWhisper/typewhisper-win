@@ -433,7 +433,9 @@ public sealed partial class MainWindow : Window
     internal void ShowFromActivation()
     {
         if (_profileRestoreClosing) return;
-        _activationStopwatch.Restart();
+        if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
+            !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen)
+            MetricsText.Text = _dictation.Status;
         _isSearchEditing = false;
         UpdateSearchPresentation();
         PlaceOnInvocationMonitor();
@@ -469,6 +471,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (_activationStopwatch.IsRunning)
+        {
+            _activationStopwatch.Stop();
+            Debug.WriteLine($"Main window first activation: {_activationStopwatch.Elapsed.TotalMilliseconds:0.0} ms");
+        }
         NativeWindowAppearance.RemoveSystemBorder(this);
         // Closing a settings picker reactivates the window. Keep its current
         // field focused instead of jumping back to the name and scrolling up.
@@ -478,8 +485,6 @@ public sealed partial class MainWindow : Window
         if (_recorderOpen) RecorderView.FocusEntry();
         else if (_workflowsOpen && WorkflowsView.IsDetail) WorkflowsView.FocusEntry();
         else SearchBox.Focus(FocusState.Programmatic);
-        var elapsed = _activationStopwatch.Elapsed.TotalMilliseconds;
-        MetricsText.Text = $"Interactive · {elapsed:0.0} ms activation";
     }
 
     private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
