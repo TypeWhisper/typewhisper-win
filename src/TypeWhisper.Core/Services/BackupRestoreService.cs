@@ -535,6 +535,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 IsRegex = item.IsRegex,
                 IsEnabled = item.IsEnabled,
                 Source = item.Source,
+                CtcMinSimilarity = item.CtcMinSimilarity,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -697,6 +698,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 EngineUsed = item.EngineUsed,
                 ModelUsed = item.ModelUsed,
                 TranscriptionTaskUsed = item.TranscriptionTaskUsed,
+                SourceKind = item.SourceKind,
                 UsedTranscriptionFallback = item.UsedTranscriptionFallback,
                 AudioFileName = null,
                 RecoveryAudioFileName = null,
@@ -840,6 +842,8 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 return "A dictionary entry contains invalid text.";
             if (!Enum.IsDefined(entry.EntryType) || !Enum.IsDefined(entry.Source))
                 return "A dictionary entry contains an unsupported enum value.";
+            if (entry.CtcMinSimilarity is { } similarity && (!float.IsFinite(similarity) || similarity is < 0 or > 1))
+                return "A dictionary entry contains an invalid acoustic similarity threshold.";
             if (entry.EntryType == DictionaryEntryType.Correction && entry.Replacement is null)
                 return "A dictionary correction has no replacement.";
             if (entry.IsRegex)
@@ -880,7 +884,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
                 return "A history entry has an invalid duration.";
             if (!ValidShort(entry.AppName) || !ValidShort(entry.AppProcessName) || !ValidShort(entry.AppUrl)
                 || !ValidShort(entry.Language) || !ValidShort(entry.WorkflowName) || !ValidShort(entry.EngineUsed)
-                || !ValidShort(entry.ModelUsed) || !ValidShort(entry.TranscriptionTaskUsed))
+                || !ValidShort(entry.ModelUsed) || !ValidShort(entry.TranscriptionTaskUsed) || !ValidShort(entry.SourceKind))
                 return "A history entry contains invalid metadata.";
         }
         if (data.Preferences is { } preferences)
@@ -944,6 +948,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
 
     private static BackupDictionaryEntry ToBackupDictionaryEntry(DictionaryEntry entry) => new()
     {
+        CtcMinSimilarity = entry.CtcMinSimilarity,
         EntryType = entry.EntryType,
         Original = entry.Original,
         Replacement = entry.Replacement,
@@ -983,6 +988,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
         TranscriptionRecord record,
         IReadOnlyDictionary<string, string> workflowNames) => new()
         {
+            SourceKind = record.SourceKind,
             Timestamp = record.Timestamp,
             RawText = record.RawText,
             FinalText = record.FinalText,
@@ -1123,6 +1129,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
     private static bool DictionaryValuesEqual(DictionaryEntry existing, BackupDictionaryEntry incoming) =>
         string.Equals(existing.Replacement ?? "", incoming.Replacement ?? "", StringComparison.Ordinal)
         && existing.IsEnabled == incoming.IsEnabled
+        && existing.CtcMinSimilarity == incoming.CtcMinSimilarity
         && existing.Source == incoming.Source;
 
     private static bool SnippetValuesEqual(Snippet existing, BackupSnippet incoming) =>
@@ -1142,6 +1149,7 @@ public sealed class BackupRestoreService : IBackupRestoreService
 
     private static string HistoryFingerprint(TranscriptionRecord record) => HistoryFingerprint(new BackupHistoryEntry
     {
+        SourceKind = record.SourceKind,
         Timestamp = record.Timestamp,
         RawText = record.RawText,
         FinalText = record.FinalText,
