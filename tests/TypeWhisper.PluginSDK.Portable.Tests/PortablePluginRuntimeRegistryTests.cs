@@ -4,7 +4,7 @@ using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 using TypeWhisper.PluginSDK.PortableFixture;
 
-public sealed class PortablePluginRuntimeRegistryTests : IDisposable
+public sealed partial class PortablePluginRuntimeRegistryTests : IDisposable
 {
     private const string Id = "test.typewhisper.runtime";
     private const string OtherId = "test.typewhisper.runtime-other";
@@ -320,6 +320,7 @@ public sealed class PortablePluginRuntimeRegistryTests : IDisposable
     {
         private readonly VocabularyHostServices _inner = new(directory);
         internal bool FailEnabledWrites;
+        internal Action? OnCapabilitiesChanged;
         internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource<string?> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task StoreSecretAsync(string key, string value) => throw new NotSupportedException();
@@ -338,7 +339,7 @@ public sealed class PortablePluginRuntimeRegistryTests : IDisposable
         public IPluginEventBus EventBus => throw new NotSupportedException();
         public IReadOnlyList<string> AvailableProfileNames => [];
         public void Log(PluginLogLevel level, string message) { if (message == "request-start") Started.TrySetResult(true); }
-        public void NotifyCapabilitiesChanged() { }
+        public void NotifyCapabilitiesChanged() => OnCapabilitiesChanged?.Invoke();
         public IPluginLocalization Localization => throw new NotSupportedException();
     }
 }

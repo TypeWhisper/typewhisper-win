@@ -37,7 +37,7 @@ public sealed record PortableActionOutcome(PortableActionStatus Status, string M
 /// Owns each activated package once and serializes all capability/configuration calls.
 /// The host initializes package storage first and must route runtime calls through this owner.
 /// </summary>
-public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Version hostVersion,
+public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore store, Version hostVersion,
     Func<string, IPluginHostServices> createServices, Func<string, bool>? ownsPlugin = null) : IAsyncDisposable
 {
     private sealed class Slot(string id, IPluginHostServices services)

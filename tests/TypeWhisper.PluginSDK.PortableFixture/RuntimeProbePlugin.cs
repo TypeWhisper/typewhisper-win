@@ -4,7 +4,7 @@ namespace TypeWhisper.PluginSDK.PortableFixture;
 
 /// <summary>A portable multi-capability package used only by runtime ownership tests.</summary>
 public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, IApiKeyPlugin,
-    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider, IPostProcessorPlugin, IActionPlugin
+    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider, IPostProcessorPlugin, IActionPlugin, IModelDownloadRequirementsProvider
 {
     private IPluginHostServices? _host;
     private bool _active;
@@ -26,7 +26,7 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <inheritdoc />
     public string TranscriptionSelectionId => _host?.GetSetting<string>("SharedSelection") ?? PluginId;
     /// <inheritdoc />
-    public bool IsConfigured => _active;
+    public bool IsConfigured => _active && _host?.GetSetting<bool>("NotReady") != true;
     /// <inheritdoc />
     public bool IsAvailable => _active;
     /// <inheritdoc />
@@ -35,6 +35,32 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     public IReadOnlyList<PluginModelInfo> SupportedModels => [new("llm", "Fixture LLM")];
     /// <inheritdoc />
     public string? SelectedModelId => "transcription";
+    /// <inheritdoc />
+    public bool SupportsModelDownload => _host?.GetSetting<bool>("LocalModels") == true;
+    /// <inheritdoc />
+    public bool IsModelDownloaded(string modelId) => !SupportsModelDownload || _host!.GetSetting<bool>("Downloaded");
+    /// <inheritdoc />
+    public async Task DownloadModelAsync(string modelId, IProgress<double>? progress, CancellationToken ct)
+    {
+        _host!.SetSetting("downloadCalls", _host.GetSetting<int>("downloadCalls") + 1);
+        progress?.Report(0.25);
+        await ProcessAsync("", "", "", ct);
+        if (_host.GetSetting<bool>("DownloadThrows")) throw new IOException("private download error");
+        if (!_host.GetSetting<bool>("MissingAfterDownload")) _host.SetSetting("Downloaded", true);
+        progress?.Report(1);
+    }
+    /// <inheritdoc />
+    public async Task LoadModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("loadCalls", _host.GetSetting<int>("loadCalls") + 1);
+        if (_host.GetSetting<bool>("HoldLoad")) await ProcessAsync("", "", "", ct);
+    }
+    /// <inheritdoc />
+    public event EventHandler? ModelDownloadRequirementsChanged { add { } remove { } }
+    /// <inheritdoc />
+    public IReadOnlyList<PluginModelDownloadRequirement> ModelDownloadRequirements =>
+        [new("transcription", "Fixture", "license", PluginModelDownloadRequirementKind.License,
+            "Fixture license", "Explicit agreement required", true, _host?.GetSetting<bool>("BlockedRequirement") != true)];
     /// <inheritdoc />
     public bool SupportsTranslation => false;
     /// <inheritdoc />
@@ -59,7 +85,16 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <inheritdoc />
     public void Dispose() => _host?.SetSetting("disposals", _host.GetSetting<int>("disposals") + 1);
     /// <inheritdoc />
-    public void SelectModel(string modelId) => _host!.NotifyCapabilitiesChanged();
+    public void SelectModel(string modelId)
+    {
+        _host!.SetSetting("selectCalls", _host.GetSetting<int>("selectCalls") + 1);
+        if (_host.GetSetting<bool>("SelectWorkerNotification"))
+        {
+            if (!Task.Run(_host.NotifyCapabilitiesChanged).Wait(TimeSpan.FromSeconds(5)))
+                throw new TimeoutException("Registry state was locked during a plugin selection notification.");
+        }
+        else _host.NotifyCapabilitiesChanged();
+    }
     /// <inheritdoc />
     public async Task<PluginTranscriptionResult> TranscribeAsync(byte[] audio, string? language, bool translate, string? prompt, CancellationToken ct)
     {
