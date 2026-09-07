@@ -10,8 +10,7 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     internal event Action? Changed;
     internal bool Busy { get; private set; }
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
-    private static readonly string DataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "PluginData", "com.typewhisper.parakeet-ctc");
+    private static readonly string DataDirectory = WinUIProfile.DataPath("PluginData", "com.typewhisper.parakeet-ctc");
     private readonly VocabularyDiagnosticLog _diagnostics;
     private readonly VocabularyHostServices _host;
     private readonly VocabularyPluginSession _session;

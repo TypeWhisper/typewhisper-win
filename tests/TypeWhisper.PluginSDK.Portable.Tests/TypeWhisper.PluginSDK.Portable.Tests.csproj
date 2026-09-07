@@ -15,6 +15,7 @@
     <ProjectReference Include="../TypeWhisper.PluginSDK.PortableFixture/TypeWhisper.PluginSDK.PortableFixture.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../../src/TypeWhisper.Core/TypeWhisper.Core.csproj" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WinUIProfile.cs" Link="WinUIProfile.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalCtcVocabulary.cs" Link="LocalCtcVocabulary.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalTranscriptionPlugin.cs" Link="LocalTranscriptionPlugin.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/CloudTranscriptionPlugin.cs" Link="CloudTranscriptionPlugin.cs" />

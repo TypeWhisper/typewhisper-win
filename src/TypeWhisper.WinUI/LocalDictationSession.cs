@@ -24,24 +24,16 @@ internal sealed class LocalDictationSession : IDisposable
     private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
     private Task<DictationSnippetSnapshot>? _snippetSnapshot;
     private bool _boostVocabulary;
-    internal DictationOutputPreferencesStore OutputPreferences { get; } = new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "dictation-output.json"));
-    internal RecordingModePreferencesStore RecordingModePreferences { get; } = new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "recording-mode.json"));
+    internal DictationOutputPreferencesStore OutputPreferences { get; } = new(WinUIProfile.DataPath("dictation-output.json"));
+    internal RecordingModePreferencesStore RecordingModePreferences { get; } = new(WinUIProfile.DataPath("recording-mode.json"));
     internal string? SelectRecordingMode(RecordingMode mode)
     {
         if (!CanChangeProvider || !_gate.Wait(0)) return "Finish dictation before changing recording mode.";
         try { return RecordingModePreferences.Save(mode); }
         finally { _gate.Release(); Changed?.Invoke(); }
     }
-    internal DictationTextPreferencesStore TextPreferences { get; } = new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "dictation-text.json"));
-    internal TranscriptionTaskPreferencesStore TranscriptionTaskPreferences { get; } = new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "transcription-task.json"));
+    internal DictationTextPreferencesStore TextPreferences { get; } = new(WinUIProfile.DataPath("dictation-text.json"));
+    internal TranscriptionTaskPreferencesStore TranscriptionTaskPreferences { get; } = new(WinUIProfile.DataPath("transcription-task.json"));
     internal bool SupportsTranslation => UsesGroq ? Groq.SupportsTranslation : Models.SupportsTranslation;
     private TranscriptionTask _taskAtStart;
     internal string? SelectTranscriptionTask(TranscriptionTask task)
@@ -66,7 +58,7 @@ internal sealed class LocalDictationSession : IDisposable
     private readonly System.Diagnostics.Stopwatch _silenceClock = new();
     internal DictationAudioPreferences AudioPreferences { get; private set; } = new();
     internal string? AudioPreferencesError { get; private set; }
-    private static readonly string AudioPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "audio.json");
+    private static readonly string AudioPreferencesPath = WinUIProfile.DataPath("audio.json");
 
     internal string? SaveAudioPreferences(DictationAudioPreferences preferences)
     {
@@ -104,7 +96,7 @@ internal sealed class LocalDictationSession : IDisposable
     private readonly LocalTranscriptionPlugin _transcriptionPlugin;
     internal LocalTranscriptionPlugin Models => _transcriptionPlugin;
     internal CloudTranscriptionPlugin Groq { get; }
-    private readonly VocabularyHostServices _selection = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "Dictation"));
+    private readonly VocabularyHostServices _selection = new(WinUIProfile.DataPath("Dictation"));
     internal bool UsesGroq { get; private set; }
     internal string ActiveModelName => UsesGroq ? "Groq · " + Groq.ModelName : Models.ActiveModelName;
     internal string? ActiveModelId => UsesGroq ? Groq.ModelId : Models.ActiveModelId;
@@ -255,7 +247,7 @@ internal sealed class LocalDictationSession : IDisposable
     internal float CurrentLevel => _audio.CurrentRmsLevel;
     internal event Action? Changed;
     private List<MicrophonePriorityItem> _microphones = [];
-    private static readonly string MicrophonePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "microphone.json");
+    private static readonly string MicrophonePath = WinUIProfile.DataPath("microphone.json");
     internal IReadOnlyList<MicrophonePriorityItem> MicrophonePriority => _microphones.AsReadOnly();
     internal string SelectedMicrophoneId => _microphones.FirstOrDefault()?.Id ?? "default";
     internal string SelectedMicrophoneName => _microphones.FirstOrDefault()?.Name ?? "System default";
@@ -292,7 +284,7 @@ internal sealed class LocalDictationSession : IDisposable
     {
         _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId));
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
-        var groqDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "PluginData", CloudTranscriptionPlugin.PluginId);
+        var groqDirectory = WinUIProfile.DataPath("PluginData", CloudTranscriptionPlugin.PluginId);
         var groqHost = new VocabularyHostServices(groqDirectory, secrets: new WindowsPluginSecretStore(groqDirectory));
         Groq = new(groqHost, async () =>
         {
@@ -303,9 +295,7 @@ internal sealed class LocalDictationSession : IDisposable
             throw new NotSupportedException("This cloud plugin does not provide transcription and API key settings.");
         });
         _history = history;
-        HistoryRetention = new(history, new HistoryRetentionPreferencesStore(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TypeWhisper-WinUI-DevUserData", "history-retention.json")));
+        HistoryRetention = new(history, new HistoryRetentionPreferencesStore(WinUIProfile.DataPath("history-retention.json")));
         _inserter = new(owner);
         _effects = new(_ducking, new MediaPauseService());
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();

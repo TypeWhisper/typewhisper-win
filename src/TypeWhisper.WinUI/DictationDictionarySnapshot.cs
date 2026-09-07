@@ -7,8 +7,7 @@ namespace TypeWhisper.WinUI;
 // No persisted writes: an older recording must never overwrite newer UI edits.
 internal sealed class DictationDictionarySnapshot
 {
-    internal static string StoragePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "TypeWhisper-WinUI-DevUserData", "dictionary.json");
+    internal static string StoragePath => WinUIProfile.DataPath("dictionary.json");
     private readonly DictionaryEntry[] _entries;
     private readonly TypeWhisper.Core.Interfaces.IVocabularyBoostingService _boosting;
     internal string? Error { get; }

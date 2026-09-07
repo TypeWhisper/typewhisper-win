@@ -16,7 +16,7 @@ public sealed partial class MainWindow : Window
 {
     private const int CompactWidth = 780;
     private const int CompactHeight = 520;
-    private static string LauncherHotkeyPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "quick-launch-hotkeys.txt");
+    private static string LauncherHotkeyPath => WinUIProfile.DataPath("quick-launch-hotkeys.txt");
 
     private string? ChangeLauncherHotkeys(string value)
     {
@@ -180,7 +180,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         NativeWindowAppearance.ApplyAppTitleBar(this);
         LoadOverlayPreferences();
-        var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
+        var historyPath = WinUIProfile.DataPath("history.json");
 #if DEBUG
         // Opt-in fixture uses an ephemeral history store, never the development profile's history.
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
@@ -803,7 +803,7 @@ public sealed partial class MainWindow : Window
     private PrototypeOverlayPreferences _layoutPreferences = new(PrototypeOverlayMode.Standard, true, false);
     private readonly Dictionary<string, string> _settingsValues = new();
     private PrototypeOverlayPreferences OverlayPreferences => _layoutPreferences with { Mode = _overlayMode, LiveText = _transcriptPreviewEnabled, TechnicalDetails = _technicalDetailsEnabled };
-    private static readonly string OverlayPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "overlay.json");
+    private static readonly string OverlayPreferencesPath = WinUIProfile.DataPath("overlay.json");
     private void LoadOverlayPreferences()
     {
         try

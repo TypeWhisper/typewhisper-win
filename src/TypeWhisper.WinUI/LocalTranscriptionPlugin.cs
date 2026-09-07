@@ -52,9 +52,8 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal LocalTranscriptionPlugin(IPluginHostServices? host = null, Func<Task<LocalTranscriptionLease>>? load = null, Func<string>? packageDirectory = null)
     {
         _packageDirectory = packageDirectory ?? (() => Path.Combine(AppContext.BaseDirectory, "Plugins", PluginId));
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        _host = host ?? new VocabularyHostServices(Path.Combine(local, "TypeWhisper-WinUI-DevUserData", "PluginData", PluginId),
-            assetDirectory: Path.Combine(local, "TypeWhisper-DevUserData", "PluginData", PluginId));
+        _host = host ?? new VocabularyHostServices(WinUIProfile.DataPath("PluginData", PluginId),
+            assetDirectory: WinUIProfile.PluginAssetPath(PluginId));
         _load = load ?? LoadPackageAsync;
     }
 
