@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using TypeWhisper.Core.Interfaces;
+using TypeWhisper.Presentation;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.PluginSDK;
@@ -22,6 +23,11 @@ internal sealed class LocalDictationSession : IDisposable
     private Task<DictationDictionarySnapshot>? _dictionarySnapshot;
     private Task<DictationSnippetSnapshot>? _snippetSnapshot;
     private bool _boostVocabulary;
+    internal DictationOutputPreferencesStore OutputPreferences { get; } = new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "TypeWhisper-WinUI-DevUserData", "dictation-output.json"));
+    private DictationOutputPreferences _outputAtStart = new();
+    internal event Action<DictationOutputResult>? ReviewRequested;
     internal bool LivePreviewEnabled { get; set; } = true;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
@@ -355,6 +361,7 @@ internal sealed class LocalDictationSession : IDisposable
                 await _livePreview.StopAsync();
                 if (_disposed) return;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
+                _outputAtStart = OutputPreferences.Current;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
@@ -443,31 +450,21 @@ internal sealed class LocalDictationSession : IDisposable
                 RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
                 EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = "transcribe"
             };
-            await _history.EnsureLoadedAsync();
-            if (!_history.TryAddRecord(record))
-            {
-                LastUnsavedText = text;
-                SetStatus("History could not be saved. Result retained in memory; no text inserted.");
-                return;
-            }
-            // Never change applications or send Enter automatically. If focus
-            // moved during decoding, keep the result in History for manual use.
-            for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25);
-            if (ModifiersHeld() || GetForegroundWindow() != _target)
-            {
-                SetStatus("Saved to History · target changed, text was not inserted");
-                return;
-            }
-            try
-            {
-                var inserted = await _inserter.InsertAsync(text, _target);
-                var completion = inserted ? $"Paste sent and saved · {ActiveModelName} ready" : "Saved to History · paste not completed; copy the result manually";
-                SetStatus(snippetError is null ? completion : completion + " · " + snippetError);
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                SetStatus("Saved to History · clipboard operation failed; check the target and clipboard: " + ex.Message, DictationPhase.Error);
-            }
+            var delivery = new DictationOutputDelivery(_history);
+            var outcome = await delivery.DeliverAsync(record, _outputAtStart,
+                () => OutputPreferences.Current, async () =>
+                {
+                    // Recheck after waiting: settings can change while modifiers are held.
+                    for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25);
+                    if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
+                        ModifiersHeld() || GetForegroundWindow() != _target) return false;
+                    return await _inserter.InsertAsync(text, _target);
+                });
+            if (_disposed) return;
+            LastUnsavedText = outcome.Saved ? null : text;
+            SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError);
+            if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
+
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

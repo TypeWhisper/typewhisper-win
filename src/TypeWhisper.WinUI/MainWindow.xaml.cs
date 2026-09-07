@@ -114,7 +114,7 @@ public sealed partial class MainWindow : Window
     }
 
     internal void FinishDictationFromTray() { if (_dictation.IsRecording) _ = _dictation.ToggleAsync(); }
-    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictation.Dispose(); _liveOverlay?.Close(); }
+    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictation.Dispose(); _liveOverlay?.Close(); foreach (var review in _reviewWindows.ToArray()) review.Close(); }
 
     private void UpdateLiveDictation()
     {
@@ -165,6 +165,16 @@ public sealed partial class MainWindow : Window
     private PrototypeLexiconView? _lexicon;
     private bool LexiconOpen => LexiconHost.Visibility == Visibility.Visible;
 
+    internal void ShowOutputReview(TypeWhisper.Presentation.DictationOutputResult result)
+    {
+        var review = new DictationReviewWindow(result);
+        _reviewWindows.Add(review);
+        review.Closed += (_, _) => _reviewWindows.Remove(review);
+        review.Activate();
+    }
+
+    private readonly List<DictationReviewWindow> _reviewWindows = [];
+
     internal MainWindow()
     {
         InitializeComponent();
@@ -173,6 +183,7 @@ public sealed partial class MainWindow : Window
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        _dictation.ReviewRequested += ShowOutputReview;
         PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();

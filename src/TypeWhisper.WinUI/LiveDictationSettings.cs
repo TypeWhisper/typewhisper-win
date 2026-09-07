@@ -12,6 +12,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
     }
     internal void Configure(string category, StackPanel content, List<PrototypeChoicePicker> pickers)
     {
+        LiveOutputSettings.Configure(category, content, pickers, session);
         if (category == "Audio")
         {
             pickers.Clear();
@@ -20,7 +21,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         if (category == "Dictation")
         {
             var previewNote = content.Children.OfType<TextBlock>().FirstOrDefault(text => text.Text.StartsWith("Preview only"));
-            if (previewNote is not null) previewNote.Text = "Model and language are saved. Other options on this page may still be previews.";
+            if (previewNote is not null) previewNote.Text = "Model, language and output choices are saved. Other options on this page may still be previews.";
             var row = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "DictationModel"));
             row.Children.Clear();
             var provider = new PrototypeChoicePicker();

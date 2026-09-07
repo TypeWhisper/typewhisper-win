@@ -275,9 +275,11 @@ public sealed partial class PrototypeSettingsWindow : Window
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
+            if (category == "Privacy" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "History saving is connected · unavailable privacy controls are disabled";
             PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
             if (category == "Dictation" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Provider, model and language are saved";
+                SessionHint.Text = "Provider, model, language and output choices are saved";
             if (category == "Audio" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
             if (category == "General")

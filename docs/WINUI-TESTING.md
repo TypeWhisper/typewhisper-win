@@ -71,3 +71,13 @@ No personal keys, recordings or weights belong in test fixtures, logs, commits o
 - [ ] Deferred controlled legacy-versus-WinUI benchmark for PR #447: same audio/model/backend/thread settings, separate warm-up and steady state, capture onset, insertion latency, memory and explicit uncertainty.
 
 For each new feature, test observable state and failure/race outcomes behind portable boundaries first, then validate the Windows adapter separately. Avoid tests that only repeat a UI implementation or use simulated output as transcription evidence.
+
+## Output settings slice (2026-09-07)
+
+Sixteen new `DictationOutputTests` exercise the actual portable delivery boundary: independent history/paste choices, failed/throwing history and paste, changes while history loads, recording-start restrictions, restart, corrupt/incomplete/unreadable preferences and atomic-save failure cleanup. After the final preferences change, all 112 Presentation cases passed; the preceding full headless run passed all four suites (112 host, 111 Presentation, 29 Groq, 25 NVIDIA, one platform skip). The additional unreadable-path case brings the tested total to 278 passed, one skipped across those runs.
+
+The real dev build exposed a pre-existing missing `TabViewScrollButtonBackground` resource during startup. Explicitly merging `XamlControlsResources` restores the host window. Computer Use verified the real output picker, persisted Review first selection and restoration of Insert directly, and the Privacy page with unavailable retention/memory/learning controls disabled. History settings were not changed through Computer Use; their write behavior is tested with isolated services.
+
+For a repeatable visual check of the real review window without microphone/cloud/history changes, Debug builds accept `TYPEWHISPER_WINUI_REVIEW_FIXTURE=1` in the environment of the prescribed `--run --winui` build script. It opens a labeled synthetic result using the same window as real delivery. Remove the environment variable after launch; Release builds ignore it. This fixture is UI evidence, not real-dictation acceptance.
+
+The Debug review fixture rendered successfully with both paragraphs after fixing TextBox initialization order (enable multiline before assigning text) and removing the one-line search template. The Copy text click could not be verified because Computer Use could not activate that window; no successful copy acceptance is claimed. Full review-after-real-dictation acceptance remains separate from the fixture.

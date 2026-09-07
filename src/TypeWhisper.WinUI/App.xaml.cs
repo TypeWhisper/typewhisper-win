@@ -55,6 +55,17 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray));
         _window.DictationChanged += _tray.UpdateDictation;
         _ = _window.InitializeDictationAsync();
+#if DEBUG
+        // Opt-in visual fixture: no capture, provider request, clipboard write or history entry.
+        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_REVIEW_FIXTURE") == "1")
+            _window.DispatcherQueue.TryEnqueue(() => _window.ShowOutputReview(new(
+                new TypeWhisper.Core.Models.TranscriptionRecord
+                {
+                    Id = "review-fixture", Timestamp = DateTime.UtcNow,
+                    RawText = "Review window sample.",
+                    FinalText = "Review window sample.\n\nDieser Text wurde nicht aufgenommen und nicht in der History gespeichert."
+                }, false, true, "UI test sample. Nothing was recorded or pasted.")));
+#endif
         if (Environment.GetCommandLineArgs().Contains("--account"))
             _window.DispatcherQueue.TryEnqueue(_window.OpenAccount);
         else if (Environment.GetCommandLineArgs().Contains("--sync-backup"))

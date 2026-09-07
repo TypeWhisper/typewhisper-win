@@ -32,9 +32,9 @@ WinUI state lives under `LocalAppData/TypeWhisper-WinUI-DevUserData`: history, d
 
 `TypeWhisper.Presentation` targets plain `net10.0` and references Core. `HistoryReader` receives its history service and returns read-only snapshots with explicit load/search failures and cancellation. It has no default user-data path, persistence writes or WPF dispatcher/dialog dependency.
 
-The adopted history UI uses the isolated history service without sample seeding. Corrupt data propagates to retryable error state without becoming an empty writable file. Display IDs are derived without rewriting opaque stored IDs. Missing kind/device metadata stays unknown. Audio projection, edit/delete/export, retention, Inbox and recovery are not connected.
+The adopted history UI uses the isolated history service without sample seeding. Corrupt data propagates to retryable error state without becoming an empty writable file. Display IDs are derived without rewriting opaque stored IDs. Missing kind/device metadata stays unknown. Audio projection, edit/delete/export, retention, Inbox and recovery are not connected. Save to history itself is now a persisted runtime choice.
 
-The dictation writer currently saves raw/final text, duration, engine/model and task `transcribe`; it does not populate language/app/URL or audio metadata. History saves before insertion. A failed save preserves the result only in memory and prevents paste; this is not durable recovery.
+The dictation writer currently saves raw/final text, duration, engine/model and task `transcribe`; it does not populate language/app/URL or audio metadata. History saves before insertion. A failed save opens a copyable review, preserves the result only in memory and prevents paste; this is not durable recovery.
 
 ## Dictation and insertion
 
@@ -46,7 +46,7 @@ Final processing currently runs CTC when eligible, then dictionary/text boosting
 
 The inserter sends one Ctrl+V for the complete text, preserving supported clipboard data through the native transaction. Unsupported/unmaterializable snapshots abort before replacement. Restore checks sequence ownership and leaves newer clipboard data alone. Temporary text is marked for clipboard-history exclusion. No automatic Enter or paste retry is sent.
 
-The target guard follows the top-level foreground window, not the exact editor field. Ctrl+V dispatch is not evidence that an editor consumed the text; restoration currently waits 500 ms. Review-first and exact-field settings are not runtime controls yet. Real rich-format clipboard and application acceptance remain necessary.
+The target guard follows the top-level foreground window, not the exact editor field. Ctrl+V dispatch is not evidence that an editor consumed the text; restoration currently waits 500 ms. Review first now opens a transient result window without automatically pasting. History saving is independent; unsaved results can still be reviewed or pasted. Restrictions applied during processing are respected, and corrupt output preferences disable both destinations. Exact-field locking remains unavailable and its control is disabled. Real rich-format clipboard and application acceptance remain necessary.
 
 ## Packages and capabilities
 

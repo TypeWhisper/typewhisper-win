@@ -4,6 +4,10 @@ Current source checkpoint: `ff77f43a` (2026-09-06). Release-wide draft: [PR #447
 
 The authoritative feature inventory is now the [full comparison against both previous Windows and Mac](WINUI-FUNCTIONAL-STATUS.md). This replaces the accumulated, contradictory milestone checklist. Historical test counts and superseded UI decisions remain available in Git history; they are not current completion claims.
 
+## Latest slice: output preferences (2026-09-07)
+
+Automatic paste / Review first and Save to history now persist and control actual delivery independently. Review and failed-delivery results remain copyable without a history write. Sixteen new portable cases cover combinations, restrictions during processing, restart, malformed/unreadable files, failed saves and failed paste. Unimplemented history retention, memory, correction learning and exact-field locking are disabled. WinUI standard control resources are now explicitly merged, fixing startup failure on `TabViewScrollButtonBackground`.
+
 ## Connected today
 
 - Real hotkey microphone dictation through NVIDIA Parakeet/Canary or Groq, local live preview, persisted provider/model/language selection and history before whole-text paste.
@@ -18,7 +22,8 @@ The authoritative feature inventory is now the [full comparison against both pre
 
 These are major implementation areas, not final polish. Detailed per-feature gaps, reference sources, a 50-row grouped plugin inventory and acceptance criteria are in the full comparison.
 
-- [ ] Wire visible runtime settings, especially Review first / AutoPaste and history/privacy; make unavailable controls unambiguous.
+- [x] Connect Review first / AutoPaste and history saving with persistence and delivery tests.
+- [ ] Connect remaining runtime settings and retention; make other preview controls unambiguous.
 - [ ] Connect complete text processing, generic plugin capabilities, cancellation, queued jobs, durable recovery and accurate provenance.
 - [ ] Replace workflow examples with persistent workflows, triggers, LLM processing, selected-text execution and retry.
 - [ ] Replace file/recorder simulations with real decoding/capture, output files, transcription jobs, subtitles and watch folders.

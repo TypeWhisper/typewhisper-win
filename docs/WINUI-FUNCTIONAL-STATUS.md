@@ -2,6 +2,10 @@
 
 Source audit for draft [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), 2026-09-06.
 
+## Update: output settings, 2026-09-07
+
+The next implementation slice connects persisted automatic-paste/review and history-saving choices. Review first opens a transient copyable result even with history off. History/paste failures also return the text for review. Switching a choice off restricts a recording already in progress; enabling it applies only to future recordings. Malformed preferences disable both destinations until explicitly saved. History retention, memory, correction learning and exact-field lock remain unavailable, with their controls disabled. The baseline comparison below retains its pinned reference sources; affected WinUI rows and findings have been updated.
+
 ## Scope and interpretation
 
 This compares **both the previous Windows application and the Mac application** with the new WinUI host, across the complete application surface and plugin inventory. It is a source-backed implementation inventory, not a claim that every legacy feature was retested or that all Mac features must ship on Windows.
@@ -19,7 +23,7 @@ Status applies to **WinUI**: **Connected** means the stated runtime path exists;
 ## Findings that change the release plan
 
 1. The implemented core is real dictation with two providers, dictionary/snippets, basic history, audio preferences, hotkeys and package management. Most other major screens are still previews.
-2. Several visible preferences do not control processing: **Review first / AutoPaste, recording mode, translation, number normalization, spelling variants and history retention**. These need wiring or explicit unavailable states before wider use. In particular, selecting Review first does not stop the current runtime from attempting a paste.
+2. Several visible preferences still do not control processing: **recording mode, translation, number normalization and spelling variants**. Review first / AutoPaste and history saving are now connected; history retention is explicitly disabled until implemented.
 3. Groq implements an LLM capability in its plugin source, but WinUI only consumes its transcription capability. Workflow processing, actions, memory and spoken feedback need a generic capability host, not just more provider packages.
 4. The legacy Windows pipeline and Mac pipeline both have substantially more stages than WinUI. WinUI currently applies CTC/text boosting and dictionary corrections before snippets; legacy pipelines place snippets before dictionary corrections. Chained corrections and snippets therefore need an explicit ordering decision and regression cases.
 5. A usable history view is not full history parity: edit/delete/export/audio/recovery, retention and contextual metadata remain open. Successful WinUI records currently omit language and target-app metadata even though the persistence schema supports them.
@@ -46,8 +50,8 @@ Sources: [WinUI session](../src/TypeWhisper.WinUI/LocalDictationSession.cs), [li
 | Spoken feedback / TTS | Windows voice and TTS providers | System/plugin voice providers | **Missing:** live Audio page does not connect spoken feedback. |
 | Local live preview | Segmentation/streaming support | Engine streaming and independent preview engine | **Partial:** local repeated decoding and overlay preview; drains before final inference. No independent preview engine, generic streaming sessions or cloud live preview. |
 | Live text in the target field | No equivalent connected field-streaming path established by this audit | Captured-field incremental insertion and recovery | **Decision:** WinUI only pastes the final result; assess Mac behavior separately. |
-| Auto-paste / review first | Output/insertion preferences | Output preferences and target handling | **Preview:** WinUI attempts paste after save irrespective of the UI choice. Must become a real runtime setting. |
-| Exact-field locking | Target observation and insertion services | Accessibility target capture / secure-input handling | **Partial:** top-level foreground-window guard only. Same-window field changes are not covered by the setting. |
+| Auto-paste / review first | Output/insertion preferences | Output preferences and target handling | **Connected:** persisted output choice controls automatic paste; Review first opens a transient copyable result independently of history saving. |
+| Exact-field locking | Target observation and insertion services | Accessibility target capture / secure-input handling | **Partial:** top-level foreground-window guard only. Same-window field changes are not covered; the unavailable exact-field setting is now disabled. |
 | Clipboard preservation | Native clipboard transaction | Native pasteboard/insertion service | **Connected:** one whole-text Ctrl+V, guarded snapshot/restore, no automatic Enter. Rich formats and target consumption still need real-app tests. |
 | Number normalization | Multilingual normalization stage | Multilingual normalization stage, including additional parsers | **Preview:** Core exists, WinUI does not invoke the full pipeline. Align language coverage explicitly. |
 | Punctuation / spoken formatting | Short-utterance and engine-aware formatting stages | Speech-punctuation strategies and verification | **Preview:** no WinUI runtime consumption of those controls. |
@@ -67,7 +71,7 @@ Sources: [WinUI lexicon](../src/TypeWhisper.WinUI/PrototypeLexicon.cs), [diction
 | Acoustic vocabulary boosting | Local provider/text-boosting baseline | Parakeet CTC implementation | **Connected, accuracy pending:** NVIDIA owns internal CTC; automatic for eligible Parakeet dictation. No separate integration or enable switch. Broader language/negative/real-microphone evidence is still needed. |
 | Text vocabulary boosting | Existing text heuristic | Different provider/CTC strategy | **Connected:** separate saved heuristic preference, used when the WinUI CTC path is not selected. Clarify UI distinction from automatic CTC. |
 | Dictionary import/export and training | Dictionary training and correction-learning UI | Export/training services | **Missing:** current WinUI editor covers CRUD, not import/export/training workflows. |
-| Learn from edits in target apps | Observation, suggestions, accept/dismiss | Correction learning with accessibility observation | **Preview:** Privacy preference does not start the service. |
+| Learn from edits in target apps | Observation, suggestions, accept/dismiss | Correction learning with accessibility observation | **Missing:** the unavailable Privacy preference is now disabled; no correction-learning service runs. |
 | Snippet editing and expansion | Persisted snippets and placeholders | Persisted snippets and placeholders | **Partial:** CRUD, tags, enablement and Windows placeholders work, with per-recording snapshots. Usage counts are not incremented; pipeline ordering differs. |
 | Workflow editing/persistence | Unified workflows with templates and overrides | Unified workflows, matching and stored prompts | **Preview:** sample workflows, in-memory drafts and example transformations. No persistent workflow service. |
 | Automatic app / website / global rules | Process/domain matching and priority | App/domain matching and priority | **Missing:** no WinUI matching/context coordinator. |
@@ -89,9 +93,9 @@ Sources: [WinUI history](../src/TypeWhisper.WinUI/PrototypeHistoryView.xaml.cs),
 | Provider/model attribution | Record metadata | Record metadata | **Connected:** actual model/provider in details only, as requested; unknown IDs retained. |
 | Language/app/URL/task provenance | Rich record fields | Rich record/source/device metadata | **Partial:** WinUI saves engine/model/duration/raw/final; does not populate language/app/URL. Adapter uses unknown origin/kind and does not project audio. |
 | Edit, delete, clear, export and read-back | History commands and workflow retry | Selection/export/delete and history actions | **Missing:** current WinUI history path is read/search/detail/copy. No mutation controller or TTS. |
-| History enabled / retention / privacy | Settings plus retention coordinator | Settings plus retention/audio policy | **Preview:** WinUI always attempts history save; Privacy settings do not control it. |
+| History enabled / retention / privacy | Settings plus retention coordinator | Settings plus retention/audio policy | **Partial:** Save to history is persisted and respected, including restrictions made during processing. Retention controls are explicitly disabled; existing history is unchanged. |
 | Saved audio and playback | Audio/recovery services and record fields | Audio assets/playback/history policies | **Missing:** no WinUI audio asset lifecycle or playback binding. |
-| Failure retry and durable recovery | Recovery store, fallback, workflow retry | Durable recovery and fallback | **Preview:** capture explicitly disables recovery; failed history save retains text only in memory. No recovery queue. |
+| Failure retry and durable recovery | Recovery store, fallback, workflow retry | Durable recovery and fallback | **Preview:** capture explicitly disables recovery; failed history save opens a transient review, retaining text only in memory. No durable recovery queue. |
 | Inbox, source devices, synchronization | No full Mac-style Inbox equivalent established | Inbox complete/reopen, origin devices, text/audio sync | **Preview / Decision:** WinUI has presentation models and device filters but no persisted Inbox/source-device semantics or sync adapter. |
 | Processing-step attribution | Raw/final and workflow failure data | Applied pipeline steps and fallback metadata | **Missing:** no WinUI per-step history metadata. This is a parity finding, not the earlier requested install/uninstall progress feature. |
 | Recorder mic + system audio | Real capture, files and transcription | Real capture/mix/conversion and transcription | **Preview:** timer and synthetic waveform only; completion explicitly creates no audio file. Linking capture source into the project does not wire this screen. |
@@ -206,7 +210,7 @@ There are 39 Windows and 49 Mac plugin manifests in these snapshots. This does n
 
 This is a proposed implementation order, not an approval to silently remove reference features. Each remaining area must be implemented, explicitly deferred, or documented as platform-specific before the draft becomes release-ready.
 
-1. **Make visible settings truthful.** Wire persistent runtime settings for insertion/review, history/privacy, recording mode and language/task; disable or clearly mark remaining preview controls. Acceptance: changing each real setting changes the next operation and survives restart; unavailable settings cannot imply protection they do not provide.
+1. **Make visible settings truthful.** Insertion/review and history saving are connected. Continue with recording mode and language/task; disable or clearly mark remaining preview controls. Acceptance: changing each real setting changes the next operation and survives restart; unavailable settings cannot imply protection they do not provide.
 2. **Complete the shared processing and job layer.** Integrate ordered normalization/formatting/snippets/corrections, generic LLM/post-processor/action capabilities, cancellation, durable recovery and metadata. Acceptance: deterministic pipeline/failure/cancellation tests plus a real dictation saved with accurate provenance.
 3. **Connect workflows.** Persistent CRUD, templates, model/provider choice, app/website/global matching and dedicated shortcuts; selected-text execution and failure retry. Acceptance: one local and one cloud workflow complete from trigger to result, including failed requests without losing original text.
 4. **Connect files and recorder.** Reuse platform capture/decoder services behind portable job decisions; output formats, progress/cancel, history/audio, real exports and watch folders. Acceptance: mic/system capture produces playable files; real media produces verified text/timings; cancel/retry and restart recovery are tested.
