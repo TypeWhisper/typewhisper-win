@@ -91,3 +91,11 @@ Provider adapters now preserve detected language; the session records the captur
 ## Recording modes and history actions, 2026-09-07
 
 The combined Presentation suite passed 153 cases, including mode state transitions/persistence and history edit/delete/export failure paths. The prescribed Debug build/launch passed. Computer Use opened the advanced Recording mode picker, selected Toggle and verified the persisted profile file. Actual physical tap/hold microphone acceptance remains separate from these state-machine tests.
+
+## Connected settings and native history fixture, 2026-09-07
+
+The full portable headless run passed 373 cases and one platform skip (Host 115, Presentation 204, Groq 29, NVIDIA 25). The new Groq request regression was then moved into the actual plugin-owned suite and all 32 Groq cases passed. Source-kind/filter cases brought the subsequent Presentation run to 215 passing cases. This is incremental evidence; do not describe it as one 387-case full run.
+
+The prescribed Debug build/launch passed with an opt-in `TYPEWHISPER_WINUI_HISTORY_FIXTURE=1`. In Debug only, this creates one synthetic entry in a new temporary history store and opens History; normal startup and Release never seed it. Computer Use opened details and the editor, confirmed both paragraphs, inserted a test prefix and saved it. Reading the temporary JSON confirmed the edit persisted while raw text and model/app metadata stayed unchanged. No personal history, audio or provider request was used for this editing test. Delete/export storage failures and restart behavior are covered by portable fixtures; native delete/export acceptance remains separate.
+
+Native translation reuses provider capability metadata. Groq translation requests omit the input-language field, following the [Groq API reference](https://console.groq.com/docs/api-reference) and [speech-to-text guide](https://console.groq.com/docs/speech-to-text); transcription still sends the selected input language. Unsupported models reject translation before audio encoding/inference.
