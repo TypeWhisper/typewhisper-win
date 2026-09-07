@@ -148,6 +148,7 @@ internal sealed class LocalDictationSession : IDisposable
     private bool _disposed;
     private DictationPhase _phase;
     private TimeSpan _lastDuration;
+    private bool _hasConfirmedPreviewText;
     private string _targetApp = "";
     private uint _targetProcessId;
     internal DictationOverlayState OverlayState => new(_phase,
@@ -542,10 +543,11 @@ internal sealed class LocalDictationSession : IDisposable
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
                 _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesRegistryProvider && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
                 LivePreviewText = "";
+                _hasConfirmedPreviewText = false;
                 if (LivePreviewEnabled && !UsesRegistryProvider && _taskAtStart == TranscriptionTask.Transcribe)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
-                        text => { LivePreviewText = text; LivePreviewChanged?.Invoke(); },
+                        text => { _hasConfirmedPreviewText |= !string.IsNullOrWhiteSpace(text); LivePreviewText = text; LivePreviewChanged?.Invoke(); },
                         error => { LivePreviewText = "Live preview unavailable · final transcription will continue."; LivePreviewChanged?.Invoke(); System.Diagnostics.Debug.WriteLine(error); });
                 if (preferences.SilenceAutoStopEnabled)
                 {
@@ -570,6 +572,7 @@ internal sealed class LocalDictationSession : IDisposable
             StopSilenceMonitoring();
             _livePreview.Cancel();
             _lastDuration = _audio.RecordingDuration;
+            var preGainPeakRms = _audio.PreGainPeakRmsLevel;
             SetStatus("Finishing recording…", DictationPhase.Processing);
             var samples = await _audio.StopRecordingAsync();
             _effects.End();
@@ -577,9 +580,16 @@ internal sealed class LocalDictationSession : IDisposable
             // Native decoding cannot be interrupted; drain the cancelled preview
             // before the final decode uses the same recognizer.
             await _livePreview.StopAsync();
-            if (samples is null || samples.Length < 1600) { SetStatus("No usable audio captured. Try again."); return; }
+            // Use captured samples for the policy and history, never decoder padding or elapsed stop time.
+            var rawDuration = (samples?.Length ?? 0) / 16000.0;
+            var captureDecision = ShortClipCapturePolicy.Classify(rawDuration, preGainPeakRms,
+                _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively);
+            if (samples is null || captureDecision == ShortClipCaptureDecision.TooShort)
+            { SetStatus("Recording was too short. Hold the shortcut a little longer."); return; }
+            if (captureDecision == ShortClipCaptureDecision.NoSpeech)
+            { SetStatus("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips."); return; }
             SetStatus($"Transcribing with {ActiveModelName}…", DictationPhase.Processing);
-            var decoded = await DecodeFinalAsync(samples);
+            var decoded = await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples));
             var rawText = decoded.Text;
             if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
             var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
@@ -634,7 +644,7 @@ internal sealed class LocalDictationSession : IDisposable
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 SourceKind = "dictation",
-                RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
+                RawText = rawText, FinalText = text, DurationSeconds = rawDuration,
                 EngineUsed = _engineAtStart, ModelUsed = _modelAtStart, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
                 Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
                 AppName = _targetApp == "Target app" ? null : _targetApp,

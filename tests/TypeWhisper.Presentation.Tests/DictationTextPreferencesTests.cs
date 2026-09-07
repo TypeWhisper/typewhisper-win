@@ -23,6 +23,7 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var captured = store.Current;
         var next = new DictationTextPreferences
         {
+            TranscribeShortQuietClipsAggressively = true,
             TranscriptionNumberNormalizationEnabled = false,
             ShortUtterancePunctuationEnabled = false,
             EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom,
@@ -67,7 +68,7 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var capturedCurrent = store.Current;
         File.Delete(PreferencesPath);
         Directory.CreateDirectory(PreferencesPath);
-        Assert.NotNull(store.Save(saved with { TranscriptionNumberNormalizationEnabled = false }));
+        Assert.NotNull(store.Save(saved with { TranscriptionNumberNormalizationEnabled = false, TranscribeShortQuietClipsAggressively = true }));
         Assert.Same(capturedCurrent, store.Current);
         AssertContentEqual(saved, store.Current);
         Assert.Empty(Directory.GetFiles(_directory));
@@ -86,6 +87,7 @@ public sealed class DictationTextPreferencesTests : IDisposable
 
     private static void AssertContentEqual(DictationTextPreferences expected, DictationTextPreferences actual)
     {
+        Assert.Equal(expected.TranscribeShortQuietClipsAggressively, actual.TranscribeShortQuietClipsAggressively);
         Assert.Equal(expected.TranscriptionNumberNormalizationEnabled, actual.TranscriptionNumberNormalizationEnabled);
         Assert.Equal(expected.ShortUtterancePunctuationEnabled, actual.ShortUtterancePunctuationEnabled);
         Assert.Equal(expected.EnglishOutputVariant, actual.EnglishOutputVariant);

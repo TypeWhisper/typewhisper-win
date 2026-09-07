@@ -7,6 +7,8 @@ namespace TypeWhisper.Presentation;
 /// <summary>Immutable text-processing choices captured when recording starts.</summary>
 public sealed record DictationTextPreferences
 {
+    /// <summary>Allows quiet captures of at least forty milliseconds to reach final transcription.</summary>
+    public bool TranscribeShortQuietClipsAggressively { get; init; }
     /// <summary>Converts recognized spoken numbers using the transcript language.</summary>
     public bool TranscriptionNumberNormalizationEnabled { get; init; } = true;
     /// <summary>Preserves model punctuation on one- and two-word utterances when enabled.</summary>
