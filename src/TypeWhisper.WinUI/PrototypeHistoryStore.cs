@@ -1,9 +1,11 @@
 namespace TypeWhisper.WinUI;
 
-// One in-memory history for the current prototype process. No disk, sync or API.
+// View snapshot. Persistence is owned by HistoryActions and HistoryReader.
 public sealed class PrototypeHistoryStore(IEnumerable<PrototypeHistoryEntry> initialEntries)
 {
     private readonly Dictionary<Guid, PrototypeHistoryEntry> _entries = initialEntries.ToDictionary(entry => entry.RecordId);
+
+    public void Remove(Guid recordId) => _entries.Remove(recordId);
 
     public void Upsert(PrototypeHistoryEntry entry)
     {

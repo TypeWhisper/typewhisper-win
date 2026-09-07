@@ -25,7 +25,8 @@ internal static class HistoryEntryAdapter
                 record.Status == TranscriptionRecordStatus.Succeeded ? PrototypeHistoryProcessingState.Ready : PrototypeHistoryProcessingState.Failed,
                 new PrototypeHistoryTranscript(record.RawText, text), record.Language,
                 EngineName: record.EngineUsed, ModelName: record.ModelUsed,
-                FailureMessage: record.WorkflowFailureMessage),
-            new PrototypeHistoryInbox(timestamp));
+                FailureMessage: record.WorkflowFailureMessage, AppName: record.AppName,
+                AppProcessName: record.AppProcessName, TranscriptionTaskUsed: record.TranscriptionTaskUsed),
+            new PrototypeHistoryInbox(timestamp)) { PersistedRecordId = record.Id };
     }
 }

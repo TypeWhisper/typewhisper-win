@@ -110,7 +110,14 @@
                 <TextBlock x:Name="TranscriptTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock x:Name="TranscriptMetadata" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <TextBlock x:Name="TranscriptModel" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                <TextBlock x:Name="TranscriptProvenance" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="AudioAvailabilityText" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <StackPanel x:Name="EntryActions" Orientation="Horizontal" Spacing="8">
+                    <local:HandCursorButton Content="Edit text" Click="Edit_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit history transcript" />
+                    <local:HandCursorButton Content="Export…" Click="Export_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Export history transcript" />
+                    <local:HandCursorButton Content="Delete…" Click="Delete_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Delete history entry" />
+                </StackPanel>
+                <TextBlock x:Name="ActionNotice" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
             </StackPanel>
             <ScrollViewer x:Name="TranscriptScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

@@ -42,7 +42,10 @@ public sealed record PrototypeHistoryContent(
     string? EngineName = null,
     string? ModelName = null,
     string? FailureCategory = null,
-    string? FailureMessage = null);
+    string? FailureMessage = null,
+    string? AppName = null,
+    string? AppProcessName = null,
+    string? TranscriptionTaskUsed = null);
 
 public sealed record PrototypeHistoryInbox(
     DateTimeOffset UpdatedAt,
@@ -74,6 +77,9 @@ public sealed record PrototypeHistoryEntry(
     PrototypeHistoryInbox Inbox,
     PrototypeHistoryAudio? Audio = null)
 {
+    [JsonIgnore]
+    public string? PersistedRecordId { get; init; }
+
     [JsonIgnore]
     public PrototypeHistoryLocalState LocalState { get; init; } = new();
 

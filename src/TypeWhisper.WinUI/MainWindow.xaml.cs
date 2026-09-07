@@ -182,7 +182,7 @@ public sealed partial class MainWindow : Window
         LoadOverlayPreferences();
         var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
-        HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService));
+        HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _dictation.ReviewRequested += ShowOutputReview;
         PluginsView.ConfigureRuntime(_dictation);

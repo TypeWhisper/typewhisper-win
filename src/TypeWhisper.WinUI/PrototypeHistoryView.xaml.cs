@@ -10,10 +10,16 @@ public sealed partial class PrototypeHistoryView : UserControl
     private PrototypeHistoryStore _store = new([]);
     private readonly Dictionary<Guid, string> _timeLabels = [];
     private TypeWhisper.Presentation.HistoryReader? _reader;
+    private TypeWhisper.Presentation.HistoryActions? _actions;
+    private bool _acting;
     private bool _loading;
     private string? _loadError;
 
-    internal void Connect(TypeWhisper.Presentation.HistoryReader reader) => _reader = reader;
+    internal void Connect(TypeWhisper.Presentation.HistoryReader reader, TypeWhisper.Presentation.HistoryActions? actions = null)
+    {
+        _reader = reader;
+        _actions = actions;
+    }
 
     internal async Task RefreshAsync()
     {
@@ -205,6 +211,10 @@ public sealed partial class PrototypeHistoryView : UserControl
         TranscriptTitle.Text = entry.Title;
         TranscriptMetadata.Text = $"{entry.Time} · {entry.Metadata}";
         TranscriptModel.Text = entry.ModelMetadata;
+        var details = entry.Entry.Content;
+        TranscriptProvenance.Text = $"App: {details.AppName ?? details.AppProcessName ?? "Not recorded"} · Task: {details.TranscriptionTaskUsed ?? "Not recorded"}";
+        EntryActions.Visibility = _actions is not null && entry.Entry.PersistedRecordId is not null ? Visibility.Visible : Visibility.Collapsed;
+        ActionNotice.Text = "";
         AudioAvailabilityText.Text = entry.AudioDescription;
         TranscriptBody.Text = entry.Entry.HasTranscript ? entry.Text
             : "This demo session has been added to History. No audio was captured and no transcript was generated.";
@@ -253,6 +263,94 @@ public sealed partial class PrototypeHistoryView : UserControl
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+
+    private async void Edit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        _acting = true;
+        var openedId = _opened.Entry.RecordId;
+        var editor = new TextBox { AcceptsReturn = true, Text = _opened.Text.ReplaceLineEndings("\r"), TextWrapping = TextWrapping.Wrap,
+            MinWidth = 320, MaxHeight = 360 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(editor, "Transcript text to edit");
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(editor);
+        panel.Children.Add(error);
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Edit transcript", Content = panel,
+            PrimaryButtonText = "Save", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
+        TypeWhisper.Core.Models.TranscriptionRecord? saved = null;
+        dialog.PrimaryButtonClick += async (_, args) =>
+        {
+            var deferral = args.GetDeferral();
+            try
+            {
+                saved = await _actions.EditAsync(id, editor.Text.ReplaceLineEndings("\n"));
+                args.Cancel = saved is null;
+                if (saved is null) error.Text = "Could not save. Your edits are still here. Try again.";
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                args.Cancel = true;
+                error.Text = string.IsNullOrWhiteSpace(editor.Text) ? "Enter transcript text." : "Could not save. Your edits are still here. Try again.";
+            }
+            finally { deferral.Complete(); }
+        };
+        try
+        {
+            await dialog.ShowAsync();
+            if (saved is not null)
+            {
+                _store.Upsert(HistoryEntryAdapter.FromRecord(saved));
+                ApplyFilters();
+                Entries.SelectedItem = FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == openedId);
+                OpenSelected();
+                ActionNotice.Text = "Transcript saved.";
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { ActionNotice.Text = "The editor could not be opened. Try again."; }
+        finally { _acting = false; }
+    }
+
+    private async void Delete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        _acting = true;
+        var entry = _opened;
+        try
+        {
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Delete this history entry?",
+                Content = $"{entry.Title}\n\nThis permanently deletes this entry and its saved audio from local history.",
+                PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            if (!await _actions.DeleteAsync(id)) { ActionNotice.Text = "Could not delete this entry. Try again."; return; }
+            _store.Remove(entry.Entry.RecordId);
+            ApplyFilters();
+            ResultSummary.Text = "History entry deleted";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { ActionNotice.Text = "Could not delete this entry. Try again."; }
+        finally { _acting = false; }
+    }
+
+    private async void Export_Click(object sender, RoutedEventArgs e)
+    {
+        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id || XamlRoot is null) return;
+        _acting = true;
+        try
+        {
+            var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
+                { SuggestedFileName = "transcript", Title = "Export transcript" };
+            picker.FileTypeChoices.Add("Text", new List<string> { ".txt" });
+            picker.FileTypeChoices.Add("Markdown", new List<string> { ".md" });
+            picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
+            picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await _actions.ExportFileAsync(id, file.Path);
+            ActionNotice.Text = "Transcript exported.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { ActionNotice.Text = "Could not export the transcript. Choose a writable location and try again."; }
+        finally { _acting = false; }
+    }
     private async void ClearSearch_Click(object sender, RoutedEventArgs e)
     {
         if (_loadError is not null) { await RefreshAsync(); return; }
