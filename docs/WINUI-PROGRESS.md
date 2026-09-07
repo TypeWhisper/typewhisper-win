@@ -62,3 +62,10 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - Custom manual workflows now persist prompts, exact provider/model and enabled state, with confirmed deletion and protected unsupported entries. Run invokes registered LLM providers and preserves source text on cancellation/failure. Automatic triggers, selected-text capture, templates and full override editing remain open.
 - Saved quiet-clip handling, original-sample thresholds, decoder-only padding and actual final no-speech metadata now reach dictation processing.
 - Complete headless validation at `a28367e3`: 517 passed, one platform skip; prescribed Debug build/launch passed. Native workflow create/save/restart/disable/delete checks passed in an isolated named profile. No successful live cloud workflow request is claimed.
+
+## 2026-09-07: media queue and additional preferences
+
+- Selected media reaches Windows decoding and the actual transcription provider. Serial requests support cancellation/drain, retry, optional History and TXT/provider-timed subtitle export. Queue persistence and file-specific vocabulary/snippet stages remain open.
+- Explicit SDK language-hint capability replaces implicit first-language fallback. Connected NVIDIA/Groq providers do not advertise it.
+- Overlay text size and successful-output duration persist, including immediate dismissal at zero; unavailable online batch preview is hidden.
+- Latest complete local run: 560 passed, one platform skip; prescribed Debug build/launch passed. Native file selection/removal/readiness and overlay preference persistence were checked in an isolated profile. Ubuntu workflow fault injection was corrected after CI exposed Windows-only lock assumptions.
