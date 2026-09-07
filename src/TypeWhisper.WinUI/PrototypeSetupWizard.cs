@@ -18,6 +18,7 @@ public sealed class PrototypeSetupWizard : UserControl
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly TextBlock _message = Copy("");
     private readonly HandCursorButton _next;
+    private readonly HandCursorButton _back;
     private readonly List<PrototypeChoicePicker> _pickers = [];
     private readonly SetupReadiness _feedback = new();
     private PrototypeChoicePicker? _providerPicker, _modelPicker, _languagePicker;
@@ -34,13 +35,20 @@ public sealed class PrototypeSetupWizard : UserControl
         _session = session; _values = values; _exit = exit; _commitHotkeys = commitHotkeys; _openProvider = openProvider;
         var store = new SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         _state = new(store);
-        var shell = new Grid { Padding = new Thickness(24), RowSpacing = 14 };
+        var shell = new Grid { Padding = new Thickness(24), RowSpacing = 24, MaxWidth = 800 };
         shell.RowDefinitions.Add(new()); shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
         shell.Children.Add(new ScrollViewer { Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        footer.Children.Add(Button("Back", () => Move(Math.Max(0, _state.Step - 1))));
-        footer.Children.Add(Button("Skip setup", () => { if (!_closing) _exit(false); }));
-        _next = Button("Continue", Next); footer.Children.Add(_next);
+        var footer = new Grid { ColumnSpacing = 12 };
+        footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        footer.ColumnDefinitions.Add(new());
+        footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        _back = Button("Back", () => Move(Math.Max(0, _state.Step - 1))); footer.Children.Add(_back);
+        var skip = Button("Skip setup", () => { if (!_closing) _exit(false); });
+        Grid.SetColumn(skip, 2); footer.Children.Add(skip);
+        _next = Button("Continue", Next);
+        _next.Style = (Style)Application.Current.Resources["PrototypePrimaryButtonStyle"];
+        Grid.SetColumn(_next, 3); footer.Children.Add(_next);
         Grid.SetRow(footer, 1); shell.Children.Add(footer); Content = shell;
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         Loaded += (_, _) => { _session.Changed += Changed; _session.Models.Changed += Changed; _session.Groq.Changed += Changed; RefreshStatus(); };
@@ -68,8 +76,10 @@ public sealed class PrototypeSetupWizard : UserControl
     private void RefreshStatus()
     {
         _next.Content = _state.Step == 4 ? "Finish setup" : "Continue";
+        _back.IsEnabled = !_closing && !_selecting && _state.Step > 0;
         _next.IsEnabled = !_closing && !_selecting && (_state.Step != 4 || Readiness() is null);
-        _message.Text = _feedback.Message(_state.Step == 4 ? Readiness() : "Settings are saved as you change them.");
+        _message.Text = _feedback.Message(_state.Step == 4 ? Readiness() : "");
+        _message.Visibility = string.IsNullOrWhiteSpace(_message.Text) ? Visibility.Collapsed : Visibility.Visible;
     }
     private void Next()
     {
@@ -94,8 +104,11 @@ public sealed class PrototypeSetupWizard : UserControl
     {
         _body.Children.Clear(); _pickers.Clear();
         _providerPicker = _modelPicker = _languagePicker = null; _configureProvider = null;
-        _body.Children.Add(Copy($"TypeWhisper Setup - {_state.Step + 1}/5: {PrototypeSetupState.Steps[_state.Step]}", 24));
-        _body.Children.Add(Copy("Changes are saved immediately. Skip or Escape keeps settings already saved. No sample recordings or automatic downloads."));
+        var stepLabel = Copy($"SETUP · STEP {_state.Step + 1} OF 5", 11);
+        stepLabel.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
+        _body.Children.Add(stepLabel);
+        _body.Children.Add(Copy(PrototypeSetupState.Steps[_state.Step], 24));
+        _body.Children.Add(Copy("Your choices are saved immediately. You can return to setup at any time."));
         switch (_state.Step)
         {
             case 0:
@@ -104,7 +117,7 @@ public sealed class PrototypeSetupWizard : UserControl
             case 1:
                 var microphones = new MicrophonePriorityEditor(_session);
                 _pickers.Add(microphones.AddPicker); _body.Children.Add(microphones);
-                _body.Children.Add(Copy("Device availability does not verify microphone permission. The real recording path reports access or capture errors when you dictate."));
+                _body.Children.Add(Copy("TypeWhisper uses the first available microphone in this list, or your Windows default. You'll test it with your first dictation."));
                 break;
             case 2:
                 AddPicker("Recording mode", Enum.GetValues<RecordingMode>().Select(mode => new PrototypeChoice(mode.ToString(), mode.ToString(), mode == RecordingMode.Hold ? "Hold the shortcut to record" : mode == RecordingMode.Hybrid ? "Tap to toggle, hold to speak" : "Press to start and stop")).ToArray(),
@@ -122,7 +135,7 @@ public sealed class PrototypeSetupWizard : UserControl
                     _session.OutputPreferences.Current.AutoPaste ? "paste" : "review", id => _session.OutputPreferences.Save(_session.OutputPreferences.Current with { AutoPaste = id == "paste" }));
                 AddPicker("Save history", [new("yes", "Save transcripts", "Save text to local history"), new("no", "Do not save", "Review remains available without history")],
                     _session.OutputPreferences.Current.SaveToHistory ? "yes" : "no", id => _session.OutputPreferences.Save(_session.OutputPreferences.Current with { SaveToHistory = id == "yes" }));
-                _body.Children.Add(Copy("After finishing, open a text field in another app and use your shortcut to dictate. This assistant does not record audio or claim a successful transcription."));
+                _body.Children.Add(Copy("Open a text field in another app and use your shortcut for your first dictation."));
                 break;
         }
         _body.Children.Add(_message); RefreshStatus();
@@ -133,6 +146,7 @@ public sealed class PrototypeSetupWizard : UserControl
         PrototypeChoicePicker Create(string label)
         {
             var picker = new PrototypeChoicePicker(); picker.Configure(label, "chip", label);
+            _body.Children.Add(Copy(label, 12));
             _body.Children.Add(picker); _pickers.Add(picker); return picker;
         }
         _providerPicker = Create("Provider"); _modelPicker = Create("Ready model"); _languagePicker = Create("Spoken language");
@@ -156,7 +170,7 @@ public sealed class PrototypeSetupWizard : UserControl
             if (provider is not null) _openProvider(provider.PluginId);
         });
         _body.Children.Add(_configureProvider);
-        _body.Children.Add(Copy("Only ready models can be selected. Download models or configure credentials in plugin settings. Provider selection here is a draft until you choose its model."));
+        _body.Children.Add(Copy("Choose a model to use its provider. Open plugin settings to download models or enter an API key."));
         RefreshModelPickers();
     }
     private static string LanguageName(string code)
@@ -190,6 +204,7 @@ public sealed class PrototypeSetupWizard : UserControl
     }
     private void AddPicker(string label, IReadOnlyList<PrototypeChoice> choices, string selected, Func<string, string?> save)
     {
+        _body.Children.Add(Copy(label, 12));
         var picker = new PrototypeChoicePicker(); picker.Configure(label, "workflow", label); picker.SetOptions(choices, selected, "Saved selection unavailable");
         picker.SelectionChanged += id =>
         {
