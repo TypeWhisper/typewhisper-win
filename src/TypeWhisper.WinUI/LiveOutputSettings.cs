@@ -46,6 +46,16 @@ internal static class LiveOutputSettings
         saveRow.Children.Add(toggle);
         var hint = Label(store.Error ?? "Saved. When off, results can still be pasted or reviewed without a history entry.");
         saveRow.Children.Add(hint);
+        var audioRow = content.Children.OfType<StackPanel>().Single(item => Equals(item.Tag, "SaveHistoryAudio"));
+        audioRow.Children.Clear();
+        var audioToggle = PrototypeToggleSwitch.Create(store.Current.SaveHistoryAudio);
+        AutomationProperties.SetName(audioToggle, "Keep dictation audio in history");
+        audioToggle.IsEnabled = store.Current.SaveToHistory;
+        audioRow.Children.Add(Label("Keep dictation audio", 14));
+        audioRow.Children.Add(Label("Save a local audio copy with new dictation entries so you can listen again. Audio is deleted with its history entry and follows history retention. File imports and recorder files are separate."));
+        audioRow.Children.Add(audioToggle);
+        var audioHint = Label("Off by default. Requires Save to history. Turning this off keeps existing recordings.");
+        audioRow.Children.Add(audioHint);
         var restoring = false;
         toggle.Toggled += (_, _) =>
         {
@@ -53,6 +63,14 @@ internal static class LiveOutputSettings
             hint.Text = store.Save(store.Current with { SaveToHistory = toggle.IsOn })
                 ?? "Saved. Turning history off also applies to a dictation in progress that has not been saved yet.";
             restoring = true; toggle.IsOn = store.Current.SaveToHistory; restoring = false;
+            audioToggle.IsEnabled = store.Current.SaveToHistory;
+        };
+        audioToggle.Toggled += (_, _) =>
+        {
+            if (restoring) return;
+            audioHint.Text = store.Save(store.Current with { SaveHistoryAudio = audioToggle.IsOn })
+                ?? "Saved. Turning audio storage off also applies to a dictation that has not been saved yet. Existing recordings are kept.";
+            restoring = true; audioToggle.IsOn = store.Current.SaveHistoryAudio; restoring = false;
         };
         foreach (var key in new[] { "HistoryRetentionMode", "HistoryRetentionMinutes", "MemoryEnabled", "TargetAppCorrectionLearningEnabled" })
             DisablePreview(content, key);

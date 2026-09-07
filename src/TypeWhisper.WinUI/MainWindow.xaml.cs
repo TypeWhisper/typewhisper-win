@@ -306,19 +306,39 @@ public sealed partial class MainWindow : Window
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             historyPath = Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-HistoryFixture", Guid.NewGuid().ToString("N"), "history.json");
 #endif
-        var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
+        var historyAudio = new TypeWhisper.Core.Services.HistoryAudioStore(Path.Combine(Path.GetDirectoryName(historyPath)!, "history-audio"));
+        var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath, audioStore: historyAudio) { ThrowOnLoadFailure = true };
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
-            historyService.TryAddRecord(new TypeWhisper.Core.Models.TranscriptionRecord
+        {
+            var fixtureRecord = new TypeWhisper.Core.Models.TranscriptionRecord
             {
                 Id = "history-ui-fixture", Timestamp = DateTime.UtcNow, SourceKind = "dictation",
                 RawText = "Synthetic history test.\nSecond paragraph.",
                 FinalText = "Synthetic history test.\n\nSecond paragraph for editing and export.",
                 AppName = "UI test fixture", AppProcessName = "fixture", Language = "en",
                 EngineUsed = "fixture", ModelUsed = "synthetic-model", TranscriptionTaskUsed = "transcribe"
-            });
+            };
+            if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_AUDIO_FIXTURE") == "1")
+            {
+                // A quiet one-second generated tone, only in the ephemeral History fixture.
+                // This exercises the real store and detail actions without recording a microphone.
+                var samples = Enumerable.Range(0, 16000).Select(index => (float)(0.03 * Math.Sin(2 * Math.PI * 440 * index / 16000))).ToArray();
+                historyService.TryAddRecordWithAudio(fixtureRecord with
+                {
+                    RawText = "Synthetic history audio test.", FinalText = "Synthetic history audio test.\n\nA generated tone was saved with this entry. No microphone was recorded.",
+                    DurationSeconds = 1
+                }, samples, 16000, () => true);
+                var missing = historyService.TryAddRecordWithAudio(fixtureRecord with
+                {
+                    Id = "history-missing-audio-fixture", RawText = "Missing audio test.", FinalText = "Missing audio test.\n\nThe generated test audio was removed. This transcript remains available.", DurationSeconds = 1
+                }, samples, 16000, () => true);
+                if (historyService.ResolveAudioPath(missing.Record.AudioFileName) is { } missingPath) File.Delete(missingPath);
+            }
+            else historyService.TryAddRecord(fixtureRecord);
+        }
 #endif
-        HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService));
+        HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         WorkflowsView.Connect(_dictation);
         _dictation.ReviewRequested += ShowOutputReview;

@@ -684,7 +684,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
                         ModifiersHeld() || GetForegroundWindow() != _target) return false;
                     return await _inserter.InsertAsync(text, _target);
-                }, _operationCancellation.Token);
+                }, _operationCancellation.Token, samples, 16000);
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             if (_disposed) return;
             _operationCancellation.Token.ThrowIfCancellationRequested();

@@ -25,6 +25,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -39,7 +40,12 @@
                 FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Stretch" TextAlignment="Right"
                 TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
         </Grid>
-        <Grid x:Name="ListPage" Grid.Row="1">
+        <StackPanel x:Name="AudioCleanupNotice" Grid.Row="1" Margin="12,0,12,12" Spacing="8" Visibility="Collapsed">
+            <TextBlock x:Name="AudioCleanupText" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+            <local:HandCursorButton x:Name="RetryAudioCleanupButton" Content="Retry audio cleanup" Click="RetryAudioCleanup_Click"
+                Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Left" />
+        </StackPanel>
+        <Grid x:Name="ListPage" Grid.Row="2">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Grid Margin="8,0,8,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -113,17 +119,19 @@
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Clear history search" />
             </StackPanel>
         </Grid>
-        <Grid x:Name="ReadingPage" Grid.Row="1" Visibility="Collapsed" Margin="12,0,12,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <Grid x:Name="ReadingPage" Grid.Row="2" Visibility="Collapsed" Margin="12,0,12,0">
+            <ScrollViewer x:Name="TranscriptScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,20,0">
             <StackPanel Margin="0,0,0,16" Spacing="7">
                 <TextBlock x:Name="TranscriptTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock x:Name="TranscriptMetadata" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                 <TextBlock x:Name="TranscriptModel" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="TranscriptProvenance" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="AudioAvailabilityText" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                <StackPanel x:Name="AudioActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play in default app" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
+                    <local:HandCursorButton x:Name="ShowAudioButton" Content="Show in folder" Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
+                </StackPanel>
                 <StackPanel x:Name="EntryActions" Orientation="Horizontal" Spacing="8">
                     <local:HandCursorButton Content="Edit text" Click="Edit_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit history transcript" />
                     <local:HandCursorButton Content="Export…" Click="Export_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Export history transcript" />
@@ -132,12 +140,12 @@
                 <TextBlock x:Name="ActionNotice" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
             </StackPanel>
-            <ScrollViewer x:Name="TranscriptScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <TextBlock x:Name="TranscriptBody" FontSize="15" LineHeight="25" TextWrapping="Wrap"
-                    IsTextSelectionEnabled="True" Margin="0,0,20,16" AutomationProperties.Name="Transcript text" />
+                    IsTextSelectionEnabled="True" Margin="0,0,0,16" AutomationProperties.Name="Transcript text" />
+            </StackPanel>
             </ScrollViewer>
         </Grid>
-        <Border Grid.Row="2" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
+        <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
             <Grid Height="48" Padding="2,0" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />

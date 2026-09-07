@@ -30,6 +30,7 @@ internal static partial class PrototypeSettingsCatalog
         "DictationRecoveryAutomaticFallbackEnabled" => "Try the recovery engine if the initial transcription fails.",
         "WorkflowRequestRecoveryEnabled" => "Keep failed requests available so you can try them again.",
         "SaveToHistoryEnabled" => "Keep completed transcripts available in History.",
+        "SaveHistoryAudio" => "Keep a local audio copy with new dictation entries. Audio follows history deletion and retention.",
         "MemoryEnabled" => "Use personal context to help tailor future results.",
         "WatchFolderAutoStart" => "Start watching your chosen folder when TypeWhisper opens.",
         "ApiServerRequiresAuthentication" => "Require authentication before accepting API requests.",
@@ -106,6 +107,7 @@ internal static partial class PrototypeSettingsCatalog
         Toggle("Files & recovery", "WorkflowRequestRecoveryEnabled", "Recover failed workflow requests", true),
 
         Toggle("Privacy", "SaveToHistoryEnabled", "Save to history", true),
+        Toggle("Privacy", "SaveHistoryAudio", "Keep dictation audio"),
         Choice("Privacy", "HistoryRetentionMode", "History retention", "For a duration", "For a duration|Forever|Until the app closes"),
         Choice("Privacy", "HistoryRetentionMinutes", "Keep history for", "90 days", "1 day|7 days|30 days|90 days|180 days"),
         Toggle("Privacy", "MemoryEnabled", "Personal memory"),

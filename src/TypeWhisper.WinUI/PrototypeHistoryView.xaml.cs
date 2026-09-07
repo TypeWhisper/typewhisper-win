@@ -55,10 +55,12 @@ public sealed partial class PrototypeHistoryView : UserControl
     private bool _loading;
     private string? _loadError;
 
-    internal void Connect(TypeWhisper.Presentation.HistoryReader reader, TypeWhisper.Presentation.HistoryActions? actions = null)
+    internal void Connect(TypeWhisper.Presentation.HistoryReader reader, TypeWhisper.Presentation.HistoryActions? actions = null,
+        TypeWhisper.Core.Interfaces.IHistoryAudioService? audio = null)
     {
         _reader = reader;
         _actions = actions;
+        _historyAudio = audio;
     }
 
     internal async Task RefreshAsync()
@@ -83,6 +85,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         finally
         {
             _loading = false;
+            if (!_closing) UpdateAudioCleanupNotice();
             if (!_closing) ApplyFilters();
             if (!_closing && openedId is { } id && FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == id) is { } opened)
             {
@@ -299,7 +302,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             TranscriptProvenance.Text += "\nProcessing failed: " + (details.FailureMessage ?? "The result needs review.");
         EntryActions.Visibility = _actions is not null && entry.Entry.PersistedRecordId is not null ? Visibility.Visible : Visibility.Collapsed;
         ActionNotice.Text = "";
-        AudioAvailabilityText.Text = entry.AudioDescription;
+        RefreshAudioAvailability();
         TranscriptBody.Text = entry.Entry.HasTranscript ? entry.Text
             : "This demo session has been added to History. No audio was captured and no transcript was generated.";
         ListPage.Visibility = Visibility.Collapsed;
@@ -533,7 +536,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             ResultSummary.Text = "History entry deleted";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { ActionNotice.Text = "Could not delete this entry. Try again."; }
-        finally { _acting = false; }
+        finally { _acting = false; if (!_closing) UpdateAudioCleanupNotice(); }
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)
