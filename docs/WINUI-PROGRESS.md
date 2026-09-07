@@ -1,6 +1,6 @@
 # Windows 1.1 progress
 
-Current implementation checkpoint: `a3045411` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
+Current implementation checkpoint: `3728d98` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
 
 The authoritative feature inventory is now the [full comparison against both previous Windows and Mac](WINUI-FUNCTIONAL-STATUS.md). This replaces the accumulated, contradictory milestone checklist. Historical test counts and superseded UI decisions remain available in Git history; they are not current completion claims.
 
@@ -83,3 +83,10 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - NVIDIA provisions its internal CTC model and tokenizer with pinned checksums, bounded BZip2/TAR extraction and cancellable activation. Actual first-run download, verified installation and Ready UI passed in a fresh test profile. Accuracy across languages remains separate acceptance work.
 - Complete local suite: **611 passed, one NVIDIA platform skip** (Host 160, Presentation 394, Groq 32, NVIDIA 25). An additional **64 Windows audio tests passed** in Debug. Prescribed WinUI build/launch passed. Real system capture, explicit file handoff and Canary transcription succeeded; the corrected timeline retained 47.632 seconds during a 47.713-second measured UI run, including leading/trailing silence and a German filename.
 - Latest pushed baseline before this slice, `536f7905`, passed Windows/Ubuntu headless CI and CodeQL. Fresh CI for these commits is tracked on the PR; CodeRabbit still skips draft review.
+
+## 2026-09-07: recording library and file lexicon
+
+- Saved recordings are discovered from real WAV files after restart, with actual duration, size/date and visible corrupt-file errors. Default-app playback/folder navigation, explicit file handoff and confirmed deletion are connected. A queued source cannot be deleted; deleting the current saved result removes its stale actions. Hidden recorder controls are collapsed while browsing the library.
+- Files share dictation dictionary/snippet processing and eligible Parakeet CTC. Provider segments remain original for subtitles. History and snippet usage commit only after final queue acceptance; canceled late results cannot leave a History entry or increment usage.
+- Complete local validation: **640 passed, one NVIDIA platform skip** (Host 160, Presentation 423, Groq 32, NVIDIA 25). Prescribed Debug build/launch passed. Native library enumeration, queue protection, cancel/confirmed delete and Canary file-to-snippet-to-correction processing passed. The fixture usage count stayed at one while viewing/reopening its result.
+- Recorder preferences and durable file recovery are the next slices; neither is claimed complete here. CI passed on both platforms plus CodeQL for the previous pushed checkpoint `905434c5`.
