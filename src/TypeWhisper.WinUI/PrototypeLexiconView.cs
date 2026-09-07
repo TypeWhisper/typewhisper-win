@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace TypeWhisper.WinUI;
 
@@ -15,7 +16,7 @@ public sealed class PrototypeLexiconView : UserControl
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
     private readonly PrototypeBreadcrumbs _crumbs = new();
     private readonly TextBlock _heading = Text("Dictionary", 22);
-    private readonly TextBlock _notice = Text("Sample data · changes last for this session only.", 11, true);
+    private readonly TextBlock _notice = Text("Dictionary and snippets are saved in this profile.", 11, true);
     private readonly TextBlock _count = Text("", 11, true);
     private readonly ScrollViewer _scroll;
     private PrototypeLexiconKind _kind;
@@ -242,6 +243,8 @@ public sealed class PrototypeLexiconView : UserControl
         }
         if (_draft is null)
         {
+            _actions.Children.Add(Button("Import", () => _ = ImportAsync()));
+            _actions.Children.Add(Button("Export", () => _ = ExportAsync()));
             _actions.Children.Add(Button("+ Add " + Singular, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;
         }
         if (_store.Entries.Any(entry => entry.Id == _draft.Id))
@@ -269,7 +272,7 @@ public sealed class PrototypeLexiconView : UserControl
         _actions.Children.Clear();
         _actions.Children.Add(Button("Back to dictionary", () => { _showPacks = false; Render(); }));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
-            ? "Packs use Windows text-based boosting · acoustic CTC is not connected yet."
+            ? "Saved packs provide dictionary terms for enabled vocabulary processing."
             : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
         _body.Children.Add(Text("Add specialist vocabulary from the existing TypeWhisper packs. Personal words stay untouched when you turn a pack off.", 13, true));
         foreach (var pack in TypeWhisper.Core.Models.TermPack.AllPacks.Where(p => !p.RequiresCommercialLicense))
@@ -295,6 +298,67 @@ public sealed class PrototypeLexiconView : UserControl
             _body.Children.Add(Surface(row, 14));
         }
         _scroll.ChangeView(null, 0, null, true);
+    }
+
+    private async Task ImportAsync()
+    {
+        var snippets = _kind == PrototypeLexiconKind.Snippet;
+        IsEnabled = false;
+        try
+        {
+            var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
+                { Title = snippets ? "Import snippets" : "Import personal dictionary" };
+            picker.FileTypeFilter.Add(".json");
+            var file = await picker.PickSingleFileAsync();
+            if (file is null) { _notice.Text = "Import canceled."; return; }
+            if (new FileInfo(file.Path).Length > 20_000_000) throw new InvalidDataException("Choose a JSON file smaller than 20 MB.");
+            var json = await File.ReadAllTextAsync(file.Path);
+            var count = _store.PreviewImport(json, snippets);
+            var target = snippets ? "snippets" : "personal words and corrections";
+            _notice.Text = $"Validated {count} {target} from {Path.GetFileName(file.Path)}. Add rejects conflicts. Replace removes existing {target}. Term packs stay unchanged.";
+            _actions.Children.Clear();
+            _actions.Children.Add(Button("Cancel import", () => { Render(); _notice.Text = "Import canceled."; }));
+            void Apply(bool replace)
+            {
+                var error = _store.Import(json, snippets, replace);
+                if (error is not null) { _notice.Text = error; return; }
+                Render(); _notice.Text = $"Imported {count} {target}. Saved for the next dictation.";
+            }
+            _actions.Children.Add(Button("Add entries", () => Apply(false), primary: true));
+            _actions.Children.Add(Button("Replace " + (snippets ? "snippets" : "personal dictionary"), () =>
+            {
+                _notice.Text = $"Replace all existing {target} with the {count} validated entries? This cannot be undone. Export a backup first if needed.";
+                _actions.Children.Clear();
+                _actions.Children.Add(Button("Cancel import", () => Render()));
+                _actions.Children.Add(Button("Replace now", () => Apply(true), destructive: true));
+            }, destructive: true));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
+        { _notice.Text = "Import canceled: " + ex.Message; }
+        finally { IsEnabled = true; }
+    }
+
+    private async Task ExportAsync()
+    {
+        var snippets = _kind == PrototypeLexiconKind.Snippet;
+        IsEnabled = false;
+        try
+        {
+            var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
+            {
+                Title = snippets ? "Export snippets" : "Export personal dictionary (words and corrections, without term packs)",
+                SuggestedFileName = snippets ? "typewhisper-snippets" : "typewhisper-dictionary"
+            };
+            picker.FileTypeChoices.Add("TypeWhisper JSON", new List<string> { ".json" });
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) { _notice.Text = "Export canceled."; return; }
+            _notice.Text = _store.Export(file.Path, snippets) ?? (snippets
+                ? "Snippets exported with tags, timestamps and usage counts."
+                : "Personal words and corrections exported with metadata. Installed term packs are managed separately.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        { _notice.Text = "Export failed: " + ex.Message; }
+        finally { IsEnabled = true; }
     }
 
     private static TextBox Input(string value, string name, bool multiline)

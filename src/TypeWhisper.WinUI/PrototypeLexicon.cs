@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Services;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -19,14 +20,17 @@ internal sealed class PrototypeLexicon
     private readonly SnippetService? _snippets;
     private string? _snippetLoadError;
     private string? _loadError;
+    private readonly string? _dictionaryPath;
+    private readonly string? _snippetPath;
     internal string? LastError { get; private set; }
     internal PrototypeLexicon(string? dictionaryPath = null, string? snippetPath = null)
     {
+        _dictionaryPath = dictionaryPath; _snippetPath = snippetPath;
         if (snippetPath is not null)
         {
             try
             {
-                _ = DictationSnippetSnapshot.ReadEntries(snippetPath);
+                if (File.Exists(snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(snippetPath));
                 _snippets = new(snippetPath);
                 RefreshSnippets();
             }
@@ -39,9 +43,7 @@ internal sealed class PrototypeLexicon
             // Fail closed: do not overwrite a malformed dictionary with an empty cache.
             if (File.Exists(dictionaryPath))
             {
-                var entries = JsonSerializer.Deserialize<List<DictionaryEntry>>(File.ReadAllText(dictionaryPath));
-                if (entries is null || entries.Any(e => e is null || string.IsNullOrWhiteSpace(e.Id) || string.IsNullOrWhiteSpace(e.Original)))
-                    throw new JsonException("Invalid dictionary entries.");
+                _ = LexiconTransfer.ReadDictionary(File.ReadAllText(dictionaryPath), allowPackEntries: true);
             }
             _dictionary = new(dictionaryPath);
             RefreshDictionary();
@@ -84,6 +86,54 @@ internal sealed class PrototypeLexicon
         RefreshDictionary(); LastError = null; return null;
     }
     internal IReadOnlyList<PrototypeLexiconEntry> Entries => _entries.AsReadOnly();
+
+    internal int PreviewImport(string json, bool snippets) => snippets
+        ? LexiconTransfer.ReadSnippets(json).Length : LexiconTransfer.ReadDictionary(json).Length;
+
+    internal string? Import(string json, bool snippets, bool replace)
+    {
+        if ((snippets ? _snippetLoadError : _loadError) is { } loadError) return LastError = loadError;
+        try
+        {
+            if (snippets)
+            {
+                if (_snippets is null) return LastError = "Persistent snippets are unavailable.";
+                var next = LexiconTransfer.MergeSnippets(_snippets.Snippets, LexiconTransfer.ReadSnippets(json), replace);
+                if (!_snippets.TryReplaceAll(next)) return LastError = "Could not save imported snippets. Existing snippets are unchanged.";
+                RefreshSnippets();
+            }
+            else
+            {
+                if (_dictionary is null) return LastError = "Persistent dictionary is unavailable.";
+                var next = LexiconTransfer.MergeDictionary(_dictionary.Entries, LexiconTransfer.ReadDictionary(json), replace);
+                if (!_dictionary.TryReplaceAll(next)) return LastError = "Could not save imported dictionary. Existing entries are unchanged.";
+                RefreshDictionary();
+            }
+            return LastError = null;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        { return LastError = "Import canceled: " + ex.Message; }
+    }
+
+    internal string? Export(string path, bool snippets)
+    {
+        if ((snippets ? _snippetLoadError : _loadError) is { } loadError) return LastError = loadError;
+        try
+        {
+            var destination = Path.GetFullPath(path);
+            if (new[] { _dictionaryPath, _snippetPath }.Any(source => source is not null &&
+                Path.GetFullPath(source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
+                return LastError = "Choose an export destination outside the active dictionary and snippet files.";
+            var json = snippets
+                ? _snippets is null ? throw new InvalidOperationException("Persistent snippets are unavailable.") : LexiconTransfer.WriteSnippets(_snippets.Snippets)
+                : _dictionary is null ? throw new InvalidOperationException("Persistent dictionary is unavailable.") :
+                    LexiconTransfer.WriteDictionary(_dictionary.Entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal)).ToArray());
+            LexiconTransfer.WriteFile(path, json);
+            return LastError = null;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        { return LastError = "Export failed: " + ex.Message; }
+    }
 
     internal IEnumerable<PrototypeLexiconEntry> Search(PrototypeLexiconKind kind, string query) =>
         _entries.Where(entry => entry.Kind == kind &&
