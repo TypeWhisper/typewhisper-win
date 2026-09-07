@@ -158,7 +158,10 @@ public sealed partial class MainWindow : Window
         // Begin all cancellation requests before awaiting any drain.
         var session = _dictation.ShutdownAsync();
         var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
-        await Task.WhenAll(session, files, _dictationInput?.Completion ?? Task.CompletedTask,
+        var history = HistoryView.ShutdownAsync();
+        var workflows = WorkflowsView.ShutdownAsync();
+        var lexicon = _lexicon?.ShutdownAsync() ?? Task.CompletedTask;
+        await Task.WhenAll(session, files, history, workflows, lexicon, _profileUiDrain ?? Task.CompletedTask, _dictationInput?.Completion ?? Task.CompletedTask,
             _dictationInitialization ?? Task.CompletedTask);
         _liveOverlay?.Close();
         foreach (var review in _reviewWindows.ToArray()) review.Close();
@@ -394,6 +397,7 @@ public sealed partial class MainWindow : Window
 
     internal void ShowFromActivation()
     {
+        if (_profileRestoreClosing) return;
         _activationStopwatch.Restart();
         _isSearchEditing = false;
         UpdateSearchPresentation();
@@ -960,12 +964,14 @@ public sealed partial class MainWindow : Window
 
     internal void OpenSettings()
     {
+        if (_profileRestoreClosing) return;
         if (_settingsWindow is null)
         {
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation, OpenProviderSettings).Configure;
+            _settingsWindow.RestoreProfile = RestoreProfile;
             _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
             _settingsWindow.HistoryRequested += () =>
             {

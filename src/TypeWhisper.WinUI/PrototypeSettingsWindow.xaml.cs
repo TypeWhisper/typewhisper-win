@@ -17,6 +17,7 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
     internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal Action<PrototypeActivityView>? ConfigureActivity { get; set; }
+    internal Func<TypeWhisper.Core.Services.PersistedProfileBackup, TypeWhisper.Core.Services.PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
     internal Task RefreshActivityAsync() => _activity?.RefreshAsync() ?? Task.CompletedTask;
     private bool _updating = true;
     private uint _dpi;
@@ -305,6 +306,11 @@ public sealed partial class PrototypeSettingsWindow : Window
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
+            if (category == "Sync & backup")
+            {
+                Descendants(CatalogContent).OfType<PrototypeSyncBackupView>().FirstOrDefault()?.ConnectRestore(RestoreProfile);
+                SessionHint.Text = "Local backup and restore are connected · device sync is not available yet";
+            }
             if (category == "Privacy" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "History saving and retention are connected · unavailable controls are disabled";
             PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
