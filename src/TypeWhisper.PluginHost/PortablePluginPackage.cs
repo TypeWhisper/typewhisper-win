@@ -31,21 +31,22 @@ public sealed class PortablePluginPackage : IAsyncDisposable
         return manifest;
     }
 
-    public static async Task<PortablePluginPackage> LoadAsync(string directory, IPluginHostServices services, Version hostVersion)
-        => await OpenAsync(directory, services, hostVersion, activate: true);
+    public static async Task<PortablePluginPackage> LoadAsync(string directory, IPluginHostServices services, Version hostVersion, CancellationToken ct = default)
+        => await OpenAsync(directory, services, hostVersion, activate: true, ct);
 
     public static async Task RunInstallationHookAsync(string directory, IPluginHostServices services, Version hostVersion,
         string? previousVersion, bool uninstall, CancellationToken ct, IProgress<PluginInstallationProgress>? progress = null)
     {
-        await using var package = await OpenAsync(directory, services, hostVersion, activate: false);
+        await using var package = await OpenAsync(directory, services, hostVersion, activate: false, ct);
         if (package.Plugin is not IPluginInstallationLifecycle lifecycle) return;
         var context = new PluginInstallationContext(services, previousVersion, progress);
         if (uninstall) await lifecycle.OnUninstallAsync(context, ct);
         else await lifecycle.OnInstallAsync(context, ct);
     }
 
-    private static async Task<PortablePluginPackage> OpenAsync(string directory, IPluginHostServices services, Version hostVersion, bool activate)
+    private static async Task<PortablePluginPackage> OpenAsync(string directory, IPluginHostServices services, Version hostVersion, bool activate, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var manifest = ReadManifest(directory);
         if (manifest.MinHostVersion is not null &&
             (!Version.TryParse(manifest.MinHostVersion, out var minimum) || minimum > hostVersion))
@@ -61,10 +62,12 @@ public sealed class PortablePluginPackage : IAsyncDisposable
             var type = assembly.GetType(manifest.PluginClass, true)!;
             if (!typeof(ITypeWhisperPlugin).IsAssignableFrom(type) || type.IsAbstract)
                 throw new InvalidDataException("The entry point does not implement the portable plugin contract.");
+            ct.ThrowIfCancellationRequested();
             plugin = (ITypeWhisperPlugin)Activator.CreateInstance(type)!;
             if (plugin.PluginId != manifest.Id || plugin.PluginVersion != manifest.Version)
                 throw new InvalidDataException("Plugin identity does not match its manifest.");
-            if (activate) await plugin.ActivateAsync(services);
+            if (activate) await plugin.ActivateAsync(services, ct);
+            ct.ThrowIfCancellationRequested();
             return new(context, plugin) { _activated = activate };
         }
         catch

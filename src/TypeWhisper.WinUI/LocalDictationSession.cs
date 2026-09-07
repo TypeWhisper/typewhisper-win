@@ -171,6 +171,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             SetStatus(enabled ? "Loading local transcription plugin…" : "Unloading local transcription plugin…", DictationPhase.Configuring);
             await _livePreview.StopAsync();
             await _transcriptionPlugin.SetEnabledAsync(enabled);
+            if (_disposed) return "The application is shutting down.";
             var vocabularyError = await CtcVocabulary.SetEnabledAsync(Models.Enabled);
             LocalPluginError = Models.Error ?? vocabularyError;
             SetStatus(enabled ? IsReady ? $"{ActiveModelName} ready" : Models.Error ?? "Download a model in plugin settings, then select it in Dictation." : "Local transcription plugin disabled", DictationPhase.Idle);

@@ -93,7 +93,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             var selected = _host.GetSetting<string>("SelectedModelId") ?? ModelId;
             if (!Models.Any(m => m.Model.Id == selected && m.Downloaded))
             {
-                Feedback = "Choose a downloaded model or download one in Models.";
+                Feedback = "Choose a downloaded model or download one below.";
                 return;
             }
             // An activation failure keeps the package available for download/retry.

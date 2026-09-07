@@ -11,27 +11,46 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _disposed;
     private IPluginHostServices? _host;
+    private readonly HttpClient _downloads = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly object _activationSync = new();
+    private CancellationTokenSource? _activation;
+    private Task _activationCallbacks = Task.CompletedTask;
     public string PluginId => "com.typewhisper.parakeet-ctc";
     public string PluginName => "Parakeet CTC Vocabulary";
     public string PluginVersion => "0.1.0";
     public bool IsReady => !_disposed && _model is not null;
 
-    public async Task ActivateAsync(IPluginHostServices host)
+    public Task ActivateAsync(IPluginHostServices host) => ActivateAsync(host, CancellationToken.None);
+
+    public async Task ActivateAsync(IPluginHostServices host, CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using var activation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        lock (_activationSync) _activation = activation;
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_model is not null) return;
             var directory = host.GetSetting<string>("ModelDirectory") ?? Path.Combine(host.PluginAssetDirectory, "model");
+            if (host.GetSetting<string>("ModelDirectory") is null)
+                await new CtcModelAssets(_downloads).EnsureAsync(directory, activation.Token,
+                    message => host.Log(PluginLogLevel.Info, message)).ConfigureAwait(false);
+            activation.Token.ThrowIfCancellationRequested();
             var tokenizer = new CtcTokenizer(Path.Combine(directory, "tokens.txt"));
-            var model = await Task.Run(() => new NemoCtcModel(Path.Combine(directory, "model.int8.onnx")));
+            var model = await Task.Run(() => new NemoCtcModel(Path.Combine(directory, "model.int8.onnx")), activation.Token).ConfigureAwait(false);
+            if (activation.IsCancellationRequested) { model.Dispose(); activation.Token.ThrowIfCancellationRequested(); }
             if (model.Metadata.GetValueOrDefault("subsampling_factor") != "8" ||
                 model.Metadata.GetValueOrDefault("normalize_type") != "per_feature" || tokenizer.BlankId != 1024)
             { model.Dispose(); throw new NotSupportedException("Expected the Parakeet 110M CTC export and matching tokens."); }
             _tokenizer = tokenizer; _model = model; _host = host;
         }
-        finally { _gate.Release(); }
+        finally
+        {
+            Task callbacks;
+            lock (_activationSync) { _activation = null; callbacks = _activationCallbacks; _activationCallbacks = Task.CompletedTask; }
+            try { await callbacks.ConfigureAwait(false); }
+            finally { _gate.Release(); }
+        }
         host.NotifyCapabilitiesChanged();
     }
 
@@ -148,9 +167,17 @@ public sealed class ParakeetCtcPlugin : IVocabularyRescorerPlugin
 
     public async Task DeactivateAsync()
     {
+        lock (_activationSync)
+            if (_activation is { IsCancellationRequested: false } activation)
+                _activationCallbacks = ObserveCancellationAsync(activation.CancelAsync());
         await _gate.WaitAsync();
         try { _model?.Dispose(); _model = null; _tokenizer = null; }
         finally { _gate.Release(); }
     }
-    public void Dispose() { _disposed = true; DeactivateAsync().GetAwaiter().GetResult(); }
+    private static async Task ObserveCancellationAsync(Task cancellation)
+    {
+        try { await cancellation.ConfigureAwait(false); }
+        catch (AggregateException) { }
+    }
+    public void Dispose() { _disposed = true; DeactivateAsync().GetAwaiter().GetResult(); _downloads.Dispose(); }
 }

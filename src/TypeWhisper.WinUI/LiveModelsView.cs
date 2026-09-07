@@ -13,6 +13,7 @@ internal sealed class LiveModelsView : UserControl
     private readonly StackPanel _cards = new() { Spacing = 12 };
     private readonly TextBlock _active = Copy("", 16);
     private readonly TextBlock _vocabulary = Copy("", 12, true);
+    private readonly HandCursorButton _setupAction = Button("Retry setup", "Retry dictionary boosting setup");
     private readonly TextBlock _feedback = Copy("", 12, true);
     private readonly List<ModelRow> _rows = [];
     private string? _message;
@@ -27,6 +28,14 @@ internal sealed class LiveModelsView : UserControl
         _panel.Children.Add(Copy("Local models support dictation and live preview. Downloads continue when you leave this page.", 12, true));
         _panel.Children.Add(_cards);
         _panel.Children.Add(_vocabulary);
+        _setupAction.HorizontalAlignment = HorizontalAlignment.Left;
+        _setupAction.Click += async (_, _) =>
+        {
+            if (_session.CtcVocabulary.Busy) _session.CtcVocabulary.RequestCancelActivation();
+            else _message = await _session.SetLocalPluginEnabledAsync(true);
+            if (IsLoaded) Update();
+        };
+        _panel.Children.Add(_setupAction);
         AutomationProperties.SetLiveSetting(_feedback, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _panel.Children.Add(_feedback);
         Content = _panel;
@@ -47,9 +56,14 @@ internal sealed class LiveModelsView : UserControl
         }
         _active.Text = _session.ActiveModelName;
         _vocabulary.Text = _session.CtcVocabulary.Error ?? (_session.CtcVocabulary.Busy
-            ? "Preparing dictionary boosting…" : _session.CtcVocabulary.Enabled
+            ? _session.CtcVocabulary.Status ?? "Preparing dictionary boosting…" : _session.CtcVocabulary.Enabled
                 ? "Dictionary boosting is included for Parakeet. Add terms in Dictionary."
                 : "Dictionary boosting follows this plugin’s enablement.");
+        _setupAction.Visibility = models.Enabled && (_session.CtcVocabulary.Busy || !_session.CtcVocabulary.Enabled)
+            ? Visibility.Visible : Visibility.Collapsed;
+        _setupAction.Content = _session.CtcVocabulary.Busy ? "Cancel setup" : "Retry setup";
+        AutomationProperties.SetName(_setupAction, _session.CtcVocabulary.Busy ? "Cancel dictionary boosting setup" : "Retry dictionary boosting setup");
+        _setupAction.IsEnabled = _session.CtcVocabulary.Busy || (_session.CanChangeProvider && !models.Busy);
         _feedback.Text = _message ?? models.Error ?? models.Feedback
             ?? "Choose a downloaded model to use it. Downloads do not change your active model.";
         foreach (var row in _rows)

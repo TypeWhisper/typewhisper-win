@@ -9,18 +9,21 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private readonly VocabularyPipeline _pipeline = new();
-    private readonly Func<Task<IVocabularyPluginLease>> _load;
+    private readonly Func<CancellationToken, Task<IVocabularyPluginLease>> _load;
     private IVocabularyPluginLease? _lease;
     private CancellationTokenSource? _request;
+    private CancellationTokenSource? _activation;
+    private Task _activationCallbacks = Task.CompletedTask;
     private Task _cancellationCallbacks = Task.CompletedTask;
     private bool _enabled;
     private bool _disposed;
     private long _generation;
 
-    public VocabularyPluginSession(Func<Task<IVocabularyPluginLease>> load) => _load = load;
+    public VocabularyPluginSession(Func<Task<IVocabularyPluginLease>> load) : this(_ => load()) { }
+    public VocabularyPluginSession(Func<CancellationToken, Task<IVocabularyPluginLease>> load) => _load = load;
     public bool Enabled { get { lock (_sync) return _enabled; } }
 
-    public async Task SetEnabledAsync(bool enabled)
+    public async Task SetEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
     {
         long generation;
         lock (_sync)
@@ -31,8 +34,10 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
             // previous activation or native request is still draining.
             _enabled = false;
             CancelRequest();
+            CancelActivation();
         }
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken);
+        CancellationTokenSource? activation = null;
         try
         {
             lock (_sync) { if (_disposed || generation != _generation) return; }
@@ -42,16 +47,38 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
                 await old.DisposeAsync();
             }
             if (!enabled) return;
-            var loaded = await _load();
+            lock (_sync)
+            {
+                if (_disposed || generation != _generation) return;
+                activation = _activation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            }
+            var loaded = await _load(activation.Token);
             bool accept;
             lock (_sync)
             {
-                accept = !_disposed && generation == _generation;
+                accept = !_disposed && generation == _generation && !activation.IsCancellationRequested;
                 if (accept) { _lease = loaded; _enabled = true; }
             }
             if (!accept) await loaded.DisposeAsync();
         }
-        finally { _gate.Release(); }
+        catch (OperationCanceledException) when (activation?.IsCancellationRequested == true && !cancellationToken.IsCancellationRequested) { }
+        finally
+        {
+            Task callbacks = Task.CompletedTask;
+            lock (_sync)
+            {
+                if (ReferenceEquals(_activation, activation))
+                { _activation = null; callbacks = _activationCallbacks; _activationCallbacks = Task.CompletedTask; }
+            }
+            await callbacks;
+            activation?.Dispose();
+            _gate.Release();
+        }
+    }
+
+    public void RequestCancelActivation()
+    {
+        lock (_sync) { _enabled = false; ++_generation; CancelActivation(); }
     }
 
     public async Task<VocabularyOutcome> RefineAsync(Guid recordingId, string text, float[] audio, int sampleRate,
@@ -101,6 +128,7 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
         {
             _disposed = true; _enabled = false; ++_generation;
             CancelRequest();
+            CancelActivation();
         }
         await _gate.WaitAsync();
         try
@@ -117,6 +145,12 @@ public sealed class VocabularyPluginSession : IAsyncDisposable
     {
         if (_request is { IsCancellationRequested: false } request)
             _cancellationCallbacks = ObserveCancellationAsync(request.CancelAsync());
+    }
+
+    private void CancelActivation()
+    {
+        if (_activation is { IsCancellationRequested: false } activation)
+            _activationCallbacks = ObserveCancellationAsync(activation.CancelAsync());
     }
 
     private static async Task ObserveCancellationAsync(Task callbacks)
@@ -138,9 +172,9 @@ public sealed class VocabularyPluginLease : IVocabularyPluginLease
     private VocabularyPluginLease(PortablePluginPackage package, IVocabularyRescorerPlugin plugin)
     { _package = package; Plugin = plugin; }
 
-    public static async Task<IVocabularyPluginLease> LoadAsync(string directory, IPluginHostServices services, Version hostVersion)
+    public static async Task<IVocabularyPluginLease> LoadAsync(string directory, IPluginHostServices services, Version hostVersion, CancellationToken ct = default)
     {
-        var package = await PortablePluginPackage.LoadAsync(directory, services, hostVersion);
+        var package = await PortablePluginPackage.LoadAsync(directory, services, hostVersion, ct);
         if (package.Plugin is IVocabularyRescorerPlugin rescorer) return new VocabularyPluginLease(package, rescorer);
         await package.DisposeAsync();
         throw new InvalidDataException("This package does not expose acoustic vocabulary rescoring.");

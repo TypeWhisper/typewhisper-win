@@ -1,14 +1,18 @@
 # Parakeet CTC vocabulary add-on
 
-Portable TypeWhisper SDK plugin, loaded through `VocabularyPluginLease`. This is actual CTC inference, not the legacy text-only vocabulary booster. WinUI exposes an opt-in switch under **Dictation > Advanced**. It is off by default. Enabled personal terms and built-in Term Packs become hints; explicit dictionary corrections still run afterward. The legacy text booster is skipped for recordings started with CTC enabled.
+Portable TypeWhisper SDK plugin, loaded through `VocabularyPluginLease` as an internal NVIDIA dependency. It has no separate enable switch. Activation prepares the required acoustic model and tokenizer automatically; enabled personal terms and built-in Term Packs become hints. Explicit dictionary corrections still run afterward. The legacy text booster is skipped for recordings started with CTC ready.
 
-## Local model setup
+## Automatic model setup
 
 Download `sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8.tar.bz2` from the official `k2-fsa/sherpa-onnx` GitHub release `asr-models`. Verify the archive SHA-256:
 
 `17f945007b52ccd8b7200ffc7c5652e9e8e961dfdf479cefcabd06cf5703630b`
 
-Place `model.int8.onnx`, `tokens.txt` and `tokenizer.json` under the plugin host's `PluginAssetDirectory/model`, or specify `ModelDirectory` in its settings. The tokenizer comes from `FluidInference/parakeet-ctc-110m-coreml` on Hugging Face; verified SHA-256: `9f7c517c0bf644b1b690ab037bab4d4c53aecd38e047e7154d011013ab9160db`. Every tokenizer vocabulary ID is validated against `tokens.txt`; missing/mismatched files prevent activation. In the current development host the folder is `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData/PluginData/com.typewhisper.parakeet-ctc/model`. Assets are not committed. No model-download UI is connected yet.
+The installer fetches the archive from `https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8.tar.bz2` and the tokenizer from `https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml/resolve/main/tokenizer.json`. The tokenizer SHA-256 is `9f7c517c0bf644b1b690ab037bab4d4c53aecd38e047e7154d011013ab9160db`. Both hashes must match before publication. Every tokenizer vocabulary ID is validated against `tokens.txt`.
+
+Assets are staged beside `PluginAssetDirectory/model`. The archive has a 512 MiB download cap; the tokenizer has a 16 MiB cap. These are safety limits, not estimated download sizes. Only the two expected archive files are extracted, with bounded lengths and rejected traversal/link entries. Cancellation and a ten-minute setup limit remove staging files. A receipt records the verified source hashes and installed file hashes; subsequent activation checks these hashes and skips networking when the assets remain valid. Downloaded assets remain on disk after deactivation and package uninstall. Existing unmanaged files are retained in a sibling backup when verified assets are published.
+
+An explicit `ModelDirectory` remains a read-only asset override: supply `model.int8.onnx`, `tokens.txt` and `tokenizer.json` yourself. Automatic setup never rewrites that directory. Missing or mismatched files prevent activation. The default development profile uses `%LOCALAPPDATA%/TypeWhisper-WinUI-DevUserData/PluginData/com.typewhisper.parakeet-ctc/model`; isolated test profiles use their own data root. Offline or failed setup preserves ordinary transcription; enabling NVIDIA again retries setup.
 
 ## Boundaries
 

@@ -96,7 +96,10 @@ public sealed partial class PrototypePluginsView : UserControl
         if (_runtime is null || _page != Page.Detail) return;
         PluginToggleButton.IsEnabled = _opened?.RuntimeCanToggle == true && !_changingPlugin &&
             !_runtime.CtcVocabulary.Busy && !_runtime.IsRecording;
-        PluginPrimaryButton.IsEnabled = _opened?.Compatible == true && !_changingPlugin;
+        // Setup navigation remains available so the internal download can be canceled.
+        var canOpenActiveSetup = _runtime.CtcVocabulary.Busy &&
+            Path.GetFileName(_opened?.Id) == LocalTranscriptionPlugin.PluginId;
+        PluginPrimaryButton.IsEnabled = _opened?.Compatible == true && (!_changingPlugin || canOpenActiveSetup);
         UninstallButton.IsEnabled = !_changingPlugin && _runtime.CanChangeProvider && !_runtime.Models.Busy && !_runtime.CtcVocabulary.Busy;
         if (PluginToggleButton.IsEnabled && _pendingDetailFocus == _opened?.Id) FocusDetailAction();
     }

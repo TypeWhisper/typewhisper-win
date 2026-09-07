@@ -20,6 +20,13 @@ public interface ITypeWhisperPlugin : IDisposable
 
     /// <summary>Called when the plugin is activated by the host.</summary>
     Task ActivateAsync(IPluginHostServices host);
+    /// <summary>Activates with cancellation. Legacy implementations are drained before cancellation is reported.</summary>
+    async Task ActivateAsync(IPluginHostServices host, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await ActivateAsync(host).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
 
     /// <summary>Called when the plugin is deactivated.</summary>
     Task DeactivateAsync();
