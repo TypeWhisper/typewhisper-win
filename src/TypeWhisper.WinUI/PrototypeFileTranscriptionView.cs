@@ -226,6 +226,14 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         _actions.Children.Add(Button("Export transcript…", async () => await Export(job), primary: true));
     }
     internal void AddRecording(string path) => AddPaths([path]);
+    internal bool CanAcceptActivation => !_queue.IsShutdown && !_queue.Running && !_picking && _result is null
+        && _recoveryDialog is null && _recoveryOperation.IsCompleted && _exportOperation.IsCompleted;
+    internal string AddActivatedFiles(IReadOnlyList<string> paths)
+    {
+        if (!CanAcceptActivation) return "Files were not added. Finish the current file operation or close the result, then retry.";
+        AddPaths(paths);
+        return _notice.Text;
+    }
     private void AddPaths(IEnumerable<string> paths)
     {
         var added = 0; var errors = new List<string>();

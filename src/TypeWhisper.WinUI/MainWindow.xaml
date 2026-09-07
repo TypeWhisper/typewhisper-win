@@ -8,14 +8,15 @@
     <Grid x:Name="WindowRoot" Background="{ThemeResource InkBrush}" KeyDown="WindowRoot_KeyDown"
           PreviewKeyDown="WindowRoot_PreviewKeyDown">
         <Grid.RowDefinitions>
-            <RowDefinition Height="38" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="34" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="DragRegion" Grid.Row="0" Padding="14,0,8,0" Background="Transparent">
+        <StackPanel Grid.Row="0">
+        <Grid x:Name="DragRegion" Height="38" Padding="14,0,8,0" Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -36,6 +37,14 @@
                     Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Hide Quick Launch" />
         </Grid>
 
+        <Border x:Name="ActivationNotice" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}" Padding="14,10" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,1">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="ActivationNoticeText" TextWrapping="Wrap" Foreground="{ThemeResource TextBrush}" FontSize="12" AutomationProperties.LiveSetting="Assertive" />
+                <local:HandCursorButton Grid.Column="1" Content="Dismiss" Click="DismissActivationNotice_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+            </Grid>
+        </Border>
+        </StackPanel>
         <Grid Grid.Row="1" Margin="14,6,14,10">
             <Border x:Name="SearchSurface"
                     Background="{ThemeResource SurfaceBrush}" BorderBrush="{ThemeResource HairlineBrush}"

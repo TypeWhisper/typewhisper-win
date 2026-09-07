@@ -10,6 +10,8 @@ public partial class App : Application
     private AppInstance? _mainInstance;
     private TrayIconService? _tray;
     private ProfileOperationWindow? _profileOperation;
+    private readonly TypeWhisper.Presentation.ActivationInbox _activations = new();
+    private bool _activationReady;
 
     public App()
     {
@@ -31,30 +33,35 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
-        var launch = TypeWhisper.Presentation.StartupLaunchPolicy.Evaluate(Environment.GetCommandLineArgs(),
+        var request = TypeWhisper.Presentation.ApplicationActivationRequest.Parse(Environment.GetCommandLineArgs().Skip(1),
             activation.Kind == ExtendedActivationKind.StartupTask);
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         _mainInstance = AppInstance.FindOrRegisterForKey(InstanceKey);
         if (!_mainInstance.IsCurrent)
         {
-            if (launch.NotifyExisting) await _mainInstance.RedirectActivationToAsync(activation);
-            Exit();
+            try
+            {
+                if (request.ShowWindow) await _mainInstance.RedirectActivationToAsync(activation);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // This secondary instance owns no profile stores or UI. Always exit after logging;
+                // do not offer recovery actions against the primary instance's profile.
+                System.Diagnostics.Trace.TraceError("Activation redirection failed: {0}", ex);
+            }
+            finally { Exit(); }
             return;
         }
 
+        _activations.Add(request);
         _mainInstance.Activated += (_, redirected) =>
         {
-            var redirectedLaunch = redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
-                ? TypeWhisper.Presentation.StartupLaunchPolicy.EvaluateCommandLine(launchArgs.Arguments)
-                : TypeWhisper.Presentation.StartupLaunchPolicy.Evaluate([], redirected.Kind == ExtendedActivationKind.StartupTask);
-            if (!redirectedLaunch.NotifyExisting) return;
-            if (_profileOperation is { } operation)
-            {
-                operation.DispatcherQueue.TryEnqueue(operation.Activate);
-                return;
-            }
-            var window = _window;
-            if (window is not null)
-                window.DispatcherQueue.TryEnqueue(window.ShowFromActivation);
+            var incoming = redirected.Data is global::Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launchArgs
+                ? TypeWhisper.Presentation.ApplicationActivationRequest.ParseCommandLine(launchArgs.Arguments)
+                : TypeWhisper.Presentation.ApplicationActivationRequest.Parse([], redirected.Kind == ExtendedActivationKind.StartupTask);
+            if (!incoming.ShowWindow) return;
+            _activations.Add(incoming);
+            dispatcher.TryEnqueue(DrainActivations);
         };
         try
         {
@@ -72,12 +79,12 @@ public partial class App : Application
         }
         _window = new MainWindow();
         _window.RestoreProfile = RestoreProfileAsync;
-        if (launch.ShowWindow) _window.ShowFromActivation();
+        if (request.ShowWindow) _window.ShowFromActivation();
         _tray = new TrayIconService(
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
             () => _window.DispatcherQueue.TryEnqueue(_window.OpenSettings),
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(() => { _window.ShowFromActivation(); _window.OpenFileTranscription(); }),
+            () => _window.DispatcherQueue.TryEnqueue(_window.OpenFilesFromTray),
             () => _window.DispatcherQueue.TryEnqueue(ExitFromTray),
             () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray),
             () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()));
@@ -86,7 +93,7 @@ public partial class App : Application
             _tray?.UpdateDictation(status, recording);
             _tray?.UpdateProcessing(_window.CanCancelProcessing);
         };
-        _ = _window.InitializeDictationAsync();
+        var initialization = _window.InitializeDictationAsync();
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray);
@@ -100,26 +107,20 @@ public partial class App : Application
                     FinalText = "Review window sample.\n\nDieser Text wurde nicht aufgenommen und nicht in der History gespeichert."
                 }, false, true, "UI test sample. Nothing was recorded or pasted.")));
 #endif
-        if (Environment.GetCommandLineArgs().Contains("--account"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenAccount);
-        else if (Environment.GetCommandLineArgs().Contains("--sync-backup"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenSyncBackup);
-        else if (Environment.GetCommandLineArgs().Contains("--dashboard"))
-            _window.DispatcherQueue.TryEnqueue(() => _window.OpenDashboard());
-        else if (Environment.GetCommandLineArgs().Contains("--statistics"))
-            _window.DispatcherQueue.TryEnqueue(() => _window.OpenDashboard(true));
-        else if (Environment.GetCommandLineArgs().Contains("--dictionary"))
-            _window.DispatcherQueue.TryEnqueue(() => _window.OpenLexicon());
-        else if (Environment.GetCommandLineArgs().Contains("--snippets"))
-            _window.DispatcherQueue.TryEnqueue(() => _window.OpenLexicon(true));
-        else if (Environment.GetCommandLineArgs().Contains("--files"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenFileTranscription);
-        else if (Environment.GetCommandLineArgs().Contains("--setup"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenSetup);
-        else if (Environment.GetCommandLineArgs().Contains("--compare-selects"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenSelectComparison);
-        else if (Environment.GetCommandLineArgs().Contains("--settings"))
-            _window.DispatcherQueue.TryEnqueue(_window.OpenSettings);
+        await initialization;
+        _activationReady = true;
+        DrainActivations();
+    }
+
+    private void DrainActivations()
+    {
+        if (_profileOperation is { } operation)
+        {
+            _activations.Close(); operation.Activate(); return;
+        }
+        if (_exiting) { _activations.Close(); return; }
+        if (!_activationReady || _window is null) return;
+        _activations.Dispatch(_window.HandleActivation, _window.ShowActivationFailure);
     }
 
     private bool _exiting;
