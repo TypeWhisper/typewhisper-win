@@ -108,6 +108,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
             "RecentTranscriptionsHotkeys" => ("history", "Open recent transcripts"),
             "CopyLastTranscriptionHotkeys" => ("file", "Copy your latest result"),
             "WorkflowPaletteHotkeys" => ("workflow", "Run a text workflow"),
+            "WorkflowSelectedTextHotkeys" => ("workflow", "Process selected text with this workflow · saved when you save the workflow"),
             _ => ("recorder", "Open the audio recorder")
         };
         var layout = new Grid { ColumnSpacing = 14 };
@@ -126,7 +127,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         var heading = Text(label, 14); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         copy.Children.Add(heading); copy.Children.Add(Text(description, 12, true));
         if (key == "CancelProcessingHotkeys") ToolTipService.SetToolTip(copy,
-            "Saved global shortcut. Requests cancellation of final dictation processing without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported.");
+            "Saved global shortcut. Requests cancellation of final dictation processing or an active selected-text workflow without starting a recording. It does not cancel Recorder or file-transcription work. Use a main key; modifier-only shortcuts are unsupported.");
         Grid.SetColumn(copy, 1); layout.Children.Add(copy);
         Grid.SetColumn(panel, 2); layout.Children.Add(panel);
         _shell = new Border
@@ -279,7 +280,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         SetValue(PrototypeShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
-    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key != "CancelProcessingHotkeys")
+    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys"))
         ?? PrototypeShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? PrototypeShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)

@@ -145,8 +145,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
-    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
+    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
+    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;

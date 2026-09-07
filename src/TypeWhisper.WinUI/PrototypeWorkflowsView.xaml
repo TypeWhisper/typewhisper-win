@@ -2,7 +2,8 @@
     x:Class="TypeWhisper.WinUI.PrototypeWorkflowsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:TypeWhisper.WinUI">
+    xmlns:local="using:TypeWhisper.WinUI"
+    PreviewKeyDown="Shortcut_PreviewKeyDown" KeyUp="Shortcut_PreviewKeyUp">
     <UserControl.Resources>
         <Style x:Key="WorkflowEditorStyle" TargetType="TextBox">
             <Setter Property="FontFamily" Value="{StaticResource InterfaceFont}" />
@@ -116,8 +117,12 @@
                     </StackPanel>
                     <StackPanel Spacing="7">
                         <TextBlock Text="ACTIVATION" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
-                        <local:PrototypeChoicePicker x:Name="ConfigTrigger" />
-                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Workflow hotkeys, recording overrides and action plugins remain unsupported." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                    <local:PrototypeChoicePicker x:Name="ConfigTrigger" />
+                    <StackPanel x:Name="ConfigShortcutSection" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="Select text in another app, then press this shortcut to send it to the configured provider. The result opens for review. Nothing is pasted or saved to History." TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                        <StackPanel x:Name="ConfigShortcutHost" />
+                    </StackPanel>
+                        <TextBlock Text="Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Workflow shortcuts process selected text. Starting dictation with a workflow shortcut, recording overrides and action plugins remain unavailable." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigAppSection" Spacing="7" Visibility="Collapsed">
                         <TextBlock Text="WINDOWS PROCESS NAMES" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
@@ -169,7 +174,7 @@
                             <local:PrototypeChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="Manual workflows run when you choose Run. App and Global workflows run automatically on matching dictations. Cloud providers receive your transcript and instructions. Automatic results use dictation output settings; failures open review without pasting." FontSize="11"
+                    <TextBlock Text="Manual workflows run when you choose Run. Selected-text shortcuts send your selection and instructions to the configured provider and open the result for review. App, Website and Global workflows run on matching dictations and use dictation output settings; failures open review without pasting." FontSize="11"
                         Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                     <local:HandCursorButton x:Name="DeleteWorkflowButton" Content="Delete workflow" Click="DeleteWorkflow_Click"
                         HorizontalAlignment="Left" Style="{StaticResource PrototypeDestructiveConfirmButtonStyle}"

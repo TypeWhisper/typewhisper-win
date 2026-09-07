@@ -17,11 +17,12 @@ public sealed partial class MainWindow
         _hotkeyRegistration?.Dispose();
         _dictationHotkey?.Dispose();
         _cancelProcessingHotkey?.Dispose();
+        var workflowShortcuts = StopWorkflowShortcutsAsync();
         _dictationInput?.Dispose();
         _dictation.RequestCancel();
         // Close admission immediately, including when recorder saving will need a retry.
         // These drains can wait for the recorder's reservation without blocking this call.
-        _profileUiDrain = Task.WhenAll(HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
+        _profileUiDrain = Task.WhenAll(workflowShortcuts, HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
             DrainRecoveryViewsAsync(),
             DrainReviewWindowsAsync(),
             _lexicon?.ShutdownAsync() ?? Task.CompletedTask,

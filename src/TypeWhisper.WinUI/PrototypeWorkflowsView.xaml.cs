@@ -38,6 +38,19 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     }
 
     private ManualWorkflowStore? _store;
+    internal WorkflowShortcutCatalog? Shortcuts { get; set; }
+    private readonly Dictionary<string, string> _shortcutDraft = [];
+    private string DraftHotkeys => _shortcutDraft.GetValueOrDefault("WorkflowSelectedTextHotkeys", "");
+    private string? ShortcutDraftError => Shortcuts is null ? "Wait for workflow shortcuts to initialize."
+        : Shortcuts.ValidateDraft(_opened?.Id ?? "", DraftHotkeys, ConfigEnabled.IsOn);
+    private void Shortcut_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        var recorder = ConfigShortcutHost.Children.OfType<PrototypeShortcutRecorder>().FirstOrDefault(r => r.IsEditing);
+        if (recorder is not null && (recorder.IsCapturing || e.Key == global::Windows.System.VirtualKey.Escape)) recorder.CaptureKeyDown(e);
+    }
+    private void Shortcut_PreviewKeyUp(object sender, KeyRoutedEventArgs e) =>
+        ConfigShortcutHost.Children.OfType<PrototypeShortcutRecorder>().FirstOrDefault(r => r.IsCapturing)?.CaptureKeyUp(e);
+    internal bool IsBusy => _run is not null || _page == Page.Configuration || _deleteCompletion is { Task.IsCompleted: false };
     private string? _loadError;
     private CancellationTokenSource? _run;
     private IReadOnlyList<PrototypeChoice> Providers => [new("none", "Not configured", "Choose an installed LLM provider"),
@@ -170,6 +183,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
             ? "Choose a provider and model in Edit workflow."
             : $"{Providers.FirstOrDefault(item => item.Id == _opened.ProviderId)?.Label ?? _opened.ProviderId} · {_opened.ModelId} · input is sent to this provider when you run";
         if (_loadError is not null) WorkflowSummary.Text = _loadError;
+        else if (Shortcuts?.Error is { } shortcutError) WorkflowSummary.Text = shortcutError;
         ConfigureWorkflowButton.Visibility = page is Page.List or Page.Editor ? Visibility.Visible : Visibility.Collapsed;
         NewWorkflowButton.IsEnabled = _loadError is null && _store is not null;
         NewWorkflowButton.Visibility = page == Page.List ? Visibility.Visible : Visibility.Collapsed;
@@ -243,7 +257,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         if (_closing || _run is not null || _opened is null || _store is null || _loadError is not null) return;
         try
         {
-            var updated = PrototypeWorkflow.FromStored(_store.SetEnabled(_opened.Id, !_opened.IsEnabled));
+            var updated = PrototypeWorkflow.FromStored(Shortcuts is { } shortcuts
+                ? shortcuts.SetEnabled(_opened.Id, !_opened.IsEnabled) : _store.SetEnabled(_opened.Id, !_opened.IsEnabled));
             var index = _workflows.FindIndex(item => item.Id == updated.Id);
             if (index >= 0) _workflows[index] = updated;
             _opened = updated;
@@ -323,11 +338,13 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         .Select(m => new PrototypeChoice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
         || ConfigTrigger.SelectedId != _opened.TriggerKind.ToString() || ConfigAppProcesses.Text != _opened.AppProcesses
+        || DraftHotkeys != _opened.Hotkeys
         || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
         || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigOutput.SelectedId != _opened.OutputTarget || ConfigEnabled.IsOn != _opened.IsEnabled);
     private string? ConfigurationError => string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
+        : ConfigTrigger.SelectedId == "Hotkey" && ShortcutDraftError is { } shortcutError ? shortcutError
         : ConfigTrigger.SelectedId == "App" && string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) ? "Enter at least one Windows process name."
         : ConfigTrigger.SelectedId is "App" or "Website" && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text)
             && ConfigAppProcesses.Text.Split(',').Any(value => string.IsNullOrWhiteSpace(value) || value.Trim().IndexOfAny(['/', '\\', ':', '*', '?']) >= 0 || value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) ? "Enter process names such as notepad, chrome (without paths or .exe)."
@@ -372,10 +389,20 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigName.Text = _opened.Title;
         ConfigTrigger.SetOptions([
             new("Manual", "Manual", "Run explicitly with source text"),
+            new("Hotkey", "Shortcut · selected text", "Send the selected text to this workflow and review the result"),
             new("App", "App", "Apply to dictation in matching Windows processes"),
             new("Website", "Website", "Apply to dictation on matching browser domains"),
             new("Global", "Global fallback", "Apply when no app or website rule matches")], _opened.TriggerKind.ToString());
         ConfigAppProcesses.Text = _opened.AppProcesses;
+        _shortcutDraft["WorkflowSelectedTextHotkeys"] = _opened.Hotkeys;
+        ConfigShortcutHost.Children.Clear();
+        ConfigShortcutHost.Children.Add(new PrototypeShortcutRecorder("WorkflowSelectedTextHotkeys", "Workflow", "", _shortcutDraft,
+            () => [], value =>
+            {
+                _shortcutDraft["WorkflowSelectedTextHotkeys"] = WorkflowShortcutCatalog.Canonical(value);
+                DispatcherQueue.TryEnqueue(UpdateConfigurationState);
+                return null;
+            }));
         ConfigWebsiteDomains.Text = _opened.WebsiteDomains;
         ConfigContextMode.SetOptions([new("All", "Match all", "App AND website"), new("Any", "Match any", "App OR website")], _opened.ContextMatchMode.ToString());
         ConfigPriority.Text = _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -412,9 +439,10 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     {
         if (_loadingConfiguration) return;
         var contextual = ConfigTrigger.SelectedId is "App" or "Website";
+        ConfigShortcutSection.Visibility = ConfigTrigger.SelectedId == "Hotkey" ? Visibility.Visible : Visibility.Collapsed;
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
-        ConfigOutputSection.Visibility = ConfigTrigger.SelectedId == "Manual" ? Visibility.Visible : Visibility.Collapsed;
+        ConfigOutputSection.Visibility = ConfigTrigger.SelectedId is "Manual" or "Hotkey" ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
@@ -423,7 +451,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
             : !Available(ConfigProvider.SelectedId, ConfigModel.SelectedId)
                 ? "You can save this workflow now. Configure the selected plugin before running it."
-                : (ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
+                : (ConfigTrigger.SelectedId == "Hotkey" ? "The shortcut processes selected text with this provider. Results open for review."
+                    : ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
         ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[error is null ? "MutedBrush" : "AccentBrush"];
         WorkflowSummary.Text = ConfigurationDirty ? "Unsaved changes" : "Workflow configuration";
         WorkflowPrimaryButton.IsEnabled = error is null && ConfigurationDirty && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
@@ -434,6 +463,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         if (_closing || _opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
         var updated = _opened with { Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
             TriggerKind = Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId), AppProcesses = ConfigAppProcesses.Text.Trim(),
+            Hotkeys = WorkflowShortcutCatalog.Canonical(DraftHotkeys),
             WebsiteDomains = ConfigWebsiteDomains.Text.Trim(), ContextMatchMode = Enum.Parse<WorkflowContextMatchMode>(ConfigContextMode.SelectedId),
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
@@ -444,7 +474,9 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         {
             if (_store is null || _loadError is not null) throw new InvalidOperationException("Workflow storage is unavailable.");
             var stored = updated.ToStored();
-            _store.Save(stored, allowAutomatic: true);
+            if (Shortcuts is { } shortcuts) shortcuts.Save(stored);
+            else if (stored.Trigger.Kind == WorkflowTriggerKind.Hotkey) throw new InvalidOperationException("Wait for workflow shortcuts to initialize.");
+            else _store.Save(stored, allowAutomatic: true);
             updated = PrototypeWorkflow.FromStored(stored);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -484,7 +516,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
                 PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
-            _store.Delete(workflow.Id, allowAutomatic: true);
+            if (Shortcuts is { } shortcuts) shortcuts.Delete(workflow.Id);
+            else _store.Delete(workflow.Id, allowAutomatic: true);
             _workflows.RemoveAll(w => w.Id == workflow.Id);
             _drafts.Remove(workflow.Id);
             _opened = null;
