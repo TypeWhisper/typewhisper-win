@@ -12,6 +12,11 @@ public sealed partial class PrototypeHistoryView : UserControl
     private TypeWhisper.Presentation.HistoryReader? _reader;
     private TypeWhisper.Presentation.HistoryActions? _actions;
     private bool _acting;
+    private bool _selecting;
+    private int _bulkFocusIndex = -1;
+    private bool _applyingFilters;
+    private string[] SelectedIds => Entries.SelectedItems.OfType<PrototypeTranscript>()
+        .Select(item => item.Entry.PersistedRecordId).OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
     private bool _loading;
     private string? _loadError;
 
@@ -60,6 +65,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     internal event EventHandler? LauncherRequested;
     internal event EventHandler? ClearSearchRequested;
     internal bool IsReading => ReadingPage.Visibility == Visibility.Visible;
+    internal bool IsSelecting => _selecting;
     private PrototypeTranscript? _opened;
 
     public PrototypeHistoryView()
@@ -79,6 +85,8 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void ApplyFilters()
     {
+        var selectedIds = _selecting ? SelectedIds.ToHashSet(StringComparer.Ordinal) : [];
+        _applyingFilters = true;
         var selectedId = (Entries.SelectedItem as PrototypeTranscript)?.Entry.RecordId;
         ShowList();
         FilteredEntries.Clear();
@@ -94,15 +102,22 @@ public sealed partial class PrototypeHistoryView : UserControl
             ?? (_store.Query().Count == 0 ? "New transcriptions will appear here. No previous history was imported." : "Try another search or reset the filters.");
         EmptyAction.Content = _loadError is not null ? "Retry" : "Reset filters";
         EmptyAction.Visibility = !_loading && (_loadError is not null || _store.Query().Count > 0) ? Visibility.Visible : Visibility.Collapsed;
-        Entries.SelectedItem = FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == selectedId)
-            ?? FilteredEntries.FirstOrDefault();
+        if (_selecting)
+        {
+            foreach (var item in FilteredEntries.Where(item => item.Entry.PersistedRecordId is { } id && selectedIds.Contains(id)))
+                Entries.SelectedItems.Add(item);
+        }
+        else Entries.SelectedItem = FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == selectedId)
+                ?? FilteredEntries.FirstOrDefault();
         AllFilter.Style = FilterStyle(_kind is null);
         DictationFilter.Style = FilterStyle(_kind == PrototypeHistoryEntryKind.Dictation);
         RecordingFilter.Style = FilterStyle(_kind == PrototypeHistoryEntryKind.Recording);
         var device = _store.Devices.FirstOrDefault(device => device.DeviceId == _deviceId);
         DeviceFilterLabel.Text = device?.DeviceName ?? "All devices";
         DeviceFilterIcon.Kind = DeviceIcon(device?.Platform);
+        _applyingFilters = false;
         UpdateResultSummary();
+        UpdateBulkActions();
     }
 
     private static string FormatTime(DateTimeOffset createdAt)
@@ -209,12 +224,31 @@ public sealed partial class PrototypeHistoryView : UserControl
     internal void MoveSelection(int offset)
     {
         if (IsReading || FilteredEntries.Count == 0) return;
+        if (_selecting)
+        {
+            _bulkFocusIndex = Math.Clamp(_bulkFocusIndex + offset, 0, FilteredEntries.Count - 1);
+            var item = FilteredEntries[_bulkFocusIndex];
+            Entries.ScrollIntoView(item);
+            Entries.UpdateLayout();
+            (Entries.ContainerFromItem(item) as Control)?.Focus(FocusState.Keyboard);
+            return;
+        }
         Entries.SelectedIndex = Math.Clamp(Entries.SelectedIndex + offset, 0, FilteredEntries.Count - 1);
         Entries.ScrollIntoView(Entries.SelectedItem);
     }
 
     internal void OpenSelected()
     {
+        if (_selecting)
+        {
+            if (_bulkFocusIndex >= 0 && _bulkFocusIndex < FilteredEntries.Count)
+            {
+                var item = FilteredEntries[_bulkFocusIndex];
+                if (Entries.SelectedItems.Contains(item)) Entries.SelectedItems.Remove(item);
+                else if (item.Entry.PersistedRecordId is not null) Entries.SelectedItems.Add(item);
+            }
+            return;
+        }
         if (IsReading || Entries.SelectedItem is not PrototypeTranscript entry) return;
         _opened = entry;
         TranscriptTitle.Text = entry.Title;
@@ -240,6 +274,8 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     internal void GoBack()
     {
+        if (_acting) return;
+        if (_selecting) { SetSelecting(false); return; }
         if (IsReading)
         {
             ShowList();
@@ -255,7 +291,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         CopyButton.Visibility = Visibility.Collapsed;
         HistoryBreadcrumbs.SetItems(new("Quick Launch", OpenLauncher, "Back from history"), new("History"));
         PageTitle.Text = "History";
-        HistoryNavigationHint.Text = "⌫ / Esc Back   ↑↓ Navigate   Enter Open";
+        HistoryNavigationHint.Text = _selecting ? "↑↓ Navigate   Enter / Space Select   Esc Done" : "⌫ / Esc Back   ↑↓ Navigate   Enter Open";
         UpdateResultSummary();
     }
 
@@ -263,7 +299,107 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void UpdateResultSummary() => ResultSummary.Text =
         _loading ? "Loading…" : _loadError is not null ? "Read failed"
+            : _selecting ? $"{SelectedIds.Length} selected · {FilteredEntries.Count} shown"
             : $"{FilteredEntries.Count} {(FilteredEntries.Count == 1 ? "entry" : "entries")} · local history";
+
+    private void UpdateBulkActions()
+    {
+        if (BulkToolbar is null) return;
+        var available = !_acting && !_loading && _loadError is null && _actions is not null;
+        SelectEntriesButton.IsEnabled = SelectAllShownButton.IsEnabled = available;
+        SelectEntriesButton.Content = _selecting ? "Done selecting" : "Select entries";
+        SelectionActions.Visibility = _selecting ? Visibility.Visible : Visibility.Collapsed;
+        ExportSelectedButton.IsEnabled = DeleteSelectedButton.IsEnabled = available && SelectedIds.Length > 0;
+        ClearHistoryButton.IsEnabled = available && _store.Query().Any(entry => entry.PersistedRecordId is not null);
+    }
+
+    private void SetSelecting(bool selecting)
+    {
+        _selecting = selecting;
+        _bulkFocusIndex = -1;
+        if (Entries.SelectionMode == ListViewSelectionMode.Multiple) Entries.SelectedItems.Clear();
+        else Entries.SelectedIndex = -1;
+        Entries.ItemContainerStyle = selecting ? null : (Style)Application.Current.Resources["PrototypeCommandItemStyle"];
+        Entries.SelectionMode = selecting ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Single;
+        Entries.IsItemClickEnabled = !selecting;
+        HistoryNavigationHint.Text = selecting ? "↑↓ Navigate   Enter / Space Select   Esc Done" : "↑↓ Navigate   Enter Open";
+        if (!selecting) Entries.SelectedItem = FilteredEntries.FirstOrDefault();
+        UpdateResultSummary(); UpdateBulkActions();
+    }
+
+    private void SelectEntries_Click(object sender, RoutedEventArgs e) => SetSelecting(!_selecting);
+    private void SelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in FilteredEntries.Where(item => item.Entry.PersistedRecordId is not null))
+            if (!Entries.SelectedItems.Contains(item)) Entries.SelectedItems.Add(item);
+    }
+    private void Entries_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_applyingFilters || !_selecting) return;
+        UpdateResultSummary(); UpdateBulkActions();
+    }
+
+    private async void DeleteSelected_Click(object sender, RoutedEventArgs e) => await DeleteSnapshotAsync(SelectedIds, false);
+    private async void ClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_acting || _actions is null) return;
+        try { await DeleteSnapshotAsync(await _actions.SnapshotIdsAsync(), true); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { ResultSummary.Text = "Could not read history for confirmation. Try again."; }
+    }
+
+    private async Task DeleteSnapshotAsync(string[] ids, bool clear)
+    {
+        if (_acting || _actions is null || ids.Length == 0) return;
+        _acting = true; UpdateBulkActions();
+        string? notice = null;
+        try
+        {
+            var dialog = new ContentDialog { XamlRoot = XamlRoot,
+                Title = clear ? $"Clear {ids.Length} history entries?" : $"Delete {ids.Length} selected entries?",
+                Content = "This permanently deletes these entries and their saved local audio. Entries added after this confirmation opens will be kept.",
+                PrimaryButtonText = clear ? "Clear history" : "Delete selected", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            notice = await _actions.DeleteAsync(ids) ? "Confirmed history entries deleted."
+                : "History could not be deleted. No entries were removed by this action.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { notice = "History could not be deleted. Refresh and try again."; }
+        finally
+        {
+            _acting = false;
+            await RefreshAsync();
+            UpdateBulkActions();
+            if (notice is not null) ResultSummary.Text = notice;
+        }
+    }
+
+    private async void ExportSelected_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = SelectedIds;
+        if (_acting || _actions is null || ids.Length == 0 || XamlRoot is null) return;
+        _acting = true; UpdateBulkActions();
+        string? notice = null;
+        try
+        {
+            var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
+                { SuggestedFileName = "history-selection", Title = $"Export {ids.Length} selected entries" };
+            picker.FileTypeChoices.Add("Text", new List<string> { ".txt" });
+            picker.FileTypeChoices.Add("Markdown", new List<string> { ".md" });
+            picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
+            picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await _actions.ExportFileAsync(ids, file.Path);
+            notice = $"Exported {ids.Length} history entries.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { notice = "Export failed. Refresh your selection or choose a writable location."; }
+        finally
+        {
+            _acting = false;
+            await RefreshAsync();
+            UpdateBulkActions();
+            if (notice is not null) ResultSummary.Text = notice;
+        }
+    }
 
     private void Entry_Click(object sender, ItemClickEventArgs e)
     {

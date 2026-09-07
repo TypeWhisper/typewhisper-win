@@ -795,7 +795,7 @@ public sealed partial class MainWindow : Window
                 PluginsView.GoBack();
             else if (_workflowsOpen && WorkflowsView.IsDetail)
                 WorkflowsView.GoBack();
-            else if (_historyOpen && HistoryView.IsReading)
+            else if (_historyOpen && (HistoryView.IsReading || HistoryView.IsSelecting))
                 HistoryView.GoBack();
             else if (ActionPanel.Visibility == Visibility.Visible)
                 ActionPanel.Visibility = Visibility.Collapsed;

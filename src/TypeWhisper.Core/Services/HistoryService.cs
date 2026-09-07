@@ -242,6 +242,31 @@ public sealed class HistoryService : IHistoryService
         RaiseRecordsChanged();
     }
 
+    /// <inheritdoc />
+    public bool TryDeleteRecords(IReadOnlyCollection<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var selected = ids.ToHashSet(StringComparer.Ordinal);
+        if (selected.Count == 0) return true;
+        using var mutation = ProfileMutationCoordinator.Enter();
+        EnsureCacheLoaded();
+        List<string?> audioFiles;
+        lock (_gate)
+        {
+            var removed = _cache.Where(record => selected.Contains(record.Id)).ToArray();
+            if (removed.Length == 0) return true;
+            var remaining = _cache.Where(record => !selected.Contains(record.Id)).ToList();
+            if (!SaveToDisk(remaining)) return false;
+            _cache = remaining;
+            RebuildStats();
+            audioFiles = removed.Select(record => record.AudioFileName)
+                .Where(name => !_cache.Any(record => record.AudioFileName == name)).ToList();
+        }
+        DeleteAudioFiles(audioFiles);
+        RaiseRecordsChanged();
+        return true;
+    }
+
     /// <summary>
     /// Performs search.
     /// </summary>
