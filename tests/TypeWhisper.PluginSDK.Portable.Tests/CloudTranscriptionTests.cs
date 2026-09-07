@@ -52,6 +52,7 @@ public sealed class CloudTranscriptionTests : IDisposable
         Assert.DoesNotContain("test-key", File.ReadAllText(Path.Combine(_root, "settings.json")));
         var result = await restarted.DecodeAsync([0, 0.5f, -0.5f]);
         Assert.Equal("Guten Morgen", result.Text);
+        Assert.Equal("german", result.DetectedLanguage);
         var request = Assert.Single(_requests);
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.Equal("https://api.groq.com/openai/v1/audio/transcriptions", request.Uri);

@@ -81,15 +81,15 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         host.SetSetting("Language", language); Changed?.Invoke();
     }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings)> DecodeAsync(float[] samples)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples)
     {
-        (string Text, VocabularyTokenTiming[] Timings) result = ("", []);
+        (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage) result = ("", [], null);
         await RunAsync(async () =>
         {
             if (!Ready) throw new InvalidOperationException("Add an API key in Plugins > Groq > Settings.");
             var response = await RequireLease().Engine.TranscribeAsync(EncodeWav(samples),
                 Language == "auto" ? null : Language, false, null, _shutdown.Token);
-            result = (response.Text, response.TokenTimings.ToArray());
+            result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage);
         });
         return result;
     }

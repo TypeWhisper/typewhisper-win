@@ -110,6 +110,7 @@ public sealed class LocalModelManagementTests : IDisposable
         await using var runtime = Create(); await runtime.InitializeAsync(); runtime.SelectLanguage("de");
         var result = await runtime.DecodeAsync([0f], false);
         Assert.Equal("Hallo", result.Text);
+        Assert.Equal("de", result.DetectedLanguage);
         Assert.Equal("de", new VocabularyHostServices(_root).GetSetting<string>("Language"));
         Assert.Throws<ArgumentException>(() => runtime.SelectLanguage("xx"));
     }

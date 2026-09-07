@@ -169,11 +169,11 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal void CancelDownload() => _download?.Cancel();
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings)> DecodeAsync(float[] samples, bool includeTimings)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples, bool includeTimings)
     {
         if (!Ready) throw new InvalidOperationException("Choose and load a model before dictating.");
         var result = await _lease!.Engine.TranscribePcmAsync(samples, Language == "auto" ? null : Language, false, CancellationToken.None);
-        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : []);
+        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage);
     }
 
     private async Task ReleaseAsync()

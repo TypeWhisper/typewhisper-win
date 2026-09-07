@@ -83,3 +83,7 @@ For a repeatable visual check of the real review window without microphone/cloud
 The Debug review fixture rendered successfully with both paragraphs after fixing TextBox initialization order (enable multiline before assigning text) and removing the one-line search template. The Copy text click could not be verified because Computer Use could not activate that window; no successful copy acceptance is claimed. Full review-after-real-dictation acceptance remains separate from the fixture.
 
 Window-title appearance: the prescribed Debug build/launch passed with shared title-bar styling applied to all six WinUI window classes. Computer Use verified that the review window caption stays dark both inactive and with the result field focused. No new headless tests were added for this appearance-only change.
+
+## Dictation provenance, 2026-09-07
+
+Provider adapters now preserve detected language; the session records the captured target process and resolves provider language names/codes without guessing automatic input. Targeted cloud/local adapter tests passed (23 cases), and language provenance tests passed (9 cases). These are portable fixture tests, not live provider acceptance. App/task presentation follows in the history-actions slice.

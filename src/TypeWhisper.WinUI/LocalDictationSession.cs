@@ -448,7 +448,10 @@ internal sealed class LocalDictationSession : IDisposable
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
-                EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = "transcribe"
+                EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = "transcribe",
+                Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
+                AppName = _targetApp == "Target app" ? null : _targetApp,
+                AppProcessName = _targetApp == "Target app" ? null : _targetApp
             };
             var delivery = new DictationOutputDelivery(_history);
             var outcome = await delivery.DeliverAsync(record, _outputAtStart,
@@ -482,7 +485,7 @@ internal sealed class LocalDictationSession : IDisposable
 
     internal string? LastUnsavedText { get; private set; }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
-    private Task<(string Text, VocabularyTokenTiming[] Timings)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
+    private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
         UsesGroq ? Groq.DecodeAsync(samples) : _transcriptionPlugin.DecodeAsync(samples, includeTimings);
     private void StopSilenceMonitoring()
     {
