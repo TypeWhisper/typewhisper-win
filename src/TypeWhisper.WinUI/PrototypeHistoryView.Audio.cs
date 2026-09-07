@@ -14,6 +14,7 @@ public sealed partial class PrototypeHistoryView
         var error = _historyAudio?.AudioCleanupError;
         AudioCleanupNotice.Visibility = error is null ? Visibility.Collapsed : Visibility.Visible;
         AudioCleanupText.Text = error ?? "";
+        RetryAudioCleanupButton.Visibility = error is null ? Visibility.Collapsed : Visibility.Visible;
         RetryAudioCleanupButton.IsEnabled = !_acting && !_closing;
     }
 

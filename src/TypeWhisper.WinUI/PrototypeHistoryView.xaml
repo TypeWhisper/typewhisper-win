@@ -42,8 +42,6 @@
         </Grid>
         <StackPanel x:Name="AudioCleanupNotice" Grid.Row="1" Margin="12,0,12,12" Spacing="8" Visibility="Collapsed">
             <TextBlock x:Name="AudioCleanupText" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-            <local:HandCursorButton x:Name="RetryAudioCleanupButton" Content="Retry audio cleanup" Click="RetryAudioCleanup_Click"
-                Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Left" />
         </StackPanel>
         <Grid x:Name="ListPage" Grid.Row="2">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -74,17 +72,6 @@
                     </Button.Flyout>
                 </local:HandCursorButton>
             </Grid>
-            <StackPanel x:Name="BulkToolbar" Grid.Row="1" Spacing="8" Margin="12,0,12,10">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <local:HandCursorButton x:Name="SelectEntriesButton" Content="Select entries" Click="SelectEntries_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
-                    <local:HandCursorButton x:Name="ClearHistoryButton" Content="Clear history…" Click="ClearHistory_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" />
-                </StackPanel>
-                <StackPanel x:Name="SelectionActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                    <local:HandCursorButton x:Name="SelectAllShownButton" Content="Select all shown" Click="SelectAll_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
-                    <local:HandCursorButton x:Name="ExportSelectedButton" Content="Export selected…" Click="ExportSelected_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
-                    <local:HandCursorButton x:Name="DeleteSelectedButton" Content="Delete selected…" Click="DeleteSelected_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" />
-                </StackPanel>
-            </StackPanel>
             <local:HandCursorListView x:Name="Entries" Grid.Row="2" ItemsSource="{x:Bind FilteredEntries}"
                 IsItemClickEnabled="True" ItemClick="Entry_Click" SelectionMode="Single"
                 SelectionChanged="Entries_SelectionChanged"
@@ -115,8 +102,6 @@
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
                 <TextBlock x:Name="EmptyTitle" Text="No matching entries" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
                 <TextBlock x:Name="EmptyDescription" Text="Try another search or reset the filters." FontSize="13" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="440" />
-                <local:HandCursorButton x:Name="EmptyAction" Content="Reset filters" Click="ClearSearch_Click" HorizontalAlignment="Center"
-                    Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Clear history search" />
             </StackPanel>
         </Grid>
         <Grid x:Name="ReadingPage" Grid.Row="2" Visibility="Collapsed" Margin="12,0,12,0">
@@ -128,15 +113,7 @@
                 <TextBlock x:Name="TranscriptModel" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="TranscriptProvenance" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 <TextBlock x:Name="AudioAvailabilityText" FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
-                <StackPanel x:Name="AudioActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play in default app" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
-                    <local:HandCursorButton x:Name="ShowAudioButton" Content="Show in folder" Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
-                </StackPanel>
-                <StackPanel x:Name="EntryActions" Orientation="Horizontal" Spacing="8">
-                    <local:HandCursorButton Content="Edit text" Click="Edit_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit history transcript" />
-                    <local:HandCursorButton Content="Export…" Click="Export_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Export history transcript" />
-                    <local:HandCursorButton Content="Delete…" Click="Delete_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Delete history entry" />
-                </StackPanel>
+
                 <TextBlock x:Name="ActionNotice" FontSize="12" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
             </StackPanel>
@@ -146,19 +123,50 @@
             </ScrollViewer>
         </Grid>
         <Border Grid.Row="3" BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,0">
-            <Grid Height="48" Padding="2,0" ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <local:PrototypeBreadcrumbs x:Name="HistoryBreadcrumbs" VerticalAlignment="Center" />
-                <TextBlock x:Name="HistoryNavigationHint" Grid.Column="1" FontSize="10" Foreground="{ThemeResource MutedBrush}"
-                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="⌫ / Esc Back   ↑↓ Navigate   Enter Open" />
-                <local:HandCursorButton x:Name="CopyButton" Grid.Column="2" Content="Copy text" Visibility="Collapsed"
-                    VerticalAlignment="Center" Click="Copy_Click" Style="{StaticResource PrototypePrimaryButtonStyle}"
-                    AutomationProperties.Name="Copy transcript text" />
-            </Grid>
+            <StackPanel Padding="2,8,2,10" Spacing="8">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <local:PrototypeBreadcrumbs x:Name="HistoryBreadcrumbs" VerticalAlignment="Center" />
+                    <TextBlock x:Name="HistoryNavigationHint" Grid.Column="1" FontSize="10" Foreground="{ThemeResource MutedBrush}"
+                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="Esc Back   ↑↓ Navigate   Enter Open" />
+                </Grid>
+                <local:HandCursorButton x:Name="RetryAudioCleanupButton" Content="Retry audio cleanup · R" Visibility="Collapsed" Click="RetryAudioCleanup_Click"
+                    Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Left" />
+                <StackPanel x:Name="AudioActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play audio · P" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
+                    <local:HandCursorButton x:Name="ShowAudioButton" Content="Show in folder · F" Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
+                </StackPanel>
+                <Grid x:Name="ListActions">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="BulkToolbar" Spacing="8" Margin="0">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <local:HandCursorButton x:Name="SelectEntriesButton" Content="Select entries · S" Click="SelectEntries_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                            <local:HandCursorButton x:Name="ClearHistoryButton" Content="Clear history…" Click="ClearHistory_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" />
+                        </StackPanel>
+                <StackPanel x:Name="SelectionActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                    <local:HandCursorButton x:Name="SelectAllShownButton" Content="Select all · A" Click="SelectAll_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="ExportSelectedButton" Content="Export selected… · X" Click="ExportSelected_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="DeleteSelectedButton" Content="Delete selected… · Del" Click="DeleteSelected_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" />
+                </StackPanel>
+            </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                        <local:HandCursorButton x:Name="EmptyAction" Content="Reset filters" Click="ClearSearch_Click" HorizontalAlignment="Center"
+                            Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Clear history search" />
+                        <local:HandCursorButton x:Name="OpenButton" Content="Open · Enter" Click="Open_Click"
+                            Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Open selected history entry" />
+                    </StackPanel>
+                </Grid>
+                <Grid x:Name="DetailActions" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="EntryActions" Grid.Column="0" Orientation="Horizontal" Visibility="Collapsed" Spacing="8">
+                        <local:HandCursorButton x:Name="EditButton" Content="Edit text · E" Click="Edit_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Edit history transcript" />
+                        <local:HandCursorButton x:Name="ExportButton" Content="Export… · X" Click="Export_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Export history transcript" />
+                        <local:HandCursorButton x:Name="DeleteButton" Content="Delete… · Del" Click="Delete_Click" Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Delete history entry" />
+                    </StackPanel>
+                    <local:HandCursorButton x:Name="CopyButton" Grid.Column="1" Content="Copy text · Enter" Visibility="Collapsed"
+                        Click="Copy_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Copy transcript text" />
+                </Grid>
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>

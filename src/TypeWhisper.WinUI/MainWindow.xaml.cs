@@ -819,6 +819,11 @@ public sealed partial class MainWindow : Window
 
     private void WindowRoot_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_historyOpen)
+        {
+            HistoryView.HandleActionKey(e);
+            if (e.Handled) return;
+        }
         if (LexiconOpen)
         {
             if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)

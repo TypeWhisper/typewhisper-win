@@ -141,7 +141,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         EmptyDescription.Text = _loading ? "Reading local history." : _loadError
             ?? (_store.Query().Count == 0 ? "New transcriptions will appear here. No previous history was imported." : "Try another search or reset the filters.");
         EmptyAction.Content = _loadError is not null ? "Retry" : "Reset filters";
-        EmptyAction.Visibility = !_loading && (_loadError is not null || _store.Query().Count > 0) ? Visibility.Visible : Visibility.Collapsed;
+        EmptyAction.Visibility = !_loading && FilteredEntries.Count == 0 && (_loadError is not null || _store.Query().Count > 0) ? Visibility.Visible : Visibility.Collapsed;
         if (_selecting)
         {
             foreach (var item in FilteredEntries.Where(item => item.Entry.PersistedRecordId is { } id && selectedIds.Contains(id)))
@@ -307,6 +307,8 @@ public sealed partial class PrototypeHistoryView : UserControl
             : "This demo session has been added to History. No audio was captured and no transcript was generated.";
         ListPage.Visibility = Visibility.Collapsed;
         ReadingPage.Visibility = Visibility.Visible;
+        ListActions.Visibility = Visibility.Collapsed;
+        DetailActions.Visibility = Visibility.Visible;
         CopyButton.Visibility = entry.Entry.HasTranscript ? Visibility.Visible : Visibility.Collapsed;
         HistoryBreadcrumbs.SetItems(new("Quick Launch", OpenLauncher, "History breadcrumb Quick Launch"),
             new("History", GoBack, "Back from history"), new(entry.Entry.Content.Kind == PrototypeHistoryEntryKind.Recording ? "Recording" : "Transcript"));
@@ -314,6 +316,8 @@ public sealed partial class PrototypeHistoryView : UserControl
         ResultSummary.Text = "Local entry · sync not connected";
         HistoryNavigationHint.Text = entry.Entry.HasTranscript ? "⌫ / Esc Back   ·   Select text to copy a passage" : "⌫ / Esc Back";
         TranscriptScroll.ChangeView(null, 0, null, true);
+        if (entry.Entry.HasTranscript) CopyButton.Focus(FocusState.Programmatic);
+        else if (EntryActions.Visibility == Visibility.Visible) EditButton.Focus(FocusState.Programmatic);
     }
 
     internal void GoBack()
@@ -333,6 +337,9 @@ public sealed partial class PrototypeHistoryView : UserControl
         ReadingPage.Visibility = Visibility.Collapsed;
         ListPage.Visibility = Visibility.Visible;
         CopyButton.Visibility = Visibility.Collapsed;
+        DetailActions.Visibility = AudioActions.Visibility = Visibility.Collapsed;
+        ListActions.Visibility = Visibility.Visible;
+        ++_audioAvailabilityGeneration;
         HistoryBreadcrumbs.SetItems(new("Quick Launch", OpenLauncher, "Back from history"), new("History"));
         PageTitle.Text = "History";
         HistoryNavigationHint.Text = _selecting ? "↑↓ Navigate   Enter / Space Select   Esc Done" : "⌫ / Esc Back   ↑↓ Navigate   Enter Open";
@@ -353,7 +360,9 @@ public sealed partial class PrototypeHistoryView : UserControl
         var hasShownEntries = FilteredEntries.Any(item => item.Entry.PersistedRecordId is not null);
         SelectEntriesButton.IsEnabled = available && (_selecting || hasShownEntries);
         SelectAllShownButton.IsEnabled = available && hasShownEntries;
-        SelectEntriesButton.Content = _selecting ? "Done selecting" : "Select entries";
+        SelectEntriesButton.Content = _selecting ? "Done selecting · S" : "Select entries · S";
+        OpenButton.Visibility = _selecting ? Visibility.Collapsed : Visibility.Visible;
+        OpenButton.IsEnabled = !_loading && !_acting && FilteredEntries.Count > 0;
         SelectionActions.Visibility = _selecting ? Visibility.Visible : Visibility.Collapsed;
         ExportSelectedButton.IsEnabled = DeleteSelectedButton.IsEnabled = available && SelectedIds.Length > 0;
         ClearHistoryButton.IsEnabled = available && _store.Query().Any(entry => entry.PersistedRecordId is not null);
@@ -569,7 +578,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     }
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        if (_opened is null) return;
+        if (_closing || _acting || !IsReading || _opened is null || !_opened.Entry.HasTranscript) return;
         try
         {
             var content = new DataPackage();
