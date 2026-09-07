@@ -61,18 +61,23 @@ public sealed class HistoryRetentionController(IHistoryService history, HistoryR
     {
         _applyError = null;
         var value = Preferences.Current;
-        if (!Preferences.CanApply || !value.IsValid || value.HistoryRetentionMode == HistoryRetentionMode.Forever)
-            return Error;
+        var mayPurge = Preferences.CanApply && value.IsValid && value.HistoryRetentionMode != HistoryRetentionMode.Forever;
+        if (!mayPurge && history is not IHistoryAudioService) return Error;
         try
         {
             await history.EnsureLoadedAsync().ConfigureAwait(false);
             if (Volatile.Read(ref _closed) != 0) return ClosedMessage;
+            if (history is IHistoryAudioService audio && audio.AudioCleanupError is not null)
+                _applyError = audio.RetryAudioCleanup() ?? audio.AudioCleanupError;
+            if (!mayPurge) return Error;
             var now = DateTime.UtcNow;
             var expiredIds = history.Records.Where(record => value.IsExpired(record.CreatedAt, now))
                 .Select(record => record.Id).ToHashSet(StringComparer.Ordinal);
             history.PurgeOldRecords(TimeSpan.FromMinutes(value.HistoryRetentionMinutes));
             if (history.Records.Any(record => expiredIds.Contains(record.Id)))
                 _applyError = "The retention choice is saved, but older history entries could not be deleted. The app will retry.";
+            if (history is IHistoryAudioService audioHistory && audioHistory.AudioCleanupError is { } cleanupError)
+                _applyError = string.Join(" ", new[] { _applyError, cleanupError }.Where(message => !string.IsNullOrWhiteSpace(message)));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

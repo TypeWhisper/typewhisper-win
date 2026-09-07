@@ -21,7 +21,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
     /// <summary>Saves when allowed, then attempts paste or returns a reviewable result.</summary>
     public async Task<DictationOutputResult> DeliverAsync(TranscriptionRecord record,
         DictationOutputPreferences atStart, Func<DictationOutputPreferences> current,
-        Func<Task<bool>> paste, CancellationToken ct = default)
+        Func<Task<bool>> paste, CancellationToken ct = default, float[]? samples = null, int sampleRate = 16000)
     {
         ct.ThrowIfCancellationRequested();
         var saved = false;
@@ -33,9 +33,31 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                 ct.ThrowIfCancellationRequested();
                 if (atStart.RestrictedBy(current()).SaveToHistory)
                 {
-                    if (!history.TryAddRecord(record))
+                    var wantsAudio = record.SourceKind == "dictation" && samples is { Length: > 0 }
+                        && atStart.RestrictedBy(current()).SaveHistoryAudio;
+                    string? audioWarning = null;
+                    var suppressed = false;
+                    if (wantsAudio && history is IHistoryAudioService audioHistory)
+                    {
+                        var audioRecord = record;
+                        var result = await Task.Run(() => audioHistory.TryAddRecordWithAudio(audioRecord, samples!, sampleRate,
+                            () => !ct.IsCancellationRequested && atStart.RestrictedBy(current()).SaveHistoryAudio, ct,
+                            () => !ct.IsCancellationRequested && atStart.RestrictedBy(current()).SaveToHistory), ct);
+                        record = result.Record;
+                        saved = result.Saved;
+                        audioWarning = result.Warning;
+                        suppressed = result.Suppressed;
+                        ct.ThrowIfCancellationRequested();
+                    }
+                    else
+                    {
+                        saved = history.TryAddRecord(record);
+                        if (wantsAudio) audioWarning = "History audio saving is unavailable. Only the text was retained.";
+                    }
+                    if (!saved && !suppressed)
                         return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.") { Failed = true };
-                    saved = true;
+                    if (!string.IsNullOrWhiteSpace(audioWarning))
+                        return new(record, saved, true, (saved ? "Saved to History. " : "Not saved to History. ") + audioWarning + " Review and copy your text; nothing was pasted.") { Failed = true };
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

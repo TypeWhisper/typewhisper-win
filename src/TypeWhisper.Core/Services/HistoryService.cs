@@ -9,12 +9,14 @@ namespace TypeWhisper.Core.Services;
 /// <summary>
 /// Provides history service behavior.
 /// </summary>
-public sealed class HistoryService : IHistoryService
+public sealed class HistoryService : IHistoryAudioService
 {
     private readonly string _filePath;
     /// <summary>Propagates read/format failures instead of treating them as empty history. Missing files remain empty.</summary>
     public bool ThrowOnLoadFailure { get; init; }
     private readonly string? _audioDirectory;
+    private readonly HistoryAudioStore? _audioStore;
+    private string? _legacyAudioError;
     private readonly object _gate = new();
     private List<TranscriptionRecord> _cache = [];
     private bool _cacheLoaded;
@@ -61,10 +63,11 @@ public sealed class HistoryService : IHistoryService
     /// <summary>
     /// Initializes a new instance of the HistoryService class.
     /// </summary>
-    public HistoryService(string filePath, string? audioDirectory = null)
+    public HistoryService(string filePath, string? audioDirectory = null, HistoryAudioStore? audioStore = null)
     {
         _filePath = filePath;
         _audioDirectory = audioDirectory;
+        _audioStore = audioStore;
     }
 
     /// <summary>
@@ -84,6 +87,7 @@ public sealed class HistoryService : IHistoryService
                 _cache = records;
                 RebuildStats();
                 _cacheLoaded = true;
+                _audioStore?.Reconcile(AudioReferences());
             }
         }
         finally
@@ -135,6 +139,79 @@ public sealed class HistoryService : IHistoryService
         return true;
     }
 
+    /// <inheritdoc />
+    public string? AudioCleanupError => _audioStore?.CleanupError ?? _legacyAudioError;
+
+    /// <inheritdoc />
+    public string? RetryAudioCleanup()
+    {
+        using var mutation = ProfileMutationCoordinator.Enter();
+        EnsureCacheLoaded();
+        lock (_gate) return _audioStore?.Reconcile(AudioReferences()) ?? _legacyAudioError;
+    }
+
+    /// <inheritdoc />
+    public string? ResolveAudioPath(string? fileName) => _audioStore?.Resolve(fileName);
+
+    private string[] AudioReferences() => _cache.Select(record => record.AudioFileName)
+        .Where(name => !string.IsNullOrWhiteSpace(name)).Cast<string>().Distinct(StringComparer.Ordinal).ToArray();
+
+    /// <inheritdoc />
+    public HistoryAudioSaveResult TryAddRecordWithAudio(TranscriptionRecord record, float[] samples, int sampleRate,
+        Func<bool> maySaveAudio, CancellationToken cancellationToken = default, Func<bool>? maySaveHistory = null)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(samples);
+        ArgumentNullException.ThrowIfNull(maySaveAudio);
+        using var mutation = ProfileMutationCoordinator.Enter();
+        EnsureCacheLoaded();
+        var actual = record with { AudioFileName = null };
+        string? warning = null;
+        var saved = false;
+        var suppressed = false;
+        lock (_gate)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (maySaveHistory?.Invoke() == false) return new(actual, false, null) { Suppressed = true };
+            if (_cache.Any(existing => existing.Id == record.Id)) return new(actual, false, null);
+            try
+            {
+                if (maySaveAudio())
+                {
+                    try
+                    {
+                        if (_audioStore is null) warning = "Audio storage is unavailable. The text can still be saved.";
+                        else actual = actual with { AudioFileName = _audioStore.Prepare(samples, sampleRate, cancellationToken) };
+                    }
+                    catch (Exception ex) when (HistoryAudioStore.Recoverable(ex))
+                    { warning = "Audio could not be saved. The text can still be saved to History."; }
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+                // Last synchronous permission boundary before committing the History reference.
+                if (!maySaveAudio()) actual = actual with { AudioFileName = null };
+                cancellationToken.ThrowIfCancellationRequested();
+                if (maySaveHistory?.Invoke() == false)
+                { suppressed = true; actual = actual with { AudioFileName = null }; warning = null; }
+                else
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var updated = _cache.ToList();
+                    updated.Insert(0, actual);
+                    saved = SaveToDisk(updated);
+                    if (saved) { _cache = updated; RebuildStats(); }
+                }
+            }
+            finally
+            {
+                var cleanup = _audioStore?.Reconcile(AudioReferences());
+                if (cleanup is not null) warning = warning is null ? cleanup : warning + " " + cleanup;
+            }
+        }
+        if (saved) RaiseRecordsChanged();
+        else actual = actual with { AudioFileName = null };
+        return new(actual, saved, warning) { Suppressed = suppressed };
+    }
+
     /// <summary>
     /// Updates record.
     /// </summary>
@@ -175,13 +252,22 @@ public sealed class HistoryService : IHistoryService
             if (index < 0)
                 return false;
 
+            var previousAudio = _cache[index].AudioFileName;
             var updated = _cache.ToList();
             updated[index] = record;
+            var removeAudio = !string.IsNullOrWhiteSpace(previousAudio) &&
+                !updated.Any(item => string.Equals(item.AudioFileName, previousAudio, StringComparison.OrdinalIgnoreCase));
+            if (removeAudio && _audioStore?.MarkDeletion([previousAudio]) == false) return false;
             if (!SaveToDisk(updated))
                 return false;
 
             _cache = updated;
             RebuildStats();
+            if (removeAudio)
+            {
+                if (_audioStore is not null) _audioStore.Reconcile(AudioReferences());
+                else DeleteAudioFile(previousAudio);
+            }
         }
 
         RaiseRecordsChanged();
@@ -191,78 +277,37 @@ public sealed class HistoryService : IHistoryService
     /// <summary>
     /// Deletes record.
     /// </summary>
-    public void DeleteRecord(string id)
-    {
-        using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
-        string? removedAudioFileName = null;
-        var changed = false;
-        lock (_gate)
-        {
-            var idx = _cache.FindIndex(r => r.Id == id);
-            if (idx < 0)
-                return;
+    public void DeleteRecord(string id) => TryDeleteRecords([id]);
 
-            var updated = _cache.ToList();
-            var removed = updated[idx];
-            updated.RemoveAt(idx);
-            if (!SaveToDisk(updated))
-                return;
-
-            _cache = updated;
-            RebuildStats();
-            removedAudioFileName = removed.AudioFileName;
-            changed = true;
-        }
-
-        DeleteAudioFile(removedAudioFileName);
-        if (changed)
-            RaiseRecordsChanged();
-    }
-
-    /// <summary>
-    /// Clears all items from the current collection.
-    /// </summary>
-    public void ClearAll()
-    {
-        using var mutation = ProfileMutationCoordinator.Enter();
-        EnsureCacheLoaded();
-        List<string?> audioFiles;
-        lock (_gate)
-        {
-            audioFiles = _cache.Select(r => r.AudioFileName).ToList();
-            if (!SaveToDisk([]))
-                return;
-
-            _cache.Clear();
-            RebuildStats();
-        }
-
-        DeleteAudioFiles(audioFiles);
-        RaiseRecordsChanged();
-    }
+    /// <summary>Removes current entries and journals only their unshared owned audio for cleanup.</summary>
+    public void ClearAll() => RemoveMatching(_ => true);
 
     /// <inheritdoc />
     public bool TryDeleteRecords(IReadOnlyCollection<string> ids)
     {
         ArgumentNullException.ThrowIfNull(ids);
         var selected = ids.ToHashSet(StringComparer.Ordinal);
-        if (selected.Count == 0) return true;
+        return selected.Count == 0 || RemoveMatching(record => selected.Contains(record.Id));
+    }
+
+    private bool RemoveMatching(Func<TranscriptionRecord, bool> remove)
+    {
         using var mutation = ProfileMutationCoordinator.Enter();
         EnsureCacheLoaded();
-        List<string?> audioFiles;
         lock (_gate)
         {
-            var removed = _cache.Where(record => selected.Contains(record.Id)).ToArray();
+            var removed = _cache.Where(remove).ToArray();
             if (removed.Length == 0) return true;
-            var remaining = _cache.Where(record => !selected.Contains(record.Id)).ToList();
+            var remaining = _cache.Where(record => !remove(record)).ToList();
+            var references = remaining.Select(record => record.AudioFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var audioFiles = removed.Select(record => record.AudioFileName).Where(name => !string.IsNullOrWhiteSpace(name) && !references.Contains(name)).ToArray();
+            if (audioFiles.Length > 0 && _audioStore?.MarkDeletion(audioFiles) == false) return false;
             if (!SaveToDisk(remaining)) return false;
             _cache = remaining;
             RebuildStats();
-            audioFiles = removed.Select(record => record.AudioFileName)
-                .Where(name => !_cache.Any(record => record.AudioFileName == name)).ToList();
+            if (_audioStore is not null) _audioStore.Reconcile(AudioReferences());
+            else DeleteAudioFiles(audioFiles);
         }
-        DeleteAudioFiles(audioFiles);
         RaiseRecordsChanged();
         return true;
     }
@@ -290,33 +335,9 @@ public sealed class HistoryService : IHistoryService
     /// </summary>
     public void PurgeOldRecords(TimeSpan? retention)
     {
-        using var mutation = ProfileMutationCoordinator.Enter();
         if (retention is null) return;
-
-        EnsureCacheLoaded();
         var cutoff = DateTime.UtcNow - retention.Value;
-        List<string?> removedAudioFiles;
-
-        lock (_gate)
-        {
-            removedAudioFiles = _cache
-                .Where(r => r.CreatedAt < cutoff)
-                .Select(r => r.AudioFileName)
-                .ToList();
-
-            if (removedAudioFiles.Count == 0)
-                return;
-
-            var updated = _cache.Where(r => r.CreatedAt >= cutoff).ToList();
-            if (!SaveToDisk(updated))
-                return;
-
-            _cache = updated;
-            RebuildStats();
-        }
-
-        DeleteAudioFiles(removedAudioFiles);
-        RaiseRecordsChanged();
+        RemoveMatching(record => record.CreatedAt < cutoff);
     }
 
     /// <summary>
@@ -456,6 +477,7 @@ public sealed class HistoryService : IHistoryService
                 _cache = records;
                 RebuildStats();
                 _cacheLoaded = true;
+                _audioStore?.Reconcile(AudioReferences());
             }
         }
         finally
@@ -468,14 +490,14 @@ public sealed class HistoryService : IHistoryService
     {
         try
         {
-            if (!ThrowOnLoadFailure && !File.Exists(_filePath)) return [];
+            if (!ThrowOnLoadFailure && _audioStore is null && !File.Exists(_filePath)) return [];
 
             var json = File.ReadAllText(_filePath);
             return JsonSerializer.Deserialize<List<TranscriptionRecord>>(json) ?? [];
         }
         catch (FileNotFoundException) { return []; }
         catch (DirectoryNotFoundException) { return []; }
-        catch when (!ThrowOnLoadFailure)
+        catch when (!ThrowOnLoadFailure && _audioStore is null)
         {
             return [];
         }
@@ -559,10 +581,20 @@ public sealed class HistoryService : IHistoryService
         if (string.IsNullOrEmpty(audioFileName) || string.IsNullOrEmpty(_audioDirectory)) return;
         try
         {
-            var path = Path.Combine(_audioDirectory, audioFileName);
-            if (File.Exists(path)) File.Delete(path);
+            if (audioFileName != Path.GetFileName(audioFileName) || audioFileName.IndexOfAny(['/', '\\', ':']) >= 0 || audioFileName is "." or "..")
+                throw new IOException("Unsafe legacy audio filename.");
+            var directory = Path.GetFullPath(_audioDirectory);
+            for (var parent = new DirectoryInfo(directory); parent is not null; parent = parent.Parent)
+                if (parent.Exists && (parent.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Linked audio directory.");
+            var path = Path.Combine(directory, audioFileName);
+            if (File.Exists(path))
+            {
+                if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException("Linked audio file.");
+                File.Delete(path);
+            }
         }
-        catch { }
+        catch (Exception ex) when (HistoryAudioStore.Recoverable(ex))
+        { _legacyAudioError = "Some legacy audio could not be removed. The text History has already been updated."; }
     }
 
     private void DeleteAudioFiles(IEnumerable<string?> audioFileNames)

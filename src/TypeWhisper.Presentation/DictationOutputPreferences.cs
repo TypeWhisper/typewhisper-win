@@ -10,13 +10,17 @@ public sealed record DictationOutputPreferences
     /// <summary>Whether new results may be added to local history.</summary>
     public bool SaveToHistory { get; init; } = true;
 
+    /// <summary>Whether eligible dictations may retain original audio in History; disabled by default.</summary>
+    public bool SaveHistoryAudio { get; init; }
+
     // Turning an option off also applies to work already in progress. Turning it
     // on never gives an older recording additional permission to write or paste.
     /// <summary>Combines recording-start choices with any restrictions applied before delivery.</summary>
     public DictationOutputPreferences RestrictedBy(DictationOutputPreferences current) => new()
     {
         AutoPaste = AutoPaste && current.AutoPaste,
-        SaveToHistory = SaveToHistory && current.SaveToHistory
+        SaveToHistory = SaveToHistory && current.SaveToHistory,
+        SaveHistoryAudio = SaveToHistory && current.SaveToHistory && SaveHistoryAudio && current.SaveHistoryAudio
     };
 }
 
@@ -25,7 +29,12 @@ public sealed class DictationOutputPreferencesStore
 {
     private readonly string _path;
     /// <summary>The loaded or last successfully saved choices.</summary>
-    public DictationOutputPreferences Current { get; private set; } = new();
+    public DictationOutputPreferences Current
+    {
+        get => Volatile.Read(ref _current);
+        private set => Volatile.Write(ref _current, value);
+    }
+    private DictationOutputPreferences _current = new();
     /// <summary>A user-facing load or save failure, if any.</summary>
     public string? Error { get; private set; }
 
@@ -42,7 +51,13 @@ public sealed class DictationOutputPreferencesStore
                 !root.TryGetProperty(nameof(DictationOutputPreferences.AutoPaste), out var paste) ||
                 !root.TryGetProperty(nameof(DictationOutputPreferences.SaveToHistory), out var history))
                 throw new JsonException("Incomplete output preferences.");
-            Current = new() { AutoPaste = paste.GetBoolean(), SaveToHistory = history.GetBoolean() };
+            if (root.EnumerateObject().GroupBy(property => property.Name, StringComparer.Ordinal).Any(group => group.Count() > 1))
+                throw new JsonException("Duplicate output preference.");
+            Current = new()
+            {
+                AutoPaste = paste.GetBoolean(), SaveToHistory = history.GetBoolean(),
+                SaveHistoryAudio = root.TryGetProperty(nameof(DictationOutputPreferences.SaveHistoryAudio), out var audio) && audio.GetBoolean()
+            };
         }
         catch (FileNotFoundException) { }
         catch (DirectoryNotFoundException) { }
