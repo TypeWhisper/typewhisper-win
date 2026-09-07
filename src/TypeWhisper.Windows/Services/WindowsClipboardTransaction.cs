@@ -19,7 +19,7 @@ internal enum ClipboardRestoreResult
     ClipboardChanged
 }
 
-internal readonly record struct ClipboardTextState(string? Text, uint SequenceNumber);
+internal readonly record struct ClipboardTextState(string? Text, uint SequenceNumber, IntPtr OwnerWindow = default);
 
 internal sealed class WindowsClipboardTransaction : IDisposable
 {
@@ -127,7 +127,7 @@ internal sealed class WindowsClipboardTransaction : IDisposable
         }, cancellationToken);
     }
 
-    public Task<ClipboardTextState> ReadTextStateAsync(CancellationToken cancellationToken) =>
+    public Task<ClipboardTextState> ReadTextStateAsync(CancellationToken cancellationToken, int? maxCharacters = null) =>
         WithOpenClipboardAsync(() =>
         {
             string? text = null;
@@ -140,7 +140,16 @@ internal sealed class WindowsClipboardTransaction : IDisposable
 
                 try
                 {
-                    text = Marshal.PtrToStringUni(textPointer);
+                    if (maxCharacters is { } maximum)
+                    {
+                        if (maximum <= 0) throw new ArgumentOutOfRangeException(nameof(maxCharacters));
+                        var bytes = ClipboardGlobalSize(textHandle).ToUInt64();
+                        var available = (int)Math.Min(bytes / 2, (ulong)maximum);
+                        var length = 0;
+                        while (length < available && Marshal.ReadInt16(textPointer, checked(length * 2)) != 0) length++;
+                        text = Marshal.PtrToStringUni(textPointer, length);
+                    }
+                    else text = Marshal.PtrToStringUni(textPointer);
                 }
                 finally
                 {
@@ -148,8 +157,32 @@ internal sealed class WindowsClipboardTransaction : IDisposable
                 }
             }
 
-            return new ClipboardTextState(text, NativeMethods.GetClipboardSequenceNumber());
+            return new ClipboardTextState(text, NativeMethods.GetClipboardSequenceNumber(), ClipboardOwner());
         }, cancellationToken);
+
+    internal uint ExpectedSequence(IClipboardLease lease) => RequireLease(lease).ExpectedSequenceNumber;
+
+    internal bool TryAcceptCopiedSequence(IClipboardLease lease, uint sequenceNumber, Func<IntPtr, bool> verifyOwner)
+    {
+#if TYPEWHISPER_WINUI
+        if (Environment.CurrentManagedThreadId != _ownerThread)
+            throw new InvalidOperationException("Clipboard operations must run on the owning UI thread.");
+#endif
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var current = RequireLease(lease);
+        return ExecuteWithOpenClipboardCore(() =>
+        {
+            if (current.IsCompleted || NativeMethods.GetClipboardSequenceNumber() != sequenceNumber
+                || !verifyOwner(ClipboardOwner())) return false;
+            current.ExpectedSequenceNumber = sequenceNumber;
+            return true;
+        });
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "GlobalSize", SetLastError = true)]
+    private static extern UIntPtr ClipboardGlobalSize(IntPtr handle);
+    [DllImport("user32.dll", EntryPoint = "GetClipboardOwner")]
+    private static extern IntPtr ClipboardOwner();
 
     public void AcceptSequence(IClipboardLease lease, uint sequenceNumber)
     {

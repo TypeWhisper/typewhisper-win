@@ -7,8 +7,13 @@ namespace TypeWhisper.WinUI;
 internal sealed class ClipboardTextInserter(IntPtr owner) : IDisposable
 {
     private readonly WindowsClipboardTransaction _clipboard = new(owner);
-    internal Task<bool> InsertAsync(string text, IntPtr target) =>
-        ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target), text);
+    internal static SemaphoreSlim TransactionGate { get; } = new(1, 1);
+    internal async Task<bool> InsertAsync(string text, IntPtr target)
+    {
+        await TransactionGate.WaitAsync();
+        try { return await ClipboardPasteOperation.RunAsync(new Platform(_clipboard, target), text); }
+        finally { TransactionGate.Release(); }
+    }
     public void Dispose() => _clipboard.Dispose();
 
     private sealed class Platform(WindowsClipboardTransaction clipboard, IntPtr target) : IClipboardPastePlatform

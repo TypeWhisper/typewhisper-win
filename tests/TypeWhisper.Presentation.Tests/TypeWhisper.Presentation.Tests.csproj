@@ -22,6 +22,8 @@
     <Compile Include="../../src/TypeWhisper.WinUI/ModifierChordState.cs" Link="ModifierChordState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/HybridHotkeyState.cs" Link="HybridHotkeyState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/ClipboardPasteOperation.cs" Link="ClipboardPasteOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/SelectedTextCaptureOperation.cs" Link="SelectedTextCaptureOperation.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/WorkflowShortcutCatalog.cs" Link="WorkflowShortcutCatalog.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationOverlayState.cs" Link="DictationOverlayState.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationAudioPreferences.cs" Link="DictationAudioPreferences.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />

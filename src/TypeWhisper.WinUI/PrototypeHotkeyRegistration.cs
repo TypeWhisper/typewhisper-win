@@ -14,7 +14,7 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
     private readonly nuint SubclassId;
 
     private readonly IntPtr _hwnd;
-    private readonly Action _callback;
+    private readonly Action<string> _callback;
     private readonly SubclassProc _subclassProc;
     private bool _registered;
     private readonly Dictionary<string, int> _bindings = new();
@@ -24,6 +24,9 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
     internal string Value => string.Join(",", _bindings.Keys);
 
     internal PrototypeHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action callback, int idBase = HotkeyId)
+        : this(window, _ => callback(), idBase) { }
+
+    internal PrototypeHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<string> callback, int idBase)
     {
         _nextId = idBase;
         SubclassId = (nuint)idBase;
@@ -81,7 +84,7 @@ internal sealed class PrototypeHotkeyRegistration : IDisposable
     {
         if (message == WmHotkey && _bindings.FirstOrDefault(binding => binding.Value == wParam.ToInt32()).Key is { } chord)
         {
-            if (!PrototypeShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback();
+            if (!PrototypeShortcutRecorder.CaptureRegisteredShortcut(chord)) _callback(chord);
         }
 
         return DefSubclassProc(hwnd, message, wParam, lParam);
