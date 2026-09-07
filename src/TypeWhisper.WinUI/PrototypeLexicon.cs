@@ -11,13 +11,13 @@ internal enum PrototypeLexiconKind { Word, Correction, Snippet }
 
 // Dictionary entries and snippets use isolated development storage.
 internal sealed record PrototypeLexiconEntry(Guid Id, PrototypeLexiconKind Kind, string Key,
-    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null);
+    string Value = "", string Tags = "", bool CaseSensitive = false, bool Enabled = true, bool FromPack = false, float? CtcMinSimilarity = null, int UsageCount = 0);
 
 internal sealed class PrototypeLexicon
 {
     private readonly List<PrototypeLexiconEntry> _entries = [];
     private readonly DictionaryService? _dictionary;
-    private readonly SnippetService? _snippets;
+    private SnippetService? _snippets;
     private string? _snippetLoadError;
     private string? _loadError;
     private readonly string? _dictionaryPath;
@@ -58,7 +58,20 @@ internal sealed class PrototypeLexicon
         if (_snippets is null) return;
         _entries.RemoveAll(e => e.Kind == PrototypeLexiconKind.Snippet);
         _entries.AddRange(_snippets.Snippets.Select(e => new PrototypeLexiconEntry(UiId(e.Id),
-            PrototypeLexiconKind.Snippet, e.Trigger, e.Replacement, e.Tags, e.CaseSensitive, e.IsEnabled)));
+            PrototypeLexiconKind.Snippet, e.Trigger, e.Replacement, e.Tags, e.CaseSensitive, e.IsEnabled, UsageCount: e.UsageCount)));
+    }
+    internal void ReloadSnippets()
+    {
+        if (_snippetPath is null) return;
+        try
+        {
+            if (File.Exists(_snippetPath)) _ = LexiconTransfer.ReadSnippets(File.ReadAllText(_snippetPath));
+            _snippets = new(_snippetPath); RefreshSnippets();
+            if (LastError == _snippetLoadError) LastError = null;
+            _snippetLoadError = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        { LastError = _snippetLoadError = "Snippets could not be loaded: " + ex.Message; }
     }
     private void RefreshDictionary()
     {
@@ -98,9 +111,9 @@ internal sealed class PrototypeLexicon
             if (snippets)
             {
                 if (_snippets is null) return LastError = "Persistent snippets are unavailable.";
-                var next = LexiconTransfer.MergeSnippets(_snippets.Snippets, LexiconTransfer.ReadSnippets(json), replace);
-                if (!_snippets.TryReplaceAll(next)) return LastError = "Could not save imported snippets. Existing snippets are unchanged.";
-                RefreshSnippets();
+                var imported = LexiconTransfer.ReadSnippets(json);
+                SnippetCatalogTransaction.Update(_snippetPath!, current => LexiconTransfer.MergeSnippets(current, imported, replace));
+                ReloadSnippets();
             }
             else
             {
@@ -125,7 +138,8 @@ internal sealed class PrototypeLexicon
                 Path.GetFullPath(source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
                 return LastError = "Choose an export destination outside the active dictionary and snippet files.";
             var json = snippets
-                ? _snippets is null ? throw new InvalidOperationException("Persistent snippets are unavailable.") : LexiconTransfer.WriteSnippets(_snippets.Snippets)
+                ? _snippets is null ? throw new InvalidOperationException("Persistent snippets are unavailable.") :
+                    LexiconTransfer.WriteSnippets(File.Exists(_snippetPath!) ? LexiconTransfer.ReadSnippets(File.ReadAllText(_snippetPath!)) : [])
                 : _dictionary is null ? throw new InvalidOperationException("Persistent dictionary is unavailable.") :
                     LexiconTransfer.WriteDictionary(_dictionary.Entries.Where(entry => !entry.Id.StartsWith("pack:", StringComparison.Ordinal)).ToArray());
             LexiconTransfer.WriteFile(path, json);
@@ -154,19 +168,27 @@ internal sealed class PrototypeLexicon
         if (draft.Value.Length > 10000) return "Keep the replacement below 10,001 characters.";
         if (draft.Tags.Length > 300) return "Keep tags below 301 characters.";
         if (draft.Kind == PrototypeLexiconKind.Correction && key.Equals(draft.Value.Trim(), StringComparison.Ordinal)) return "The correction must differ from the original phrase.";
-        if (_entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
+        if ((draft.Kind != PrototypeLexiconKind.Snippet || _snippets is null) && _entries.Any(entry => entry.Id != draft.Id && entry.Kind == draft.Kind &&
             entry.Key.Equals(key, entry.CaseSensitive && draft.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             return "This word or trigger already exists in this section.";
         var normalized = draft with { Key = key, Value = draft.Kind == PrototypeLexiconKind.Word ? "" : draft.Value, Tags = draft.Tags.Trim() };
         if (_snippets is not null && draft.Kind == PrototypeLexiconKind.Snippet)
         {
-            var existing = _snippets.Snippets.FirstOrDefault(e => UiId(e.Id) == draft.Id);
-            var entry = (existing ?? new Snippet { Id = draft.Id.ToString(), Trigger = key, Replacement = draft.Value })
-                with { Trigger = key, Replacement = draft.Value, Tags = normalized.Tags, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, UpdatedAt = DateTime.UtcNow };
-            try { _ = SnippetService.ApplySnippetsSnapshot(key, [entry with { IsEnabled = true }], () => ""); }
-            catch (FormatException) { return "Check the date or time placeholder format."; }
-            if (!_snippets.TryReplaceAll(_snippets.Snippets.Where(e => e.Id != entry.Id).Append(entry).ToArray())) return LastError = "Could not save snippet.";
-            RefreshSnippets(); LastError = null; return null;
+            var wasExisting = _entries.Any(entry => entry.Id == draft.Id);
+            try
+            {
+                SnippetCatalogTransaction.Update(_snippetPath!, current =>
+                {
+                    var existing = current.FirstOrDefault(entry => UiId(entry.Id) == draft.Id);
+                    if (existing is null && wasExisting) throw new InvalidOperationException("This snippet was deleted elsewhere. Reopen the list before creating it again.");
+                    var entry = (existing ?? new Snippet { Id = draft.Id.ToString(), Trigger = key, Replacement = draft.Value })
+                        with { Trigger = key, Replacement = draft.Value, Tags = normalized.Tags, CaseSensitive = draft.CaseSensitive, IsEnabled = draft.Enabled, UpdatedAt = DateTime.UtcNow };
+                    return LexiconTransfer.MergeSnippets(current.Where(item => item.Id != entry.Id).ToArray(), [entry], replace: false);
+                });
+                ReloadSnippets(); LastError = null; return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+            { return LastError = "Could not save snippet: " + ex.Message; }
         }
         if (_dictionary is not null && draft.Kind != PrototypeLexiconKind.Snippet)
         {
@@ -187,8 +209,13 @@ internal sealed class PrototypeLexicon
         if (entry is null || entry.FromPack) return false;
         if (entry.Kind == PrototypeLexiconKind.Snippet && _snippets is not null)
         {
-            if (!_snippets.TryReplaceAll(_snippets.Snippets.Where(e => UiId(e.Id) != id).ToArray())) { LastError = "Could not delete snippet."; return false; }
-            RefreshSnippets(); LastError = null; return true;
+            try
+            {
+                SnippetCatalogTransaction.Update(_snippetPath!, current => current.Where(item => UiId(item.Id) != id).ToArray());
+                ReloadSnippets(); LastError = null; return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+            { LastError = "Could not delete snippet: " + ex.Message; return false; }
         }
         if (entry.Kind != PrototypeLexiconKind.Snippet && _dictionary is not null)
         {

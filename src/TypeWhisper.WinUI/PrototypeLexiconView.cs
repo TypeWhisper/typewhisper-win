@@ -46,6 +46,7 @@ public sealed class PrototypeLexiconView : UserControl
 
     internal void Present(bool snippets)
     {
+        _store.ReloadSnippets();
         _kind = snippets ? PrototypeLexiconKind.Snippet : PrototypeLexiconKind.Word;
         _showPacks = false;
         _draft = _original = null; _pending = null; _query = ""; Render();
@@ -140,6 +141,7 @@ public sealed class PrototypeLexiconView : UserControl
                 description.MaxLines = 1; description.TextTrimming = TextTrimming.CharacterEllipsis; labels.Children.Add(description);
             }
             if (entry.Tags.Length > 0) labels.Children.Add(Text(entry.Tags, 11, true));
+            if (entry.Kind == PrototypeLexiconKind.Snippet) labels.Children.Add(Text($"Used {entry.UsageCount} {(entry.UsageCount == 1 ? "time" : "times")}", 11, true));
             Grid.SetColumn(labels, 1); content.Children.Add(labels);
             var trailing = Text(entry.Enabled ? "Edit  ›" : "Off  ·  Edit  ›", 11, true); trailing.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(trailing, 2); content.Children.Add(trailing);

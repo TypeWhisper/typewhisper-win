@@ -474,6 +474,7 @@ internal sealed class LocalDictationSession : IDisposable
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
             var notices = new List<string>();
             if (dictionary?.Error is { } dictionaryError) notices.Add(dictionaryError);
+            string[] appliedSnippetIds = [];
             var processed = await DictationTextPipeline.ProcessAsync(refinedText, _textAtStart, Language,
                 detectedLanguage: DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
                 expandSnippets: snippets is null ? null : async (input, ct) =>
@@ -491,8 +492,9 @@ internal sealed class LocalDictationSession : IDisposable
                         catch (Exception ex) when (ex is not OutOfMemoryException)
                         { System.Diagnostics.Debug.WriteLine("Snippet clipboard text unavailable: " + ex.Message); }
                     }
-                    var expansion = await Task.Run(() => snippets.Apply(input, clipboardText is null ? null : () => clipboardText), ct);
+                    var expansion = await Task.Run(() => snippets.ApplyWithUsage(input, clipboardText is null ? null : () => clipboardText), ct);
                     if (expansion.Error is { } error) notices.Add(error);
+                    appliedSnippetIds = expansion.AppliedIds;
                     return expansion.Text;
                 },
                 boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
@@ -500,8 +502,11 @@ internal sealed class LocalDictationSession : IDisposable
                 task: _taskAtStart);
             notices.AddRange(processed.Warnings);
             var text = processed.Text;
-            var snippetError = notices.Count == 0 ? null : string.Join(" · ", notices);
             if (_disposed) return;
+            try { TypeWhisper.Core.Services.SnippetUsageRecorder.Record(DictationSnippetSnapshot.StoragePath, appliedSnippetIds); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OverflowException)
+            { notices.Add("Snippet usage could not be saved. Your transcript is unchanged."); }
+            var snippetError = notices.Count == 0 ? null : string.Join(" · ", notices);
             var record = new TranscriptionRecord
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,

@@ -39,14 +39,22 @@ internal sealed class DictationSnippetSnapshot
 
     internal (string Text, string? Error) Apply(string text, Func<string>? clipboardProvider = null)
     {
-        if (Error is not null) return (text, Error);
+        var result = ApplyWithUsage(text, clipboardProvider);
+        return (result.Text, result.Error);
+    }
+
+    internal (string Text, string? Error, string[] AppliedIds) ApplyWithUsage(string text, Func<string>? clipboardProvider = null)
+    {
+        if (Error is not null) return (text, Error, []);
         try
         {
+            var applied = new HashSet<string>(StringComparer.Ordinal);
             // Read only when a matching snippet actually expands this placeholder.
-            return (SnippetService.ApplySnippetsSnapshot(text, _entries,
-                clipboardProvider ?? (() => throw new InvalidOperationException("Clipboard text is unavailable."))), null);
+            var expanded = SnippetService.ApplySnippetsSnapshot(text, _entries,
+                clipboardProvider ?? (() => throw new InvalidOperationException("Clipboard text is unavailable.")), id => applied.Add(id));
+            return (expanded, null, applied.ToArray());
         }
         catch (Exception ex) when (ex is FormatException or InvalidOperationException)
-        { return (text, "Snippet expansion failed · transcript retained: " + ex.Message); }
+        { return (text, "Snippet expansion failed · transcript retained: " + ex.Message, []); }
     }
 }
