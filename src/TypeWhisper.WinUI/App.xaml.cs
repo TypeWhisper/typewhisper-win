@@ -94,11 +94,12 @@ public partial class App : Application
             _tray?.UpdateProcessing(_window.CanCancelProcessing);
         };
         var initialization = _window.InitializeDictationAsync();
+        await initialization;
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray);
         // Opt-in visual fixture: no capture, provider request, clipboard write or history entry.
-        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_REVIEW_FIXTURE") == "1")
+        if (WinUIProfile.IsTestProfile && Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_REVIEW_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(() => _window.ShowOutputReview(new(
                 new TypeWhisper.Core.Models.TranscriptionRecord
                 {
@@ -107,7 +108,6 @@ public partial class App : Application
                     FinalText = "Review window sample.\n\nDieser Text wurde nicht aufgenommen und nicht in der History gespeichert."
                 }, false, true, "UI test sample. Nothing was recorded or pasted.")));
 #endif
-        await initialization;
         _activationReady = true;
         DrainActivations();
     }
