@@ -22,7 +22,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
         var devices = OutputDevices();
         void Save(DictationAudioPreferences next) => _status.Text = session.SaveAudioPreferences(next) ?? "Saved · applies to the next dictation.";
 
-        AddPicker("Audio output", "One output for feedback sounds and volume reduction. Spoken feedback will use it once connected.", devices,
+        AddPicker("Audio output", "One output for feedback sounds, spoken feedback and volume reduction.", devices,
             preferences.OutputDeviceId ?? "", id => Save(session.AudioPreferences with { OutputDeviceId = id }));
         AddToggle("Sound feedback", "Play a short sound when recording starts or stops.", preferences.SoundFeedbackEnabled,
             value => Save(session.AudioPreferences with { SoundFeedbackEnabled = value }));
@@ -35,7 +35,7 @@ internal sealed class LiveAudioSettings(LocalDictationSession session)
             ((int)Math.Round(preferences.AudioDuckingLevel * 100)).ToString(), id => Save(session.AudioPreferences with { AudioDuckingLevel = int.Parse(id) / 100f }));
         AddToggle("Pause media during recording", "Send the media Play/Pause key at start and stop, as in the previous app. Use while media is playing; paused media may start.", preferences.PauseMediaDuringRecording,
             value => Save(session.AudioPreferences with { PauseMediaDuringRecording = value }));
-        AddToggle("Spoken feedback", "Not connected yet · requires the speech provider integration.", false, _ => { }, false);
+        content.Children.Add(new SystemVoiceSettingsControl(session, pickers));
         AddToggle("Stop after silence", "Finish and transcribe after a quiet pause, including silence at the start. Waits while shortcut modifiers are held. Background noise may delay stopping.", preferences.SilenceAutoStopEnabled,
             value => Save(session.AudioPreferences with { SilenceAutoStopEnabled = value }));
         var timeouts = new[] { 3, 5, 10, 15, 30 }.Append(preferences.SilenceAutoStopSeconds).Distinct().Order()

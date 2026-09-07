@@ -66,6 +66,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal string? SaveAudioPreferences(DictationAudioPreferences preferences)
     {
+        if (_disposed) return "Audio preferences are unavailable during shutdown.";
         try
         {
             preferences = preferences.Validated();
@@ -568,6 +569,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 var preferences = AudioPreferences;
+                _spokenFeedbackAtStart = preferences;
+                await SpokenFeedback.CancelAndDrainAsync();
                 await _livePreview.StopAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
@@ -707,6 +710,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else OutputCompleted?.Invoke(recordingId);
+            ReadCompletedDictation(record, outcome, processed.Warnings.Count == 0);
 
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && _operationCancellation.Token.IsCancellationRequested)

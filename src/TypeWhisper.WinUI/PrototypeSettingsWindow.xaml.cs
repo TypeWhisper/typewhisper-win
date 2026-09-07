@@ -321,7 +321,7 @@ public sealed partial class PrototypeSettingsWindow : Window
             if (category == "Dictation" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Dictation, recording and text processing choices are saved";
             if (category == "Audio" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
+                SessionHint.Text = "Audio preferences are saved for your next dictation";
             if (category == "Recorder" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Recorder source choices are saved · changes apply to the next recording";
             if (category == "Files & recovery" && ConfigureLiveSettings is not null)
