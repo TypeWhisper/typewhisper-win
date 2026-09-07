@@ -1,6 +1,6 @@
 # Testing the 1.1 application
 
-Current implementation checkpoint: `ff77f43a` (2026-09-06). Functional coverage and outstanding features are tracked in the [Windows and Mac comparison](WINUI-FUNCTIONAL-STATUS.md); passing tests do not imply all displayed features are implemented.
+Current implementation checkpoint: `e1588aa` (2026-09-07), including Recovery UI fix `108a67c` and Review action wiring `e1588aa`. Functional coverage and outstanding features are tracked in the [Windows and Mac comparison](WINUI-FUNCTIONAL-STATUS.md); passing tests do not imply all displayed features are implemented.
 
 ## Required headless checks
 
@@ -8,19 +8,22 @@ Current implementation checkpoint: `ff77f43a` (2026-09-06). Functional coverage 
 & ./eng/Test-WinUIHeadless.ps1 -Configuration Release
 ```
 
-The runner executes portable host, Presentation and discovered `plugins/*/Tests/*.csproj` suites sequentially and writes TRX files plus `summary.json` under `artifacts/test-results/winui-headless`. No desktop, Computer Use, real microphone, downloaded models or provider credentials are required.
+The runner executes shared Core, portable host, Presentation and discovered `plugins/*/Tests/*.csproj` suites sequentially and writes TRX files plus `summary.json` under `artifacts/test-results/winui-headless`. No desktop, Computer Use, real microphone, downloaded models or provider credentials are required.
 
-[CI workflow](../.github/workflows/winui-headless.yml) runs on Windows and Ubuntu. At [run 34060774341](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060774341), verified from logs:
+Latest complete local headless run passed **1,432 tests with one skip**: Core 522, Host 171, Presentation 605, Filler Words 59, Groq 32, Obsidian 18 and NVIDIA 25 with one skip. [Headless CI at `0e2c4fc`](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34126461982) passed **1,432 with one skip on Windows** and **1,423 with five skips on Ubuntu**. The latest verified CodeQL remains [run 34125334102 at `2d672c5`](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34125334102).
 
-| Suite | Windows passed / skipped | Ubuntu passed / skipped |
-|---|---|---|
-| Portable SDK / host | 112 / 0 | 111 / 0 |
-| Presentation | 96 / 0 | 96 / 0 |
-| Groq plugin | 29 / 0 | 29 / 0 |
-| NVIDIA/Sherpa plugin | 25 / 1 | 21 / 5 |
-| Total | **262 / 1** | **257 / 5** |
+Historical CI baseline: [CI workflow](../.github/workflows/winui-headless.yml) runs on Windows and Ubuntu. At `2d672c5`, [headless run 34125333030](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34125333030) passed **1,393 tests with one skip on Windows** and **1,384 with five skips on Ubuntu**. [CodeQL run 34125334102](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34125334102) passed. These CI results precede `0e2c4fc`; they do not establish acceptance of subsequent changes or the later Review action UI.
 
-The DPAPI test is compiled on Windows only. Five CUDA-specific cases require Windows x64; the complementary unsupported-platform test runs elsewhere. These tests do not install a real GPU runtime. [CodeQL run 34060775205](https://github.com/TypeWhisper/typewhisper-win/actions/runs/34060775205) passed. CodeRabbit skipped the draft review; its green status does not establish review completion.
+Earlier local suite results were Core 522, Host 162, Presentation 601, Groq 32 and NVIDIA 25 with one skip. Filler Words passed 59 after a cleanup fix that explicitly verifies collectible package-context unloading. Subsequent focused runs passed Bootstrap 21, Action Registry 16, Action Controller 4, Obsidian 18 and Recovery/Delivery 45. Focused counts overlap suite cases and must not be summed into a new full-run total.
+
+The DPAPI test is Windows-only. CUDA-specific cases remain platform-dependent; headless results do not establish GPU runtime, microphone or full application acceptance. A skipped draft CodeRabbit review is not completed review evidence.
+
+## Current native evidence and remaining acceptance
+
+- Brave matched the `example.com` Website rule with normal page focus. A focused address bar was rejected; `example.org` did not match. Workflow selection uses Website/App/Global rules and recording-start snapshots. Only the normalized host, not a full address/path/query, may enter History under its existing privacy choices. This bounded check does not prove every browser or tab/focus race.
+- Real setup configuration and restart passed: microphone, mode, model/language, output/history choices and completion persisted. Downloads and keys remain in plugin settings; setup generates no fake transcript. Real first-dictation acceptance remains separate.
+- Fresh-profile package bootstrap is restricted to NVIDIA/Groq. Portable Filler Words processing/settings/History integration is connected. Obsidian's atomic new-note writer and generic action registry/controller have focused tests. Review action UI is now wired with early drain and `OriginalText = null`; no native action acceptance is claimed.
+- Prescribed native build passed after replacing the unavailable global `WorkflowEditorStyle` lookup (a workflow-local resource) with the shared multiline style. Recovery Retry performed real Canary decoding and opened Review; Copy placed exactly the visible test text on the clipboard. Saving recovery Off with 30-day retention retained the existing 246,232-byte audio. History and Snippets hashes were unchanged. Delete default Cancel preserved the file. Closing Settings and opening a new Settings window retained Recovery Review; another real Canary Retry succeeded without a disposed-controller failure. Explicit Delete then removed only the synthetic 246,232-byte file, showed zero saved recordings and left Review text copyable.
 
 ## What the tests establish
 
@@ -64,15 +67,19 @@ No personal keys, recordings or weights belong in test fixtures, logs, commits o
 - [ ] Real local and Groq dictation through install/configure/select/record/insert/history, with accurate metadata, failure/cancel and provider switch-back.
 - [ ] Published v2 install/use/update/restart/uninstall/reinstall, including retained configuration/models and failed hook/update recovery.
 - [ ] Real microphone changes, unplug/replug, sleep/resume, sound devices, media/ducking restoration and short quiet utterances.
-- [ ] Rich clipboard formats, focus changes within/across windows, editor consumption, modifier races and review-first behavior once wired.
-- [ ] Durable recovery, history mutations/retention/audio, real files/recorder/workflows and all remaining data services as they are integrated.
+- [ ] Rich clipboard formats, focus changes within/across windows, editor consumption, modifier races and full real-dictation review-first acceptance; delivery is already wired.
+- [ ] Complete broader recovery failure-path acceptance beyond the passing native Retry/Copy, Settings reopen and Delete Cancel/confirm flow; continue remaining audio and end-to-end file/recorder/workflow checks.
 - [ ] Full keyboard/screen-reader/high-contrast, actual 200% DPI and mixed-monitor transitions. Logical viewport previews are not OS DPI tests.
 - [ ] Actual WinUI release build/installer/update/rollback and each claimed OS/architecture; headless CI is not a WinUI build gate yet.
 - [ ] Deferred controlled legacy-versus-WinUI benchmark for PR #447: same audio/model/backend/thread settings, separate warm-up and steady state, capture onset, insertion latency, memory and explicit uncertainty.
 
 For each new feature, test observable state and failure/race outcomes behind portable boundaries first, then validate the Windows adapter separately. Avoid tests that only repeat a UI implementation or use simulated output as transcription evidence.
 
-## Output settings slice (2026-09-07)
+## Historical validation log
+
+The following sections record earlier implementation checkpoints. Their counts, open-at-the-time features and UI observations are historical; the current checkpoint and unresolved failures above take precedence. They are not cumulative test totals.
+
+### Historical output settings slice (2026-09-07)
 
 Sixteen new `DictationOutputTests` exercise the actual portable delivery boundary: independent history/paste choices, failed/throwing history and paste, changes while history loads, recording-start restrictions, restart, corrupt/incomplete/unreadable preferences and atomic-save failure cleanup. After the final preferences change, all 112 Presentation cases passed; the preceding full headless run passed all four suites (112 host, 111 Presentation, 29 Groq, 25 NVIDIA, one platform skip). The additional unreadable-path case brings the tested total to 278 passed, one skipped across those runs.
 
