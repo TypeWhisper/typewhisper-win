@@ -30,15 +30,18 @@ public sealed partial class PortablePluginRuntimeRegistry
             token.ThrowIfCancellationRequested();
             if (!_index.Transcription.TryGetValue(selectionId, out var role) || role.Owner != owner)
                 throw new InvalidOperationException("The model provider changed.");
-            var engine = role.Engine;
-            var requirements = ReadModelRequirements(owner, engine);
-            var identity = _modelEngineIdentities.GetValue(engine, static _ => new()).Value;
-            var models = engine.TranscriptionModels.Select(model => new PortableDownloadableModel(owner.Id,
-                selectionId, engine.PluginVersion, owner.Generation, identity, model.Id, model.DisplayName,
-                model.SizeDescription, engine.SupportsModelDownload, engine.IsModelDownloaded(model.Id),
-                Array.AsReadOnly(requirements.Where(item => item.ModelId == model.Id).ToArray()))).ToArray();
-            return Task.FromResult<IReadOnlyList<PortableDownloadableModel>>(Array.AsReadOnly(models));
+            return Task.FromResult(CaptureModelStates(owner, selectionId, role.Engine));
         }, cancellationToken);
+    }
+
+    private IReadOnlyList<PortableDownloadableModel> CaptureModelStates(Slot owner, string selectionId, ITranscriptionEnginePlugin engine)
+    {
+        var requirements = ReadModelRequirements(owner, engine);
+        var identity = _modelEngineIdentities.GetValue(engine, static _ => new()).Value;
+        return Array.AsReadOnly(engine.TranscriptionModels.Select(model => new PortableDownloadableModel(owner.Id,
+            selectionId, engine.PluginVersion, owner.Generation, identity, model.Id, model.DisplayName,
+            model.SizeDescription, engine.SupportsModelDownload, engine.IsModelDownloaded(model.Id),
+            Array.AsReadOnly(requirements.Where(item => item.ModelId == model.Id).ToArray()))).ToArray());
     }
 
     /// <summary>
@@ -63,6 +66,8 @@ public sealed partial class PortablePluginRuntimeRegistry
                 || role.Owner != owner || !MatchesModelOwner(role, expected))
                 throw new InvalidOperationException("The captured model provider changed.");
             var engine = role.Engine;
+            if (engine.PluginVersion != expected.Version)
+                throw new InvalidOperationException("The captured model provider version changed.");
             if (!engine.SupportsModelDownload || !engine.TranscriptionModels.Any(model => model.Id == expected.ModelId))
                 throw new InvalidOperationException("This model is not available for download.");
             if (ReadModelRequirements(owner, engine).Any(item => item.ModelId == expected.ModelId && item.IsRequired && !item.IsSatisfied))
@@ -99,6 +104,8 @@ public sealed partial class PortablePluginRuntimeRegistry
                 || role.Owner != owner || !MatchesModelOwner(role, expected))
                 throw new InvalidOperationException("The captured model provider changed.");
             var engine = role.Engine;
+            if (engine.PluginVersion != expected.Version)
+                throw new InvalidOperationException("The captured model provider version changed.");
             if (!engine.TranscriptionModels.Any(model => model.Id == expected.ModelId))
                 throw new InvalidOperationException("The selected model is no longer available.");
             token.ThrowIfCancellationRequested();
@@ -108,6 +115,8 @@ public sealed partial class PortablePluginRuntimeRegistry
                     throw new InvalidOperationException("Download this model before selecting it.");
                 await engine.LoadModelAsync(expected.ModelId, token).ConfigureAwait(false);
             }
+            else if (!engine.IsConfigured)
+                throw new InvalidOperationException("Complete the provider configuration before selecting this model.");
             token.ThrowIfCancellationRequested();
             if (!_index.Transcription.TryGetValue(expected.SelectionId, out var current)
                 || current.Owner != owner || !MatchesModelOwner(current, expected))
@@ -135,8 +144,8 @@ public sealed partial class PortablePluginRuntimeRegistry
 
     private bool MatchesModelOwner(TranscriptionRole role, PortableDownloadableModel expected) =>
         role.Owner.Accepting && role.Owner.Id == expected.PluginId && role.Owner.Generation == expected.Generation
-        && role.Engine.PluginVersion == expected.Version
-        && _modelEngineIdentities.GetValue(role.Engine, static _ => new()).Value == expected.EngineIdentity;
+        && _modelEngineIdentities.TryGetValue(role.Engine, out var identity)
+        && identity.Value == expected.EngineIdentity;
 
     private static PluginModelDownloadRequirement[] ReadModelRequirements(Slot owner, ITranscriptionEnginePlugin engine)
     {

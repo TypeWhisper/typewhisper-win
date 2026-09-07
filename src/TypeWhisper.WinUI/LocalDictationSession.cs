@@ -134,11 +134,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }.Where(provider => Packages.Store.IsInstalled(provider.PluginId)).Concat(PluginRuntime.TranscriptionProviders
         .Where(provider => provider.PluginId != CloudTranscriptionPlugin.PluginId || provider.SelectionId != CloudTranscriptionPlugin.PluginId)
         .Select(provider => new DictationProviderOption(provider.SelectionId, provider.PluginId, provider.Name, true, provider.Ready, !PackageIsLocal(provider.PluginId),
-            provider.SelectedModelId, provider.Models.Select(model => new DictationModelOption(model.Id, model.DisplayName, provider.Ready)).ToArray()))).ToArray();
+            provider.SelectedModelId, provider.ModelStates.Select(model => new DictationModelOption(model.ModelId, model.DisplayName,
+                model.SupportsDownload ? model.Downloaded : provider.Ready)).ToArray()))).ToArray();
     internal Task<string?> SelectProviderModelAsync(string providerId, string modelId) => providerId switch
     {
         "local" => SelectModelAsync(modelId),
-        "groq" => SelectGroqModelAsync(modelId),
+        "groq" => SelectRegistryModelAsync(providerId, modelId),
         _ => SelectRegistryModelAsync(providerId, modelId)
     };
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
@@ -211,13 +212,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal async Task<string?> SetGroqEnabledAsync(bool enabled) => await ChangeGroqAsync(() => Groq.SetEnabledAsync(enabled));
     internal Task<string?> SaveGroqKeyAsync(string key) => ChangeGroqAsync(() => Groq.SaveKeyAsync(key));
     internal Task<string?> ValidateGroqAsync() => ChangeGroqAsync(Groq.ValidateAsync);
-    internal Task<string?> SelectGroqModelAsync(string modelId) => ChangeGroqAsync(async () =>
-    {
-        if (!Groq.Ready) throw new InvalidOperationException("Save a Groq API key before choosing this model.");
-        await Groq.SelectModelAsync(modelId);
-        _selection.SetSetting("Provider", "groq");
-        _providerId = "groq";
-    });
+    internal Task<string?> SelectGroqModelAsync(string modelId) => SelectRegistryModelAsync("groq", modelId);
     internal Task<string?> SelectDictationModelAsync(string id)
     {
         foreach (var provider in DictationProviders)
@@ -324,26 +319,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         });
         await PluginRuntime.RefreshCapabilitiesAsync();
     });
-    private async Task<string?> SelectRegistryModelAsync(string providerId, string modelId)
+    private Task<string?> SelectRegistryModelAsync(string providerId, string modelId)
     {
-        var provider = PluginRuntime.TranscriptionProviders.FirstOrDefault(item => item.SelectionId == RegistrySelectionId(providerId));
-        if (provider is null) return "Enable this transcription provider in Integrations first.";
-        return await ChangeRegistryPluginAsync(provider.PluginId, async () =>
-        {
-            await PluginRuntime.UseTranscriptionAsync(provider.SelectionId, async (engine, ct) =>
-            {
-                if (!engine.TranscriptionModels.Any(model => model.Id == modelId)) throw new ArgumentException("This model is no longer available.");
-                if (engine.SupportsModelDownload)
-                {
-                    if (!engine.IsModelDownloaded(modelId)) throw new InvalidOperationException("Download the model before selecting it.");
-                    await engine.LoadModelAsync(modelId, ct);
-                }
-                engine.SelectModel(modelId); return true;
-            });
-            await PluginRuntime.RefreshCapabilitiesAsync();
-            _selection.SetSetting("Provider", providerId);
-            _providerId = providerId;
-        });
+        if (_disposed || !CanChangeProvider || Models.Busy)
+            return Task.FromResult<string?>("Finish dictation and model operations before selecting a model.");
+        var model = PluginRuntime.TranscriptionProviders
+            .FirstOrDefault(provider => provider.SelectionId == RegistrySelectionId(providerId))?
+            .ModelStates.FirstOrDefault(model => model.ModelId == modelId);
+        return model is null ? Task.FromResult<string?>("This model is no longer available. Refresh its provider settings.")
+            : UseRegistryModelAsync(model);
     }
     private async Task<string?> ChangeRegistryPluginAsync(string id, Func<Task> action)
     {
@@ -482,7 +466,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                     : System.Text.Json.JsonSerializer.Deserialize<MicrophonePriorityItem>(json) is { } previous ? [previous] : [];
                 _audio.SetMicrophonePriorityList(_microphones);
             }
-            _providerId = _selection.GetSetting<string>("Provider") ?? "local";
+            _providerId = SessionProviderId(_selection.GetSetting<string>("Provider") ?? "local");
             await PluginRuntime.InitializeAsync();
             if (_disposed) return;
             try { if (Packages.Store.IsInstalled(CloudTranscriptionPlugin.PluginId)) await Groq.InitializeAsync(); }

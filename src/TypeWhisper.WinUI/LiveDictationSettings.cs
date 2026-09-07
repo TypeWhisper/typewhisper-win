@@ -65,7 +65,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
                 modelSection.Visibility = selected?.Models.Count > 1 ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
                 model.SetOptions(selected?.Models.Select(item => new PrototypeChoice(item.Id, item.Name,
                     item.Ready ? "Ready" : "Download in provider settings", item.Ready)).ToArray() ?? [], selected?.SelectedModelId ?? "", "Choose a model");
-                model.IsEnabled = canChange && selected?.Ready == true;
+                model.IsEnabled = canChange && selected?.Enabled == true && selected.Models.Any(item => item.Ready);
                 setup.IsEnabled = !selecting && selected is not null;
                 setup.Content = selected?.Ready != true ? "Set up provider" : selected.Id != session.ActiveProviderId ? "Use provider" : "Provider settings";
                 hint.Text = selectionError ?? (selected is null ? "Set up a transcription provider in Integrations."

@@ -8,7 +8,11 @@ public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, s
 /// <summary>A transcription role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableTranscriptionProvider(string PluginId, string SelectionId, string Name,
     bool Ready, string? SelectedModelId, IReadOnlyList<PluginModelInfo> Models, bool SupportsTranslation, bool SupportsPcm,
-    IReadOnlyList<string>? SupportedLanguages = null, string? EngineId = null, bool SupportsLanguageHints = false);
+    IReadOnlyList<string>? SupportedLanguages = null, string? EngineId = null, bool SupportsLanguageHints = false)
+{
+    /// <summary>Actual per-model asset states captured under the package lease; independent of provider readiness.</summary>
+    public IReadOnlyList<PortableDownloadableModel> ModelStates { get; init; } = [];
+}
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableLlmProvider(string PluginId, string SelectionId, string Name,
     bool Ready, IReadOnlyList<PluginModelInfo> Models);
@@ -78,7 +82,9 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
     /// <summary>Returns the last published metadata snapshots of enabled transcription roles.</summary>
     public IReadOnlyList<PortableTranscriptionProvider> TranscriptionProviders
     {
-        get { lock (_sync) return _index.TranscriptionSnapshots.Where(item => _slots[item.PluginId].Accepting).ToArray(); }
+        get { lock (_sync) return _index.TranscriptionSnapshots.Where(item => _slots[item.PluginId].Accepting)
+            .Select(item => item with { ModelStates = Array.AsReadOnly(item.ModelStates.Select(model => model with
+                { Generation = _slots[item.PluginId].Generation }).ToArray()) }).ToArray(); }
     }
     /// <summary>Returns the last published metadata snapshots of enabled LLM roles.</summary>
     public IReadOnlyList<PortableLlmProvider> LlmProviders
@@ -424,7 +430,8 @@ public sealed partial class PortablePluginRuntimeRegistry(PortablePluginStore st
                     throw new CapabilityCollisionException("Transcription capability identity collision or invalid owner: " + id);
                 transcriptionSnapshots.Add(new(slot.Id, id, engine.ProviderDisplayName, engine.IsConfigured,
                     engine.SelectedModelId, Array.AsReadOnly(engine.TranscriptionModels.ToArray()), engine.SupportsTranslation, engine is IPcmTranscriptionEnginePlugin,
-                    Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints));
+                    Array.AsReadOnly(engine.SupportedLanguages.ToArray()), engine.ProviderId, engine.SupportsLanguageHints)
+                    { ModelStates = CaptureModelStates(slot, id, engine) });
             }
             var providers = (plugin is ILlmProviderPlugin directLlm ? new[] { directLlm } : [])
                 .Concat(plugin is IAdditionalLlmProvidersProvider additionalLlm ? additionalLlm.AdditionalLlmProviders : [])

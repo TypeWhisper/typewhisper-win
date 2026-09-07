@@ -13,6 +13,20 @@ public sealed partial class PortablePluginRuntimeRegistryTests
     }
 
     [Fact]
+    public async Task CloudModelSelectionRechecksReadinessWithoutLoadingAssets()
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("LocalModels", false);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.SelectModelAsync(model));
+        Assert.Equal(0, Host(Id).GetSetting<int>("selectCalls"));
+        Host(Id).SetSetting("NotReady", false);
+        await registry.SelectModelAsync(model);
+        Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
+        Assert.Equal(0, Host(Id).GetSetting<int>("loadCalls"));
+    }
+
+    [Fact]
     public async Task NotReadyModelCanDownloadWithoutSelectingOrLoadingAndSnapshotRemainsUnchanged()
     {
         await using var registry = await LocalModelRegistry();
@@ -206,6 +220,71 @@ public sealed partial class PortablePluginRuntimeRegistryTests
             Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
         }
         finally { Host(Id).OnCapabilitiesChanged = null; }
+    }
+
+    [Fact]
+    public async Task PublishedModelStatesRemainDetachedAndDoNotUseProviderReadinessAsAssetStatus()
+    {
+        await using var registry = await LocalModelRegistry();
+        var before = Assert.Single(registry.TranscriptionProviders);
+        Assert.False(before.Ready);
+        var model = Assert.Single(before.ModelStates);
+        Assert.False(model.Downloaded);
+        Host(Id).SetSetting("Downloaded", true);
+        await registry.RefreshCapabilitiesAsync();
+        var after = Assert.Single(registry.TranscriptionProviders);
+        Assert.False(after.Ready);
+        Assert.True(Assert.Single(after.ModelStates).Downloaded);
+        Assert.False(Assert.Single(before.ModelStates).Downloaded);
+        await registry.SelectModelAsync(Assert.Single(after.ModelStates));
+        Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
+    }
+
+    [Fact]
+    public async Task PublishedModelIdentitySurvivesFailedDisableWithoutAcceptingOldSnapshot()
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("Downloaded", true);
+        await registry.RefreshCapabilitiesAsync();
+        var before = Assert.Single(Assert.Single(registry.TranscriptionProviders).ModelStates);
+        Host(Id).FailEnabledWrites = true;
+        Assert.NotNull(await registry.SetEnabledAsync(Id, false));
+        Host(Id).FailEnabledWrites = false;
+        var current = Assert.Single(Assert.Single(registry.TranscriptionProviders).ModelStates);
+        Assert.NotEqual(before.Generation, current.Generation);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await registry.SelectModelAsync(before));
+        await registry.SelectModelAsync(current);
+        Assert.Equal(1, Host(Id).GetSetting<int>("selectCalls"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ModelVersionGetterCanAwaitWorkerReadingRegistryDuringDownloadOrSelection(bool select)
+    {
+        await using var registry = await LocalModelRegistry();
+        Host(Id).SetSetting("Downloaded", select);
+        var model = Assert.Single(await registry.GetModelStatesAsync(Id));
+        var notifications = 0;
+        Host(Id).OnCapabilitiesChanged = () =>
+        {
+            Assert.NotEmpty(registry.Snapshot());
+            Interlocked.Increment(ref notifications);
+        };
+        Host(Id).SetSetting("VersionWorkerNotification", true);
+        try
+        {
+            if (select) await registry.SelectModelAsync(model);
+            else await registry.DownloadModelAsync(model);
+            Assert.True(notifications > 0);
+            Assert.Equal(select ? 1 : 0, Host(Id).GetSetting<int>("selectCalls"));
+            Assert.Equal(select ? 0 : 1, Host(Id).GetSetting<int>("downloadCalls"));
+        }
+        finally
+        {
+            Host(Id).SetSetting("VersionWorkerNotification", false);
+            Host(Id).OnCapabilitiesChanged = null;
+        }
     }
 
     private sealed class ModelProgress(Action<double> report) : IProgress<double>

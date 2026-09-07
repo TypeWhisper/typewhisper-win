@@ -16,7 +16,18 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <inheritdoc />
     public string PluginName => "Runtime fixture";
     /// <inheritdoc />
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion
+    {
+        get
+        {
+            if (_host?.GetSetting<bool>("VersionWorkerNotification") == true)
+            {
+                if (!Task.Run(_host.NotifyCapabilitiesChanged).Wait(TimeSpan.FromSeconds(5)))
+                    throw new TimeoutException("Registry state was locked during a plugin version notification.");
+            }
+            return "1.0.0";
+        }
+    }
     /// <inheritdoc />
     public string ProviderId => PluginId;
     /// <inheritdoc />

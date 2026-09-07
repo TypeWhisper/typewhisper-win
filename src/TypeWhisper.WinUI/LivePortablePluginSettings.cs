@@ -12,7 +12,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     private readonly TextBlock _status = Label("");
     private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
-    private readonly StackPanel _models = new() { Spacing = 10 };
+    private readonly LivePortableModelSettings _models;
     private readonly ContentControl _textSettings = new();
     private readonly HandCursorButton _enable;
     private readonly HandCursorButton _save;
@@ -24,6 +24,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     internal LivePortablePluginSettings(LocalDictationSession session, string id)
     {
         _session = session; _id = id;
+        _models = new(session, id);
         var content = new StackPanel { Spacing = 14, Margin = new Thickness(0, 0, 14, 14) };
         content.Children.Add(_status);
         AutomationProperties.SetLiveSetting(_status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
@@ -36,7 +37,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _save = Button("Save key", async () =>
         {
             var error = await session.SaveRegistryKeyAsync(id, _key.Password);
-            if (error is null) _key.Password = "";
+            if (error is null && IsLoaded) _key.Password = "";
             return error;
         });
         _remove = Button("Remove saved key", () => session.SaveRegistryKeyAsync(id, ""));
@@ -60,27 +61,9 @@ internal sealed class LivePortablePluginSettings : UserControl
         if (state?.Enabled == true && state.HasTextSettings)
             _textSettings.Content ??= new LivePluginTextSettings(_session, _id);
         else _textSettings.Content = null;
-        _models.Children.Clear();
-        foreach (var provider in _session.PluginRuntime.TranscriptionProviders.Where(item => item.PluginId == _id))
-        {
-            _models.Children.Add(Label(provider.Name, 16));
-            foreach (var model in provider.Models)
-            {
-                var selected = _session.ActiveProviderId == provider.SelectionId && provider.SelectedModelId == model.Id;
-                var button = Button((selected ? "Active: " : "Use model: ") + model.DisplayName,
-                    () => _session.SelectProviderModelAsync(provider.SelectionId, model.Id));
-                button.IsEnabled = !_working && _session.CanChangeProvider && provider.Ready && !selected;
-                _models.Children.Add(button);
-            }
-            if (!provider.Ready) _models.Children.Add(Label("This provider is not ready. Complete its configuration before choosing a dictation model."));
-        }
-        foreach (var provider in _session.LlmProviders.Where(item => item.PluginId == _id))
-        {
-            _models.Children.Add(Label(provider.Name + " · Text processing", 16));
-            _models.Children.Add(Label(string.Join(", ", provider.Models.Select(model => model.DisplayName))));
-        }
-        if (state?.Enabled == true && state.HasApiKeySettings == false && !state.HasTextSettings)
-            _models.Children.Add(Label("This plugin does not expose API-key settings. Other configuration methods are not available on this page."));
+        _models.Visibility = _session.PluginRuntime.TranscriptionProviders.Any(provider => provider.PluginId == _id) ||
+            _session.LlmProviders.Any(provider => provider.PluginId == _id) ||
+            _session.ActiveRegistryModelDownload?.PluginId == _id ? Visibility.Visible : Visibility.Collapsed;
         UpdateButtons();
     }
     private void UpdateButtons()
@@ -95,10 +78,16 @@ internal sealed class LivePortablePluginSettings : UserControl
             Style = (Style)Application.Current.Resources["PrototypeSecondaryButtonStyle"] };
         button.Click += async (_, _) =>
         {
-            if (_working) return;
+            if (_working || !IsLoaded) return;
             _working = true; UpdateButtons();
-            try { _message = await action() ?? "Saved."; }
-            finally { _working = false; Refresh(); }
+            try { var error = await action(); if (IsLoaded) _message = error ?? "Saved."; }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            { if (IsLoaded) _message = "The plugin operation could not finish. Check its configuration and try again."; }
+            finally
+            {
+                _working = false;
+                DispatcherQueue.TryEnqueue(() => { if (IsLoaded) { Refresh(); _models.RequestRefresh(); } });
+            }
         };
         return button;
     }

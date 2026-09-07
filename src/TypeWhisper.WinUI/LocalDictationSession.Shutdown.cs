@@ -26,7 +26,8 @@ internal sealed partial class LocalDictationSession
         _livePreview.Cancel();
         _retentionTimer.Stop();
         StopSilenceMonitoring();
-        return DrainAndReleaseAsync(Task.WhenAll(HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync(), DrainSpokenFeedbackAsync()));
+        return DrainAndReleaseAsync(Task.WhenAll(HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync(),
+            DrainSpokenFeedbackAsync(), RegistryModelDownload.ShutdownAsync()));
     });
 
     private async Task DrainAndReleaseAsync(Task retentionDrain)

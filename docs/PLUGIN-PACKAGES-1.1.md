@@ -36,9 +36,28 @@ directory. Do not include model downloads, API keys, user settings, or test bina
 NVIDIA Parakeet bundles its CTC component under
 `Dependencies/com.typewhisper.parakeet-ctc/`; it is not a separate installable integration.
 
-The package manager is provider-independent. WinUI capability adapters and settings
-renderers currently connect NVIDIA Parakeet and Groq; installing an arbitrary future
-capability does not by itself implement its application UI.
+The package manager is provider-independent. WinUI connects portable transcription,
+LLM, text-processing and explicit action capabilities. NVIDIA Parakeet retains its
+dedicated local-model adapter. Other SDK capabilities still need host consumers;
+installing a package does not by itself implement every capability's application UI.
+
+## Host-rendered settings and models
+
+`IPluginTextSettings` supplies bounded text fields. A `PluginTextSetting` is single-line
+by default; set `IsMultiline = true` for word lists or other multiline input. Credentials
+belong in the plugin's credential settings rather than a text field.
+
+Portable transcription engines that expose `SupportsModelDownload` use the SDK's
+`IsModelDownloaded`, `DownloadModelAsync` and `LoadModelAsync` methods. Plugin settings
+show actual asset state and reported progress, including when the provider is not yet
+ready. Downloading does not select or load a model: the user chooses **Use model**
+afterwards. Cancellation and shutdown wait for the plugin operation to finish.
+
+Model commands are bound to the captured package activation and engine instance.
+`IModelDownloadRequirementsProvider` prerequisites are displayed and rechecked before
+download; unmet required prerequisites block the request. Generic credential/license
+editors for these prerequisites remain future work. The host never assumes license
+acceptance or invents a credential.
 
 ## Lifecycle
 
