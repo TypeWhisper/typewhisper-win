@@ -5,7 +5,7 @@ namespace TypeWhisper.WinUI;
 
 internal sealed partial class LocalDictationSession
 {
-    private static bool WorkflowProbeEnabled => WinUIProfile.IsTestProfile &&
+    internal static bool WorkflowProbeEnabled => WinUIProfile.IsTestProfile &&
         Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_WORKFLOW_PROBE") == "1";
 
     // Runs under the ordinary recording gate, but before readiness, audio, or effects.

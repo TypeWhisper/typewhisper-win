@@ -31,7 +31,13 @@ internal sealed class DictationHotkeyRegistration : IDisposable
             if (code >= 0)
             {
                 var key = Marshal.PtrToStructure<KeyData>(data);
-                if ((key.Flags & 0x10) == 0)
+                var acceptInjectedProbeInput = false;
+#if DEBUG
+                // Computer Use emits injected keys. Accept them only in the explicit
+                // named-profile probe, whose session path returns before any audio work.
+                acceptInjectedProbeInput = LocalDictationSession.WorkflowProbeEnabled;
+#endif
+                if ((key.Flags & 0x10) == 0 || acceptInjectedProbeInput)
                 {
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
