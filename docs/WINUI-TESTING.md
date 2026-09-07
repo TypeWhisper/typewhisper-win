@@ -6,11 +6,11 @@
 
 Downloaded TRX artifacts (`artifacts/ci-a28986cd/`) establish **1,632 passed and one skipped on Windows**, and **1,623 passed and five skipped on Ubuntu**. Counts were read from individual test results, including `NotExecuted` results, because the TRX summary's `notExecuted` counter is zero despite platform skips. Presentation passed 743 cases on both systems. Ubuntu omits five Windows-only Host cases and skips five Windows CUDA cases; Windows skips the unsupported-CUDA-platform case. These are platform-specific complete CI suite results, not local native acceptance.
 
-History footer/keyboard behavior, the revised History guard, Groq live-window gating, local preference restoration and shutdown still await Marco's manual checks. This CI evidence belongs to the exact SHA above; subsequent documentation-only commits are not represented as separately validated code.
+Marco confirmed the History footer arrangement and Enter/E/X/Delete shortcuts outside the text editor. The revised History guard, Groq live-window gating, local preference restoration and shutdown still await manual checks. Editor input, dialog cancellation and complete Tab navigation are not covered by that confirmation. This CI evidence belongs to the exact SHA above; subsequent documentation-only commits are not represented as separately validated code.
 
 ## Manual-test fixes through `2864ed3c`, 2026-09-07
 
-- `2864ed3c`: History list/detail actions occupy a fixed footer. Enter opens/copies; E edits, X exports and Delete opens confirmation. Audio and selection actions also expose keyboard shortcuts. Text inputs, modifiers, dialogs and flyouts retain their keyboard behavior; a tab-focused button keeps normal Enter invocation. Native visual and keyboard acceptance is pending.
+- `2864ed3c`: History list/detail actions occupy a fixed footer. Enter opens/copies; E edits, X exports and Delete opens confirmation. Audio and selection actions also expose keyboard shortcuts. Text inputs, modifiers, dialogs and flyouts retain their keyboard behavior; a tab-focused button keeps normal Enter invocation. Marco confirmed the visible footer arrangement and Enter/E/X/Delete shortcuts outside the text editor; this is user-reported native acceptance. Editor input, dialog cancellation and full Tab navigation remain unverified.
 - `a9f94191`: the History hotkey can open History while the separate Settings window remains open. Marco's earlier Alt+W screenshot proves registration/invocation reached the old overly restrictive guard; it does not prove the correction passed acceptance.
 - `fdb72396`: live text uses an explicit host availability boolean. Groq and other registry providers without a connected live path do not show live text during recording/processing; completed final text remains available. Settings retain the preference for supported local models. Real Groq final output was confirmed by Marco before this fix; the new gating and model-switch behavior still need acceptance.
 - `a6dcb8e9`: activation/window-change callbacks return during shutdown and profile restoration, addressing the logged presenter exception. Repeated shutdown acceptance is pending.
@@ -323,7 +323,7 @@ A synthetic backup added one unsupported App workflow. An initially malformed te
 The real setup wizard listed three connected microphones. Selecting HyperX QuadCast 2 saved its actual endpoint ID; selecting Toggle wrote the recording-mode preference. Canary offered English, German, French and Spanish. German and Review first persisted, Finish wrote `Step=4, Completed=true`, and the Dictation page reflected both choices. A prescribed restart retained microphone, mode, model, German, Review first and completion. No microphone or cloud transcription was performed by setup. An earlier native App-rule edit also checked missing-process validation, then persisted disabled `notepad` with priority `-5`.
 
 
-## History footer actions (manual acceptance pending)
+## History footer actions (layout and action shortcuts confirmed by Marco)
 
 History list and detail actions now share a fixed bottom action area. Detail shortcuts are Enter (copy), E (edit), X (export), Delete (confirmation), P (saved audio), and F (audio folder). Selection supports S, A, X, and Delete. Text inputs, modifiers, dialogs, and flyouts keep their own keyboard handling; Enter on a tab-focused button invokes that button. Opening a transcript moves focus out of search to its primary action.
 
