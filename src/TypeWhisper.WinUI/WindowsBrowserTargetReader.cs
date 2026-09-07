@@ -14,12 +14,24 @@ internal static class WindowsBrowserTargetReader
     // even when page-authored controls imitate these identities.
     private const int Edit = 50004, Toolbar = 50021;
     private const int ValuePattern = 10002;
+#if DEBUG
+    internal static string? LastProbeStage;
+    internal static string? LastAddressState;
+    private static void ProbeStage(string stage)
+    { if (LocalDictationSession.WorkflowProbeEnabled) Volatile.Write(ref LastProbeStage, stage); }
+#else
+    private static void ProbeStage(string stage) { }
+#endif
     private static readonly BrowserTargetCapture Capture = new(Read, TimeSpan.FromMilliseconds(350));
     internal static Task<string?> CaptureAsync(nint window, int processId, string processName, CancellationToken ct) =>
         Capture.CaptureAsync(new(window, processId, processName), ct);
 
     private static string? Read(BrowserCaptureTarget target, CancellationToken ct)
     {
+        ProbeStage("start");
+#if DEBUG
+        LastAddressState = null;
+#endif
         if (!StillOriginalTarget(target)) return null;
         IUIAutomation2? automation = null;
         IUIAutomationElement? root = null;
@@ -34,12 +46,14 @@ internal static class WindowsBrowserTargetReader
             automation.ConnectionTimeout = 200;
             automation.TransactionTimeout = 200;
             root = automation.ElementFromHandle(target.WindowHandle);
+            ProbeStage("root");
             if (root.CurrentProcessId != target.ProcessId) return null;
             walker = automation.RawViewWalker;
             var remaining = 128;
             var incomplete = false;
             var values = new List<string>();
             Visit(root, "", 0);
+            ProbeStage(incomplete ? "traversal_incomplete" : values.Count != 1 ? "no_address" : "validating_address");
             ct.ThrowIfCancellationRequested();
             if (incomplete || values.Count != 1 || candidate is null || !StillOriginalTarget(target)) return null;
             if (!BelongsToOriginalRoot(candidate) || candidate.CurrentProcessId != target.ProcessId ||
@@ -97,6 +111,12 @@ internal static class WindowsBrowserTargetReader
                 if (type == Toolbar) toolbarId = id;
                 if (type == Edit)
                 {
+#if DEBUG
+                    if (LocalDictationSession.WorkflowProbeEnabled && (id == "view_1012" || id == "urlbar-input"))
+                        LastAddressState = element.CurrentHasKeyboardFocus != 0 ? "address_focused" :
+                            element.CurrentIsOffscreen != 0 ? "address_offscreen" :
+                            element.CurrentAcceleratorKey?.Equals("Ctrl+L", StringComparison.OrdinalIgnoreCase) == true ? "address_shortcut_known" : "address_shortcut_unknown";
+#endif
                     if (!BrowserWorkflowContext.IsAddressBar(target.ProcessName, id, toolbarId,
                         element.CurrentAcceleratorKey ?? "", element.CurrentHasKeyboardFocus != 0,
                         element.CurrentIsPassword != 0, element.CurrentIsOffscreen != 0)) return;
@@ -135,8 +155,16 @@ internal static class WindowsBrowserTargetReader
                     {
                         Visit(child, toolbarId, depth + 1);
                         ct.ThrowIfCancellationRequested();
-                        if (remaining > 0) next = walker.GetNextSiblingElement(child);
-                        else incomplete = true;
+                        // Stop at the first verified browser-owned address bar. Walking
+                        // unrelated extension/tab/bookmark branches afterwards can exhaust
+                        // the bounded probe despite already having the address we need.
+                        // The candidate's ancestry, identity, focus and value are rechecked
+                        // against the original window before accepting its hostname.
+                        if (candidate is null)
+                        {
+                            if (remaining > 0) next = walker.GetNextSiblingElement(child);
+                            else incomplete = true;
+                        }
                     }
                     finally { if (!ReferenceEquals(child, candidate)) Release(child); }
                     child = next;

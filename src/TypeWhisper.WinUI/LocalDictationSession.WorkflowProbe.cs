@@ -54,6 +54,8 @@ internal sealed partial class LocalDictationSession
                 ProcessName = Bounded(_targetApp, 260),
                 Host = TypeWhisper.Presentation.BrowserWorkflowContext.NormalizeHost(_targetHostAtStart),
                 SelectedWorkflowId = Bounded(_workflowAtStart?.Id, 256),
+                CaptureStage = WindowsBrowserTargetReader.LastProbeStage,
+                AddressState = WindowsBrowserTargetReader.LastAddressState,
                 Error = error
             });
             Directory.CreateDirectory(WinUIProfile.Root);
