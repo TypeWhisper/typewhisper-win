@@ -25,6 +25,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     private bool _picking;
     private ContentDialog? _recoveryDialog;
     private Task _recoveryOperation = Task.CompletedTask;
+    private Task _exportOperation = Task.CompletedTask;
     internal event Action? ExitRequested;
 
     public PrototypeFileTranscriptionView()
@@ -62,10 +63,10 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     internal Task CancelAndDrainAsync() => _queue.CancelAndDrainAsync();
     internal async Task ShutdownAsync()
     {
+        IsEnabled = false;
         var drain = _queue.ShutdownAsync();
         _recoveryDialog?.Hide();
-        await _recoveryOperation;
-        await drain;
+        await Task.WhenAll(_recoveryOperation, drain, _exportOperation);
     }
     internal void GoBack()
     {
@@ -233,43 +234,50 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     }
     private async Task ChooseFiles()
     {
-        if (_picking || _queue.Running || XamlRoot is null) return;
+        if (_queue.IsShutdown || _picking || _queue.Running || XamlRoot is null) return;
         _picking = true;
         try
         {
             var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = "Choose audio or video files" };
             foreach (var extension in FileTranscriptionQueue.Extensions) picker.FileTypeFilter.Add(extension);
             var files = await picker.PickMultipleFilesAsync();
+            if (_queue.IsShutdown) return;
             if (files.Count > 0) AddPaths(files.Select(file => file.Path)); else _notice.Text = "Selection canceled. Your queue is unchanged.";
         }
         catch (Exception) { _notice.Text = "The file dialog could not be opened. Try dropping a file."; }
-        finally { _picking = false; Render(); }
+        finally { _picking = false; if (!_queue.IsShutdown) Render(); }
     }
     private async Task Export(FileTranscriptionJob job)
     {
-        if (_picking || XamlRoot is null) return;
+        if (_queue.IsShutdown || _picking || XamlRoot is null) return;
         _picking = true; var format = _format;
         try
         {
             var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { SuggestedFileName = Path.GetFileNameWithoutExtension(job.Name), Title = "Export transcript" };
             picker.FileTypeChoices.Add(format.ToUpperInvariant(), new List<string> { "." + format });
             var file = await picker.PickSaveFileAsync();
+            if (_queue.IsShutdown) return;
             if (file is null) { _notice.Text = "Export canceled. Nothing was written."; return; }
             var destination = Path.GetFullPath(file.Path);
             if (_queue.Jobs.Any(item => string.Equals(Path.GetFullPath(item.Path), destination, StringComparison.OrdinalIgnoreCase)))
                 throw new IOException("Choose a filename different from the source media.");
-            var temporary = Path.Combine(Path.GetDirectoryName(destination)!, ".transcript-" + Guid.NewGuid().ToString("N") + ".tmp");
-            try
-            {
-                await File.WriteAllTextAsync(temporary, FileTranscriptionQueue.Export(job, format), new System.Text.UTF8Encoding(false));
-                File.Move(temporary, destination, true);
-            }
-            finally { if (File.Exists(temporary)) File.Delete(temporary); }
-            _notice.Text = "Transcript exported.";
+            _exportOperation = WriteExportAsync(destination, FileTranscriptionQueue.Export(job, format));
+            await _exportOperation;
+            if (!_queue.IsShutdown) _notice.Text = "Transcript exported.";
         }
         catch (IOException) { _notice.Text = "Could not save. Choose a writable destination different from the source media."; }
         catch (Exception) { _notice.Text = "Export could not be completed. Your result is still available."; }
-        finally { _picking = false; }
+        finally { _picking = false; _exportOperation = Task.CompletedTask; }
+    }
+    private static async Task WriteExportAsync(string destination, string text)
+    {
+        var temporary = Path.Combine(Path.GetDirectoryName(destination)!, ".transcript-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporary, text, new System.Text.UTF8Encoding(false)).ConfigureAwait(false);
+            File.Move(temporary, destination, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     private static HandCursorButton Button(string text, Action action, bool primary = false, bool destructive = false)
     {

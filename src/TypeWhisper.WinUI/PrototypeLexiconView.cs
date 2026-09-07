@@ -9,6 +9,19 @@ namespace TypeWhisper.WinUI;
 
 public sealed class PrototypeLexiconView : UserControl
 {
+    // Dispatcher-owned state; shutdown closes admission before waiting for native pickers.
+    private bool _closing;
+    private TaskCompletionSource? _transferCompletion;
+    private Action? _cancelPicker;
+    internal Task ShutdownAsync()
+    {
+        _closing = true;
+        IsEnabled = false;
+        try { _cancelPicker?.Invoke(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
+        return _transferCompletion?.Task ?? Task.CompletedTask;
+    }
+
     private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
     private bool _showPacks;
     private readonly StackPanel _body = new() { Spacing = 14 };
@@ -292,6 +305,7 @@ public sealed class PrototypeLexiconView : UserControl
             toggle.Toggled += (_, _) =>
             {
                 if (restoring) return;
+                if (_closing) return;
                 var error = _store.SetPackEnabled(pack, toggle.IsOn);
                 _notice.Text = error ?? $"{pack.Name} {(toggle.IsOn ? "enabled" : "disabled")} · saved.";
                 if (error is not null) { restoring = true; toggle.IsOn = _store.PackEnabled(pack.Id); restoring = false; }
@@ -304,6 +318,8 @@ public sealed class PrototypeLexiconView : UserControl
 
     private async Task ImportAsync()
     {
+        if (_closing || _transferCompletion is { Task.IsCompleted: false }) return;
+        var completion = _transferCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var snippets = _kind == PrototypeLexiconKind.Snippet;
         IsEnabled = false;
         try
@@ -311,10 +327,15 @@ public sealed class PrototypeLexiconView : UserControl
             var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
                 { Title = snippets ? "Import snippets" : "Import personal dictionary" };
             picker.FileTypeFilter.Add(".json");
-            var file = await picker.PickSingleFileAsync();
+            var operation = picker.PickSingleFileAsync();
+            _cancelPicker = () => operation.Cancel();
+            var file = await operation;
+            _cancelPicker = null;
+            if (_closing) return;
             if (file is null) { _notice.Text = "Import canceled."; return; }
             if (new FileInfo(file.Path).Length > 20_000_000) throw new InvalidDataException("Choose a JSON file smaller than 20 MB.");
             var json = await File.ReadAllTextAsync(file.Path);
+            if (_closing) return;
             var count = _store.PreviewImport(json, snippets);
             var target = snippets ? "snippets" : "personal words and corrections";
             _notice.Text = $"Validated {count} {target} from {Path.GetFileName(file.Path)}. Add rejects conflicts. Replace removes existing {target}. Term packs stay unchanged.";
@@ -322,6 +343,7 @@ public sealed class PrototypeLexiconView : UserControl
             _actions.Children.Add(Button("Cancel import", () => { Render(); _notice.Text = "Import canceled."; }));
             void Apply(bool replace)
             {
+                if (_closing) return;
                 var error = _store.Import(json, snippets, replace);
                 if (error is not null) { _notice.Text = error; return; }
                 Render(); _notice.Text = $"Imported {count} {target}. Saved for the next dictation.";
@@ -335,13 +357,20 @@ public sealed class PrototypeLexiconView : UserControl
                 _actions.Children.Add(Button("Replace now", () => Apply(true), destructive: true));
             }, destructive: true));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
         { _notice.Text = "Import canceled: " + ex.Message; }
-        finally { IsEnabled = true; }
+        finally
+        {
+            _cancelPicker = null;
+            try { IsEnabled = !_closing; }
+            finally { completion.TrySetResult(); }
+        }
     }
 
     private async Task ExportAsync()
     {
+        if (_closing || _transferCompletion is { Task.IsCompleted: false }) return;
+        var completion = _transferCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var snippets = _kind == PrototypeLexiconKind.Snippet;
         IsEnabled = false;
         try
@@ -352,15 +381,24 @@ public sealed class PrototypeLexiconView : UserControl
                 SuggestedFileName = snippets ? "typewhisper-snippets" : "typewhisper-dictionary"
             };
             picker.FileTypeChoices.Add("TypeWhisper JSON", new List<string> { ".json" });
-            var file = await picker.PickSaveFileAsync();
+            var operation = picker.PickSaveFileAsync();
+            _cancelPicker = () => operation.Cancel();
+            var file = await operation;
+            _cancelPicker = null;
+            if (_closing) return;
             if (file is null) { _notice.Text = "Export canceled."; return; }
             _notice.Text = _store.Export(file.Path, snippets) ?? (snippets
                 ? "Snippets exported with tags, timestamps and usage counts."
                 : "Personal words and corrections exported with metadata. Installed term packs are managed separately.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         { _notice.Text = "Export failed: " + ex.Message; }
-        finally { IsEnabled = true; }
+        finally
+        {
+            _cancelPicker = null;
+            try { IsEnabled = !_closing; }
+            finally { completion.TrySetResult(); }
+        }
     }
 
     private static TextBox Input(string value, string name, bool multiline)
@@ -380,10 +418,10 @@ public sealed class PrototypeLexiconView : UserControl
         border.LostFocus += (_, _) => border.BorderBrush = Brush("HairlineBrush");
         return border;
     }
-    private static HandCursorButton Button(string label, Action click, bool primary = false, bool destructive = false)
+    private HandCursorButton Button(string label, Action click, bool primary = false, bool destructive = false)
     {
         var button = new HandCursorButton { Content = label, Style = (Style)Application.Current.Resources[destructive ? "PrototypeDestructiveButtonStyle" : primary ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"] };
-        button.Click += (_, _) => click(); return button;
+        button.Click += (_, _) => { if (!_closing) click(); }; return button;
     }
     private static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
     private static TextBlock Text(string text, double size, bool muted = false) => new() { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Foreground = Brush(muted ? "MutedBrush" : "TextBrush") };

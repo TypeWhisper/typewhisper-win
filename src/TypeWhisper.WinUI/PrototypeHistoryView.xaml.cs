@@ -12,6 +12,41 @@ public sealed partial class PrototypeHistoryView : UserControl
     private TypeWhisper.Presentation.HistoryReader? _reader;
     private TypeWhisper.Presentation.HistoryActions? _actions;
     private bool _acting;
+    private bool _closing;
+    private readonly HashSet<ContentDialog> _dialogs = [];
+    private readonly HashSet<Task> _writes = [];
+    private Task? _shutdown;
+
+    internal Task ShutdownAsync()
+    {
+        if (_shutdown is not null) return _shutdown;
+        _closing = true;
+        IsEnabled = false;
+        foreach (var dialog in _dialogs.ToArray()) dialog.Hide();
+        return _shutdown = Task.WhenAll(_writes.ToArray());
+    }
+
+    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+    {
+        if (_closing) return ContentDialogResult.None;
+        _dialogs.Add(dialog);
+        try { return await dialog.ShowAsync(); }
+        finally { _dialogs.Remove(dialog); }
+    }
+
+    private async Task<T> TrackWriteAsync<T>(Task<T> write)
+    {
+        _writes.Add(write);
+        try { return await write; }
+        finally { _writes.Remove(write); }
+    }
+
+    private async Task TrackWriteAsync(Task write)
+    {
+        _writes.Add(write);
+        try { await write; }
+        finally { _writes.Remove(write); }
+    }
     private bool _selecting;
     private int _bulkFocusIndex = -1;
     private bool _applyingFilters;
@@ -28,7 +63,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     internal async Task RefreshAsync()
     {
-        if (_reader is null || _loading || _acting) return;
+        if (_closing || _reader is null || _loading || _acting) return;
         var openedId = IsReading ? _opened?.Entry.RecordId : null;
         _loading = true;
         _loadError = null;
@@ -36,6 +71,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         try
         {
             var records = await _reader.ReadAsync();
+            if (_closing) return;
             _store = new PrototypeHistoryStore(records.Select(HistoryEntryAdapter.FromRecord));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -46,8 +82,9 @@ public sealed partial class PrototypeHistoryView : UserControl
         }
         finally
         {
-            _loading = false; ApplyFilters();
-            if (openedId is { } id && FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == id) is { } opened)
+            _loading = false;
+            if (!_closing) ApplyFilters();
+            if (!_closing && openedId is { } id && FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == id) is { } opened)
             {
                 Entries.SelectedItem = opened;
                 OpenSelected();
@@ -344,14 +381,14 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void DeleteSelected_Click(object sender, RoutedEventArgs e) => await DeleteSnapshotAsync(SelectedIds, false);
     private async void ClearHistory_Click(object sender, RoutedEventArgs e)
     {
-        if (_acting || _actions is null) return;
+        if (_closing || _acting || _actions is null) return;
         try { await DeleteSnapshotAsync(await _actions.SnapshotIdsAsync(), true); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { ResultSummary.Text = "Could not read history for confirmation. Try again."; }
     }
 
     private async Task DeleteSnapshotAsync(string[] ids, bool clear)
     {
-        if (_acting || _actions is null || ids.Length == 0) return;
+        if (_closing || _acting || _actions is null || ids.Length == 0) return;
         _acting = true; UpdateBulkActions();
         string? notice = null;
         try
@@ -361,8 +398,8 @@ public sealed partial class PrototypeHistoryView : UserControl
                 Title = clear ? $"Clear {ids.Length} history {entryLabel}?" : $"Delete {ids.Length} selected {entryLabel}?",
                 Content = "This permanently deletes these entries and their saved local audio. Entries added after this confirmation opens will be kept.",
                 PrimaryButtonText = clear ? "Clear history" : "Delete selected", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-            notice = await _actions.DeleteAsync(ids) ? "Confirmed history entries deleted."
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || _closing) return;
+            notice = await TrackWriteAsync(_actions.DeleteAsync(ids)) ? "Confirmed history entries deleted."
                 : "History could not be deleted. No entries were removed by this action.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { notice = "History could not be deleted. Refresh and try again."; }
@@ -370,9 +407,12 @@ public sealed partial class PrototypeHistoryView : UserControl
         {
             _acting = false;
             await RefreshAsync();
-            UpdateBulkActions();
-            if (notice is not null) ResultSummary.Text = notice;
-            RestoreBulkFocus(clear ? ClearHistoryButton : DeleteSelectedButton);
+            if (!_closing)
+            {
+                UpdateBulkActions();
+                if (notice is not null) ResultSummary.Text = notice;
+                RestoreBulkFocus(clear ? ClearHistoryButton : DeleteSelectedButton);
+            }
         }
     }
 
@@ -385,7 +425,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void ExportSelected_Click(object sender, RoutedEventArgs e)
     {
         var ids = SelectedIds;
-        if (_acting || _actions is null || ids.Length == 0 || XamlRoot is null) return;
+        if (_closing || _acting || _actions is null || ids.Length == 0 || XamlRoot is null) return;
         _acting = true; UpdateBulkActions();
         string? notice = null;
         try
@@ -397,8 +437,8 @@ public sealed partial class PrototypeHistoryView : UserControl
             picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
             picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
             var file = await picker.PickSaveFileAsync();
-            if (file is null) return;
-            await _actions.ExportFileAsync(ids, file.Path);
+            if (_closing || file is null) return;
+            await TrackWriteAsync(_actions.ExportFileAsync(ids, file.Path));
             notice = $"Exported {ids.Length} history {(ids.Length == 1 ? "entry" : "entries")}.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { notice = "Export failed. Refresh your selection or choose a writable location."; }
@@ -406,9 +446,12 @@ public sealed partial class PrototypeHistoryView : UserControl
         {
             _acting = false;
             await RefreshAsync();
-            UpdateBulkActions();
-            if (notice is not null) ResultSummary.Text = notice;
-            RestoreBulkFocus(ExportSelectedButton);
+            if (!_closing)
+            {
+                UpdateBulkActions();
+                if (notice is not null) ResultSummary.Text = notice;
+                RestoreBulkFocus(ExportSelectedButton);
+            }
         }
     }
 
@@ -422,7 +465,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
-        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
         _acting = true;
         var openedId = _opened.Entry.RecordId;
         var editor = new TextBox { AcceptsReturn = true, Text = _opened.Text.ReplaceLineEndings("\r"), TextWrapping = TextWrapping.Wrap,
@@ -437,10 +480,11 @@ public sealed partial class PrototypeHistoryView : UserControl
         TypeWhisper.Core.Models.TranscriptionRecord? saved = null;
         dialog.PrimaryButtonClick += async (_, args) =>
         {
+            if (_closing) { args.Cancel = true; return; }
             var deferral = args.GetDeferral();
             try
             {
-                saved = await _actions.EditAsync(id, editor.Text.ReplaceLineEndings("\n"));
+                saved = await TrackWriteAsync(_actions.EditAsync(id, editor.Text.ReplaceLineEndings("\n")));
                 args.Cancel = saved is null;
                 if (saved is null) error.Text = "Could not save. Your edits are still here. Try again.";
             }
@@ -453,8 +497,8 @@ public sealed partial class PrototypeHistoryView : UserControl
         };
         try
         {
-            await dialog.ShowAsync();
-            if (saved is not null)
+            await ShowDialogAsync(dialog);
+            if (!_closing && saved is not null)
             {
                 _store.Upsert(HistoryEntryAdapter.FromRecord(saved));
                 ApplyFilters();
@@ -469,7 +513,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
         _acting = true;
         var entry = _opened;
         try
@@ -477,8 +521,9 @@ public sealed partial class PrototypeHistoryView : UserControl
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Delete this history entry?",
                 Content = $"{entry.Title}\n\nThis permanently deletes this entry and its saved audio from local history.",
                 PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-            if (!await _actions.DeleteAsync(id)) { ActionNotice.Text = "Could not delete this entry. Try again."; return; }
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary || _closing) return;
+            if (!await TrackWriteAsync(_actions.DeleteAsync(id))) { if (!_closing) ActionNotice.Text = "Could not delete this entry. Try again."; return; }
+            if (_closing) return;
             _store.Remove(entry.Entry.RecordId);
             ApplyFilters();
             ResultSummary.Text = "History entry deleted";
@@ -489,7 +534,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
-        if (_acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id || XamlRoot is null) return;
+        if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id || XamlRoot is null) return;
         _acting = true;
         try
         {
@@ -500,9 +545,9 @@ public sealed partial class PrototypeHistoryView : UserControl
             picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
             picker.FileTypeChoices.Add("JSON", new List<string> { ".json" });
             var file = await picker.PickSaveFileAsync();
-            if (file is null) return;
-            await _actions.ExportFileAsync(id, file.Path);
-            ActionNotice.Text = "Transcript exported.";
+            if (_closing || file is null) return;
+            await TrackWriteAsync(_actions.ExportFileAsync(id, file.Path));
+            if (!_closing) ActionNotice.Text = "Transcript exported.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { ActionNotice.Text = "Could not export the transcript. Choose a writable location and try again."; }
         finally { _acting = false; }

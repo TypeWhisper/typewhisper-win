@@ -149,6 +149,61 @@ public sealed class HistoryRetentionTests : IDisposable
         Assert.False(new HistoryRetentionPreferences().RequiresConfirmationComparedTo(Duration(60)));
     }
 
+    [Fact]
+    public async Task ClosingDuringLoadDrainsActiveCallAndRejectsQueuedAndLateSettingsWrites()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(service => service.EnsureLoadedAsync()).Returns(() => { entered.SetResult(); return release.Task; });
+        var store = new HistoryRetentionPreferencesStore(SettingsPath);
+        Assert.Null(store.Save(Duration(60)));
+        var original = File.ReadAllBytes(SettingsPath);
+        var controller = new HistoryRetentionController(history.Object, store);
+        var active = controller.ApplyAsync();
+        await entered.Task;
+        var queued = controller.ChangeAsync(new HistoryRetentionPreferences());
+        var drain = controller.CloseAndDrainAsync();
+        Assert.Same(drain, controller.CloseAndDrainAsync());
+        Assert.False(drain.IsCompleted);
+        Assert.NotNull(await controller.ChangeAsync(Duration(10), confirmedShortening: true));
+        release.SetResult();
+        Assert.NotNull(await active);
+        Assert.NotNull(await queued);
+        await drain;
+        Assert.NotNull(await controller.ApplyAsync());
+        Assert.Equal(original, File.ReadAllBytes(SettingsPath));
+        history.Verify(service => service.EnsureLoadedAsync(), Times.Once);
+        history.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ClosingWaitsForAlreadyExecutingPurgeBeforeReturning()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        history.Setup(service => service.EnsureLoadedAsync()).Returns(Task.CompletedTask);
+        history.SetupGet(service => service.Records).Returns(Array.Empty<TranscriptionRecord>());
+        history.Setup(service => service.PurgeOldRecords(It.IsAny<TimeSpan?>())).Callback(() =>
+        {
+            entered.SetResult();
+            if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Test purge barrier timed out.");
+        });
+        var store = new HistoryRetentionPreferencesStore(SettingsPath);
+        Assert.Null(store.Save(Duration(60)));
+        var controller = new HistoryRetentionController(history.Object, store);
+        var active = Task.Run(controller.ApplyAsync);
+        await entered.Task;
+        var drain = controller.CloseAndDrainAsync();
+        try { Assert.False(drain.IsCompleted); }
+        finally { release.Set(); }
+        await active;
+        await drain;
+        Assert.NotNull(await controller.ApplyAsync());
+        history.Verify(service => service.PurgeOldRecords(It.IsAny<TimeSpan?>()), Times.Once);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);

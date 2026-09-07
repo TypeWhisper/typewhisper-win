@@ -26,11 +26,12 @@ internal sealed partial class LocalDictationSession
         _livePreview.Cancel();
         _retentionTimer.Stop();
         StopSilenceMonitoring();
-        return DrainAndReleaseAsync();
+        return DrainAndReleaseAsync(HistoryRetention.CloseAndDrainAsync());
     });
 
-    private async Task DrainAndReleaseAsync()
+    private async Task DrainAndReleaseAsync(Task retentionDrain)
     {
+        await retentionDrain;
         await _gate.WaitAsync();
         var failures = new List<Exception>();
         async Task Release(Func<Task> action)
