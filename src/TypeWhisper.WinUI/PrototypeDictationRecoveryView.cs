@@ -18,6 +18,7 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
     private Task _uiOperation = Task.CompletedTask;
     private bool _working;
     private bool _closing;
+    private bool _renderQueued;
     private string? _uiMessage;
 
     // The host supplies the real, drained preference/retention transaction. No UI-only setting.
@@ -25,7 +26,7 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
         DictationRecoveryPreferencesStore preferences, Func<DictationRecoveryPreferences, Task<string?>> commitPreferences)
     {
         _controller = controller; _preferences = preferences; _commitPreferences = commitPreferences;
-        Content = new ScrollViewer { Content = _body, Padding = new Thickness(24), HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Content = new ScrollViewer { Content = _body, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite);
         Loaded += (_, _) => { _controller.Changed += Changed; Render(); };
         Unloaded += (_, _) => _controller.Changed -= Changed;
@@ -40,14 +41,25 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
         _controller.Changed -= Changed;
     }
 
-    private void Changed() => DispatcherQueue.TryEnqueue(() => { if (!_closing && IsLoaded && _dialog is null) Render(); });
+    private void Changed() => DispatcherQueue.TryEnqueue(QueueRender);
+
+    private void QueueRender()
+    {
+        if (_closing || !IsLoaded || _renderQueued) return;
+        _renderQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _renderQueued = false;
+            if (!_closing && IsLoaded && _dialog is null) Render();
+        });
+    }
 
     private void Render()
     {
         if (_closing) return;
         _body.Children.Clear();
         _body.Children.Add(Label("Dictation recovery", 22));
-        _body.Children.Add(Label("Optional audio recovery is separate from History and the Recorder library. It saves microphone audio on this device so you can retry an interrupted dictation. Nothing is transcribed, pasted, or added to History automatically. A crash may lose the last unflushed audio."));
+        _body.Children.Add(Label("Keep microphone audio on this device to recover interrupted dictations. Recovery is separate from History and the Recorder library."));
         var enabled = new ToggleSwitch { Header = "Keep dictation audio for recovery", IsOn = _preferences.Current.Enabled };
         var retention = new PrototypeChoicePicker();
         retention.Configure("Recovery audio retention", "history", "Recovery audio retention");
@@ -56,8 +68,10 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
             _preferences.Current.RetentionDays.ToString());
         var locked = _working || _controller.Busy;
         enabled.IsEnabled = retention.IsEnabled = !locked;
-        _body.Children.Add(enabled); _body.Children.Add(retention);
-        _body.Children.Add(Label("Turning recovery off stops new recovery recordings; it does not delete existing audio. Applying a shorter retention may delete existing older recovery audio."));
+        _body.Children.Add(enabled);
+        _body.Children.Add(Label("Keep recovery audio for"));
+        _body.Children.Add(retention);
+        _body.Children.Add(Label("Turning recovery off keeps existing recordings. A shorter retention deletes older audio after confirmation. An interrupted recording may be missing its final moments."));
         _body.Children.Add(Button("Save recovery preferences", () => Start(async () =>
         {
             var next = new DictationRecoveryPreferences { Enabled = enabled.IsOn, RetentionDays = int.Parse(retention.SelectedId) };
@@ -76,11 +90,13 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
         }), locked));
         _body.Children.Add(Button("Refresh recordings", () => Start(_controller.RefreshAsync), locked));
         if (_controller.Busy) _body.Children.Add(Button("Cancel recovery", _controller.Cancel));
-        _body.Children.Add(Label($"{_controller.Recordings.Count} saved recovery recordings"));
+        _body.Children.Add(Label(_controller.Recordings.Count == 1 ? "1 saved recovery recording" : $"{_controller.Recordings.Count} saved recovery recordings"));
         foreach (var recording in _controller.Recordings)
         {
             var row = new StackPanel { Spacing = 6 };
-            row.Children.Add(Label($"{recording.CreatedAt.LocalDateTime:g} · {TimeSpan.FromSeconds(recording.DurationSeconds):g}"));
+            var duration = TimeSpan.FromSeconds(recording.DurationSeconds);
+            var elapsed = duration.ToString(duration.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss");
+            row.Children.Add(Label($"{recording.CreatedAt.LocalDateTime:g} · {elapsed}"));
             var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             actions.Children.Add(Button("Transcribe and review", () => Start(() => _controller.RetryAsync(recording.Id)), locked));
             actions.Children.Add(Button("Delete audio", () => Start(async () =>
@@ -95,7 +111,7 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
             _body.Children.Add(Label("Recovered text · review before copying", 16));
             var text = new TextBox { AcceptsReturn = true, IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
                 Text = review.Text.ReplaceLineEndings("\r"), MinHeight = 140, MaxHeight = 340,
-                Style = (Style)Application.Current.Resources["WorkflowEditorStyle"] };
+                Style = (Style)Application.Current.Resources["PrototypeLexiconMultilineStyle"] };
             AutomationProperties.SetName(text, "Recovered dictation text");
             _body.Children.Add(text);
             _body.Children.Add(Button("Copy reviewed text", () =>
@@ -123,13 +139,14 @@ internal sealed class PrototypeDictationRecoveryView : UserControl
         _uiMessage = null;
         _working = true;
         _uiOperation = Execute();
-        if (_dialog is null) Render();
+        // Keep the clicked control alive until WinUI finishes its pointer callback.
+        QueueRender();
         async Task Execute()
         {
             try { await action(); }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             { if (!_closing) _uiMessage = "The recovery action could not finish. Your current review remains available."; }
-            finally { _working = false; if (!_closing) Render(); }
+            finally { _working = false; QueueRender(); }
         }
     }
     private static TextBlock Label(string text, double size = 13) => new() { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap };
