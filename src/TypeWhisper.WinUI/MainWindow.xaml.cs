@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
         if (_hotkeyRegistration is null) return "Global hotkey service is unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithLauncher(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value) is { } workflowConflict) return workflowConflict;
+        if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
         var previous = _hotkeyRegistration.Value;
         var error = _hotkeyRegistration.TryChange(value);
         if (error is not null) return error;
@@ -76,6 +77,7 @@ public sealed partial class MainWindow : Window
         if (_dictationHotkey is null) return "Dictation hotkeys are unavailable. Restart the app.";
         if (_cancelProcessingHotkey?.ConflictWithDictation(value) is { } conflict) return conflict;
         if (_workflowShortcuts?.Conflict(value, modifierOnly: true) is { } workflowConflict) return workflowConflict;
+        if (HistoryShortcutConflict(value, modifierOnly: true) is { } historyConflict) return historyConflict;
         if (_dictation.IsRecording) return "Finish the recording before changing its shortcut.";
         var previous = _dictationHotkey.Value;
         var error = _dictationHotkey.TryChange(value);
@@ -152,6 +154,7 @@ public sealed partial class MainWindow : Window
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey?.Value ?? "";
             await _dictation.InitializeAsync();
             InitializeWorkflowShortcuts();
+            InitializeHistoryShortcut();
             if (cancelError is not null && !_closing) MetricsText.Text = cancelError;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
@@ -172,6 +175,7 @@ public sealed partial class MainWindow : Window
     internal async Task ShutdownDictationAsync()
     {
         _cancelProcessingHotkey?.Dispose();
+        _historyHotkey?.Dispose();
         await StopWorkflowShortcutsAsync();
         // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
         var reviews = DrainReviewWindowsAsync();
@@ -183,6 +187,7 @@ public sealed partial class MainWindow : Window
         _closing = true;
         await StopWorkflowShortcutsAsync();
         _cancelProcessingHotkey?.Dispose();
+        _historyHotkey?.Dispose();
         _dictationHotkey?.Dispose();
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
@@ -1039,12 +1044,14 @@ public sealed partial class MainWindow : Window
         {
             _settingsWindow = new PrototypeSettingsWindow(OverlayPreferences, _settingsValues);
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
+            _settingsWindow.CommitRecentTranscriptionsHotkeys = ChangeHistoryShortcut;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.CommitCancelProcessingHotkeys = value =>
             {
                 if (_closing || _profileRestoreClosing) return "The app is shutting down.";
                 if (_cancelProcessingHotkey is null) return "Cancel shortcuts are unavailable. Wait for startup to finish or restart the app.";
                 if (_workflowShortcuts?.Conflict(value) is { } conflict) return conflict;
+                if (HistoryShortcutConflict(value) is { } historyConflict) return historyConflict;
                 var error = _cancelProcessingHotkey.TryChange(value);
                 _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey.Value;
                 return error;

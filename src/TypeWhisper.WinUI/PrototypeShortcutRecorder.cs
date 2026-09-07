@@ -280,7 +280,7 @@ public sealed class PrototypeShortcutRecorder : UserControl
         SetValue(PrototypeShortcutRules.Upsert(Current, _editingIndex, _candidate)); _add.Focus(FocusState.Keyboard);
     }
     // Cancellation uses RegisterHotKey rather than the dictation modifier-only hook.
-    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys"))
+    private string? Validate(string candidate) => PrototypeShortcutRules.Validate(candidate, allowModifiersOnly: _key is not ("CancelProcessingHotkeys" or "WorkflowSelectedTextHotkeys" or "RecentTranscriptionsHotkeys"))
         ?? PrototypeShortcutRules.Duplicate(candidate, Current, _editingIndex)
         ?? PrototypeShortcutRules.Conflict(candidate, _key, _bindings());
     private void Candidate(string candidate)

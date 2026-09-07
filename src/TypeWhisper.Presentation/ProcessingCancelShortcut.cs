@@ -9,15 +9,16 @@ public interface IProcessingCancelShortcutBackend
     string? TryChange(string value);
 }
 
-/// <summary>Persists explicit cancel shortcuts after successful registration; missing settings mean unassigned.</summary>
+/// <summary>Persists explicit shortcuts after successful registration; missing settings mean unassigned.</summary>
 public sealed class ProcessingCancelShortcut
 {
     private readonly string _path;
     private readonly IProcessingCancelShortcutBackend _backend;
     private readonly Func<string, string?> _validate;
+    private readonly string _displayName;
     /// <summary>Creates an uninitialized controller; this does not register or write anything.</summary>
-    public ProcessingCancelShortcut(string path, IProcessingCancelShortcutBackend backend, Func<string, string?> validate)
-    { _path = Path.GetFullPath(path); _backend = backend; _validate = validate; }
+    public ProcessingCancelShortcut(string path, IProcessingCancelShortcutBackend backend, Func<string, string?> validate, string displayName = "Cancel shortcuts")
+    { _path = Path.GetFullPath(path); _backend = backend; _validate = validate; _displayName = displayName; }
     /// <summary>The actually registered shortcuts, not a failed draft.</summary>
     public string Value => _backend.Value;
     /// <summary>Latest registration or persistence failure.</summary>
@@ -28,7 +29,7 @@ public sealed class ProcessingCancelShortcut
         try
         {
             using var stream = File.OpenRead(_path);
-            if (stream.Length > 1024) return Error = "Cancel shortcuts could not be loaded. Assign them again in Settings.";
+            if (stream.Length > 1024) return Error = $"{_displayName} could not be loaded. Assign them again in Settings.";
             using var reader = new StreamReader(stream);
             var value = reader.ReadToEnd();
             return Error = Validate(value) ?? _backend.TryChange(value);
@@ -36,7 +37,7 @@ public sealed class ProcessingCancelShortcut
         catch (FileNotFoundException) { return null; }
         catch (DirectoryNotFoundException) { return null; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { return Error = "Cancel shortcuts could not be loaded. Assign them again in Settings."; }
+        { return Error = $"{_displayName} could not be loaded. Assign them again in Settings."; }
     }
     /// <summary>Registers and atomically saves a canonical value, rolling back registration if saving fails.</summary>
     public string? Save(string value)
@@ -67,13 +68,13 @@ public sealed class ProcessingCancelShortcut
         }
     }
     private string? Validate(string value) => value.Length > 256 || value.Any(char.IsControl)
-        ? "The cancel shortcut value is invalid or too long." : _validate(value);
+        ? $"{_displayName}: the shortcut value is invalid or too long." : _validate(value);
     private string RollBack(string previous)
     {
         var error = _backend.TryChange(previous);
         return Error = error is null && SameBindings(Value, previous)
-            ? "Cancel shortcuts could not be saved. Previous shortcuts still apply."
-            : "Cancel shortcuts could not be saved and previous registration could not be restored. The displayed active shortcuts are authoritative; reassign them or restart.";
+            ? $"{_displayName} could not be saved. Previous shortcuts still apply."
+            : $"{_displayName} could not be saved and previous registration could not be restored. The displayed active shortcuts are authoritative; reassign them or restart.";
     }
     private static bool SameBindings(string actual, string requested)
     {
