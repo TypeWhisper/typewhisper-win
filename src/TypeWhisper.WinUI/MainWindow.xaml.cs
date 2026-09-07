@@ -181,7 +181,23 @@ public sealed partial class MainWindow : Window
         NativeWindowAppearance.ApplyAppTitleBar(this);
         LoadOverlayPreferences();
         var historyPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TypeWhisper-WinUI-DevUserData", "history.json");
+#if DEBUG
+        // Opt-in fixture uses an ephemeral history store, never the development profile's history.
+        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
+            historyPath = Path.Combine(Path.GetTempPath(), "TypeWhisper-WinUI-HistoryFixture", Guid.NewGuid().ToString("N"), "history.json");
+#endif
         var historyService = new TypeWhisper.Core.Services.HistoryService(historyPath) { ThrowOnLoadFailure = true };
+#if DEBUG
+        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
+            historyService.TryAddRecord(new TypeWhisper.Core.Models.TranscriptionRecord
+            {
+                Id = "history-ui-fixture", Timestamp = DateTime.UtcNow,
+                RawText = "Synthetic history test.\nSecond paragraph.",
+                FinalText = "Synthetic history test.\n\nSecond paragraph for editing and export.",
+                AppName = "UI test fixture", AppProcessName = "fixture", Language = "en",
+                EngineUsed = "fixture", ModelUsed = "synthetic-model", TranscriptionTaskUsed = "transcribe"
+            });
+#endif
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _dictation.ReviewRequested += ShowOutputReview;

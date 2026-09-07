@@ -56,6 +56,8 @@ public partial class App : Application
         _window.DictationChanged += _tray.UpdateDictation;
         _ = _window.InitializeDictationAsync();
 #if DEBUG
+        if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
+            _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray);
         // Opt-in visual fixture: no capture, provider request, clipboard write or history entry.
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_REVIEW_FIXTURE") == "1")
             _window.DispatcherQueue.TryEnqueue(() => _window.ShowOutputReview(new(
