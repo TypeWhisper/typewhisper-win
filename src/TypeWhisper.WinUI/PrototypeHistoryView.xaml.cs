@@ -306,7 +306,9 @@ public sealed partial class PrototypeHistoryView : UserControl
     {
         if (BulkToolbar is null) return;
         var available = !_acting && !_loading && _loadError is null && _actions is not null;
-        SelectEntriesButton.IsEnabled = SelectAllShownButton.IsEnabled = available;
+        var hasShownEntries = FilteredEntries.Any(item => item.Entry.PersistedRecordId is not null);
+        SelectEntriesButton.IsEnabled = available && (_selecting || hasShownEntries);
+        SelectAllShownButton.IsEnabled = available && hasShownEntries;
         SelectEntriesButton.Content = _selecting ? "Done selecting" : "Select entries";
         SelectionActions.Visibility = _selecting ? Visibility.Visible : Visibility.Collapsed;
         ExportSelectedButton.IsEnabled = DeleteSelectedButton.IsEnabled = available && SelectedIds.Length > 0;
@@ -354,8 +356,9 @@ public sealed partial class PrototypeHistoryView : UserControl
         string? notice = null;
         try
         {
-            var dialog = new ContentDialog { XamlRoot = XamlRoot,
-                Title = clear ? $"Clear {ids.Length} history entries?" : $"Delete {ids.Length} selected entries?",
+            var entryLabel = ids.Length == 1 ? "entry" : "entries";
+            var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ActualTheme,
+                Title = clear ? $"Clear {ids.Length} history {entryLabel}?" : $"Delete {ids.Length} selected {entryLabel}?",
                 Content = "This permanently deletes these entries and their saved local audio. Entries added after this confirmation opens will be kept.",
                 PrimaryButtonText = clear ? "Clear history" : "Delete selected", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -369,7 +372,14 @@ public sealed partial class PrototypeHistoryView : UserControl
             await RefreshAsync();
             UpdateBulkActions();
             if (notice is not null) ResultSummary.Text = notice;
+            RestoreBulkFocus(clear ? ClearHistoryButton : DeleteSelectedButton);
         }
+    }
+
+    private void RestoreBulkFocus(Control preferred)
+    {
+        var target = preferred.IsEnabled ? preferred : SelectEntriesButton.IsEnabled ? SelectEntriesButton : (Control)AllFilter;
+        target.Focus(FocusState.Programmatic);
     }
 
     private async void ExportSelected_Click(object sender, RoutedEventArgs e)
@@ -381,7 +391,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         try
         {
             var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId)
-                { SuggestedFileName = "history-selection", Title = $"Export {ids.Length} selected entries" };
+                { SuggestedFileName = "history-selection", Title = $"Export {ids.Length} selected {(ids.Length == 1 ? "entry" : "entries")}" };
             picker.FileTypeChoices.Add("Text", new List<string> { ".txt" });
             picker.FileTypeChoices.Add("Markdown", new List<string> { ".md" });
             picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
@@ -389,7 +399,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             var file = await picker.PickSaveFileAsync();
             if (file is null) return;
             await _actions.ExportFileAsync(ids, file.Path);
-            notice = $"Exported {ids.Length} history entries.";
+            notice = $"Exported {ids.Length} history {(ids.Length == 1 ? "entry" : "entries")}.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { notice = "Export failed. Refresh your selection or choose a writable location."; }
         finally
@@ -398,6 +408,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             await RefreshAsync();
             UpdateBulkActions();
             if (notice is not null) ResultSummary.Text = notice;
+            RestoreBulkFocus(ExportSelectedButton);
         }
     }
 
