@@ -16,6 +16,8 @@ public sealed partial class PrototypeSettingsWindow : Window
     internal Func<string, string?>? CommitLauncherHotkeys { get; set; }
     internal Func<string, string?>? CommitDictationHotkeys { get; set; }
     internal Action<string, StackPanel, List<PrototypeChoicePicker>>? ConfigureLiveSettings { get; set; }
+    internal Action<PrototypeActivityView>? ConfigureActivity { get; set; }
+    internal Task RefreshActivityAsync() => _activity?.RefreshAsync() ?? Task.CompletedTask;
     private bool _updating = true;
     private uint _dpi;
     private bool _positioning;
@@ -262,6 +264,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 if (_activity is null)
                 {
                     _activity = new PrototypeActivityView();
+                    ConfigureActivity?.Invoke(_activity);
                     _activity.NavigateRequested += destination =>
                     {
                         if (destination == "Setup") ShowSetup();
@@ -271,7 +274,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                     ActivityHost.Child = _activity;
                 }
                 ActivityHost.Visibility = Visibility.Visible; _activity.Present(category == "Statistics");
-                SessionHint.Text = "Sample activity only · no personal usage is measured";
+                SessionHint.Text = "Statistics reflect retained history · deletion and retention reduce these totals";
                 return;
             }
             PrototypeSettingsCatalog.Render(category, CatalogContent, _values, _catalogPickers, () => ShowCategory(category), CommitLauncherHotkeys, CommitDictationHotkeys);
@@ -280,7 +283,7 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "History saving and retention are connected · unavailable controls are disabled";
             PrototypeSettingsCatalog.UpdateTrailingSeparators(CatalogContent);
             if (category == "Dictation" && ConfigureLiveSettings is not null)
-                SessionHint.Text = "Provider, model, language and output choices are saved";
+                SessionHint.Text = "Dictation, recording and text processing choices are saved";
             if (category == "Audio" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
             if (category == "General")

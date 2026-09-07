@@ -185,7 +185,11 @@ public sealed partial class MainWindow : Window
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService));
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _dictation.ReviewRequested += ShowOutputReview;
-        historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () => { if (_historyOpen) await HistoryView.RefreshAsync(); });
+        historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_historyOpen) await HistoryView.RefreshAsync();
+            if (_settingsWindow is not null) await _settingsWindow.RefreshActivityAsync();
+        });
         PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();
@@ -863,6 +867,7 @@ public sealed partial class MainWindow : Window
             _settingsWindow.CommitLauncherHotkeys = ChangeLauncherHotkeys;
             _settingsWindow.CommitDictationHotkeys = ChangeDictationHotkeys;
             _settingsWindow.ConfigureLiveSettings = new LiveDictationSettings(_dictation, OpenProviderSettings).Configure;
+            _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
             _settingsWindow.HistoryRequested += () =>
             {
                 if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }

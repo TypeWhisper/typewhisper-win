@@ -3,6 +3,8 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using TypeWhisper.Core.Models;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -14,11 +16,16 @@ public sealed class PrototypeActivityView : UserControl
     private readonly StackPanel _periods = new() { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
     private readonly ScrollViewer _scroll;
     private readonly List<Action<double>> _responsive = [];
-    private PrototypeUsagePeriod _period = PrototypeUsagePeriod.AllTime;
+    private UsagePeriod _period = UsagePeriod.AllTime;
     private bool _statistics;
-    private bool _empty;
-    private DateOnly _rangeStart = new(2026, 8, 7);
-    private DateOnly _rangeEnd = new(2026, 9, 5);
+    private HistoryReader? _reader;
+    private Func<bool> _historySavingEnabled = () => true;
+    private IReadOnlyList<TranscriptionRecord> _records = [];
+    private bool _loading;
+    private bool _refreshAgain;
+    private string? _loadError;
+    private DateOnly _rangeStart = DateOnly.FromDateTime(DateTime.Today).AddDays(-29);
+    private DateOnly _rangeEnd = DateOnly.FromDateTime(DateTime.Today);
     private PrototypeDateRangePicker? _rangePicker;
     internal event Action<string>? NavigateRequested;
 
@@ -42,7 +49,35 @@ public sealed class PrototypeActivityView : UserControl
         };
     }
 
-    internal void Present(bool statistics) { _statistics = statistics; Render(); }
+    internal void Connect(HistoryReader reader, Func<bool> historySavingEnabled)
+    {
+        _reader = reader;
+        _historySavingEnabled = historySavingEnabled;
+    }
+
+    internal async Task RefreshAsync()
+    {
+        if (_reader is null) return;
+        if (_loading) { _refreshAgain = true; return; }
+        _loading = true;
+        if (_records.Count == 0) Render();
+        try
+        {
+            do
+            {
+                _refreshAgain = false;
+                _records = await _reader.ReadAsync();
+                _loadError = null;
+            } while (_refreshAgain);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _loadError = "Activity could not be loaded from local history. Try again.";
+        }
+        finally { _loading = false; Render(); }
+    }
+
+    internal void Present(bool statistics) { _statistics = statistics; Render(); _ = RefreshAsync(); }
     internal bool CloseRangeIfOpen()
     {
         if (_rangePicker?.IsOpen != true) return false;
@@ -53,49 +88,54 @@ public sealed class PrototypeActivityView : UserControl
         _rangePicker?.Close(); _rangePicker = null;
         _body.Children.Clear(); _periods.Children.Clear(); _responsive.Clear();
         _title.Text = _statistics ? "Statistics" : "Dashboard";
-        var data = new PrototypeUsageData(_empty);
-        var summary = _statistics && _period == PrototypeUsagePeriod.Custom
-            ? PrototypeUsageData.SummarizeRange(data.Events, _rangeStart, _rangeEnd)
-            : data.Summarize(_statistics ? _period : PrototypeUsagePeriod.AllTime);
+        var data = new PrototypeUsageData(_records);
+        var summary = _statistics && _period == UsagePeriod.Custom
+            ? data.SummarizeRange(_rangeStart, _rangeEnd)
+            : data.Summarize(_statistics ? _period : UsagePeriod.AllTime);
         if (_statistics)
         {
-            foreach (var period in new[] { PrototypeUsagePeriod.Week, PrototypeUsagePeriod.Month, PrototypeUsagePeriod.AllTime })
+            foreach (var period in new[] { UsagePeriod.Week, UsagePeriod.Month, UsagePeriod.AllTime })
             {
-                var label = period switch { PrototypeUsagePeriod.Week => "Week", PrototypeUsagePeriod.Month => "Month", _ => "All time" };
+                var label = period switch { UsagePeriod.Week => "Week", UsagePeriod.Month => "Month", _ => "All history" };
                 var button = Button(label, () => { _period = period; Render(); }, period == _period);
                 AutomationProperties.SetItemStatus(button, period == _period ? "Selected" : "Not selected"); _periods.Children.Add(button);
             }
-            _rangePicker = new PrototypeDateRangePicker(_rangeStart, _rangeEnd, _period == PrototypeUsagePeriod.Custom);
-            _rangePicker.Applied += (start, end) => { _rangeStart = start; _rangeEnd = end; _period = PrototypeUsagePeriod.Custom; Render(); };
+            _rangePicker = new PrototypeDateRangePicker(_rangeStart, _rangeEnd, _period == UsagePeriod.Custom);
+            _rangePicker.Applied += (start, end) => { _rangeStart = start; _rangeEnd = end; _period = UsagePeriod.Custom; Render(); };
             _periods.Children.Add(_rangePicker);
         }
-        if (_empty) RenderEmpty();
+        if (_reader is null || _loading && _records.Count == 0 || _loadError is not null)
+        {
+            _body.Children.Add(Text(_loadError ?? (_reader is null ? "Activity is not connected to history." : "Loading local history…"), 14));
+            if (_loadError is not null) _body.Children.Add(Button("Retry", () => _ = RefreshAsync()));
+        }
+        else if (summary.Transcriptions == 0) RenderEmpty();
         else if (_statistics) RenderStatistics(summary);
         else RenderDashboard(summary);
-        var preview = new StackPanel { Spacing = 8 };
-        preview.Children.Add(Text("SAMPLE DATA · No personal activity is being measured.", 11, true));
-        var toggle = Button(_empty ? "Show sample data" : "Preview empty state", () => { _empty = !_empty; Render(); }); toggle.HorizontalAlignment = HorizontalAlignment.Left;
-        preview.Children.Add(toggle); _body.Children.Add(preview);
+        _body.Children.Add(Text("Based only on entries currently saved in local history. Editing, deletion and retention change these figures. Dictations that were not saved are not counted. Dates and hours use this device's local time.", 11, true));
+        if (!_historySavingEnabled()) _body.Children.Add(Text("History saving is off. New dictations will not appear in these statistics. Existing saved entries are still included.", 12, true));
         foreach (var resize in _responsive) resize(Math.Max(0, ActualWidth - 48));
         _scroll.ChangeView(null, 0, null, true);
     }
 
-    private void RenderDashboard(PrototypeUsageSummary summary)
+    private void RenderDashboard(UsageSummary summary)
     {
         var activity = new StackPanel { Spacing = 16 };
         activity.Children.Add(SectionLink("Your activity", "stats", "View all statistics", () => NavigateRequested?.Invoke("Statistics")));
         activity.Children.Add(Metrics(summary, true)); _body.Children.Add(Card(activity));
         var recent = new StackPanel { Spacing = 4 };
         recent.Children.Add(SectionLink("Recent transcriptions", "history", "View all history", () => NavigateRequested?.Invoke("History")));
-        foreach (var item in PrototypeHistorySamples.Entries.Take(3))
+        var entries = _records.Take(3).Select(record => new PrototypeTranscript(HistoryEntryAdapter.FromRecord(record),
+            new DateTimeOffset(DateTime.SpecifyKind(record.Timestamp, DateTimeKind.Utc)).ToLocalTime().ToString("g"))).ToArray();
+        foreach (var item in entries)
         {
             var labels = new StackPanel { Spacing = 5 };
             var text = Text(item.Preview, 14); text.MaxLines = 1; text.TextTrimming = TextTrimming.CharacterEllipsis;
-            labels.Children.Add(text); labels.Children.Add(Text($"{item.Time} · {item.DeviceLabel}", 11, true));
+            labels.Children.Add(text); labels.Children.Add(Text($"{item.Time} · {item.Entry.Content.AppName ?? item.Entry.Content.AppProcessName ?? "App not recorded"}", 11, true));
             var row = Button("", () => ShowTranscript(item)); row.Content = labels; row.HorizontalContentAlignment = HorizontalAlignment.Stretch; row.HorizontalAlignment = HorizontalAlignment.Stretch;
             row.Style = (Style)Application.Current.Resources["PrototypeMenuButtonStyle"]; row.Padding = new Thickness(4, 12, 4, 12);
             AutomationProperties.SetName(row, "Open recent transcription: " + item.Title); recent.Children.Add(row);
-            if (item != PrototypeHistorySamples.Entries[2]) recent.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
+            if (item != entries[^1]) recent.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush") });
         }
         _body.Children.Add(Card(recent));
     }
@@ -103,7 +143,8 @@ public sealed class PrototypeActivityView : UserControl
     {
         _body.Children.Clear(); _periods.Children.Clear(); _responsive.Clear(); _title.Text = "Recent transcription";
         _body.Children.Add(Button("← Dashboard", Render)); _body.Children.Add(Text(item.Title, 18));
-        _body.Children.Add(Text(item.Metadata + " · sample data", 11, true));
+        _body.Children.Add(Text(item.Metadata, 11, true));
+        _body.Children.Add(Text(item.ModelMetadata, 11, true));
         var text = Text(item.Text, 14); text.IsTextSelectionEnabled = true; _body.Children.Add(Card(text));
         _scroll.ChangeView(null, 0, null, true);
     }
@@ -111,27 +152,28 @@ public sealed class PrototypeActivityView : UserControl
     {
         var body = new StackPanel { Spacing = 12, Padding = new Thickness(8, 28, 8, 28) };
         body.Children.Add(new TypeWhisperGlyph { Kind = "signal", Width = 42, Height = 42, HorizontalAlignment = HorizontalAlignment.Center });
-        var title = Text(_statistics ? "Your activity starts with your first dictation" : "Welcome to TypeWhisper", 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
-        var hint = Text(_statistics ? "Words, streaks, and the apps you use will appear here." : "Set up your shortcut and model, then try your first dictation.", 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
-        var setup = Button("Open setup wizard", () => NavigateRequested?.Invoke("Setup"), true); setup.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(setup);
+        var title = Text(_statistics ? "No saved activity in this date range" : "No saved activity yet", 20); title.TextAlignment = TextAlignment.Center; body.Children.Add(title);
+        var hint = Text(_statistics ? "Choose another date range or save a new dictation to history." : "Dictations saved to local history will appear here.", 13, true); hint.TextAlignment = TextAlignment.Center; body.Children.Add(hint);
+        var history = Button("Open history", () => NavigateRequested?.Invoke("History"), true); history.HorizontalAlignment = HorizontalAlignment.Center; body.Children.Add(history);
         _body.Children.Add(Card(body));
     }
-    private void RenderStatistics(PrototypeUsageSummary summary)
+    private void RenderStatistics(UsageSummary summary)
     {
         _body.Children.Add(MetricGrid([
-            ("Active days", summary.ActiveDays.ToString(), "calendar"), ("Current streak", $"{summary.CurrentStreak}d", "flame"),
-            ("Longest streak", $"{summary.LongestStreak}d", "trophy"), ("Transcriptions", summary.Transcriptions.ToString("N0"), "signal")], false));
-        _body.Children.Add(Metrics(summary, false));
+            ("Days with saved entries", summary.ActiveDays.ToString(), "calendar"), ("Saved entries", summary.Transcriptions.ToString("N0"), "signal"),
+            ("Recorded apps", summary.KnownApps.ToString(), "desktop"), ("Recorded models", summary.KnownModels.ToString(), "chip")], false));
+        _body.Children.Add(MetricGrid([("Words", summary.Words.ToString("N0"), "text"),
+            ("Recorded minutes", summary.Minutes.ToString("N1"), "history")], false));
         _body.Children.Add(ActivityChart(summary));
         var usage = new Grid { ColumnSpacing = 16, RowSpacing = 16 };
         usage.Children.Add(Ranking("Top apps", summary.Apps, summary.Transcriptions)); usage.Children.Add(Ranking("Models used", summary.Models, summary.Transcriptions));
         ResponsiveColumns(usage, 2, 560); _body.Children.Add(usage);
         _body.Children.Add(Heatmap(summary));
-        _body.Children.Add(Text("Time saved is an estimate against typing at 40 words per minute, minus dictation time. All figures use the selected period.", 11, true));
+        _body.Children.Add(Text("Words use the current displayed transcript. Recorded minutes sum the stored duration; entries without a recorded duration contribute zero. Rankings count saved entries, including entries with missing attribution.", 11, true));
     }
-    private Grid Metrics(PrototypeUsageSummary summary, bool links) => MetricGrid([
-        ("Words", summary.Words.ToString("N0"), "text"), ("Avg. WPM", summary.Wpm == 0 ? "—" : summary.Wpm.ToString(), "speed"),
-        ("Apps used", summary.Apps.Length.ToString(), "desktop"), ("Time saved", summary.SavedLabel, "history")], links);
+    private Grid Metrics(UsageSummary summary, bool links) => MetricGrid([
+        ("Words", summary.Words.ToString("N0"), "text"), ("Saved entries", summary.Transcriptions.ToString("N0"), "signal"),
+        ("Recorded apps", summary.KnownApps.ToString(), "desktop"), ("Recorded minutes", summary.Minutes.ToString("N1"), "history")], links);
     private Grid MetricGrid((string Label, string Value, string Icon)[] metrics, bool links)
     {
         var grid = new Grid { ColumnSpacing = 12, RowSpacing = 12 };
@@ -150,7 +192,7 @@ public sealed class PrototypeActivityView : UserControl
             }
             else grid.Children.Add(card);
         }
-        ResponsiveColumns(grid, 4, 600); return grid;
+        ResponsiveColumns(grid, Math.Min(4, metrics.Length), 600); return grid;
     }
     private void ResponsiveColumns(Grid grid, int wideColumns, double breakpoint)
     {
@@ -165,7 +207,7 @@ public sealed class PrototypeActivityView : UserControl
         }
         _responsive.Add(Resize);
     }
-    private Border ActivityChart(PrototypeUsageSummary summary)
+    private Border ActivityChart(UsageSummary summary)
     {
         var panel = new StackPanel { Spacing = 12 }; panel.Children.Add(Text("Activity", 14));
         var buckets = summary.Days.Chunk(Math.Max(1, (int)Math.Ceiling(summary.Days.Length / 90d)))
@@ -219,7 +261,7 @@ public sealed class PrototypeActivityView : UserControl
         for (var i = 0; i < 3; i++) { var label = Text(summary.Days[(summary.Days.Length - 1) * i / 2].Date.ToString("MMM d"), 10, true); label.HorizontalAlignment = i == 0 ? HorizontalAlignment.Left : i == 1 ? HorizontalAlignment.Center : HorizontalAlignment.Right; Grid.SetColumn(label, i); labels.Children.Add(label); }
         panel.Children.Add(labels); return Card(panel);
     }
-    private Border Ranking(string title, PrototypeUsageRank[] ranks, int total)
+    private Border Ranking(string title, UsageRank[] ranks, int total)
     {
         var body = new StackPanel { Spacing = 12 }; body.Children.Add(Text(title, 14));
         foreach (var rank in ranks)
@@ -232,7 +274,7 @@ public sealed class PrototypeActivityView : UserControl
         }
         var card = Card(body); card.VerticalAlignment = VerticalAlignment.Top; return card;
     }
-    private Border Heatmap(PrototypeUsageSummary summary)
+    private Border Heatmap(UsageSummary summary)
     {
         var body = new StackPanel { Spacing = 12 }; body.Children.Add(Text("Usage by time of day", 14));
         var grid = new Grid { ColumnSpacing = 3, RowSpacing = 3 }; grid.ColumnDefinitions.Add(new() { Width = new GridLength(30) });
@@ -298,7 +340,7 @@ public sealed class PrototypeActivityView : UserControl
             }
         }
         AutomationProperties.SetName(grid, "Hourly activity, Monday to Sunday, 00:00 to 23:00. Darker cells mean less activity.");
-        body.Children.Add(grid); body.Children.Add(Text("Less  ░ ▒ ▓  More · sample local time", 10, true)); return Card(body);
+        body.Children.Add(grid); body.Children.Add(Text("Less  ░ ▒ ▓  More · local time", 10, true)); return Card(body);
     }
     private static HandCursorButton SectionLink(string title, string icon, string action, Action click)
     {

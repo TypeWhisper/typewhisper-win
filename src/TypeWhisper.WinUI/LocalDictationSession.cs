@@ -82,6 +82,7 @@ internal sealed class LocalDictationSession : IDisposable
         finally { _applyingRetention = false; }
     }
     private readonly IHistoryService _history;
+    internal HistoryReader HistoryReader => new(_history);
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly LocalTranscriptionPlugin _transcriptionPlugin;
