@@ -123,7 +123,7 @@
                     <local:HandCursorButton x:Name="DiscardButton" Content="Discard" Click="Discard_Click" Visibility="Collapsed"
                         Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Discard recorder session" />
                     <local:HandCursorButton x:Name="PauseButton" Content="Pause" Click="Pause_Click" Visibility="Collapsed"
-                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Pause or resume recorder" />
+                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Pause or resume this recording" />
                     <local:HandCursorButton x:Name="PrimaryButton" Content="Start recording" Click="Primary_Click"
                         Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Recorder primary action" />
                 </StackPanel>

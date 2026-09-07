@@ -12,7 +12,9 @@ public enum RecorderState
     /// <summary>Captured audio remains in memory for another save attempt.</summary>
     SaveFailed,
     /// <summary>The WAV file was published successfully.</summary>
-    Saved
+    Saved,
+    /// <summary>All sources are stopped; retained segments can be resumed or saved.</summary>
+    Paused
 }
 
 /// <summary>Serializes capture, retryable saving and shutdown on its owning UI thread.</summary>
@@ -24,6 +26,9 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
     private Task _pending = Task.CompletedTask;
     private bool _closing;
     private bool _emptyCapture;
+    private readonly RecorderSegments _segments = new();
+    private bool _microphone;
+    private bool _systemAudio;
     /// <summary>The current recorder state.</summary>
     public RecorderState State { get; private set; }
     /// <summary>Whether an asynchronous transition is pending.</summary>
@@ -49,36 +54,76 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
         return true;
     }
     /// <summary>Stops and saves at the recorder's sixty-minute limit.</summary>
-    public Task StopAtLimitAsync(TimeSpan elapsed) => State == RecorderState.Recording && elapsed >= TimeSpan.FromHours(1)
+    public Task StopAtLimitAsync(TimeSpan elapsed) => State is (RecorderState.Recording or RecorderState.Paused) && elapsed >= TimeSpan.FromHours(1)
         ? StopAndSaveAsync() : Task.CompletedTask;
 
     /// <summary>Reserves capture exclusively and starts the selected sources.</summary>
     public Task StartAsync(bool microphone, bool systemAudio) => Run(async () =>
     {
-        if (_closing || State is RecorderState.Recording or RecorderState.SaveFailed) throw new InvalidOperationException("Finish or save the current recording first.");
+        if (_closing || State is RecorderState.Recording or RecorderState.Paused or RecorderState.SaveFailed) throw new InvalidOperationException("Finish or save the current recording first.");
         if (!microphone && !systemAudio) throw new InvalidOperationException("Select at least one audio source.");
         _reservation = reserve();
         _emptyCapture = false;
+        _segments.Clear();
+        Duration = TimeSpan.Zero;
+        _microphone = microphone; _systemAudio = systemAudio;
         try { await start(microphone, systemAudio); State = RecorderState.Recording; FilePath = null; Duration = TimeSpan.Zero; }
         catch (RecorderCleanupException) { State = RecorderState.Recording; throw; }
         catch { _reservation.Dispose(); _reservation = null; throw; }
     });
 
-    /// <summary>Stops capture and publishes a WAV; failed writes keep all samples available for retry.</summary>
-    public Task StopAndSaveAsync() => Run(async () =>
+    /// <summary>Stops both sources while preserving audio and the exclusive session reservation.</summary>
+    public Task PauseAsync() => Run(async () =>
     {
-        if (State != RecorderState.Recording) return;
-        State = RecorderState.Saving; NotifyChanged();
+        if (_closing || State != RecorderState.Recording) return;
+        await FinishSegmentAsync();
+    });
+
+    /// <summary>Resumes the frozen source choices without inserting pause time into the recording.</summary>
+    public Task ResumeAsync() => Run(async () =>
+    {
+        if (_closing || State != RecorderState.Paused) return;
+        if (_segments.SampleCount >= RecorderSegments.MaximumSamples)
+            throw new InvalidOperationException("The active recording limit was reached. Stop and save this recording.");
+        try { await start(_microphone, _systemAudio); State = RecorderState.Recording; }
+        catch (RecorderCleanupException) { State = RecorderState.Recording; throw; }
+    });
+
+    private async Task FinishSegmentAsync()
+    {
+        _segments.PrepareAppend();
         try
         {
-            try { _unsaved = await stop(); }
-            catch (RecorderCleanupException) { State = RecorderState.Recording; throw; }
-            catch { State = RecorderState.Ready; throw; }
+            var captured = await stop();
+            _segments.Add(captured);
+            Duration = _segments.Duration;
+            State = RecorderState.Paused;
+        }
+        catch (RecorderCleanupException) { State = RecorderState.Recording; throw; }
+        catch { State = RecorderState.Paused; throw; }
+    }
+
+    /// <summary>Stops capture and publishes all active segments; failed writes retain the complete recording for retry.</summary>
+    public Task StopAndSaveAsync() => Run(async () =>
+    {
+        if (State is not (RecorderState.Recording or RecorderState.Paused)) return;
+        var wasRecording = State == RecorderState.Recording;
+        try
+        {
+            if (wasRecording) await FinishSegmentAsync();
+            State = RecorderState.Saving; NotifyChanged();
+            try { _unsaved = await Task.Run(_segments.Combine); }
+            catch { State = RecorderState.Paused; throw; }
+            _segments.Clear();
             if (_unsaved.Length == 0) { _emptyCapture = true; State = RecorderState.Ready; throw new InvalidOperationException("No usable audio was captured."); }
             Duration = TimeSpan.FromSeconds(_unsaved.Length / 16000.0);
             await SaveAsync();
         }
-        finally { if (State != RecorderState.Recording) { _reservation?.Dispose(); _reservation = null; } }
+        finally
+        {
+            if (State is not (RecorderState.Recording or RecorderState.Paused))
+            { _reservation?.Dispose(); _reservation = null; }
+        }
     });
 
     /// <summary>Retries publication without recording or decoding again.</summary>
@@ -97,7 +142,7 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
     {
         _closing = true;
         try { await _pending; } catch { /* Inspect retained state and retry below. */ }
-        if (State == RecorderState.Recording)
+        if (State is RecorderState.Recording or RecorderState.Paused)
         {
             try { await StopAndSaveAsync(); }
             catch when (_emptyCapture && State == RecorderState.Ready && _reservation is null)

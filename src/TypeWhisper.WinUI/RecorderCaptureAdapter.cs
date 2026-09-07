@@ -17,8 +17,10 @@ internal sealed class RecorderCaptureAdapter : IDisposable
     private readonly System.Diagnostics.Stopwatch _timeline = new();
     private TimeSpan? _stopAt;
     private string? _outputDeviceId;
+    internal TimeSpan SegmentElapsed => _stopAt ?? _timeline.Elapsed;
     internal float Level => Math.Max(_micLevel, _systemLevel);
     internal string? Warning { get; private set; }
+    internal void BeginSession() => Warning = null;
     internal RecorderCaptureAdapter(AudioRecordingService microphone, DispatcherQueue dispatcher)
     {
         _microphone = microphone; _dispatcher = dispatcher;
@@ -55,7 +57,6 @@ internal sealed class RecorderCaptureAdapter : IDisposable
     {
         _outputDeviceId = outputDeviceId;
         _generation++;
-        Warning = null;
         _timeline.Restart();
         _stopAt = null;
         _microphone.AudioLevelChanged += MicLevel;
@@ -69,8 +70,12 @@ internal sealed class RecorderCaptureAdapter : IDisposable
         try
         {
             var captured = await _sources.StopAsync();
-            Warning = captured.Warnings.Count == 0 ? null : string.Join(" ", captured.Warnings) + " Available audio was retained.";
-            return await Task.Run(() => RecorderMixer.MixForOutput(captured.Microphone, captured.System, RecorderMicDuckingMode.Off));
+            if (captured.Warnings.Count > 0)
+                Warning = string.Join(" ", new[] { Warning, string.Join(" ", captured.Warnings) + " Available audio was retained." }
+                    .Where(message => !string.IsNullOrWhiteSpace(message)));
+            return await Task.Run(() => RecorderMixer.MixForOutput(
+                captured.Microphone.Length == 0 ? [] : RecorderSegments.FitTimeline(captured.Microphone, _stopAt.Value),
+                captured.System.Length == 0 ? [] : RecorderSegments.FitTimeline(captured.System, _stopAt.Value), RecorderMicDuckingMode.Off));
         }
         finally { Unsubscribe(); }
     }
