@@ -33,7 +33,7 @@ public sealed class RecorderLibraryStoreTests : IDisposable
         await File.WriteAllBytesAsync(Path.Combine(_directory, "truncated.WAV"), bytes[..^2]);
         var entries = await new RecorderLibraryStore(_directory).ReadAsync();
         Assert.Equal(3, entries.Count);
-        Assert.Single(entries.Where(entry => entry.Error is null));
+        Assert.Single(entries, entry => entry.Error is null);
         Assert.All(entries.Where(entry => entry.Error is not null), entry => Assert.Null(entry.Duration));
         Assert.True(File.Exists(Path.Combine(_directory, "broken.wav")));
     }

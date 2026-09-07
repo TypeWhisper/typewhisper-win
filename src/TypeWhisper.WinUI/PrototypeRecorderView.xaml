@@ -13,6 +13,7 @@
         <Grid Margin="12,0,12,12" MinHeight="32">
             <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
             <local:HandCursorButton x:Name="LibraryButton" Content="Saved recordings" Click="Library_Click"
+                Style="{StaticResource PrototypeSecondaryButtonStyle}"
                 HorizontalAlignment="Right" VerticalAlignment="Center" />
         </Grid>
         <Grid x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0">
@@ -95,11 +96,11 @@
                 </Border>
             </Grid>
         </Grid>
-        <Grid x:Name="LibraryPanel" Grid.Row="1" Margin="12,0" Visibility="Collapsed" Background="{ThemeResource ElevatedBrush}">
+        <Grid x:Name="LibraryPanel" Grid.Row="1" Margin="12,4,12,0" Padding="0,0,4,0" Visibility="Collapsed">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Grid Margin="0,0,0,12">
                 <TextBlock x:Name="LibraryStatus" Text="Saved recordings" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,100,0" AutomationProperties.LiveSetting="Polite" />
-                <local:HandCursorButton x:Name="LibraryRefreshButton" Content="Refresh" Click="LibraryRefresh_Click" HorizontalAlignment="Right" />
+                <local:HandCursorButton x:Name="LibraryRefreshButton" Content="Refresh" Click="LibraryRefresh_Click" HorizontalAlignment="Right" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
             </Grid>
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="LibraryEntries" Spacing="8" />
