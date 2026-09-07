@@ -52,6 +52,7 @@ internal sealed class LocalDictationSession : IDisposable
     private DictationTextPreferences _textAtStart = new();
     private DictationOutputPreferences _outputAtStart = new();
     internal event Action<DictationOutputResult>? ReviewRequested;
+    internal event Action<Guid>? OutputCompleted;
     internal bool LivePreviewEnabled { get; set; } = true;
     internal string LivePreviewText { get; private set; } = "";
     internal event Action? LivePreviewChanged;
@@ -666,8 +667,11 @@ internal sealed class LocalDictationSession : IDisposable
                 });
             if (_disposed) return;
             LastUnsavedText = outcome.Saved ? null : text;
-            SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError);
+            if (!outcome.NeedsReview) LivePreviewText = text;
+            SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
+                outcome.NeedsReview ? DictationPhase.Idle : DictationPhase.Completed);
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
+            else OutputCompleted?.Invoke(recordingId);
 
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

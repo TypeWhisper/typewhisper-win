@@ -72,6 +72,18 @@ public sealed partial class PrototypeSettingsWindow : Window
             SettingsNavigation.Children.Add(section);
         }
         PrototypeSettingsCatalog.RenderLiveTextOptions(LiveTextOptions, _values, _appearancePickers);
+        foreach (var picker in _appearancePickers)
+        {
+            if (picker.Tag is "LiveTranscriptionFontSize") picker.SelectionChanged += value =>
+            {
+                if (!_updating && double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var size))
+                    Publish(_preferences with { LiveTranscriptionFontSize = size });
+            };
+            else if (picker.Tag is "PreviewBubbleAutoHideMilliseconds") picker.SelectionChanged += value =>
+            {
+                if (!_updating) Publish(_preferences with { PreviewBubbleAutoHideMilliseconds = DurationChoices.First(c => c.Label == value).Milliseconds });
+            };
+        }
         ShowCategory("Appearance");
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(SettingsDragRegion);
@@ -129,6 +141,15 @@ public sealed partial class PrototypeSettingsWindow : Window
     {
         _updating = true;
         _preferences = preferences;
+        var size = preferences.LiveTranscriptionFontSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _values["LiveTranscriptionFontSize"] = size;
+        var duration = DurationChoices.FirstOrDefault(c => c.Milliseconds == preferences.PreviewBubbleAutoHideMilliseconds).Label
+            ?? $"{preferences.PreviewBubbleAutoHideMilliseconds} milliseconds";
+        _values["PreviewBubbleAutoHideMilliseconds"] = duration;
+        _appearancePickers.FirstOrDefault(p => p.Tag is "LiveTranscriptionFontSize")?.SetOptions(
+            Enumerable.Range(10, 9).Select(n => new PrototypeChoice(n.ToString(), n.ToString(), "Saved on this device")).ToArray(), size, size);
+        _appearancePickers.FirstOrDefault(p => p.Tag is "PreviewBubbleAutoHideMilliseconds")?.SetOptions(
+            DurationChoices.Select(c => new PrototypeChoice(c.Label, c.Label, "After successful paste; errors remain visible for five seconds")).ToArray(), duration, duration);
         OverlayEditor.SetPreferences(preferences);
         foreach (var button in new[] { StandardChoice, CompactChoice, MinimalChoice })
         {
@@ -170,6 +191,11 @@ public sealed partial class PrototypeSettingsWindow : Window
         SetPreferences(preferences);
         PreferencesChanged?.Invoke(preferences);
     }
+
+    private static readonly (string Label, int Milliseconds)[] DurationChoices =
+    [("Immediately", 0), ("0.5 seconds", 500), ("1 second", 1000), ("1.5 seconds", 1500), ("2 seconds", 2000), ("3 seconds", 3000), ("5 seconds", 5000)];
+
+    internal void ShowOverlaySaveError(string error) => SessionHint.Text = error;
 
     private void Preview_Click(object sender, RoutedEventArgs e) => PreviewRequested?.Invoke(this, EventArgs.Empty);
     private void Close_Click(object sender, RoutedEventArgs e) => Close();

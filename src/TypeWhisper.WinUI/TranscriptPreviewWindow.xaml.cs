@@ -50,6 +50,7 @@ public sealed partial class TranscriptPreviewWindow : Window
     {
         _liveText = liveText;
         InitializeComponent();
+        TranscriptSourceLabel.Text = liveText is null ? "DEMO TEXT" : "LIVE TEXT";
         NativeWindowAppearance.ApplyAppTitleBar(this);
         SystemBackdrop = new WinUIEx.TransparentTintBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -107,6 +108,13 @@ public sealed partial class TranscriptPreviewWindow : Window
         else if (_expansion > 0 && _lastWordCount < DemoTranscriptWords.Length)
             _streamClock.Start();
         if (!paused && _expansion > 0) _timer.Start();
+    }
+
+    internal void SetTextSize(double size)
+    {
+        if (!double.IsFinite(size) || size is < 10 or > 18) return;
+        TranscriptText.FontSize = size;
+        TranscriptText.LineHeight = size * 1.4;
     }
 
     internal void HideImmediately()

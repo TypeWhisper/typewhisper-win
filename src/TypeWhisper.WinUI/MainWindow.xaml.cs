@@ -136,7 +136,15 @@ public sealed partial class MainWindow : Window
         MetricsText.Text = _dictation.Status;
         UpdateTranscriptToggle();
         DictationChanged?.Invoke(_dictation.Status, _dictation.IsRecording);
-        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error)
+        if (_dictation.OverlayState.Phase != DictationPhase.Completed) _completedPreviewExpired = false;
+        else if (_completedPreviewExpired) return;
+        else if (OverlayPreferences.PreviewBubbleAutoHideMilliseconds == 0)
+        {
+            _completedPreviewExpired = true;
+            _liveOverlay?.HidePreview();
+            return;
+        }
+        if (_dictation.OverlayState.Phase is DictationPhase.Recording or DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed)
         {
             _overlay?.HidePreview();
             if (_liveOverlay is null)
@@ -155,6 +163,19 @@ public sealed partial class MainWindow : Window
         }
     }
     private int _overlayRevision;
+    private Guid _completedRecordingId;
+    private bool _completedPreviewExpired;
+    private async Task HideCompletedOverlayAsync(Guid recordingId)
+    {
+        _completedRecordingId = recordingId;
+        var delay = OverlayPreferences.PreviewBubbleAutoHideMilliseconds;
+        if (delay > 0) await Task.Delay(delay);
+        if (_completedRecordingId == recordingId && _dictation.OverlayState.Phase == DictationPhase.Completed)
+        {
+            _completedPreviewExpired = true;
+            _liveOverlay?.HidePreview();
+        }
+    }
     private async Task HideErrorOverlayAsync(int revision)
     {
         await Task.Delay(5000);
@@ -216,6 +237,7 @@ public sealed partial class MainWindow : Window
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         WorkflowsView.Connect(_dictation);
         _dictation.ReviewRequested += ShowOutputReview;
+        _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
         historyService.RecordsChanged += () => DispatcherQueue.TryEnqueue(async () =>
         {
             if (_historyOpen) await HistoryView.RefreshAsync();
@@ -824,9 +846,7 @@ public sealed partial class MainWindow : Window
         try
         {
             if (!File.Exists(OverlayPreferencesPath)) return;
-            var preferences = System.Text.Json.JsonSerializer.Deserialize<PrototypeOverlayPreferences>(File.ReadAllText(OverlayPreferencesPath));
-            if (preferences is null || !Enum.IsDefined(preferences.Mode) || !Enum.IsDefined(preferences.Anchor)
-                || !Enum.IsDefined(preferences.Left) || !Enum.IsDefined(preferences.Right)) return;
+            var preferences = OverlayPreferencesStore.Read(OverlayPreferencesPath);
             _layoutPreferences = preferences;
             _overlayMode = preferences.Mode; _transcriptPreviewEnabled = preferences.LiveText;
             _technicalDetailsEnabled = preferences.TechnicalDetails;
@@ -834,16 +854,15 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { MetricsText.Text = "Could not load overlay preferences: " + ex.Message; }
     }
-    private void SaveOverlayPreferences()
+    private bool SaveOverlayPreferences(PrototypeOverlayPreferences? preferences = null)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(OverlayPreferencesPath)!);
-            File.WriteAllText(OverlayPreferencesPath + ".tmp", System.Text.Json.JsonSerializer.Serialize(OverlayPreferences));
-            File.Move(OverlayPreferencesPath + ".tmp", OverlayPreferencesPath, true);
+            OverlayPreferencesStore.Save(OverlayPreferencesPath, preferences ?? OverlayPreferences);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { MetricsText.Text = "Could not save overlay preferences: " + ex.Message; }
+        { MetricsText.Text = "Could not save overlay preferences: " + ex.Message; return false; }
     }
 
     internal void OpenSetup()
@@ -912,13 +931,18 @@ public sealed partial class MainWindow : Window
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.PreferencesChanged += preferences =>
             {
+                if (!SaveOverlayPreferences(preferences))
+                {
+                    _settingsWindow.SetPreferences(OverlayPreferences);
+                    _settingsWindow.ShowOverlaySaveError(MetricsText.Text);
+                    return;
+                }
                 var modeChanged = _overlayMode != preferences.Mode || _layoutPreferences.Anchor != preferences.Anchor
                     || _layoutPreferences.Left != preferences.Left || _layoutPreferences.Right != preferences.Right;
                 _layoutPreferences = preferences;
                 _overlayMode = preferences.Mode;
                 _transcriptPreviewEnabled = preferences.LiveText;
                 _technicalDetailsEnabled = preferences.TechnicalDetails;
-                SaveOverlayPreferences();
                 if (_liveOverlay?.IsPreviewVisible == true) UpdateLiveDictation();
                 if (_overlay?.IsPreviewVisible == true)
                 {

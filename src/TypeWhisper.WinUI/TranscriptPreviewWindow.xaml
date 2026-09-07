@@ -27,7 +27,7 @@
                     <TextBlock Text="LIVE TRANSCRIPT" FontSize="9" FontWeight="SemiBold"
                                CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"
+                <TextBlock x:Name="TranscriptSourceLabel" Grid.Column="1" Text="DEMO TEXT" FontFamily="Cascadia Mono"
                            FontSize="8" Foreground="{ThemeResource MutedBrush}" />
             </Grid>
 

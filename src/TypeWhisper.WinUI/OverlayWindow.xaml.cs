@@ -13,7 +13,6 @@ using global::Windows.UI;
 
 namespace TypeWhisper.WinUI;
 
-internal enum PrototypeOverlayMode { Standard, Compact, Minimal }
 
 public sealed partial class OverlayWindow : Window
 {
@@ -53,7 +52,11 @@ public sealed partial class OverlayWindow : Window
     private int _logicalWidth = WindowWidth;
     private int _logicalHeight = WindowHeight;
     private PrototypeOverlayPreferences _layout = new(PrototypeOverlayMode.Standard, true, false);
-    internal void SetLayout(PrototypeOverlayPreferences preferences) => _layout = preferences;
+    internal void SetLayout(PrototypeOverlayPreferences preferences)
+    {
+        _layout = preferences;
+        _transcriptWindow?.SetTextSize(preferences.LiveTranscriptionFontSize);
+    }
 
     internal bool IsPaused => _paused;
     internal bool IsPreviewVisible => _previewVisible;
@@ -280,6 +283,7 @@ public sealed partial class OverlayWindow : Window
         if (_transcriptWindow is null)
         {
             _transcriptWindow = new TranscriptPreviewWindow(_liveText);
+            _transcriptWindow.SetTextSize(_layout.LiveTranscriptionFontSize);
             _transcriptWindow.Collapsed += (_, _) => SetJoinedShape(false);
             _transcriptWindow.Closed += (_, _) =>
             {
@@ -412,9 +416,10 @@ public sealed partial class OverlayWindow : Window
 
     private void WaveformCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error } state)
+        if (_runtimeState?.Invoke() is { Phase: DictationPhase.Processing or DictationPhase.Error or DictationPhase.Completed } state)
         {
-            var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130) : Color.FromArgb(255, 244, 188, 106);
+            var color = state.Phase == DictationPhase.Error ? Color.FromArgb(255, 255, 120, 130)
+                : state.Phase == DictationPhase.Completed ? Color.FromArgb(255, 96, 210, 140) : Color.FromArgb(255, 244, 188, 106);
             var centerY = (float)sender.Size.Height / 2;
             for (var i = -1; i <= 1; i++) args.DrawingSession.FillCircle((float)sender.Size.Width / 2 + i * 10, centerY, 2.5f, color);
             return;

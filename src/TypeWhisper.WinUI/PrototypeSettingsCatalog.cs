@@ -84,9 +84,9 @@ internal static partial class PrototypeSettingsCatalog
         Text("Shortcuts", "RecorderToggleHotkeys", "Recorder"),
 
 
-        Choice("Live text", "LiveTranscriptionFontSize", "Text size", "12", "10|11|12|13|14|15|16|17|18", "Catalog preview only; not connected to the overlay yet."),
+        Choice("Live text", "LiveTranscriptionFontSize", "Text size", "12", "10|11|12|13|14|15|16|17|18", "Size of the live transcript and completed result in the overlay."),
         Toggle("Live text", "OnlineAsrBatchLiveTranscriptionEnabled", "Live text for online batch engines", false, "Availability depends on the selected engine."),
-        Choice("Live text", "PreviewBubbleAutoHideMilliseconds", "Result preview duration", "1.5 seconds", "Keep visible|0.5 seconds|1 second|1.5 seconds|2 seconds|3 seconds|5 seconds"),
+        Choice("Live text", "PreviewBubbleAutoHideMilliseconds", "Result preview duration", "1.5 seconds", "Immediately|0.5 seconds|1 second|1.5 seconds|2 seconds|3 seconds|5 seconds", "After successful paste. Review windows stay open; errors remain visible for five seconds."),
 
         Choice("Recorder", "RecorderSystemAudioDeviceId", "System audio device", "System default", "System default|Sample speakers|Sample headset"),
         Toggle("Recorder", "RecorderMicEnabled", "Microphone on by default", true),
@@ -301,7 +301,7 @@ internal static partial class PrototypeSettingsCatalog
             else if (field.Choices is not null)
             {
                 stack.Children.Add(Label(field.Label, 14));
-                var picker = new PrototypeChoicePicker();
+                var picker = new PrototypeChoicePicker { Tag = field.Key };
                 picker.Configure(field.Label, ChoiceIcon(field), $"Preference {field.Key}");
                 picker.SetOptions(field.Choices.Select(v => new PrototypeChoice(v, v, "Session-only setting")).ToArray(), value);
                 picker.SelectionChanged += selected =>
