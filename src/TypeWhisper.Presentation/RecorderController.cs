@@ -36,6 +36,18 @@ public sealed class RecorderController(Func<IDisposable> reserve, Func<bool, boo
     public string? Error { get; private set; }
     /// <summary>Raised on the owner thread when state changes.</summary>
     public event Action? Changed;
+    /// <summary>Clears the saved result after its file was deleted, without affecting an active capture or save.</summary>
+    public bool ForgetDeletedFile(string path)
+    {
+        if (Busy || State != RecorderState.Saved || !string.Equals(FilePath, path,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return false;
+        FilePath = null;
+        Duration = TimeSpan.Zero;
+        State = RecorderState.Ready;
+        Error = null;
+        NotifyChanged();
+        return true;
+    }
     /// <summary>Stops and saves at the recorder's sixty-minute limit.</summary>
     public Task StopAtLimitAsync(TimeSpan elapsed) => State == RecorderState.Recording && elapsed >= TimeSpan.FromHours(1)
         ? StopAndSaveAsync() : Task.CompletedTask;

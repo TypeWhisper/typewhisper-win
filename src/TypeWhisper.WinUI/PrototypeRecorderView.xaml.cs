@@ -16,6 +16,7 @@ public sealed partial class PrototypeRecorderView : UserControl
     private bool _presented;
     private bool _automaticStop;
     private string _recordingTitle = "";
+    private bool _recordingDeleted;
     internal string SessionTitle { get; set; } = "";
     internal event EventHandler? ExitRequested;
     internal event EventHandler? LauncherRequested;
@@ -52,13 +53,18 @@ public sealed partial class PrototypeRecorderView : UserControl
         _recorder.Changed += Refresh;
         Refresh();
     }
-    internal void SetPresented(bool presented) { _presented = presented; Refresh(); }
-    internal void FocusEntry() => PrimaryButton.Focus(FocusState.Programmatic);
-    internal void GoBack() => ExitRequested?.Invoke(this, EventArgs.Empty);
+    internal void SetPresented(bool presented) { _presented = presented; Refresh(); if (presented && _libraryOpen) BeginLibraryRefresh(); }
+    internal void FocusEntry() => (_libraryOpen ? LibraryRefreshButton : PrimaryButton).Focus(FocusState.Programmatic);
+    internal void GoBack()
+    {
+        if (_libraryOpen) { Library_Click(this, new RoutedEventArgs()); return; }
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+    }
     internal async Task ShutdownAsync()
     {
         if (_recorder is null) return;
         await _recorder.ShutdownAsync();
+        await ShutdownLibraryAsync();
         _timer.Stop(); _capture?.Dispose();
     }
     private void Refresh()
@@ -68,11 +74,16 @@ public sealed partial class PrototypeRecorderView : UserControl
         var busy = _recorder?.Busy == true;
         var active = state == RecorderState.Recording;
         var saved = state == RecorderState.Saved && _recorder?.Error is null;
-        RecorderStatus.Text = _recorder?.Error ?? state switch
+        if (saved && _librarySavedPath != _recorder?.FilePath)
+        {
+            _librarySavedPath = _recorder?.FilePath;
+            if (_libraryOpen) BeginLibraryRefresh();
+        }
+        RecorderStatus.Text = _recorder?.Error ?? (state == RecorderState.Ready && _recordingDeleted ? "Recording deleted" : state switch
         {
             RecorderState.Recording => "Recording", RecorderState.Saving => "Saving recording…",
             RecorderState.SaveFailed => "Could not save. Audio is retained for retry.", RecorderState.Saved => "Recording saved", _ => "Ready to record"
-        };
+        });
         RecorderDuration.Text = (active ? _elapsed.Elapsed : _recorder?.Duration ?? TimeSpan.Zero).ToString(@"hh\:mm\:ss");
         SessionHint.Text = _capture?.Warning ?? "WAV · default system output · maximum 60 minutes, then automatic stop and save. Pause and source changes during recording are unavailable.";
         MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
@@ -80,18 +91,22 @@ public sealed partial class PrototypeRecorderView : UserControl
         SystemState.Text = SystemSource.IsChecked == true ? "On" : "Off";
         PrimaryButton.Content = active ? "Stop and save" : state == RecorderState.SaveFailed ? "Retry save" : "Start recording";
         PrimaryButton.IsEnabled = _recorder is not null && !busy && (active || state == RecorderState.SaveFailed || MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true);
+        PrimaryButton.Visibility = !_libraryOpen || active || state == RecorderState.SaveFailed ? Visibility.Visible : Visibility.Collapsed;
+        LibraryRecordingStatus.Visibility = _libraryOpen && (active || busy || state == RecorderState.SaveFailed) ? Visibility.Visible : Visibility.Collapsed;
+        LibraryRecordingStatus.Text = $"{RecorderStatus.Text} · {RecorderDuration.Text}";
         PauseButton.Visibility = DiscardButton.Visibility = DiscardConfirmation.Visibility = Visibility.Collapsed;
         SessionPanel.Visibility = saved ? Visibility.Collapsed : Visibility.Visible;
         CompletedPanel.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
         CompletedTitle.Text = _recordingTitle.Length == 0 ? "Recording saved" : _recordingTitle;
         CompletedMetadata.Text = $"{_recorder?.Duration.ToString(@"hh\:mm\:ss")} · {_recorder?.FilePath}";
         ViewHistoryButton.Content = "Transcribe file…";
-        ViewHistoryButton.Visibility = OpenFolderButton.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
+        ViewHistoryButton.Visibility = OpenFolderButton.Visibility = saved && !_libraryOpen ? Visibility.Visible : Visibility.Collapsed;
         if (_presented) SignalCanvas.Invalidate();
     }
     private async void Primary_Click(object sender, RoutedEventArgs e)
     {
         if (_recorder is null) return;
+        if (_libraryOpen && _recorder.State is not (RecorderState.Recording or RecorderState.SaveFailed)) return;
         try
         {
             if (_recorder.State == RecorderState.Recording) { await StopAsync(); return; }
@@ -99,6 +114,7 @@ public sealed partial class PrototypeRecorderView : UserControl
             else
             {
                 _recordingTitle = RecorderWavStore.NormalizeTitle(SessionTitle);
+                _recordingDeleted = false;
                 await _recorder.StartAsync(MicrophoneSource.IsChecked == true, SystemSource.IsChecked == true);
                 _elapsed.Restart(); _automaticStop = false; _timer.Start();
             }
@@ -116,7 +132,7 @@ public sealed partial class PrototypeRecorderView : UserControl
     }
     private void Source_Changed(object sender, RoutedEventArgs e) => Refresh();
     private void ViewHistory_Click(object sender, RoutedEventArgs e)
-    { if (_recorder?.FilePath is { } path) TranscribeRequested?.Invoke(path); }
+    { if (_recorder?.FilePath is { } path) RequestTranscribe(path); }
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
         if (_recorder?.FilePath is not { } path) return;

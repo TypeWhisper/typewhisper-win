@@ -230,6 +230,28 @@ public sealed class RecorderControllerTests
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 
+    [Fact]
+    public async Task DeletingLastSavedFileClearsCompletedResultAndAllowsAnotherCapture()
+    {
+        var reservation = new Reservation();
+        var recorder = new RecorderController(() => reservation, (_, _) => Task.CompletedTask,
+            () => Task.FromResult(new[] { 0.1f }), _ => Task.FromResult("saved.wav"));
+        await recorder.StartAsync(true, false);
+        Assert.False(recorder.ForgetDeletedFile("saved.wav"));
+        Assert.Equal(RecorderState.Recording, recorder.State);
+        Assert.Equal(0, reservation.Releases);
+        await recorder.StopAndSaveAsync();
+        Assert.False(recorder.ForgetDeletedFile("other.wav"));
+        Assert.Equal("saved.wav", recorder.FilePath);
+        Assert.True(recorder.ForgetDeletedFile("saved.wav"));
+        Assert.Equal(RecorderState.Ready, recorder.State);
+        Assert.Null(recorder.FilePath);
+        Assert.Equal(TimeSpan.Zero, recorder.Duration);
+        Assert.False(recorder.ForgetDeletedFile("saved.wav"));
+        await recorder.StartAsync(true, false);
+        Assert.Equal(RecorderState.Recording, recorder.State);
+    }
+
     [Theory]
     [InlineData("Grüße aus Köln", "Grüße aus Köln")]
     [InlineData("../../CON:<test>|?*\\audio", "_.._CON__test_____audio")]

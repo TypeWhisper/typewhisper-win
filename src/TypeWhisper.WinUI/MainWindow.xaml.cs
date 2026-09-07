@@ -295,6 +295,7 @@ public sealed partial class MainWindow : Window
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
         RecorderView.Connect(_dictation);
+        RecorderView.IsQueuedSource = path => _fileTranscription?.ContainsSource(path) == true;
         RecorderView.TranscribeRequested += path =>
         {
             CloseRecorder();
