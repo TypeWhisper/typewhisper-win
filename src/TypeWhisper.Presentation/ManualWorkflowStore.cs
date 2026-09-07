@@ -6,8 +6,11 @@ using TypeWhisper.Core.Services;
 namespace TypeWhisper.Presentation;
 
 /// <summary>Persists workflows using the shared Core schema without hiding load or write failures.</summary>
-public sealed class ManualWorkflowStore(string path)
+/// <param name="path">Workflow JSON file to read and update.</param>
+/// <param name="write">Optional atomic snapshot writer; false reports a failed write. The default uses the Core workflow service.</param>
+public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow>, bool>? write = null)
 {
+    private readonly Func<IReadOnlyList<Workflow>, bool> _write = write ?? (items => new WorkflowService(path).TryReplaceAll(items));
     private static readonly object MutationLock = new();
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true, WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -66,7 +69,7 @@ public sealed class ManualWorkflowStore(string path)
                 throw new InvalidOperationException("This workflow has changed and can no longer be edited here.");
             var updated = workflow with { UpdatedAt = DateTime.UtcNow };
             if (index < 0) items.Add(updated); else items[index] = updated;
-            if (!new WorkflowService(path).TryReplaceAll(items))
+            if (!_write(items.AsReadOnly()))
                 throw new IOException("Workflow changes could not be saved.");
         }
     }
@@ -81,7 +84,7 @@ public sealed class ManualWorkflowStore(string path)
                 ?? throw new InvalidOperationException("This workflow no longer exists.");
             if (!IsSupported(current)) throw new InvalidOperationException("This workflow cannot be deleted here.");
             items.Remove(current);
-            if (!new WorkflowService(path).TryReplaceAll(items))
+            if (!_write(items.AsReadOnly()))
                 throw new IOException("The workflow could not be deleted.");
         }
     }

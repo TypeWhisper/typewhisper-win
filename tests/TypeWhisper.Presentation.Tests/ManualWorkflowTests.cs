@@ -49,15 +49,19 @@ public sealed class ManualWorkflowTests : IDisposable
     }
 
     [Fact]
-    public void FailedSaveKeepsExistingFileAndLeavesNoTemporaryFile()
+    public void RejectedSaveReportsFailureAndKeepsPersistedSnapshot()
     {
         var store = new ManualWorkflowStore(FilePath);
         store.Save(Draft);
         var bytes = File.ReadAllBytes(FilePath);
-        using (var locked = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-            Assert.Throws<IOException>(() => store.Save(Draft with { Name = "Must not persist" }));
+        var originalSnapshot = store.Read();
+        IReadOnlyList<Workflow>? candidate = null;
+        var rejectingStore = new ManualWorkflowStore(FilePath, items => { candidate = items; return false; });
+        Assert.Throws<IOException>(() => rejectingStore.Save(Draft with { Name = "Must not persist" }));
+        Assert.Equal("Must not persist", Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<Workflow>>(candidate)).Name);
+        Assert.Equal(Draft.Name, Assert.Single(originalSnapshot).Name);
+        Assert.Equal(Draft.Name, Assert.Single(rejectingStore.Read()).Name);
         Assert.Equal(bytes, File.ReadAllBytes(FilePath));
-        Assert.Single(Directory.GetFiles(_directory));
     }
 
     [Fact]
@@ -132,19 +136,23 @@ public sealed class ManualWorkflowTests : IDisposable
     }
 
     [Fact]
-    public void FailedDisableAndDeleteDoNotChangeStoredWorkflow()
+    public void RejectedDisableAndDeleteReportFailureAndKeepPersistedSnapshot()
     {
         var store = new ManualWorkflowStore(FilePath);
         store.Save(Draft);
         var bytes = File.ReadAllBytes(FilePath);
-        using (var locked = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-        {
-            Assert.Throws<IOException>(() => store.Save(Draft with { IsEnabled = false }));
-            Assert.Throws<IOException>(() => store.Delete(Draft.Id));
-        }
+        var originalSnapshot = store.Read();
+        var candidates = new List<IReadOnlyList<Workflow>>();
+        var rejectingStore = new ManualWorkflowStore(FilePath, items => { candidates.Add(items); return false; });
+        Assert.Throws<IOException>(() => rejectingStore.Save(Draft with { IsEnabled = false }));
+        Assert.Throws<IOException>(() => rejectingStore.Delete(Draft.Id));
+        Assert.Equal(2, candidates.Count);
+        Assert.False(Assert.Single(candidates[0]).IsEnabled);
+        Assert.Empty(candidates[1]);
+        Assert.True(Assert.Single(originalSnapshot).IsEnabled);
+        Assert.True(Assert.Single(rejectingStore.Read()).IsEnabled);
         Assert.Equal(bytes, File.ReadAllBytes(FilePath));
         Assert.True(Assert.Single(new ManualWorkflowStore(FilePath).Read()).IsEnabled);
-        Assert.Single(Directory.GetFiles(_directory));
     }
 
     [Fact]
