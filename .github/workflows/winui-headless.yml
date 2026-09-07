@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   headless:
-    name: Plugin and presentation logic (${{ matrix.os }})
+    name: Core, plugin and presentation logic (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:

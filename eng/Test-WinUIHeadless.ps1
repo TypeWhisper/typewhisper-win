@@ -14,6 +14,7 @@ if ([string]::IsNullOrWhiteSpace($ResultsDirectory)) {
 $ResultsDirectory = [IO.Path]::GetFullPath($ResultsDirectory)
 New-Item -ItemType Directory -Force -Path $ResultsDirectory | Out-Null
 $checks = @(
+    @{ Name = 'Core'; Project = 'tests/TypeWhisper.Core.Tests/TypeWhisper.Core.Tests.csproj' },
     @{ Name = 'PluginHost'; Project = 'tests/TypeWhisper.PluginSDK.Portable.Tests/TypeWhisper.PluginSDK.Portable.Tests.csproj' },
     @{ Name = 'Presentation'; Project = 'tests/TypeWhisper.Presentation.Tests/TypeWhisper.Presentation.Tests.csproj' }
 )
