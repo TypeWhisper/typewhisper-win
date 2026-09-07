@@ -19,14 +19,12 @@ internal sealed class DictationHotkeyRegistration : IDisposable
         recordingMode ??= () => RecordingMode.Hybrid;
         // Reserve ordinary chords, but use the hook for both press and release.
         _regular = new(window, () => { }, 0x6500);
-        void Dispatch(HybridHotkeyAction? action, RecordingMode mode)
+        void Dispatch(HybridHotkeyAction? action)
         {
-            if (action is not null)
-                window.DispatcherQueue.TryEnqueue(() =>
-                {
-                    // Settings may change while a press is queued on the UI thread.
-                    if (!_disposed && !PrototypeShortcutRecorder.AnyEditing && recordingMode() == mode) invoke(action.Value);
-                });
+            // The hook runs on the installing UI thread. The receiver only captures
+            // intent here and schedules audio work through its bounded coordinator.
+            // This preserves event-time readiness before a long UI queue can drain.
+            if (action is not null && !_disposed && !PrototypeShortcutRecorder.AnyEditing) invoke(action.Value);
         }
         _callback = (code, message, data) =>
         {
@@ -41,7 +39,7 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                     else if (down || up)
                     {
                         var mode = recordingMode();
-                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode), mode);
+                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode));
                     }
                 }
             }

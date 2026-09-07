@@ -62,6 +62,8 @@ public sealed partial class MainWindow : Window
     private readonly Stopwatch _activationStopwatch = Stopwatch.StartNew();
     private readonly PrototypeHotkeyRegistration? _hotkeyRegistration;
     private DictationHotkeyRegistration? _dictationHotkey;
+    private TypeWhisper.Presentation.DictationInputCoordinator? _dictationInput;
+    private Action? _observeInputMode;
     private static string DictationHotkeyPath => Path.Combine(Path.GetDirectoryName(LauncherHotkeyPath)!, "dictation-hotkeys.txt");
     private string? ChangeDictationHotkeys(string value)
     {
@@ -92,17 +94,29 @@ public sealed partial class MainWindow : Window
     {
         try
         {
+            _dictationInput = new(
+                () => { _dictation.LivePreviewEnabled = _transcriptPreviewEnabled; return _dictation.StartAsync(); },
+                _dictation.StopAsync, _dictation.CancelAsync,
+                () => _dictation.IsRecording, () => _dictation.CanChangeProvider && _dictation.IsReady,
+                () => _dictation.RecordingModePreferences.Current,
+                dispatch: action => DispatcherQueue.TryEnqueue(() => action()),
+                reportError: error => System.Diagnostics.Debug.WriteLine("Dictation input failed: " + error.GetType().Name));
+            _observeInputMode = () =>
+            {
+                if (DispatcherQueue.HasThreadAccess) _dictationInput.ObserveMode();
+                else DispatcherQueue.TryEnqueue(() => _dictationInput.ObserveMode());
+            };
+            _dictation.Changed += _observeInputMode;
             _dictationHotkey = new DictationHotkeyRegistration(this, action =>
             {
-                _dictation.LivePreviewEnabled = _transcriptPreviewEnabled;
-                _ = action switch
+                _ = _dictationInput.SubmitAsync(action switch
                 {
-                    HybridHotkeyAction.Start => _dictation.StartAsync(),
-                    HybridHotkeyAction.Stop => _dictation.StopAsync(),
-                    HybridHotkeyAction.Cancel => _dictation.CancelAsync(),
-                    _ => _dictation.ToggleAsync()
-                };
-            }, () => _dictation.IsRecording, () => _dictation.RecordingModePreferences.Current);
+                    HybridHotkeyAction.Start => TypeWhisper.Presentation.DictationInputAction.Start,
+                    HybridHotkeyAction.Stop => TypeWhisper.Presentation.DictationInputAction.Stop,
+                    HybridHotkeyAction.Cancel => TypeWhisper.Presentation.DictationInputAction.Cancel,
+                    _ => TypeWhisper.Presentation.DictationInputAction.Toggle
+                });
+            }, () => _dictationInput.IsRecordingOrStarting, () => _dictation.RecordingModePreferences.Current);
             var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;
@@ -114,7 +128,7 @@ public sealed partial class MainWindow : Window
     }
 
     internal void FinishDictationFromTray() { if (_dictation.IsRecording) _ = _dictation.ToggleAsync(); }
-    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictation.Dispose(); _liveOverlay?.Close(); foreach (var review in _reviewWindows.ToArray()) review.Close(); }
+    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictationInput?.Dispose(); if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode; _dictation.Dispose(); _liveOverlay?.Close(); foreach (var review in _reviewWindows.ToArray()) review.Close(); }
 
     private void UpdateLiveDictation()
     {
