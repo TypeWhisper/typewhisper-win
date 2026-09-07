@@ -12,7 +12,7 @@ namespace TypeWhisper.WinUI;
 
 public sealed class PrototypeFileTranscriptionView : UserControl
 {
-    private readonly FileTranscriptionQueue _queue = new();
+    private readonly FileTranscriptionQueue _queue = new(new FileTranscriptionQueueStore(WinUIProfile.DataPath("file-queue.json")));
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly TextBlock _notice = Text("", 12, true);
     private readonly PrototypeBreadcrumbs _crumbs = new();
@@ -23,6 +23,8 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     private PrototypeChoicePicker? _formatPicker;
     private string _format = "txt";
     private bool _picking;
+    private ContentDialog? _recoveryDialog;
+    private Task _recoveryOperation = Task.CompletedTask;
     internal event Action? ExitRequested;
 
     public PrototypeFileTranscriptionView()
@@ -54,11 +56,17 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_queue.Running && !_picking && _result is null) Render(); });
     }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
-    internal void Stop() { _queue.Cancel(); }
+    internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
     internal bool ContainsSource(string path) => _queue.Jobs.Any(job =>
         string.Equals(job.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
     internal Task CancelAndDrainAsync() => _queue.CancelAndDrainAsync();
-    internal Task ShutdownAsync() => _queue.ShutdownAsync();
+    internal async Task ShutdownAsync()
+    {
+        var drain = _queue.ShutdownAsync();
+        _recoveryDialog?.Hide();
+        await _recoveryOperation;
+        await drain;
+    }
     internal void GoBack()
     {
         if (_picking) return;
@@ -72,6 +80,36 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) { Stop(); ExitRequested?.Invoke(); } }),
             new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
         if (_result is not null) { RenderResult(_result); return; }
+        var recovery = new CheckBox
+        {
+            Content = "Remember this queue after restart", IsChecked = _queue.RecoveryEnabled,
+            IsEnabled = !_queue.Running && !_picking
+        };
+        AutomationProperties.SetName(recovery, "Remember file queue after restart");
+        void ChangeRecovery()
+        {
+            var enabled = recovery.IsChecked == true;
+            var saved = _queue.SetRecoveryEnabled(enabled);
+            _notice.Text = saved ? enabled
+                ? "Queue recovery is on. Saved jobs require an explicit start or retry after restart."
+                : "Queue recovery is off. Saved recovery data was removed; this session’s results remain available."
+                : _queue.RecoveryError ?? "The recovery setting could not be changed.";
+            Render();
+        }
+        recovery.Checked += (_, _) => ChangeRecovery();
+        recovery.Unchecked += (_, _) => ChangeRecovery();
+        _body.Children.Add(recovery);
+        _body.Children.Add(Text("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.", 11, true));
+        if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
+        if (_queue.RecoveryError is not null)
+        {
+            var discardRecovery = Button("Discard saved queue data…", () =>
+            {
+                if (_recoveryOperation.IsCompleted) _recoveryOperation = DiscardRecoveryAsync();
+            }, destructive: true);
+            discardRecovery.IsEnabled = !_queue.Running && !_picking;
+            _body.Children.Add(discardRecovery);
+        }
         var dropContent = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         dropContent.Children.Add(new TypeWhisperGlyph { Kind = "file", Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Center });
         dropContent.Children.Add(Text("Drop audio or video files here", 15));
@@ -98,7 +136,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         _body.Children.Add(drop);
         if (_session?.IsReady != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
         else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text("Finish the current recording or model operation before starting.", 12, true));
-        if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Results stay in this queue until you close the app.", 13, true));
+        if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Turn on queue recovery to keep results after closing the app.", 13, true));
         else
         {
             _body.Children.Add(Text($"{_queue.Jobs.Count} {(_queue.Jobs.Count == 1 ? "file" : "files")} · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
@@ -119,6 +157,32 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
         _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
         Render();
+    }
+    private async Task DiscardRecoveryAsync()
+    {
+        if (_queue.Running || _picking || _queue.IsShutdown) return;
+        _picking = true;
+        try
+        {
+            var dialog = _recoveryDialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot, RequestedTheme = ActualTheme, Title = "Discard saved queue data?",
+                Content = "Remove the saved recovery queue and turn recovery off? Original media files and this session’s results are kept.",
+                PrimaryButtonText = "Discard saved data", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
+            };
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary && !_queue.IsShutdown)
+                _notice.Text = _queue.DiscardRecoveryData() ? "Saved queue recovery data was removed." : _queue.RecoveryError ?? "Recovery data could not be removed.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { if (!_queue.IsShutdown) _notice.Text = "Saved recovery data could not be discarded. Try again."; }
+        finally
+        {
+            _recoveryDialog = null; _picking = false;
+            if (!_queue.IsShutdown)
+                try { Render(); }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                { _notice.Text = "The queue view could not be refreshed. Reopen Files to try again."; }
+        }
     }
     private void AddRow(FileTranscriptionJob job)
     {
@@ -142,6 +206,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     private void RenderResult(FileTranscriptionJob job)
     {
         _body.Children.Add(Text(job.Name, 16));
+        if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
         var duration = TimeSpan.FromSeconds(job.Result!.Duration).ToString(@"hh\:mm\:ss");
         _body.Children.Add(Text($"{job.Result.DisplayName ?? job.Result.Model} · {duration}", 12, true));
         if (job.Result.Warning is { } warning) _body.Children.Add(Text(warning, 12, true));

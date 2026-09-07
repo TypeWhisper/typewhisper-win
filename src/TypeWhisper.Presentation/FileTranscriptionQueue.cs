@@ -31,10 +31,10 @@ public sealed record FileTranscriptionOutput(string Text, string Provider, strin
 }
 
 /// <summary>One file selected by the user; the queue never deletes source media.</summary>
-public sealed class FileTranscriptionJob(string path)
+public sealed class FileTranscriptionJob(string path, Guid? id = null)
 {
     /// <summary>Stable queue identity.</summary>
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; } = id ?? Guid.NewGuid();
     /// <summary>Original absolute media path.</summary>
     public string Path { get; } = path;
     /// <summary>Display filename.</summary>
@@ -45,12 +45,62 @@ public sealed class FileTranscriptionJob(string path)
     public string Stage { get; internal set; } = "Queued";
     /// <summary>Accepted result, available only after success.</summary>
     public FileTranscriptionOutput? Result { get; internal set; }
+    internal FileTranscriptionSourceFingerprint? SourceFingerprint { get; set; }
+    internal FileTranscriptionAcceptanceReceipt Receipt { get; set; }
 }
 
 /// <summary>Serial file execution with explicit retry and cancellation that rejects late provider results.</summary>
-/// <remarks>Call mutations on the owning UI thread. This queue is not yet a durable recovery store.</remarks>
+/// <remarks>Call mutations on the owning UI thread. Recovery is optional and never resumes processing automatically.</remarks>
 public sealed class FileTranscriptionQueue
 {
+    private readonly FileTranscriptionQueueStore? _store;
+    /// <summary>Creates an in-memory queue or restores explicitly enabled checkpoints without running any job or acceptance hook.</summary>
+    public FileTranscriptionQueue(FileTranscriptionQueueStore? store = null)
+    {
+        _store = store;
+        if (store?.Enabled != true) return;
+        foreach (var entry in store.Entries)
+        {
+            var state = entry.Status switch
+            {
+                FileTranscriptionRecoveryStatus.Ready => FileTranscriptionStatus.Ready,
+                FileTranscriptionRecoveryStatus.Queued => FileTranscriptionStatus.Queued,
+                FileTranscriptionRecoveryStatus.Failed => FileTranscriptionStatus.Failed,
+                _ => FileTranscriptionStatus.Canceled
+            };
+            var result = entry.Result?.ToOutput();
+            if (result is not null && entry.RecoveryNotice is { } warning)
+                result = result with { Warning = JoinWarning(result.Warning, warning) };
+            _jobs.Add(new(entry.SourcePath, entry.Id)
+            {
+                Status = state, Stage = entry.RecoveryNotice ?? entry.Stage ?? (state == FileTranscriptionStatus.Ready ? "Ready · recovered" : state.ToString()),
+                Result = result, SourceFingerprint = entry.Source, Receipt = entry.Receipt
+            });
+        }
+    }
+
+    /// <summary>Whether the user has explicitly enabled local queue recovery.</summary>
+    public bool RecoveryEnabled => _store?.Enabled == true;
+    /// <summary>Latest checkpoint failure; in-memory results remain available.</summary>
+    public string? RecoveryError => _store?.Error;
+    /// <summary>Changes the persisted recovery option while idle. Disabling removes checkpoint data, never in-memory jobs or source media.</summary>
+    public bool SetRecoveryEnabled(bool enabled)
+    {
+        if (Running || _shutdown || _store is null) return false;
+        var saved = _store.TrySetEnabled(enabled, enabled ? CaptureCheckpoint() : null);
+        Changed?.Invoke();
+        return saved;
+    }
+
+    /// <summary>Discards persisted recovery after explicit confirmation, preserving in-memory jobs and source media.</summary>
+    public bool DiscardRecoveryData()
+    {
+        if (Running || _shutdown || _store is null) return false;
+        var saved = _store.TryDiscardSavedData();
+        Changed?.Invoke();
+        return saved;
+    }
+
     /// <summary>File extensions offered to the native media decoder.</summary>
     public static IReadOnlyList<string> Extensions { get; } = Array.AsReadOnly(new[]
         { ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".aac", ".wma", ".mkv", ".avi" });
@@ -80,7 +130,9 @@ public sealed class FileTranscriptionQueue
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return "The file path is invalid."; }
         if (_jobs.Any(j => string.Equals(j.Path, path, StringComparison.OrdinalIgnoreCase))) return "This file is already in the queue.";
         if (_jobs.Count >= 20) return "The queue supports up to 20 files at a time.";
-        _jobs.Add(new(path)); Changed?.Invoke(); return null;
+        var job = new FileTranscriptionJob(path);
+        if (RecoveryEnabled) TryCaptureFingerprint(job);
+        _jobs.Add(job); Checkpoint(); Changed?.Invoke(); return null;
     }
 
     /// <summary>Processes queued files serially, preserving completed results on failure or cancellation.</summary>
@@ -112,6 +164,14 @@ public sealed class FileTranscriptionQueue
                 try
                 {
                     cancellation.Token.ThrowIfCancellationRequested();
+                    if (RecoveryEnabled)
+                    {
+                        var fingerprint = FileTranscriptionSourceFingerprint.Capture(job.Path);
+                        if (job.SourceFingerprint is { } previous && previous != fingerprint)
+                            throw new IOException("The source file changed. Choose Retry to use the current file.");
+                        job.SourceFingerprint = fingerprint;
+                        if (!Checkpoint()) throw new IOException("Recovery checkpoint failed. Retry after fixing recovery storage or turning recovery off.");
+                    }
                     var result = await process(job.Path, stage =>
                     {
                         if (ReferenceEquals(_run, cancellation) && !cancellation.IsCancellationRequested && job.Status == FileTranscriptionStatus.Processing)
@@ -120,20 +180,27 @@ public sealed class FileTranscriptionQueue
                     cancellation.Token.ThrowIfCancellationRequested();
                     if (string.IsNullOrWhiteSpace(result.Text)) throw new InvalidOperationException("No speech was recognized.");
                     job.Result = result; job.Status = FileTranscriptionStatus.Ready; job.Stage = "Ready";
+                    job.Receipt = FileTranscriptionAcceptanceReceipt.Pending;
+                    var durable = Checkpoint();
                     // Acceptance is final before committing usage. No await or UI notification
                     // separates this check from the commit on the owning thread.
                     string? warning = null;
-                    try { warning = onAccepted?.Invoke(result); }
+                    try
+                    {
+                        if (durable) warning = onAccepted?.Invoke(result);
+                        else warning = "Recovery could not be saved. History and snippet usage were not recorded. Export this transcript before closing the app.";
+                    }
                     catch (Exception ex) when (ex is not OutOfMemoryException)
                     { warning = "Result usage could not be saved. Your transcript is unchanged."; }
                     if (warning is not null) job.Result = result with
                     { Warning = result.Warning is null ? warning : result.Warning + " · " + warning };
+                    if (durable) job.Receipt = FileTranscriptionAcceptanceReceipt.Completed;
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 { job.Status = cancellation.IsCancellationRequested ? FileTranscriptionStatus.Canceled : FileTranscriptionStatus.Failed; job.Stage = cancellation.IsCancellationRequested ? "Canceled" : ex.Message; }
-                Changed?.Invoke();
+                Checkpoint(); Changed?.Invoke();
             }
         }
         catch (Exception ex) { failure = ex; }
@@ -144,7 +211,7 @@ public sealed class FileTranscriptionQueue
                 if (cancellation.IsCancellationRequested)
                     foreach (var job in _jobs.Where(j => j.Status is FileTranscriptionStatus.Queued or FileTranscriptionStatus.Processing))
                     { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
-                _run = null; Changed?.Invoke();
+                _run = null; Checkpoint(); Changed?.Invoke();
             }
             catch (Exception ex) { failure ??= ex; }
             finally
@@ -175,14 +242,42 @@ public sealed class FileTranscriptionQueue
     public bool Retry(FileTranscriptionJob job)
     {
         if (_shutdown || Running || !_jobs.Contains(job) || job.Status is not (FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)) return false;
-        job.Status = FileTranscriptionStatus.Queued; job.Stage = "Queued"; job.Result = null; Changed?.Invoke(); return true;
+        job.Status = FileTranscriptionStatus.Queued; job.Stage = "Queued"; job.Result = null;
+        job.Receipt = FileTranscriptionAcceptanceReceipt.None;
+        if (RecoveryEnabled) TryCaptureFingerprint(job);
+        Checkpoint(); Changed?.Invoke(); return true;
     }
     /// <summary>Removes a queue entry without modifying source media.</summary>
     public bool Remove(FileTranscriptionJob job)
     {
         if (Running || !_jobs.Remove(job)) return false;
-        Changed?.Invoke(); return true;
+        Checkpoint(); Changed?.Invoke(); return true;
     }
+
+    private static string JoinWarning(string? previous, string next) => previous is null ? next :
+        previous.Contains(next, StringComparison.Ordinal) ? previous : previous + " · " + next;
+
+    private static void TryCaptureFingerprint(FileTranscriptionJob job)
+    {
+        try { job.SourceFingerprint = FileTranscriptionSourceFingerprint.Capture(job.Path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { job.SourceFingerprint = null; }
+    }
+
+    private bool Checkpoint()
+    {
+        if (!RecoveryEnabled) return true;
+        return _store!.TrySave(CaptureCheckpoint());
+    }
+
+    private FileTranscriptionRecoveryEntry[] CaptureCheckpoint() => _jobs.Select(job => new FileTranscriptionRecoveryEntry(job.Id, job.Path, job.SourceFingerprint,
+            job.Status switch
+            {
+                FileTranscriptionStatus.Queued => FileTranscriptionRecoveryStatus.Queued,
+                FileTranscriptionStatus.Processing => FileTranscriptionRecoveryStatus.Processing,
+                FileTranscriptionStatus.Ready => FileTranscriptionRecoveryStatus.Ready,
+                FileTranscriptionStatus.Canceled => FileTranscriptionRecoveryStatus.Canceled,
+                _ => FileTranscriptionRecoveryStatus.Failed
+            }, job.Result is null ? null : FileTranscriptionRecoveryResult.FromOutput(job.Result), job.Receipt, job.Stage)).ToArray();
     /// <summary>Checks whether actual provider segments have usable finite timing.</summary>
     public static bool HasSubtitles(FileTranscriptionOutput result) => double.IsFinite(result.Duration) && result.Duration > 0 && result.Segments.Count > 0
         && result.Segments.Zip(result.Segments.Skip(1), (a, b) => b.Start >= a.Start).All(ordered => ordered) && result.Segments.All(s =>
