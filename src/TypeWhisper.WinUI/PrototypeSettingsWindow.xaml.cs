@@ -280,7 +280,7 @@ public sealed partial class PrototypeSettingsWindow : Window
         var catalog = category != "Appearance" && category != "Overlay editor";
         CatalogScroll.Visibility = catalog ? Visibility.Visible : Visibility.Collapsed;
         PreviewButton.Visibility = catalog ? Visibility.Collapsed : Visibility.Visible;
-        SessionHint.Text = catalog ? "UI preview only · no system changes" : "Applies to preview · this session only";
+        SessionHint.Text = catalog ? "UI preview only · no system changes" : "Overlay preferences are saved on this device";
         if (catalog)
         {
             _catalogPickers.Clear();

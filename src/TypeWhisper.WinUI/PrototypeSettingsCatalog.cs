@@ -229,7 +229,7 @@ internal static partial class PrototypeSettingsCatalog
 
     internal static void RenderLiveTextOptions(StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers)
     {
-        RenderFields(Fields.Where(f => f.Category == "Live text"), target, values, pickers, null);
+        RenderFields(Fields.Where(f => f.Category == "Live text" && f.Key != "OnlineAsrBatchLiveTranscriptionEnabled"), target, values, pickers, null);
     }
 
     private static void RenderAudio(StackPanel target, Dictionary<string, string> values, List<PrototypeChoicePicker> pickers)
