@@ -206,17 +206,43 @@ public sealed class CloudTranscriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task PortablePackageLoadsWithoutWpfAndExposesHostRenderedConfiguration()
+    public void PortablePackageLoadsWithoutWpfAndExposesHostRenderedConfiguration()
     {
         var directory = Path.Combine(_root, "package"); Directory.CreateDirectory(directory);
         File.Copy(typeof(GroqPlugin).Assembly.Location, Path.Combine(directory, "TypeWhisper.Plugin.Groq.dll"));
         File.WriteAllText(Path.Combine(directory, "manifest.json"), """
             {"id":"com.typewhisper.groq","name":"Groq","version":"1.0.6","minHostVersion":"1.1.0","assemblyName":"TypeWhisper.Plugin.Groq.dll","pluginClass":"TypeWhisper.Plugin.Groq.GroqPlugin"}
             """);
-        await using var package = await PortablePluginPackage.LoadAsync(directory, Host, LocalCtcVocabulary.HostVersion);
-        Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
-        Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
-        Assert.DoesNotContain(package.Plugin.GetType().Assembly.GetReferencedAssemblies(), a => a.Name is "PresentationFramework" or "NAudio");
+        var context = LoadInspectAndReleasePackage(directory, Host);
+        // Unload requests collection; all package/type roots must leave their stack frame first.
+        // Verify release on both Windows (mapped DLL cannot be deleted) and Linux.
+        for (var attempt = 0; context.IsAlive && attempt < 10; attempt++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        Assert.False(context.IsAlive, "The disposed Groq package load context must be collected before its directory is deleted.");
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static WeakReference LoadInspectAndReleasePackage(string directory, IPluginHostServices host)
+    {
+        // The in-memory secret store completes synchronously. A non-async scope avoids retaining
+        // the package in the test's async state machine while xUnit runs IDisposable teardown.
+        var package = PortablePluginPackage.LoadAsync(directory, host, LocalCtcVocabulary.HostVersion).GetAwaiter().GetResult();
+        try
+        {
+            var assembly = package.Plugin.GetType().Assembly;
+            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(assembly)!;
+            Assert.True(context.IsCollectible);
+            Assert.NotSame(typeof(GroqPlugin).Assembly, assembly);
+            Assert.IsAssignableFrom<ITranscriptionEnginePlugin>(package.Plugin);
+            Assert.IsAssignableFrom<IApiKeyPlugin>(package.Plugin);
+            Assert.DoesNotContain(assembly.GetReferencedAssemblies(), a => a.Name is "PresentationFramework" or "NAudio");
+            return new WeakReference(context);
+        }
+        finally { package.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
     }
 
     private static HttpResponseMessage Json(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
