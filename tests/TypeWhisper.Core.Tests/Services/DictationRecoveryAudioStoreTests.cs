@@ -72,7 +72,7 @@ public sealed class DictationRecoveryAudioStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Startup_PromotesValidPendingAndDeletesIncompleteActiveFiles()
+    public async Task Startup_PromotesValidPendingAndRepairsOwnActivePcm()
     {
         string pendingPath;
         string activePath;
@@ -96,10 +96,82 @@ public sealed class DictationRecoveryAudioStoreTests : IAsyncLifetime
         await using var restartedStore = CreateStore();
         await restartedStore.InitializeAsync();
 
-        Assert.Single(restartedStore.Recordings);
+        Assert.Equal(2, restartedStore.Recordings.Count);
         Assert.Empty(Directory.EnumerateFiles(_directory, "*.pending.wav"));
         Assert.Empty(Directory.EnumerateFiles(_directory, "*.active.wav"));
-        Assert.Single(Directory.EnumerateFiles(_directory, "*.wav"));
+        Assert.Equal(2, Directory.EnumerateFiles(_directory, "*.wav").Count());
+    }
+
+    [Fact]
+    public async Task Capture_CheckpointsHeaderAndPcmBeforeStop()
+    {
+        await using var store = CreateStore();
+        var id = Assert.IsType<Guid>(store.BeginRecording());
+        store.AppendSamples(id, Enumerable.Repeat(0.5f, DictationRecoveryAudioStore.SampleRate).ToArray());
+        await store.RefreshAsync(); // Worker barrier: capture remains active.
+        var path = Assert.Single(Directory.GetFiles(_directory, "*.active.wav"));
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var bytes = new byte[44]; stream.ReadExactly(bytes);
+        Assert.Equal(32044, stream.Length);
+        Assert.Equal(32000, BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(40, 4)));
+        Assert.Null(store.LastError);
+        Assert.Empty(store.Recordings);
+    }
+
+    [Fact]
+    public async Task Startup_RepairsStaleCheckpointAndKeepsEveryPersistedWholeSample()
+    {
+        var bytes = await PcmFixtureAsync();
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4, 4), 36);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(40, 4), 0);
+        var active = Path.Combine(_directory, "dictation-recovery-20260805-101112-345-0042.active.wav");
+        File.WriteAllBytes(active, bytes);
+        await using var store = CreateStore(); await store.InitializeAsync();
+        var descriptor = Assert.Single(store.Recordings);
+        var recovered = File.ReadAllBytes(store.GetRecordingPath(descriptor.Id)!);
+        Assert.Equal(bytes[44..], recovered[44..]);
+        Assert.Equal(bytes.Length - 44, BinaryPrimitives.ReadInt32LittleEndian(recovered.AsSpan(40, 4)));
+        Assert.False(File.Exists(active));
+    }
+
+    [Theory]
+    [InlineData("format")]
+    [InlineData("odd")]
+    [InlineData("oversized-header")]
+    [InlineData("invalid-date")]
+    [InlineData("foreign-name")]
+    public async Task Startup_PreservesInvalidOrForeignActiveBytes(string damage)
+    {
+        var bytes = await PcmFixtureAsync();
+        if (damage == "format") bytes[20] = 3;
+        if (damage == "odd") bytes = bytes[..^1];
+        if (damage == "oversized-header") BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(40, 4), int.MaxValue);
+        var name = damage == "invalid-date" ? "dictation-recovery-20269999-101112-345-0042.active.wav"
+            : damage == "foreign-name" ? "foreign.active.wav" : "dictation-recovery-20260805-101112-345-0042.active.wav";
+        var path = Path.Combine(_directory, name); File.WriteAllBytes(path, bytes);
+        await using var store = CreateStore(); await store.InitializeAsync();
+        await store.DeleteAllAsync();
+        Assert.Empty(store.Recordings); Assert.Equal(bytes, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public async Task Startup_CollisionPreservesBothSourcesWithoutOverwrite()
+    {
+        var bytes = await PcmFixtureAsync();
+        var active = Path.Combine(_directory, "dictation-recovery-20260805-101112-345-0042.active.wav");
+        var final = active.Replace(".active.wav", ".wav", StringComparison.Ordinal);
+        File.WriteAllBytes(active, bytes); File.WriteAllText(final, "foreign destination");
+        await using var store = CreateStore(); await store.InitializeAsync();
+        Assert.Equal(bytes, File.ReadAllBytes(active)); Assert.Equal("foreign destination", File.ReadAllText(final));
+    }
+
+    private async Task<byte[]> PcmFixtureAsync()
+    {
+        await using var store = CreateStore();
+        var descriptor = await CreateRecoveryAsync(store);
+        var bytes = File.ReadAllBytes(store.GetRecordingPath(descriptor.Id)!);
+        Assert.True(await store.DeleteAsync(descriptor.Id));
+        return bytes;
     }
 
     [Theory]
@@ -217,6 +289,7 @@ public sealed class DictationRecoveryAudioStoreTests : IAsyncLifetime
         var failedId = Assert.IsType<Guid>(store.BeginRecording());
         store.AppendSamples(failedId, [0.1f]);
         Assert.Null(await store.FinalizeRecordingAsync(failedId));
+        Assert.NotNull(store.LastError);
 
         File.Delete(blockingParent);
         Directory.CreateDirectory(blockingParent);
@@ -229,6 +302,17 @@ public sealed class DictationRecoveryAudioStoreTests : IAsyncLifetime
     }
 
     private DictationRecoveryAudioStore CreateStore() => new(_directory, () => _now);
+
+    [Fact]
+    public async Task Startup_DoesNotDeleteMalformedPendingFile()
+    {
+        var path = Path.Combine(_directory, "dictation-recovery-20260805-101112-345-0042.pending.wav");
+        File.WriteAllText(path, "invalid but preserved");
+        await using var store = CreateStore(); await store.InitializeAsync();
+        await store.SetRetentionAsync(-1);
+        Assert.Equal("invalid but preserved", File.ReadAllText(path));
+        Assert.Empty(store.Recordings);
+    }
 
     private static async Task<RecoveryRecordingDescriptor> CreateRecoveryAsync(
         DictationRecoveryAudioStore store)
