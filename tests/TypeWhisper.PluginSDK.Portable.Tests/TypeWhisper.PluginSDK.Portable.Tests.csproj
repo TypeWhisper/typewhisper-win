@@ -24,10 +24,13 @@
     <ProjectReference Include="../../plugins/TypeWhisper.Plugin.ParakeetCtc/TypeWhisper.Plugin.ParakeetCtc.csproj" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <Compile Include="../../src/TypeWhisper.WinUI/MediaFoundationFileDecoder.cs" Link="MediaFoundationFileDecoder.cs" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <Compile Include="../../src/TypeWhisper.WinUI/WindowsPluginSecretStore.cs" Link="WindowsPluginSecretStore.cs" />
   </ItemGroup>
   <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <Compile Remove="MediaFoundationFileDecoderTests.cs" />
     <Compile Remove="WindowsPluginSecretStoreTests.cs" />
   </ItemGroup>
 </Project>

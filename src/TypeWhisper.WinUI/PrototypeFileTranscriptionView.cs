@@ -1,3 +1,4 @@
+using TypeWhisper.Presentation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -11,15 +12,14 @@ namespace TypeWhisper.WinUI;
 
 public sealed class PrototypeFileTranscriptionView : UserControl
 {
-    private readonly PrototypeFileQueue _queue = new();
+    private readonly FileTranscriptionQueue _queue = new();
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly TextBlock _notice = Text("", 12, true);
     private readonly PrototypeBreadcrumbs _crumbs = new();
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-    private readonly Dictionary<Guid, Action> _updateRows = [];
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(240) };
+    private LocalDictationSession? _session;
     private readonly ScrollViewer _scroll;
-    private PrototypeFileJob? _result;
+    private FileTranscriptionJob? _result;
     private PrototypeChoicePicker? _formatPicker;
     private string _format = "txt";
     private bool _picking;
@@ -40,19 +40,21 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         var border = new Border { Child = footer, BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Brush("HairlineBrush") };
         Grid.SetRow(border, 3); root.Children.Add(border);
         Content = root;
-        _timer.Tick += (_, _) =>
+        _queue.Changed += () =>
         {
-            var statuses = string.Join(',', _queue.Jobs.Select(job => job.Status));
-            _queue.Tick();
-            if (_result is null && statuses != string.Join(',', _queue.Jobs.Select(job => job.Status))) Render();
-            else foreach (var update in _updateRows.Values) update();
-            if (!_queue.Running) { _timer.Stop(); _notice.Text = "Demo finished. Results are sample text, not transcripts of your files."; }
+            if (DispatcherQueue.HasThreadAccess) Render();
+            else DispatcherQueue.TryEnqueue(Render);
         };
         Unloaded += (_, _) => Stop();
         Render();
     }
-    internal void Present() { _notice.Text = "Preview only · no media is read or uploaded."; Render(); }
-    internal void Stop() { _timer.Stop(); if (_queue.Running) _queue.Cancel(); }
+    internal void Connect(LocalDictationSession session)
+    {
+        _session = session;
+        session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_queue.Running && !_picking && _result is null) Render(); });
+    }
+    internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
+    internal void Stop() { _queue.Cancel(); }
     internal void GoBack()
     {
         if (_picking) return;
@@ -62,7 +64,7 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     }
     private void Render()
     {
-        _body.Children.Clear(); _actions.Children.Clear(); _updateRows.Clear(); _formatPicker = null;
+        _body.Children.Clear(); _actions.Children.Clear(); _formatPicker = null;
         _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) { Stop(); ExitRequested?.Invoke(); } }),
             new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
         if (_result is not null) { RenderResult(_result); return; }
@@ -71,9 +73,8 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         dropContent.Children.Add(Text("Drop audio or video files here", 15));
         var importActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
         var browse = Button("Choose files…", async () => await ChooseFiles()); browse.IsEnabled = !_queue.Running && !_picking; importActions.Children.Add(browse);
-        var sample = Button("Try sample", () => { AddPaths(["Team meeting.wav", "Interview.mp4"]); }); sample.IsEnabled = !_queue.Running && !_picking; importActions.Children.Add(sample);
         dropContent.Children.Add(importActions);
-        dropContent.Children.Add(Text("Audio & video · up to 20 files · simulation only", 11, true));
+        dropContent.Children.Add(Text("Audio & video · up to 20 files · maximum 60 minutes per file", 11, true));
         var drop = new Border { Child = dropContent, Background = Brush("SurfaceBrush"), BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(16), AllowDrop = true };
         drop.DragOver += (_, e) => { e.AcceptedOperation = !_queue.Running && !_picking && e.DataView.Contains(StandardDataFormats.StorageItems) ? DataPackageOperation.Copy : DataPackageOperation.None; drop.BorderBrush = Brush(e.AcceptedOperation == DataPackageOperation.Copy ? "AccentBrush" : "HairlineBrush"); };
         drop.DragLeave += (_, _) => drop.BorderBrush = Brush("HairlineBrush");
@@ -91,49 +92,64 @@ public sealed class PrototypeFileTranscriptionView : UserControl
             finally { drop.BorderBrush = Brush("HairlineBrush"); deferral.Complete(); }
         };
         _body.Children.Add(drop);
-        if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose your own file to test the flow, or try the sample queue without selecting anything.", 13, true));
+        if (_session?.CanTranscribeFile != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
+        if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Results stay in this queue until you close the app.", 13, true));
         else
         {
-            _body.Children.Add(Text($"{_queue.Jobs.Count} files · simulated transcription", 12, true));
+            _body.Children.Add(Text($"{_queue.Jobs.Count} files · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
             foreach (var job in _queue.Jobs) AddRow(job);
         }
-        var errorDemo = Button("Try an error example", () => { var error = _queue.Add("Unreadable demo.wav", true); _notice.Text = error ?? "This sample deliberately fails halfway through. Original files are never opened."; Render(); });
-        errorDemo.Style = (Style)Application.Current.Resources["PrototypeIconButtonStyle"]; errorDemo.IsEnabled = !_queue.Running && !_picking; _body.Children.Add(errorDemo);
-        if (_queue.Running) _actions.Children.Add(Button("Cancel run", () => { Stop(); _notice.Text = "Run canceled. Completed results are kept; originals are unchanged."; Render(); }, destructive: true));
+        if (_queue.Running) _actions.Children.Add(Button("Cancel run", () => { Stop(); _notice.Text = "Canceling… Waiting for the current decoder to stop. Completed results are kept."; Render(); }, destructive: true));
         else
         {
-            var start = Button("Start demo", () => { if (_queue.Start()) { _timer.Start(); _notice.Text = "Simulating transcription — your files are not being processed."; Render(); } }, primary: true);
-            start.IsEnabled = !_picking && _queue.Jobs.Any(job => job.Status == PrototypeFileStatus.Queued); _actions.Children.Add(start);
+            var start = Button("Start transcription", async () => await RunQueue(), primary: true);
+            start.IsEnabled = _session?.CanTranscribeFile == true && !_picking && _queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued); _actions.Children.Add(start);
         }
     }
-    private void AddRow(PrototypeFileJob job)
+    private async Task RunQueue()
+    {
+        if (_session is null || !_session.CanTranscribeFile || _queue.Running) return;
+        _notice.Text = "Transcribing with the model selected in Dictation…";
+        try { await _queue.RunAsync(_session.TranscribeFileAsync); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
+        _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
+        Render();
+    }
+    private void AddRow(FileTranscriptionJob job)
     {
         var row = new Grid { ColumnSpacing = 12 }; row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var labels = new StackPanel { Spacing = 6 }; var name = Text(job.Name, 13); name.TextTrimming = TextTrimming.CharacterEllipsis; name.TextWrapping = TextWrapping.NoWrap; ToolTipService.SetToolTip(name, job.Name); labels.Children.Add(name);
         var status = Text("", 11, true); labels.Children.Add(status);
-        var fill = new Border { Height = 2, HorizontalAlignment = HorizontalAlignment.Left, Background = Brush("AccentBrush") };
-        var track = new Grid { Height = 2, Background = Brush("HairlineBrush") }; track.Children.Add(fill); labels.Children.Add(track);
-        void Update() { status.Text = job.Status == PrototypeFileStatus.Failed ? "Demo error · simulated unreadable file" : job.Status == PrototypeFileStatus.Processing ? $"Simulating · {job.Progress}%" : job.Status == PrototypeFileStatus.Ready ? "Ready · sample transcript" : job.Status.ToString(); fill.Width = track.ActualWidth * job.Progress / 100; }
-        track.SizeChanged += (_, _) => Update(); _updateRows[job.Id] = Update; Update(); row.Children.Add(labels);
+        var progress = new ProgressBar { Height = 2, IsIndeterminate = true, Visibility = job.Status == FileTranscriptionStatus.Processing ? Visibility.Visible : Visibility.Collapsed }; labels.Children.Add(progress);
+        status.Text = job.Stage;
+        row.Children.Add(labels);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        if (job.Status == PrototypeFileStatus.Ready) actions.Children.Add(Button("View result", () => { _result = job; _scroll.ChangeView(null, 0, null, true); Render(); }));
-        if (job.Status is PrototypeFileStatus.Failed or PrototypeFileStatus.Canceled)
+        if (job.Status == FileTranscriptionStatus.Ready) actions.Children.Add(Button("View result", () => { _result = job; _scroll.ChangeView(null, 0, null, true); Render(); }));
+        if (job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)
         {
             var retry = Button("Retry", () => { _queue.Retry(job); Render(); }); retry.IsEnabled = !_queue.Running; actions.Children.Add(retry);
         }
-        var remove = Button("×", () => { _queue.Remove(job); _notice.Text = "Removed from this preview queue. The original file is unchanged."; Render(); }, destructive: true);
+        var remove = Button("×", () => { _queue.Remove(job); _notice.Text = "Removed from the queue. The original file is unchanged."; Render(); }, destructive: true);
         AutomationProperties.SetName(remove, $"Remove {job.Name} from queue"); remove.IsEnabled = !_queue.Running && !_picking; actions.Children.Add(remove);
         Grid.SetColumn(actions, 1); row.Children.Add(actions);
         _body.Children.Add(new Border { Child = row, Padding = new Thickness(14), CornerRadius = new CornerRadius(8), Background = Brush("SurfaceBrush") });
     }
-    private void RenderResult(PrototypeFileJob job)
+    private void RenderResult(FileTranscriptionJob job)
     {
-        _body.Children.Add(Text(job.Name, 16)); _body.Children.Add(Text("SAMPLE RESULT · Not generated from the selected media. Subtitle timings are fictional.", 12, true));
-        _body.Children.Add(new Border { Child = new TextBlock { Text = job.Transcript, FontSize = 14, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Foreground = Brush("TextBrush") }, Padding = new Thickness(18), Background = Brush("SurfaceBrush"), CornerRadius = new CornerRadius(10) });
+        _body.Children.Add(Text(job.Name, 16)); _body.Children.Add(Text($"{job.Result!.Provider} · {job.Result.Model} · {TimeSpan.FromSeconds(job.Result.Duration):g}", 12, true));
+        if (job.Result.Warning is { } warning) _body.Children.Add(Text(warning, 12, true));
+        _body.Children.Add(new Border { Child = new TextBlock { Text = job.Result!.Text, FontSize = 14, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true, Foreground = Brush("TextBrush") }, Padding = new Thickness(18), Background = Brush("SurfaceBrush"), CornerRadius = new CornerRadius(10) });
         _formatPicker = new PrototypeChoicePicker(); _formatPicker.Configure("Export format", "file", "File export format");
-        _formatPicker.SetOptions([new("txt", "Plain text · TXT", "Sample transcript"), new("srt", "Subtitles · SRT", "Sample timestamps"), new("vtt", "Subtitles · WebVTT", "Sample timestamps")], _format);
+        var formats = new List<PrototypeChoice> { new("txt", "Plain text · TXT", "Transcribed text") };
+        if (FileTranscriptionQueue.HasSubtitles(job.Result!))
+        {
+            formats.Add(new("srt", "Subtitles · SRT", "Provider timestamps"));
+            formats.Add(new("vtt", "Subtitles · WebVTT", "Provider timestamps"));
+        }
+        else { _format = "txt"; _body.Children.Add(Text("Subtitle export is unavailable because this provider did not return usable timing.", 12, true)); }
+        _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
-        _actions.Children.Add(Button("Export sample…", async () => await Export(job), primary: true));
+        _actions.Children.Add(Button("Export transcript…", async () => await Export(job), primary: true));
     }
     private void AddPaths(IEnumerable<string> paths)
     {
@@ -148,30 +164,36 @@ public sealed class PrototypeFileTranscriptionView : UserControl
         try
         {
             var picker = new FileOpenPicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { Title = "Choose audio or video files" };
-            foreach (var extension in PrototypeFileQueue.Extensions) picker.FileTypeFilter.Add(extension);
+            foreach (var extension in FileTranscriptionQueue.Extensions) picker.FileTypeFilter.Add(extension);
             var files = await picker.PickMultipleFilesAsync();
             if (files.Count > 0) AddPaths(files.Select(file => file.Path)); else _notice.Text = "Selection canceled. Your queue is unchanged.";
         }
-        catch (Exception) { _notice.Text = "The file dialog could not be opened. Try dropping a file or using the sample queue."; }
+        catch (Exception) { _notice.Text = "The file dialog could not be opened. Try dropping a file."; }
         finally { _picking = false; Render(); }
     }
-    private async Task Export(PrototypeFileJob job)
+    private async Task Export(FileTranscriptionJob job)
     {
         if (_picking || XamlRoot is null) return;
         _picking = true; var format = _format;
         try
         {
-            var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { SuggestedFileName = Path.GetFileNameWithoutExtension(job.Name) + ".demo", Title = "Export sample transcript" };
+            var picker = new FileSavePicker(XamlRoot.ContentIslandEnvironment.AppWindowId) { SuggestedFileName = Path.GetFileNameWithoutExtension(job.Name), Title = "Export transcript" };
             picker.FileTypeChoices.Add(format.ToUpperInvariant(), new List<string> { "." + format });
             var file = await picker.PickSaveFileAsync();
             if (file is null) { _notice.Text = "Export canceled. Nothing was written."; return; }
-            // CreateNew deliberately refuses overwriting any existing file in this preview.
-            await using var stream = new FileStream(file.Path, FileMode.CreateNew, FileAccess.Write);
-            await using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false));
-            await writer.WriteAsync(PrototypeFileQueue.Export(job, format));
-            _notice.Text = "Sample exported. Original media is unchanged.";
+            var destination = Path.GetFullPath(file.Path);
+            if (_queue.Jobs.Any(item => string.Equals(Path.GetFullPath(item.Path), destination, StringComparison.OrdinalIgnoreCase)))
+                throw new IOException("Choose a filename different from the source media.");
+            var temporary = Path.Combine(Path.GetDirectoryName(destination)!, ".transcript-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                await File.WriteAllTextAsync(temporary, FileTranscriptionQueue.Export(job, format), new System.Text.UTF8Encoding(false));
+                File.Move(temporary, destination, true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+            _notice.Text = "Transcript exported.";
         }
-        catch (IOException) { _notice.Text = "Could not save. Choose a new filename in a writable folder; this preview does not overwrite files."; }
+        catch (IOException) { _notice.Text = "Could not save. Choose a writable destination different from the source media."; }
         catch (Exception) { _notice.Text = "Export could not be completed. Your result is still available."; }
         finally { _picking = false; }
     }

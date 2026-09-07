@@ -11,7 +11,7 @@ namespace TypeWhisper.WinUI;
 
 // Initial local vertical slice: reuses the existing capture implementation and
 // Parakeet configuration. Does not instantiate the WPF application or plugin UI.
-internal sealed class LocalDictationSession : IDisposable
+internal sealed partial class LocalDictationSession : IDisposable
 {
     private readonly AudioRecordingService _audio = new();
     private readonly SoundService _sounds = new();
@@ -143,8 +143,8 @@ internal sealed class LocalDictationSession : IDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
-    internal bool CanSelectModel => !_disposed && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
+    internal bool CanChangeProvider => !_disposed && !_fileBusy && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
+    internal bool CanSelectModel => !_disposed && !_fileBusy && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;
@@ -422,6 +422,7 @@ internal sealed class LocalDictationSession : IDisposable
         _inserter = new(owner);
         _effects = new(_ducking, new MediaPauseService());
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _fileDispatcher = dispatcher;
         _retentionTimer = dispatcher.CreateTimer();
         _retentionTimer.Interval = TimeSpan.FromMinutes(1);
         _retentionTimer.Tick += async (_, _) => await ApplyHistoryRetentionAsync();

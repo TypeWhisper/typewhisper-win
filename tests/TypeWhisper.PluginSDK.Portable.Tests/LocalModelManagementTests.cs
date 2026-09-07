@@ -31,6 +31,37 @@ public sealed class LocalModelManagementTests : IDisposable
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
     [Fact]
+    public async Task FullDecodeRetainsSdkSegmentsAndProbabilityWithoutReconstructingTiming()
+    {
+        var response = new PluginTranscriptionResult("Hallo Welt", "de", 2, 0.2f)
+        { Segments = [new("Hallo", 0.12, 0.83), new("Welt", 1.1, 1.72)] };
+        _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), "de", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        var decoded = await runtime.DecodeResultAsync([0.1f], "de", false, default);
+        Assert.Same(response, decoded);
+        Assert.Same(response.Segments, decoded.Segments);
+        Assert.Empty(decoded.TokenTimings);
+    }
+
+    [Fact]
+    public async Task CancelDuringNativeDecodeDrainsThenRejectsLateResult()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var native = new TaskCompletionSource<PluginTranscriptionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), null, false, It.IsAny<CancellationToken>()))
+            .Returns(() => { entered.SetResult(); return native.Task; });
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var cancellation = new CancellationTokenSource();
+        var decoding = runtime.DecodeResultAsync([0.1f], null, false, cancellation.Token);
+        await entered.Task;
+        cancellation.Cancel();
+        Assert.False(decoding.IsCompleted);
+        native.SetResult(new("Late text", "en", 1, null));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decoding);
+    }
+
+    [Fact]
     public async Task NativeTranslationPassesTranslateFlagOnlyForCapableLoadedModel()
     {
         _downloaded.Add("canary");

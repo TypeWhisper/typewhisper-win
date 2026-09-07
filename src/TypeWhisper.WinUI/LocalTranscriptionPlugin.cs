@@ -171,11 +171,20 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 
     internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false)
     {
+        var result = await DecodeResultAsync(samples, Language == "auto" ? null : Language, translate, CancellationToken.None);
+        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
+    }
+
+    internal async Task<TypeWhisper.PluginSDK.Models.PluginTranscriptionResult> DecodeResultAsync(float[] samples,
+        string? language, bool translate, CancellationToken ct)
+    {
         if (!Ready) throw new InvalidOperationException("Choose and load a model before dictating.");
         if (translate && !SupportsTranslation)
             throw new NotSupportedException("The selected local model cannot translate audio to English. Choose a translation-capable model or switch to Transcribe.");
-        var result = await _lease!.Engine.TranscribePcmAsync(samples, Language == "auto" ? null : Language, translate, CancellationToken.None);
-        return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
+        ct.ThrowIfCancellationRequested();
+        var result = await _lease!.Engine.TranscribePcmAsync(samples, language, translate, ct);
+        ct.ThrowIfCancellationRequested();
+        return result;
     }
 
     private async Task ReleaseAsync()

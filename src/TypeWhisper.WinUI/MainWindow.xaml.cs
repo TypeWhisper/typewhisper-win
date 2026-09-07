@@ -895,6 +895,7 @@ public sealed partial class MainWindow : Window
         if (_fileTranscription is null)
         {
             _fileTranscription = new PrototypeFileTranscriptionView();
+            _fileTranscription.Connect(_dictation);
             _fileTranscription.ExitRequested += () =>
             {
                 FileTranscriptionHost.Visibility = Visibility.Collapsed;
