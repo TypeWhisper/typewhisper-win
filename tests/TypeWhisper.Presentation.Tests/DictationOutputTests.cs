@@ -44,6 +44,7 @@ public sealed class DictationOutputTests
         var result = await new DictationOutputDelivery(history.Object).DeliverAsync(record, preferences,
             () => preferences, () => { pasted++; return Task.FromResult(true); });
         Assert.Equal(save, result.Saved);
+        Assert.False(result.Failed);
         Assert.Equal(!autoPaste, result.NeedsReview);
         Assert.Equal(autoPaste ? 1 : 0, pasted);
         Assert.Same(record, result.Record);
@@ -66,6 +67,7 @@ public sealed class DictationOutputTests
         Assert.False(result.Saved);
         Assert.True(result.NeedsReview);
         Assert.Equal("Reviewed text", result.Record.FinalText);
+        Assert.True(result.Failed);
         Assert.False(pasted);
     }
 
@@ -79,6 +81,7 @@ public sealed class DictationOutputTests
         var result = await new DictationOutputDelivery(history.Object).DeliverAsync(Record(), preferences, () => preferences,
             () => throws ? Task.FromException<bool>(new IOException()) : Task.FromResult(false));
         Assert.True(result.NeedsReview);
+        Assert.True(result.Failed);
         Assert.False(result.Saved);
         history.VerifyNoOtherCalls();
     }
@@ -97,6 +100,7 @@ public sealed class DictationOutputTests
         loading.SetResult();
         var result = await delivery;
         Assert.True(result.NeedsReview);
+        Assert.False(result.Failed);
         Assert.False(result.Saved);
         Assert.False(pasted);
         history.Verify(h => h.EnsureLoadedAsync(), Times.Once);

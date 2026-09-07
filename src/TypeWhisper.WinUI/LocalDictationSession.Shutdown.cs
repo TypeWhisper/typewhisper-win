@@ -26,7 +26,7 @@ internal sealed partial class LocalDictationSession
         _livePreview.Cancel();
         _retentionTimer.Stop();
         StopSilenceMonitoring();
-        return DrainAndReleaseAsync(HistoryRetention.CloseAndDrainAsync());
+        return DrainAndReleaseAsync(Task.WhenAll(HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync()));
     });
 
     private async Task DrainAndReleaseAsync(Task retentionDrain)
@@ -42,13 +42,14 @@ internal sealed partial class LocalDictationSession
         }
         try
         {
-            await Release(async () => { if (_audio.IsRecording) await _audio.StopRecordingAsync(); });
+            await Release(() => StopRecoveryCaptureAsync(preserve: true));
             await Release(_livePreview.StopAsync);
             await Release(() => CtcVocabulary.DisposeAsync().AsTask());
             await Release(() => Groq.DisposeAsync().AsTask());
             await Release(() => PluginRuntime.DisposeAsync().AsTask());
             await Release(() => _transcriptionPlugin.DisposeAsync().AsTask());
             await Release(() => { _effects.End(); _audio.Dispose(); return Task.CompletedTask; });
+            await Release(() => _recoveryAudio.DisposeAsync().AsTask());
             await Release(() => { _inserter.Dispose(); _operationCancellation.Dispose(); return Task.CompletedTask; });
         }
         finally { _gate.Release(); }

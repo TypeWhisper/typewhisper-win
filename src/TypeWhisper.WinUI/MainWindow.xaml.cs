@@ -155,6 +155,9 @@ public sealed partial class MainWindow : Window
         _dictationInput?.Dispose();
         if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
         MetricsText.Text = "Finishing shutdown…";
+        // Finish settings confirmations, preference writes and recovery retries before
+        // session shutdown disposes the recovery store they use.
+        await DrainRecoveryViewsAsync();
         // Begin all cancellation requests before awaiting any drain.
         var session = _dictation.ShutdownAsync();
         var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
@@ -975,10 +978,18 @@ public sealed partial class MainWindow : Window
                 _dictation, OpenProviderSettings);
             var dictationSettings = new LiveDictationSettings(_dictation, OpenProviderSettings);
             var startup = WindowsStartupRegistration.Create();
+            PrototypeDictationRecoveryView? recoveryView = null;
             _settingsWindow.ConfigureLiveSettings = (category, content, pickers) =>
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                if (category == "Files & recovery")
+                {
+                    content.Children.Clear(); pickers.Clear();
+                    recoveryView ??= CreateRecoveryView();
+                    content.Children.Add(recoveryView);
+                    _ = recoveryView.PresentAsync();
+                }
             };
             _settingsWindow.RestoreProfile = RestoreProfile;
             _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
@@ -992,7 +1003,11 @@ public sealed partial class MainWindow : Window
                 }
                 _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); OpenHistory();
             };
-            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsWindow.Closed += (_, _) =>
+            {
+                CloseRecoveryView(recoveryView);
+                _settingsWindow = null;
+            };
             _settingsWindow.PreferencesChanged += preferences =>
             {
                 if (!SaveOverlayPreferences(preferences))

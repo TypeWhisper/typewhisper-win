@@ -323,6 +323,10 @@ public sealed partial class PrototypeSettingsWindow : Window
                 SessionHint.Text = "Audio preferences are saved · spoken feedback is not connected yet";
             if (category == "Recorder" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Recorder source choices are saved · changes apply to the next recording";
+            if (category == "Files & recovery" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Recovery audio requires opt-in · retry and deletion are explicit";
+            if (category == "Shortcuts" && ConfigureLiveSettings is not null)
+                SessionHint.Text = "Quick Launch and main dictation shortcuts are saved · other actions are unavailable";
             if (category == "General")
             {
                 var setup = new HandCursorButton { Content = "Open setup wizard", HorizontalAlignment = HorizontalAlignment.Left,

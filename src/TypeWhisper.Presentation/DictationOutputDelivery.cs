@@ -8,7 +8,11 @@ namespace TypeWhisper.Presentation;
 /// <param name="Saved">Whether the record was written to history.</param>
 /// <param name="NeedsReview">Whether the host should present a transient review.</param>
 /// <param name="Message">User-facing delivery status.</param>
-public sealed record DictationOutputResult(TranscriptionRecord Record, bool Saved, bool NeedsReview, string Message);
+public sealed record DictationOutputResult(TranscriptionRecord Record, bool Saved, bool NeedsReview, string Message)
+{
+    /// <summary>Whether a requested history write or paste failed; choosing review-first is not a failure.</summary>
+    public bool Failed { get; init; }
+}
 
 /// <summary>Applies output choices without requiring Windows or a clipboard.</summary>
 /// <param name="history">Explicit history destination.</param>
@@ -30,14 +34,14 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                 if (atStart.RestrictedBy(current()).SaveToHistory)
                 {
                     if (!history.TryAddRecord(record))
-                        return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.");
+                        return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.") { Failed = true };
                     saved = true;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.");
+                return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.") { Failed = true };
             }
         }
         var storage = saved ? "Saved to History." : "Not saved to History.";
@@ -50,6 +54,6 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
-        return new(record, saved, true, storage + " Paste was not completed. Review and copy your text.");
+        return new(record, saved, true, storage + " Paste was not completed. Review and copy your text.") { Failed = true };
     }
 }

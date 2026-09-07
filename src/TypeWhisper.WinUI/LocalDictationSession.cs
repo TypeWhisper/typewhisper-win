@@ -13,7 +13,7 @@ namespace TypeWhisper.WinUI;
 // Parakeet configuration. Does not instantiate the WPF application or plugin UI.
 internal sealed partial class LocalDictationSession : IAsyncDisposable
 {
-    private readonly AudioRecordingService _audio = new();
+    private readonly AudioRecordingService _audio;
     private readonly SoundService _sounds = new();
     private readonly AudioDuckingService _ducking = new();
     private readonly RecordingAudioEffects _effects;
@@ -412,6 +412,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
 
     internal LocalDictationSession(IHistoryService history, IntPtr owner)
     {
+        _audio = new(_recoveryAudio);
+        Recovery = new(_recoveryAudio, DecodeRecoveryAudioAsync);
         _transcriptionPlugin = new(packageDirectory: () => Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId));
         CtcVocabulary = new(packageDirectory: () => Path.Combine(Packages.Store.Resolve(LocalTranscriptionPlugin.PluginId), "Dependencies", LocalCtcVocabulary.PluginId));
         PluginRuntime = new(Packages.Store, LocalCtcVocabulary.HostVersion, WinUIPluginPackages.CreateServices,
@@ -423,6 +425,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _inserter = new(owner);
         _effects = new(_ducking, new MediaPauseService());
         var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _recoveryAudio.Changed += () => dispatcher.TryEnqueue(ReportRecoveryStorageError);
         _fileDispatcher = dispatcher;
         _retentionTimer = dispatcher.CreateTimer();
         _retentionTimer.Interval = TimeSpan.FromMinutes(1);
@@ -462,6 +465,10 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         await _gate.WaitAsync();
         try
         {
+            await _recoveryAudio.InitializeAsync();
+            await _recoveryAudio.SetRetentionAsync(RecoveryPreferences.Current.Enabled ? RecoveryPreferences.Current.RetentionDays : 0);
+            if (_disposed) return;
+            ReportRecoveryStorageError();
             await Packages.InitializeAsync();
             if (_disposed) return;
             if (File.Exists(MicrophonePath))
@@ -530,6 +537,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             return;
         }
 #endif
+        TypeWhisper.Core.Services.RecoveryRecordingLease? recoveryLease = null;
+        var preserveRecovery = false;
         try
         {
             if (recording.HasValue && recording.Value == _audio.IsRecording) return;
@@ -573,7 +582,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _textAtStart = TextPreferences.Current;
                 _processorsAtStart = PluginRuntime.PostProcessors.ToArray();
                 _languageAtStart = Language;
-                _audio.StartRecording(enableRecovery: false);
+                _recoveryAtStart = RecoveryPreferences.Current;
+                _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
@@ -608,7 +618,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             _lastDuration = _audio.RecordingDuration;
             var preGainPeakRms = _audio.PreGainPeakRmsLevel;
             SetStatus("Finishing recording…", DictationPhase.Processing);
-            var samples = await _audio.StopRecordingAsync();
+            var captured = await _audio.StopRecordingWithRecoveryAsync();
+            recoveryLease = captured.RecoveryLease;
+            var samples = captured.Samples;
             _effects.End();
             _sounds.PlayStopSound();
             // Native decoding cannot be interrupted; drain the cancelled preview
@@ -686,6 +698,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                         ModifiersHeld() || GetForegroundWindow() != _target) return false;
                     return await _inserter.InsertAsync(text, _target);
                 }, _operationCancellation.Token);
+            preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             if (_disposed) return;
             _operationCancellation.Token.ThrowIfCancellationRequested();
             LastUnsavedText = outcome.Saved ? null : text;
@@ -698,24 +711,31 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && _operationCancellation.Token.IsCancellationRequested)
         {
+            preserveRecovery = _disposed;
             StopSilenceMonitoring();
-            if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            await StopRecoveryCaptureAsync(preserve: _disposed);
             _effects.End();
             await _livePreview.StopAsync();
             if (!_disposed) SetStatus("Dictation canceled. Ready to try again.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            preserveRecovery = true;
             StopSilenceMonitoring();
             _livePreview.Cancel();
-            try { if (_audio.IsRecording) await _audio.StopRecordingAsync(); }
+            try { await StopRecoveryCaptureAsync(preserve: true); }
             catch (Exception stopError) when (stopError is not OutOfMemoryException)
             { System.Diagnostics.Debug.WriteLine(stopError); }
             finally { _effects.End(); await _livePreview.StopAsync(); }
             _sounds.PlayErrorSound();
             SetStatus("Dictation failed: " + ex.Message, DictationPhase.Error);
         }
-        finally { if (!_audio.IsRecording) _effects.End(); _gate.Release(); }
+        finally
+        {
+            await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
+            if (!_audio.IsRecording) _effects.End();
+            _gate.Release();
+        }
     }
 
     internal string? LastUnsavedText { get; private set; }

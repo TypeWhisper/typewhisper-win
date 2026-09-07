@@ -21,6 +21,7 @@ public sealed partial class MainWindow
         // Close admission immediately, including when recorder saving will need a retry.
         // These drains can wait for the recorder's reservation without blocking this call.
         _profileUiDrain = Task.WhenAll(HistoryView.ShutdownAsync(), WorkflowsView.ShutdownAsync(),
+            DrainRecoveryViewsAsync(),
             _lexicon?.ShutdownAsync() ?? Task.CompletedTask,
             _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask,
             _dictation.HistoryRetention.CloseAndDrainAsync(),
