@@ -225,6 +225,43 @@ public sealed class PortablePluginRuntimeRegistryTests : IDisposable
         Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
     }
 
+    [Fact]
+    public async Task TextProcessorSnapshotNeverResolvesToAReenabledPackage()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        await registry.InitializeAsync();
+        Assert.Empty(registry.PostProcessors);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        var captured = Assert.Single(registry.PostProcessors);
+        Assert.Equal("1.0.0", captured.Version);
+        Assert.Equal("original", await registry.ProcessTextAsync(captured, "original", new()));
+        Assert.Null(await registry.SetEnabledAsync(Id, false));
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Assert.NotEqual(captured.Generation, Assert.Single(registry.PostProcessors).Generation);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await registry.ProcessTextAsync(captured, "original", new()));
+        Assert.Equal("new", await registry.ProcessTextAsync(Assert.Single(registry.PostProcessors), "new", new()));
+    }
+
+    [Fact]
+    public async Task DisablingTextProcessorDrainsNativeWorkBeforeDisposalAndRejectsLateResult()
+    {
+        var store = await Store();
+        await using var registry = Registry(store);
+        Assert.Null(await registry.SetEnabledAsync(Id, true));
+        Host(Id).SetSetting("Hold", true);
+        var request = registry.ProcessTextAsync(Assert.Single(registry.PostProcessors), "late", new());
+        await Host(Id).Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var disable = registry.SetEnabledAsync(Id, false);
+        Assert.False(disable.IsCompleted);
+        Assert.Empty(registry.PostProcessors);
+        Assert.Equal(0, Host(Id).GetSetting<int>("disposals"));
+        Host(Id).Release.TrySetResult(null);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        Assert.Null(await disable);
+        Assert.Equal(1, Host(Id).GetSetting<int>("disposals"));
+    }
+
     public void Dispose()
     {
         _http.Dispose();

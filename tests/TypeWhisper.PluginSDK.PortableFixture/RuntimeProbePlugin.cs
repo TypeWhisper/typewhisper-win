@@ -4,7 +4,7 @@ namespace TypeWhisper.PluginSDK.PortableFixture;
 
 /// <summary>A portable multi-capability package used only by runtime ownership tests.</summary>
 public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin, IApiKeyPlugin,
-    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider
+    ITranscriptionEngineSelectionIdentity, IAdditionalTranscriptionEnginesProvider, IAdditionalLlmProvidersProvider, IPostProcessorPlugin
 {
     private IPluginHostServices? _host;
     private bool _active;
@@ -75,6 +75,14 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
         _host.NotifyCapabilitiesChanged();
         return userText;
     }
+    /// <inheritdoc />
+    public string ProcessorName => "Fixture text processor";
+    /// <inheritdoc />
+    public int Priority => 250;
+    /// <inheritdoc />
+    public Task<string> ProcessAsync(string text, PostProcessingContext context, CancellationToken ct)
+        => ProcessAsync("", text, "llm", ct);
+
     /// <inheritdoc />
     public Task SetApiKeyAsync(string apiKey)
     {

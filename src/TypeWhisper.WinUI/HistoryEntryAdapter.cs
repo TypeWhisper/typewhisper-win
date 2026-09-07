@@ -32,9 +32,10 @@ internal static class HistoryEntryAdapter
                 record.Status == TranscriptionRecordStatus.Succeeded ? PrototypeHistoryProcessingState.Ready : PrototypeHistoryProcessingState.Failed,
                 new PrototypeHistoryTranscript(record.RawText, text), record.Language,
                 EngineName: record.EngineUsed, ModelName: record.ModelUsed,
-                FailureMessage: record.WorkflowFailureMessage, AppName: record.AppName,
+                FailureMessage: record.Status == TranscriptionRecordStatus.TextProcessorFailed
+                    ? "Text processing failed. The preceding transcript was retained." : record.WorkflowFailureMessage, AppName: record.AppName,
                 AppProcessName: record.AppProcessName, TranscriptionTaskUsed: record.TranscriptionTaskUsed,
-                WorkflowName: record.ProfileName, WorkflowId: record.WorkflowId),
+                WorkflowName: record.ProfileName, WorkflowId: record.WorkflowId, TextProcessors: record.TextProcessors?.ToArray()),
             new PrototypeHistoryInbox(timestamp)) { PersistedRecordId = record.Id };
     }
 }

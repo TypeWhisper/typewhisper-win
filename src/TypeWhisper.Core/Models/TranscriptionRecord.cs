@@ -14,7 +14,9 @@ public enum TranscriptionRecordStatus
     /// <summary>
     /// Speech-to-text succeeded, but workflow post-processing failed.
     /// </summary>
-    WorkflowPostProcessingFailed
+    WorkflowPostProcessingFailed,
+    /// <summary>A configured text processor failed; the preceding text remains available for review.</summary>
+    TextProcessorFailed
 }
 
 /// <summary>
@@ -45,6 +47,9 @@ public sealed record TranscriptionRecord
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SourceKind { get; init; }
+    /// <summary>Optional processor identities, versions and sanitized execution statuses, saved only with History.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<TextProcessorProvenance>? TextProcessors { get; init; }
     /// <summary>
     /// Gets or sets the app name value.
     /// </summary>

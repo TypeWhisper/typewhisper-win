@@ -47,7 +47,8 @@ public sealed record PrototypeHistoryContent(
     string? AppProcessName = null,
     string? TranscriptionTaskUsed = null,
     string? WorkflowName = null,
-    string? WorkflowId = null);
+    string? WorkflowId = null,
+    IReadOnlyList<TypeWhisper.Core.Models.TextProcessorProvenance>? TextProcessors = null);
 
 public sealed record PrototypeHistoryInbox(
     DateTimeOffset UpdatedAt,

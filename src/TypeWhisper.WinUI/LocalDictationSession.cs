@@ -571,6 +571,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _outputAtStart = OutputPreferences.Current;
                 _textAtStart = TextPreferences.Current;
+                _processorsAtStart = PluginRuntime.PostProcessors.ToArray();
                 _languageAtStart = Language;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
@@ -647,7 +648,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, _languageAtStart,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart), boostVocabulary,
                 ReadSnippetClipboardAsync, _operationCancellation.Token, _taskAtStart, _targetApp, _engineAtStart, _modelAtStart,
-                WorkflowProcessor(_languageAtStart, decoded.DetectedLanguage));
+                WorkflowProcessor(_languageAtStart, decoded.DetectedLanguage),
+                BindTextProcessors(_processorsAtStart, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart),
+                    _targetApp, _workflowAtStart?.Name, rawDuration));
             var notices = processed.Warnings.ToList();
             if (processed.WorkflowError is { } workflowError) notices.Add(workflowError);
             var text = processed.Text;
@@ -661,7 +664,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 SourceKind = "dictation",
                 WorkflowId = _workflowAtStart?.Id, ProfileName = _workflowAtStart?.Name,
-                Status = processed.WorkflowError is null ? TranscriptionRecordStatus.Succeeded : TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+                Status = processed.WorkflowError is not null ? TranscriptionRecordStatus.WorkflowPostProcessingFailed
+                    : processed.TextProcessors?.Any(item => item.Status == "failed") == true ? TranscriptionRecordStatus.TextProcessorFailed : TranscriptionRecordStatus.Succeeded,
+                TextProcessors = processed.TextProcessors?.ToArray(),
                 WorkflowFailureMessage = processed.WorkflowError,
                 RawText = rawText, FinalText = text, DurationSeconds = rawDuration,
                 EngineUsed = _engineAtStart, ModelUsed = _modelAtStart, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",

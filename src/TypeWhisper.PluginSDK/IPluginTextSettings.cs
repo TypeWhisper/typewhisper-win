@@ -1,0 +1,13 @@
+namespace TypeWhisper.PluginSDK;
+
+/// <summary>A bounded text setting rendered by the host without a framework-specific plugin view.</summary>
+public sealed record PluginTextSetting(string Id, string Title, string Description, string Value, int MaxLength = 32768);
+
+/// <summary>Provides persistent text settings. Hosts call this capability within the package configuration lease.</summary>
+public interface IPluginTextSettings
+{
+    /// <summary>Returns current values; the host must preserve unsaved edits while capabilities refresh.</summary>
+    IReadOnlyList<PluginTextSetting> TextSettings { get; }
+    /// <summary>Persists a value before publishing it. Failed writes must retain the preceding value.</summary>
+    Task SaveTextSettingAsync(string id, string value, CancellationToken cancellationToken);
+}

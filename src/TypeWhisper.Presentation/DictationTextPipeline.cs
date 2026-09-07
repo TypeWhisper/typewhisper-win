@@ -1,3 +1,4 @@
+using TypeWhisper.Core.Models;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Core.Services;
 
@@ -12,6 +13,8 @@ public sealed record DictationTextPipelineResult
     public IReadOnlyList<string> Warnings { get; init; } = [];
     /// <summary>A required workflow failure; hosts must retain the text for review and disable automatic insertion.</summary>
     public string? WorkflowError { get; init; }
+    /// <summary>Executed processor identities and sanitized success or failure status in execution order.</summary>
+    public IReadOnlyList<TextProcessorProvenance> TextProcessors { get; init; } = [];
 }
 
 /// <summary>Runs the shared Core pipeline with asynchronous snippet expansion and explicit dictionary steps.</summary>
@@ -35,12 +38,18 @@ public static class DictationTextPipeline
         string? targetProcessName = null,
         string? engineId = null,
         string? modelId = null,
-        Func<string, CancellationToken, Task<string>>? workflow = null)
+        Func<string, CancellationToken, Task<string>>? workflow = null,
+        IReadOnlyList<DictationTextProcessor>? textProcessors = null)
     {
         ArgumentNullException.ThrowIfNull(rawText);
         ArgumentNullException.ThrowIfNull(preferences);
         if (!preferences.IsValid) throw new ArgumentException("Unsupported text preferences.", nameof(preferences));
         var warnings = new List<string>();
+        var provenance = new List<TextProcessorProvenance>();
+        var capturedProcessors = (textProcessors ?? []).OrderBy(item => item.Priority)
+            .ThenBy(item => item.PluginId, StringComparer.Ordinal).ToArray();
+        if (capturedProcessors.Select(item => item.PluginId).Distinct(StringComparer.Ordinal).Count() != capturedProcessors.Length)
+            throw new ArgumentException("A text processor may occur only once.", nameof(textProcessors));
         var spokenFormatting = DictationFormatting.Resolve(preferences, engineId, modelId, configuredLanguage, detectedLanguage, task);
         Func<string, string>? Protect(string name, Func<string, string>? step) => step is null ? null : text =>
         {
@@ -63,6 +72,30 @@ public static class DictationTextPipeline
                 return text;
             }
         })];
+        var processors = snippets?.ToList() ?? [];
+        foreach (var processor in capturedProcessors)
+        {
+            processors.Add(new(processor.Priority, async (text, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    var output = await processor.ProcessAsync(text, token);
+                    token.ThrowIfCancellationRequested();
+                    if (output is null) throw new InvalidOperationException("The text processor returned no result.");
+                    provenance.Add(new(processor.PluginId, processor.Version, "succeeded"));
+                    return output;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    token.ThrowIfCancellationRequested();
+                    provenance.Add(new(processor.PluginId, processor.Version, "failed"));
+                    warnings.Add($"Text processor {processor.PluginId} failed. Text from the preceding step was retained.");
+                    return text;
+                }
+            }));
+        }
         var workflowFailed = false;
         try
         {
@@ -88,7 +121,7 @@ public static class DictationTextPipeline
                 TranscriptionTask = task,
                 ConfiguredLanguage = configuredLanguage,
                 DetectedLanguage = detectedLanguage,
-                PluginPostProcessors = snippets,
+                PluginPostProcessors = processors,
                 TargetProcessName = targetProcessName,
                 AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
                 SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
@@ -96,14 +129,14 @@ public static class DictationTextPipeline
                 DictionaryCorrector = Protect("Dictionary corrections", correctDictionary)
             }, ct);
             ct.ThrowIfCancellationRequested();
-            return new() { Text = result.Text, Warnings = warnings.ToArray() };
+            return new() { Text = result.Text, Warnings = warnings.ToArray(), TextProcessors = provenance.ToArray() };
         }
         catch (Exception ex) when (workflowFailed && ex is not OutOfMemoryException && ex is not OperationCanceledException)
         {
             ct.ThrowIfCancellationRequested();
             return new()
             {
-                Text = rawText, Warnings = warnings.ToArray(),
+                Text = rawText, Warnings = warnings.ToArray(), TextProcessors = provenance.ToArray(),
                 WorkflowError = "Workflow processing failed. Your transcript was retained for review; nothing was pasted."
             };
         }

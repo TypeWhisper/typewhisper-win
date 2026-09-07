@@ -9,7 +9,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dictionary, DictationSnippetSnapshot? snippets)
 {
     internal DictationDictionarySnapshot? Dictionary => dictionary;
-    internal sealed record Result(string Text, IReadOnlyList<string> Warnings, IReadOnlyList<string> AppliedSnippetIds, string? WorkflowError = null);
+    internal sealed record Result(string Text, IReadOnlyList<string> Warnings, IReadOnlyList<string> AppliedSnippetIds, string? WorkflowError = null, IReadOnlyList<TypeWhisper.Core.Models.TextProcessorProvenance>? TextProcessors = null);
 
     internal static DictationLexiconSnapshot Load(string dictionaryPath, string snippetPath) =>
         new(DictationDictionarySnapshot.Load(dictionaryPath), DictationSnippetSnapshot.Load(snippetPath));
@@ -22,7 +22,7 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
         string? configuredLanguage, string? detectedLanguage, bool boostVocabulary,
         Func<CancellationToken, Task<string>> readClipboard, CancellationToken ct,
         TranscriptionTask task, string? targetProcessName, string? engineId, string? modelId,
-        Func<string, CancellationToken, Task<string>>? workflow = null)
+        Func<string, CancellationToken, Task<string>>? workflow = null, IReadOnlyList<DictationTextProcessor>? textProcessors = null)
     {
         var warnings = new List<string>();
         if (dictionary?.Error is { } dictionaryError) warnings.Add(dictionaryError);
@@ -46,9 +46,9 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
             },
             boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
             correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
-            ct: ct, task: task, targetProcessName: targetProcessName, engineId: engineId, modelId: modelId, workflow: workflow);
+            ct: ct, task: task, targetProcessName: targetProcessName, engineId: engineId, modelId: modelId, workflow: workflow, textProcessors: textProcessors);
         warnings.AddRange(processed.Warnings);
-        return new(processed.Text, warnings, appliedIds, processed.WorkflowError);
+        return new(processed.Text, warnings, appliedIds, processed.WorkflowError, processed.TextProcessors);
     }
 
     internal static string? RecordUsage(string path, IReadOnlyCollection<string> appliedIds)

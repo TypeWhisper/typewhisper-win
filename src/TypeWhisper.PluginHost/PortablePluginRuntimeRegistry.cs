@@ -4,7 +4,7 @@ using TypeWhisper.PluginSDK.Models;
 namespace TypeWhisper.PluginHost;
 
 /// <summary>One installed package's runtime state. Enablement is separate from provider readiness.</summary>
-public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, string? Error, bool HasApiKeySettings = false);
+public sealed record PortablePluginRuntimeState(string PluginId, bool Enabled, string? Error, bool HasApiKeySettings = false, bool HasTextSettings = false);
 /// <summary>A transcription role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableTranscriptionProvider(string PluginId, string SelectionId, string Name,
     bool Ready, string? SelectedModelId, IReadOnlyList<PluginModelInfo> Models, bool SupportsTranslation, bool SupportsPcm,
@@ -12,6 +12,9 @@ public sealed record PortableTranscriptionProvider(string PluginId, string Selec
 /// <summary>An LLM role's UI snapshot, without exposing its package lifetime.</summary>
 public sealed record PortableLlmProvider(string PluginId, string SelectionId, string Name,
     bool Ready, IReadOnlyList<PluginModelInfo> Models);
+
+/// <summary>An enabled text processor bound to one exact package activation.</summary>
+public sealed record PortablePostProcessor(string PluginId, string Name, string Version, int Priority, long Generation);
 
 /// <summary>
 /// Owns each activated package once and serializes all capability/configuration calls.
@@ -34,8 +37,12 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
     }
     private sealed record TranscriptionRole(Slot Owner, ITranscriptionEnginePlugin Engine);
     private sealed record LlmRole(Slot Owner, ILlmProviderPlugin Provider);
+    private sealed record PostProcessorRole(Slot Owner, IPostProcessorPlugin Processor, PortablePostProcessor Snapshot);
     private sealed record Index(Dictionary<string, TranscriptionRole> Transcription, Dictionary<string, LlmRole> Llm,
-        PortableTranscriptionProvider[] TranscriptionSnapshots, PortableLlmProvider[] LlmSnapshots);
+        PortableTranscriptionProvider[] TranscriptionSnapshots, PortableLlmProvider[] LlmSnapshots)
+    {
+        internal Dictionary<string, PostProcessorRole> PostProcessors { get; init; } = new(StringComparer.Ordinal);
+    }
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private readonly Dictionary<string, Slot> _slots = new(StringComparer.Ordinal);
@@ -59,10 +66,21 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
     {
         get { lock (_sync) return _index.LlmSnapshots.Where(item => _slots[item.PluginId].Accepting).ToArray(); }
     }
+    /// <summary>Returns enabled processors in deterministic priority and identifier order.</summary>
+    public IReadOnlyList<PortablePostProcessor> PostProcessors
+    {
+        get
+        {
+            lock (_sync) return _index.PostProcessors.Values.Where(role => role.Owner.Accepting)
+                .Select(role => role.Snapshot with { Generation = role.Owner.Generation }).OrderBy(item => item.Priority)
+                .ThenBy(item => item.PluginId, StringComparer.Ordinal).ToArray();
+        }
+    }
+
     /// <summary>Returns known installed packages and their visible activation/capability errors.</summary>
     public IReadOnlyList<PortablePluginRuntimeState> Snapshot()
     {
-        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin)).ToArray();
+        lock (_sync) return _slots.Values.Select(slot => new PortablePluginRuntimeState(slot.Id, slot.Accepting, slot.Error, slot.Package?.Plugin is IApiKeyPlugin, slot.Package?.Plugin is IPluginTextSettings)).ToArray();
     }
 
     /// <summary>Restores only explicit saved enablement. Missing preferences never activate a package.</summary>
@@ -201,6 +219,28 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
             ? use(current.Provider, token) : throw new InvalidOperationException("LLM provider changed."), cancellationToken);
     }
 
+    /// <summary>Processes text only with the exact activation captured at operation start.</summary>
+    public Task<string> ProcessTextAsync(PortablePostProcessor expected, string text,
+        PostProcessingContext context, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expected);
+        Slot owner;
+        lock (_sync)
+        {
+            if (!_index.PostProcessors.TryGetValue(expected.PluginId, out var role)
+                || (role.Snapshot with { Generation = role.Owner.Generation }) != expected || !role.Owner.Accepting || role.Owner.Generation != expected.Generation)
+                throw new InvalidOperationException("The captured text processor is no longer available.");
+            owner = role.Owner;
+        }
+        return UseAsync(owner, token =>
+        {
+            if (!_index.PostProcessors.TryGetValue(expected.PluginId, out var current)
+                || current.Owner != owner || (current.Snapshot with { Generation = owner.Generation }) != expected || owner.Generation != expected.Generation)
+                throw new InvalidOperationException("The captured text processor changed.");
+            return current.Processor.ProcessAsync(text, context, token);
+        }, cancellationToken);
+    }
+
     /// <summary>
     /// Serializes host-rendered configuration with requests, including IApiKeyPlugin operations.
     /// The callback must not retain the plugin reference or activate/dispose the plugin itself.
@@ -286,9 +326,18 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
         var llm = new Dictionary<string, LlmRole>(StringComparer.OrdinalIgnoreCase);
         var transcriptionSnapshots = new List<PortableTranscriptionProvider>();
         var llmSnapshots = new List<PortableLlmProvider>();
+        var postProcessors = new Dictionary<string, PostProcessorRole>(StringComparer.Ordinal);
         foreach (var slot in slots)
         {
             var plugin = slot.Package!.Plugin;
+            if (plugin is IPostProcessorPlugin processor)
+            {
+                if (processor.PluginId != slot.Id)
+                    throw new CapabilityCollisionException("Text processor identity does not match its package.");
+                var snapshot = new PortablePostProcessor(slot.Id, processor.ProcessorName,
+                    processor.PluginVersion, processor.Priority, slot.Generation);
+                postProcessors.Add(slot.Id, new(slot, processor, snapshot));
+            }
             var engines = (plugin is ITranscriptionEnginePlugin direct ? new[] { direct } : [])
                 .Concat(plugin is IAdditionalTranscriptionEnginesProvider additional ? additional.AdditionalTranscriptionEngines : [])
                 .Distinct(ReferenceEqualityComparer.Instance).Cast<ITranscriptionEnginePlugin>();
@@ -312,7 +361,7 @@ public sealed class PortablePluginRuntimeRegistry(PortablePluginStore store, Ver
                 llmSnapshots.Add(new(slot.Id, id, provider.ProviderName, provider.IsAvailable, Array.AsReadOnly(provider.SupportedModels.ToArray())));
             }
         }
-        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray());
+        return new(transcription, llm, transcriptionSnapshots.ToArray(), llmSnapshots.ToArray()) { PostProcessors = postProcessors };
     }
 
     private void Publish(Index index) { lock (_sync) _index = index; }

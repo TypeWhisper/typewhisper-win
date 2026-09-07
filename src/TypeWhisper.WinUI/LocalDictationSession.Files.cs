@@ -34,6 +34,7 @@ internal sealed partial class LocalDictationSession
             var language = Language;
             var task = TranscriptionTaskPreferences.Current;
             var textPreferences = TextPreferences.Current;
+            var processors = PluginRuntime.PostProcessors.ToArray();
             var outputPreferences = OutputPreferences.Current;
             var ctcReady = CtcVocabulary.Enabled;
             var boostVocabulary = DictionaryBoostingPreferences.Load();
@@ -78,7 +79,9 @@ internal sealed partial class LocalDictationSession
             }
             var processed = await lexicon.ProcessAsync(refinedText, textPreferences, language,
                 DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language), boostVocabulary && !useCtc,
-                ReadSnippetClipboardAsync, ct, task, null, engineId, modelId);
+                ReadSnippetClipboardAsync, ct, task, null, engineId, modelId, textProcessors:
+                    BindTextProcessors(processors, DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, language),
+                        null, null, samples.Length / 16000.0));
             ct.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             var warnings = processed.Warnings.ToList();
@@ -98,6 +101,8 @@ internal sealed partial class LocalDictationSession
                     if (outputPreferences.RestrictedBy(OutputPreferences.Current).SaveToHistory) pendingHistory = new()
                     {
                         Id = Guid.NewGuid().ToString(), Timestamp = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+                        TextProcessors = processed.TextProcessors?.ToArray(),
+                        Status = processed.TextProcessors?.Any(item => item.Status == "failed") == true ? TranscriptionRecordStatus.TextProcessorFailed : TranscriptionRecordStatus.Succeeded,
                         SourceKind = "file", RawText = decoded.Text, FinalText = processed.Text, DurationSeconds = duration,
                         EngineUsed = engineId, ModelUsed = modelId,
                         TranscriptionTaskUsed = translate ? "translate" : "transcribe",

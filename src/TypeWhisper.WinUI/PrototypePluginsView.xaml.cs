@@ -249,7 +249,7 @@ public sealed partial class PrototypePluginsView : UserControl
         if (_runtime is not null && page == Page.Settings)
         {
             PluginPrimaryButton.Visibility = Visibility.Collapsed;
-            PluginSummary.Text = _opened is not null && Path.GetFileName(_opened.Id) == CloudTranscriptionPlugin.PluginId ? "Plugin settings" : "Saved automatically";
+            PluginSummary.Text = "Plugin settings";
             PluginNavigationHint.Text = "Esc Back";
         }
         if (page == Page.Detail && _opened is { } plugin)

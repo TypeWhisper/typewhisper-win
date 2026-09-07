@@ -13,6 +13,7 @@ internal sealed class LivePortablePluginSettings : UserControl
     private readonly PasswordBox _key = new() { PlaceholderText = "Enter an API key" };
     private readonly StackPanel _credentials = new() { Spacing = 8 };
     private readonly StackPanel _models = new() { Spacing = 10 };
+    private readonly ContentControl _textSettings = new();
     private readonly HandCursorButton _enable;
     private readonly HandCursorButton _save;
     private readonly HandCursorButton _remove;
@@ -42,7 +43,7 @@ internal sealed class LivePortablePluginSettings : UserControl
         _check = Button("Check connection", () => session.ValidateRegistryKeyAsync(id));
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         actions.Children.Add(_save); actions.Children.Add(_remove); actions.Children.Add(_check);
-        _credentials.Children.Add(actions); content.Children.Add(_credentials); content.Children.Add(_models);
+        _credentials.Children.Add(actions); content.Children.Add(_credentials); content.Children.Add(_models); content.Children.Add(_textSettings);
         Content = content;
         _key.PasswordChanged += (_, _) => UpdateButtons();
         Loaded += (_, _) => { session.Changed += OnChanged; Refresh(); };
@@ -56,6 +57,9 @@ internal sealed class LivePortablePluginSettings : UserControl
         _status.Text = _message ?? state?.Error ?? (state?.Enabled == true ? "Plugin enabled." : "Enable this plugin to configure its providers.");
         _enable.Visibility = state?.Enabled == true ? Visibility.Collapsed : Visibility.Visible;
         _credentials.Visibility = state?.HasApiKeySettings == true ? Visibility.Visible : Visibility.Collapsed;
+        if (state?.Enabled == true && state.HasTextSettings)
+            _textSettings.Content ??= new LivePluginTextSettings(_session, _id);
+        else _textSettings.Content = null;
         _models.Children.Clear();
         foreach (var provider in _session.PluginRuntime.TranscriptionProviders.Where(item => item.PluginId == _id))
         {
@@ -75,7 +79,7 @@ internal sealed class LivePortablePluginSettings : UserControl
             _models.Children.Add(Label(provider.Name + " · Text processing", 16));
             _models.Children.Add(Label(string.Join(", ", provider.Models.Select(model => model.DisplayName))));
         }
-        if (state?.Enabled == true && state.HasApiKeySettings == false)
+        if (state?.Enabled == true && state.HasApiKeySettings == false && !state.HasTextSettings)
             _models.Children.Add(Label("This plugin does not expose API-key settings. Other configuration methods are not available on this page."));
         UpdateButtons();
     }
