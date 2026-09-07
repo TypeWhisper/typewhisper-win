@@ -1,6 +1,6 @@
 # Windows 1.1 progress
 
-Current connected-settings checkpoint: `5d72fca` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
+Current implementation checkpoint: `a3045411` (2026-09-07). Release-wide draft: [PR #447](https://github.com/TypeWhisper/typewhisper-win/pull/447), `seofood/release-1.1` against `main`.
 
 The authoritative feature inventory is now the [full comparison against both previous Windows and Mac](WINUI-FUNCTIONAL-STATUS.md). This replaces the accumulated, contradictory milestone checklist. Historical test counts and superseded UI decisions remain available in Git history; they are not current completion claims.
 
@@ -16,8 +16,8 @@ Automatic paste / Review first and Save to history now persist and control actua
 
 - Real hotkey microphone dictation through NVIDIA Parakeet/Canary or Groq, local live preview, persisted provider/model/language selection and history before whole-text paste.
 - Main Dictation and Quick Launch shortcuts, microphone priority, sound/output preferences, whisper mode, media pause/ducking and silence auto-stop. Overlay configuration and provider configuration are separate from recording state.
-- Dictionary terms/corrections, noncommercial built-in term packs, snippets with recording snapshots and automatic internal Parakeet CTC. Snippet usage counts and full text-pipeline parity remain open.
-- Isolated history read/search/raw-final details/copy/edit/delete/export, explicit retention and actual usage aggregation. Model, provider and app/task appear in details only.
+- Dictionary terms/corrections, noncommercial built-in term packs, snippets with recording snapshots and automatic internal Parakeet CTC. Successful snippet usage is counted; generic plugin stages and full text-pipeline parity remain open.
+- Isolated history read/search/raw-final details/copy/edit, selected export/delete, confirmed clear-history and explicit retention and actual usage aggregation. Model, provider and app/task appear in details only.
 - Integrations with Installed and Discover. Only NVIDIA Parakeet and Groq have connected runtime bindings. Plugin settings own model downloads and credentials; Dictation selects provider/model. There is no global Models settings page or independent CTC integration.
 - Persistent package installation/uninstallation, staged updates, checksums and extraction/identity validation. Plugin-owned output folders/tests and optional install/uninstall hooks with status messages. See [package contract](PLUGIN-PACKAGES-1.1.md).
 - Headless CI for portable host, presentation and plugin-owned suites on Windows and Ubuntu.
@@ -31,8 +31,8 @@ These are major implementation areas, not final polish. Detailed per-feature gap
 - [ ] Connect language hints and remaining runtime settings; make other preview controls unambiguous.
 - [ ] Connect complete text processing, generic plugin capabilities, cancellation, queued jobs, durable recovery and accurate provenance.
 - [ ] Replace workflow examples with persistent workflows, triggers, LLM processing, selected-text execution and retry.
-- [ ] Replace file/recorder simulations with real decoding/capture, output files, transcription jobs, subtitles and watch folders.
-- [ ] Complete remaining history bulk/audio actions, correction learning, backup and sync; mutation/export/retention/statistics are connected.
+- [ ] Extend connected file decoding and microphone/system recording with durable jobs, recording-library management, pause/tracks, remaining formats and watch folders.
+- [ ] Complete remaining history audio actions, correction learning, backup and sync; bulk mutation/export/clear, retention and statistics are connected.
 - [ ] Generalize provider/settings/contribution integration and rebuild the selected additional plugins; publish and verify the single v2 catalog end to end.
 - [ ] Connect onboarding, licensing, updates, autostart, localization, API/CLI and Windows shell activation.
 - [ ] Decide which Mac additions belong in Windows: Inbox/audio sync, meeting automation, live field text, media imports and platform-specific alternatives.
@@ -75,3 +75,11 @@ Latest focused validation: Host 133 and Presentation 285 passing cases; prescrib
 - Tray cancellation reaches final processing immediately; linked tokens guard provider, CTC, formatting and output stages. Native work is drained before disposal.
 - Exit waits for initialization, active session work, file queue and shortcut coordination. Shutdown permanently rejects new queue jobs and reports cleanup failures. Durable recovery remains open.
 - Complete local validation: 569 passed, one platform skip; prescribed Debug build/launch passed. Groq package unload now has an explicit collection assertion after Windows CI exposed a test-lifetime issue; its 17 focused tests passed.
+
+## 2026-09-07: real recorder, bulk history and automatic CTC setup
+
+- Recorder now captures microphone and/or system output, preserves loopback silence on a shared timeline, writes a named local WAV atomically and retains unsaved audio for retry. It reserves the dictation session and drains before shutdown. File-queue handoff requires an explicit Start. Recording library, pause/tracks and crash recovery remain open.
+- History multi-selection supports selected TXT/MD/CSV/JSON export, confirmed atomic deletion and clear-history snapshots that retain entries added during confirmation. Native selection, export, default Cancel, selective deletion, Escape and clear-all checks passed.
+- NVIDIA provisions its internal CTC model and tokenizer with pinned checksums, bounded BZip2/TAR extraction and cancellable activation. Actual first-run download, verified installation and Ready UI passed in a fresh test profile. Accuracy across languages remains separate acceptance work.
+- Complete local suite: **611 passed, one NVIDIA platform skip** (Host 160, Presentation 394, Groq 32, NVIDIA 25). An additional **64 Windows audio tests passed** in Debug. Prescribed WinUI build/launch passed. Real system capture, explicit file handoff and Canary transcription succeeded; the corrected timeline retained 47.632 seconds during a 47.713-second measured UI run, including leading/trailing silence and a German filename.
+- Latest pushed baseline before this slice, `536f7905`, passed Windows/Ubuntu headless CI and CodeQL. Fresh CI for these commits is tracked on the PR; CodeRabbit still skips draft review.
