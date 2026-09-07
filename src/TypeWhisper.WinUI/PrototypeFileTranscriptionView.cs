@@ -55,6 +55,8 @@ public sealed class PrototypeFileTranscriptionView : UserControl
     }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
     internal void Stop() { _queue.Cancel(); }
+    internal Task CancelAndDrainAsync() => _queue.CancelAndDrainAsync();
+    internal Task ShutdownAsync() => _queue.ShutdownAsync();
     internal void GoBack()
     {
         if (_picking) return;

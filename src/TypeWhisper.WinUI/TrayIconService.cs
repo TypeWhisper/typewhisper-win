@@ -14,10 +14,14 @@ internal sealed class TrayIconService : IDisposable
     private readonly TrayMenuWindow _menuWindow;
     private readonly MenuFlyoutItem _status;
     private readonly MenuFlyoutItem _recordingAction;
+    private readonly MenuFlyoutItem _cancelProcessing;
+    private readonly MenuFlyout _menu;
+    private bool _closing;
 
-    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation)
+    internal TrayIconService(Action show, Action settings, Action history, Action files, Action exit, Action finishDictation, Action cancelProcessing)
     {
         var menu = new MenuFlyout();
+        _menu = menu;
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
         presenterStyle.Setters.Add(new Setter(FrameworkElement.RequestedThemeProperty, ElementTheme.Dark));
         presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 43, 43, 43))));
@@ -33,6 +37,9 @@ internal sealed class TrayIconService : IDisposable
         _recordingAction = CreateItem("Start with dictation shortcut", "\uE720", finishDictation);
         _recordingAction.IsEnabled = false;
         menu.Items.Add(_recordingAction);
+        _cancelProcessing = CreateItem("Cancel processing", "\uE711", cancelProcessing);
+        _cancelProcessing.IsEnabled = false;
+        menu.Items.Add(_cancelProcessing);
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Label("General"));
         menu.Items.Add(CreateItem("Quick Launch", "\uE80F", show));
@@ -76,11 +83,25 @@ internal sealed class TrayIconService : IDisposable
 
     internal void UpdateDictation(string status, bool recording)
     {
+        if (_closing) return;
         _status.Text = recording ? "Recording" : status;
         ToolTipService.SetToolTip(_status, status);
         _recordingAction.Text = recording ? "Finish dictation" : "Start with dictation shortcut";
         _recordingAction.IsEnabled = recording;
         _icon.ToolTipText = recording ? "TypeWhisper · Recording" : "TypeWhisper · " + status[..Math.Min(status.Length, 90)];
+    }
+
+    internal void SetShutdownState(string status)
+    {
+        _closing = true;
+        foreach (var item in _menu.Items) item.IsEnabled = false;
+        _status.Text = status;
+        _icon.ToolTipText = "TypeWhisper · " + status;
+    }
+
+    internal void UpdateProcessing(bool canCancel)
+    {
+        if (!_closing) _cancelProcessing.IsEnabled = canCancel;
     }
 
     private static MenuFlyoutItem Label(string text) => new()

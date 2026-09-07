@@ -24,6 +24,7 @@ internal sealed partial class LocalDictationSession
         }
         try
         {
+            ct = _operationCancellation.Begin(ct);
             Changed?.Invoke();
             var engineId = ActiveEngineId;
             var modelId = ActiveModelId;

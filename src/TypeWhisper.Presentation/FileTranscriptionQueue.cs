@@ -48,16 +48,23 @@ public sealed class FileTranscriptionQueue
         { ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".mp4", ".mov", ".webm", ".aac", ".wma", ".mkv", ".avi" });
     private readonly List<FileTranscriptionJob> _jobs = [];
     private CancellationTokenSource? _run;
+    private Task _runCompletion = Task.CompletedTask;
+    private bool _shutdown;
     /// <summary>Current queue order.</summary>
     public IReadOnlyList<FileTranscriptionJob> Jobs => _jobs.AsReadOnly();
     /// <summary>True until the active request has actually drained.</summary>
     public bool Running => _run is not null;
+    /// <summary>Completes after the current or most recent run and its decoder have drained.</summary>
+    public Task RunCompletion => _runCompletion;
+    /// <summary>True after shutdown permanently prevents new queue work.</summary>
+    public bool IsShutdown => _shutdown;
     /// <summary>Notifies the owning surface after a state change.</summary>
     public event Action? Changed;
 
     /// <summary>Adds a source path, returning a validation error when rejected.</summary>
     public string? Add(string path)
     {
+        if (_shutdown) return "The file queue has shut down.";
         if (Running) return "Wait for the current run to finish before adding files.";
         if (string.IsNullOrWhiteSpace(path) || !Extensions.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
             return "Choose a supported audio or video file.";
@@ -69,11 +76,21 @@ public sealed class FileTranscriptionQueue
     }
 
     /// <summary>Processes queued files serially, preserving completed results on failure or cancellation.</summary>
-    public async Task RunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process)
+    public Task RunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process)
     {
-        if (Running || !_jobs.Any(j => j.Status == FileTranscriptionStatus.Queued)) return;
-        using var cancellation = new CancellationTokenSource();
+        if (_shutdown || Running || !_jobs.Any(j => j.Status == FileTranscriptionStatus.Queued)) return Task.CompletedTask;
+        var cancellation = new CancellationTokenSource();
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _runCompletion = completion.Task;
         _run = cancellation;
+        _ = ExecuteRunAsync(process, cancellation, completion);
+        return completion.Task;
+    }
+
+    private async Task ExecuteRunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process,
+        CancellationTokenSource cancellation, TaskCompletionSource completion)
+    {
+        Exception? failure = null;
         try
         {
             foreach (var job in _jobs.Where(j => j.Status == FileTranscriptionStatus.Queued).ToArray())
@@ -82,6 +99,7 @@ public sealed class FileTranscriptionQueue
                 job.Status = FileTranscriptionStatus.Processing; job.Stage = "Loading audio…"; Changed?.Invoke();
                 try
                 {
+                    cancellation.Token.ThrowIfCancellationRequested();
                     var result = await process(job.Path, stage =>
                     {
                         if (ReferenceEquals(_run, cancellation) && !cancellation.IsCancellationRequested && job.Status == FileTranscriptionStatus.Processing)
@@ -98,21 +116,45 @@ public sealed class FileTranscriptionQueue
                 Changed?.Invoke();
             }
         }
+        catch (Exception ex) { failure = ex; }
         finally
         {
-            if (cancellation.IsCancellationRequested)
-                foreach (var job in _jobs.Where(j => j.Status is FileTranscriptionStatus.Queued or FileTranscriptionStatus.Processing))
-                { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
-            _run = null; Changed?.Invoke();
+            try
+            {
+                if (cancellation.IsCancellationRequested)
+                    foreach (var job in _jobs.Where(j => j.Status is FileTranscriptionStatus.Queued or FileTranscriptionStatus.Processing))
+                    { job.Status = FileTranscriptionStatus.Canceled; job.Stage = "Canceled"; }
+                _run = null; Changed?.Invoke();
+            }
+            catch (Exception ex) { failure ??= ex; }
+            finally
+            {
+                cancellation.Dispose();
+                if (failure is null) completion.TrySetResult();
+                else completion.TrySetException(failure);
+            }
         }
     }
 
     /// <summary>Requests cancellation; an uninterruptible decoder is still drained.</summary>
     public void Cancel() => _run?.Cancel();
+    /// <summary>Cancels and awaits the active decoder. Repeated calls await the same run; the queue remains reusable.</summary>
+    public Task CancelAndDrainAsync()
+    {
+        var completion = _runCompletion;
+        Cancel();
+        return completion;
+    }
+    /// <summary>Permanently blocks new work, cancels, and waits for the active decoder to drain.</summary>
+    public Task ShutdownAsync()
+    {
+        _shutdown = true;
+        return CancelAndDrainAsync();
+    }
     /// <summary>Requeues a failed or canceled request only when idle.</summary>
     public bool Retry(FileTranscriptionJob job)
     {
-        if (Running || !_jobs.Contains(job) || job.Status is not (FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)) return false;
+        if (_shutdown || Running || !_jobs.Contains(job) || job.Status is not (FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)) return false;
         job.Status = FileTranscriptionStatus.Queued; job.Stage = "Queued"; job.Result = null; Changed?.Invoke(); return true;
     }
     /// <summary>Removes a queue entry without modifying source media.</summary>

@@ -52,8 +52,13 @@ public partial class App : Application
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowHistoryFromTray),
             () => _window.DispatcherQueue.TryEnqueue(() => { _window.ShowFromActivation(); _window.OpenFileTranscription(); }),
             () => _window.DispatcherQueue.TryEnqueue(ExitFromTray),
-            () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray));
-        _window.DictationChanged += _tray.UpdateDictation;
+            () => _window.DispatcherQueue.TryEnqueue(_window.FinishDictationFromTray),
+            () => _window.DispatcherQueue.TryEnqueue(async () => await _window.CancelProcessingAsync()));
+        _window.DictationChanged += (status, recording) =>
+        {
+            _tray?.UpdateDictation(status, recording);
+            _tray?.UpdateProcessing(_window.CanCancelProcessing);
+        };
         _ = _window.InitializeDictationAsync();
 #if DEBUG
         if (Environment.GetEnvironmentVariable("TYPEWHISPER_WINUI_HISTORY_FIXTURE") == "1")
@@ -90,12 +95,25 @@ public partial class App : Application
             _window.DispatcherQueue.TryEnqueue(_window.OpenSettings);
     }
 
-    private void ExitFromTray()
+    private bool _exiting;
+    private async void ExitFromTray()
     {
-        _window?.DisposeDictation();
-        _tray?.Dispose();
-        _tray = null;
-        _mainInstance?.UnregisterKey();
-        Exit();
+        if (_exiting) return;
+        _exiting = true;
+        _tray?.SetShutdownState("Finishing shutdown…");
+        try
+        {
+            if (_window is not null) await _window.ShutdownDictationAsync();
+            _tray?.Dispose();
+            _tray = null;
+            _mainInstance?.UnregisterKey();
+            Exit();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceError("Application shutdown failed: {0}", ex);
+            _tray?.SetShutdownState("Shutdown failed. Work is stopped.");
+            _window?.ShowShutdownFailure();
+        }
     }
 }

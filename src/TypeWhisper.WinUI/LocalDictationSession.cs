@@ -11,7 +11,7 @@ namespace TypeWhisper.WinUI;
 
 // Initial local vertical slice: reuses the existing capture implementation and
 // Parakeet configuration. Does not instantiate the WPF application or plugin UI.
-internal sealed partial class LocalDictationSession : IDisposable
+internal sealed partial class LocalDictationSession : IAsyncDisposable
 {
     private readonly AudioRecordingService _audio = new();
     private readonly SoundService _sounds = new();
@@ -371,7 +371,7 @@ internal sealed partial class LocalDictationSession : IDisposable
             return LanguageHintTranscription.DecodeAsync(engine, samples,
                 () => CloudTranscriptionPlugin.EncodeWav(samples, int.MaxValue), language,
                 _textAtStart.PreferredLanguageHints.Split(',', StringSplitOptions.RemoveEmptyEntries), translate, ct);
-        });
+        }, _operationCancellation.Token);
         return (result.Text, result.TokenTimings.ToArray(), result.DetectedLanguage, result.NoSpeechProbability);
     }
     internal event Action? Changed;
@@ -454,12 +454,15 @@ internal sealed partial class LocalDictationSession : IDisposable
 
     internal async Task InitializeAsync()
     {
+        if (_disposed) return;
         await ApplyHistoryRetentionAsync();
+        if (_disposed) return;
         _retentionTimer.Start();
         await _gate.WaitAsync();
         try
         {
             await Packages.InitializeAsync();
+            if (_disposed) return;
             if (File.Exists(MicrophonePath))
             {
                 var json = File.ReadAllText(MicrophonePath);
@@ -472,10 +475,13 @@ internal sealed partial class LocalDictationSession : IDisposable
             }
             _providerId = _selection.GetSetting<string>("Provider") ?? "local";
             await PluginRuntime.InitializeAsync();
+            if (_disposed) return;
             try { if (Packages.Store.IsInstalled(CloudTranscriptionPlugin.PluginId)) await Groq.InitializeAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Groq initialization failed: " + CloudTranscriptionPlugin.DescribeError(ex)); }
+            if (_disposed) return;
             try { if (Packages.Store.IsInstalled(LocalTranscriptionPlugin.PluginId)) await _transcriptionPlugin.InitializeAsync(); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { LocalPluginError = ex.Message; }
+            if (_disposed) return;
             // Prepare the device without starting capture, so key-down need not initialize it.
             var prepared = _audio.WarmUp();
             await CtcVocabulary.SetEnabledAsync(Models.Enabled);
@@ -495,9 +501,12 @@ internal sealed partial class LocalDictationSession : IDisposable
     internal Task StopAsync() => SetRecordingAsync(false);
     internal async Task CancelAsync()
     {
-        if (_disposed || !await _gate.WaitAsync(0)) return;
+        RequestCancel();
+        if (_disposed) return;
+        await _gate.WaitAsync();
         try
         {
+            if (_disposed) return;
             StopSilenceMonitoring();
             _livePreview.Cancel();
             if (_audio.IsRecording) await _audio.StopRecordingAsync();
@@ -518,6 +527,7 @@ internal sealed partial class LocalDictationSession : IDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
+                _operationCancellation.Begin();
                 if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
                 {
                     SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
@@ -535,6 +545,7 @@ internal sealed partial class LocalDictationSession : IDisposable
                 }
                 var preferences = AudioPreferences;
                 await _livePreview.StopAsync();
+                _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _outputAtStart = OutputPreferences.Current;
@@ -584,6 +595,7 @@ internal sealed partial class LocalDictationSession : IDisposable
             // before the final decode uses the same recognizer.
             await _livePreview.StopAsync();
             // Use captured samples for the policy and history, never decoder padding or elapsed stop time.
+            _operationCancellation.Token.ThrowIfCancellationRequested();
             var rawDuration = (samples?.Length ?? 0) / 16000.0;
             var captureDecision = ShortClipCapturePolicy.Classify(rawDuration, preGainPeakRms,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively);
@@ -593,6 +605,7 @@ internal sealed partial class LocalDictationSession : IDisposable
             { SetStatus("No speech energy detected. Speak closer to the microphone or enable Recognize short, quiet clips."); return; }
             SetStatus($"Transcribing with {ActiveModelName}…", DictationPhase.Processing);
             var decoded = await DecodeFinalAsync(ShortClipCapturePolicy.PadForFinalDecode(samples));
+            _operationCancellation.Token.ThrowIfCancellationRequested();
             var rawText = decoded.Text;
             if (FinalSpeechPolicy.ShouldReject(rawText, decoded.NoSpeechProbability,
                 _hasConfirmedPreviewText, _textAtStart.TranscribeShortQuietClipsAggressively))
@@ -605,7 +618,7 @@ internal sealed partial class LocalDictationSession : IDisposable
             if (_ctcAtStart && dictionary is not null && CtcVocabulary.Enabled)
             {
                 SetStatus("Checking vocabulary with CTC…", DictationPhase.Processing);
-                var refined = await CtcVocabulary.RefineAsync(recordingId, rawText, samples, decoded.Timings, dictionary.EnabledCtcEntries);
+                var refined = await CtcVocabulary.RefineAsync(recordingId, rawText, samples, decoded.Timings, dictionary.EnabledCtcEntries, _operationCancellation.Token);
                 refinedText = refined.Text;
                 if (refined.Error is not null) System.Diagnostics.Debug.WriteLine(refined.Error);
             }
@@ -639,9 +652,10 @@ internal sealed partial class LocalDictationSession : IDisposable
                 },
                 boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
                 correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
-                task: _taskAtStart, targetProcessName: _targetApp, engineId: _engineAtStart, modelId: _modelAtStart);
+                ct: _operationCancellation.Token, task: _taskAtStart, targetProcessName: _targetApp, engineId: _engineAtStart, modelId: _modelAtStart);
             notices.AddRange(processed.Warnings);
             var text = processed.Text;
+            _operationCancellation.Token.ThrowIfCancellationRequested();
             if (_disposed) return;
             try { TypeWhisper.Core.Services.SnippetUsageRecorder.Record(DictationSnippetSnapshot.StoragePath, appliedSnippetIds); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or OverflowException)
@@ -662,12 +676,14 @@ internal sealed partial class LocalDictationSession : IDisposable
                 () => OutputPreferences.Current, async () =>
                 {
                     // Recheck after waiting: settings can change while modifiers are held.
-                    for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25);
+                    for (var attempt = 0; attempt < 40 && ModifiersHeld(); attempt++) await Task.Delay(25, _operationCancellation.Token);
+                    _operationCancellation.Token.ThrowIfCancellationRequested();
                     if (_disposed || !_outputAtStart.RestrictedBy(OutputPreferences.Current).AutoPaste ||
                         ModifiersHeld() || GetForegroundWindow() != _target) return false;
                     return await _inserter.InsertAsync(text, _target);
-                });
+                }, _operationCancellation.Token);
             if (_disposed) return;
+            _operationCancellation.Token.ThrowIfCancellationRequested();
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,
@@ -675,6 +691,14 @@ internal sealed partial class LocalDictationSession : IDisposable
             if (outcome.NeedsReview) ReviewRequested?.Invoke(outcome);
             else OutputCompleted?.Invoke(recordingId);
 
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException && _operationCancellation.Token.IsCancellationRequested)
+        {
+            StopSilenceMonitoring();
+            if (_audio.IsRecording) await _audio.StopRecordingAsync();
+            _effects.End();
+            await _livePreview.StopAsync();
+            if (!_disposed) SetStatus("Dictation canceled. Ready to try again.");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -693,9 +717,9 @@ internal sealed partial class LocalDictationSession : IDisposable
     internal string? LastUnsavedText { get; private set; }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesGroq ? Groq.DecodeAsync(samples, _taskAtStart == TranscriptionTask.Translate)
+        UsesGroq ? Groq.DecodeAsync(samples, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token)
             : UsesRegistryProvider ? DecodeRegistryAsync(samples)
-            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate);
+            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate, _operationCancellation.Token);
     private void StopSilenceMonitoring()
     {
         _silence = null;
@@ -704,6 +728,7 @@ internal sealed partial class LocalDictationSession : IDisposable
     }
     private void SetStatus(string status, DictationPhase? phase = null)
     {
+        if (_disposed) return;
         Status = status;
         _phase = phase ?? (_audio.IsRecording ? DictationPhase.Recording : DictationPhase.Idle);
         Changed?.Invoke();
@@ -711,30 +736,7 @@ internal sealed partial class LocalDictationSession : IDisposable
 
     private static bool ModifiersHeld() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(key => (GetAsyncKeyState(key) & 0x8000) != 0);
 
-    public void Dispose()
-    {
-        _disposed = true;
-        _retentionTimer.Stop();
-        _ = CtcVocabulary.DisposeAsync();
-        _ = Groq.DisposeAsync();
-        _ = PluginRuntime.DisposeAsync();
-        _livePreview.Dispose();
-        StopSilenceMonitoring();
-        _effects.End();
-        _audio.Dispose();
-        _inserter.Dispose();
-        // Decode cannot be interrupted safely; process shutdown releases it if busy.
-        // The preview may still be inside native inference. Drain it before disposing.
-        _ = DisposeRecognizerAsync();
-    }
-
-    private async Task DisposeRecognizerAsync()
-    {
-        await _livePreview.StopAsync();
-        await _gate.WaitAsync();
-        try { await _transcriptionPlugin.DisposeAsync(); }
-        finally { _gate.Release(); }
-    }
+    public ValueTask DisposeAsync() => new(ShutdownAsync());
 
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);

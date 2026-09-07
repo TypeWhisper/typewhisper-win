@@ -169,9 +169,9 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     internal void CancelDownload() => _download?.Cancel();
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default)
     {
-        var result = await DecodeResultAsync(samples, Language == "auto" ? null : Language, translate, CancellationToken.None);
+        var result = await DecodeResultAsync(samples, Language == "auto" ? null : Language, translate, ct);
         return (result.Text, includeTimings ? result.TokenTimings.ToArray() : [], result.DetectedLanguage, result.NoSpeechProbability);
     }
 

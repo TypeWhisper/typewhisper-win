@@ -17,14 +17,16 @@ public sealed class DictationOutputDelivery(IHistoryService history)
     /// <summary>Saves when allowed, then attempts paste or returns a reviewable result.</summary>
     public async Task<DictationOutputResult> DeliverAsync(TranscriptionRecord record,
         DictationOutputPreferences atStart, Func<DictationOutputPreferences> current,
-        Func<Task<bool>> paste)
+        Func<Task<bool>> paste, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         var saved = false;
         if (atStart.RestrictedBy(current()).SaveToHistory)
         {
             try
             {
                 await history.EnsureLoadedAsync();
+                ct.ThrowIfCancellationRequested();
                 if (atStart.RestrictedBy(current()).SaveToHistory)
                 {
                     if (!history.TryAddRecord(record))
@@ -32,18 +34,21 @@ public sealed class DictationOutputDelivery(IHistoryService history)
                     saved = true;
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 return new(record, false, true, "History could not be saved. Review and copy your text; nothing was pasted.");
             }
         }
         var storage = saved ? "Saved to History." : "Not saved to History.";
+        ct.ThrowIfCancellationRequested();
         if (!atStart.RestrictedBy(current()).AutoPaste)
             return new(record, saved, true, storage + " Review and copy your text; nothing was pasted.");
         try
         {
             if (await paste()) return new(record, saved, false, "Paste sent. " + storage);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { }
         return new(record, saved, true, storage + " Paste was not completed. Review and copy your text.");
     }

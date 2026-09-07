@@ -247,6 +247,93 @@ public sealed class FileTranscriptionQueueTests : IDisposable
         Assert.False(Directory.Exists(_directory));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelAndDrainWaitsForLateDecoderAndIsReusable(bool failLate)
+    {
+        var queue = new FileTranscriptionQueue();
+        Assert.True(queue.RunCompletion.IsCompletedSuccessfully);
+        Assert.Null(queue.Add(Source("drain.wav")));
+        var release = new TaskCompletionSource<FileTranscriptionOutput>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = queue.RunAsync((_, _, _) => release.Task);
+        var firstDrain = queue.CancelAndDrainAsync();
+        var secondDrain = queue.CancelAndDrainAsync();
+        Assert.Same(run, queue.RunCompletion);
+        Assert.Same(run, firstDrain);
+        Assert.Same(firstDrain, secondDrain);
+        Assert.False(firstDrain.IsCompleted);
+        Assert.True(queue.Running);
+        if (failLate) release.SetException(new IOException("late decoder failure"));
+        else release.SetResult(Output("late result"));
+        await Task.WhenAll(run, firstDrain, secondDrain);
+        Assert.False(queue.Running);
+        Assert.False(queue.IsShutdown);
+        Assert.Equal(FileTranscriptionStatus.Canceled, Assert.Single(queue.Jobs).Status);
+        Assert.Null(queue.Jobs[0].Result);
+        Assert.True(queue.Retry(queue.Jobs[0]));
+        await queue.RunAsync((_, _, _) => Task.FromResult(Output("retry after navigation")));
+        Assert.Equal("retry after navigation", queue.Jobs[0].Result!.Text);
+    }
+
+    [Fact]
+    public async Task ShutdownBlocksNewWorkImmediatelyAndDrainsBeforeCompleting()
+    {
+        var queue = new FileTranscriptionQueue();
+        Assert.Null(queue.Add(Source("shutdown.wav")));
+        var release = new TaskCompletionSource<FileTranscriptionOutput>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken received = default;
+        var run = queue.RunAsync((_, _, token) => { received = token; return release.Task; });
+        var shutdown = queue.ShutdownAsync();
+        Assert.True(queue.IsShutdown);
+        Assert.True(received.IsCancellationRequested);
+        Assert.False(shutdown.IsCompleted);
+        Assert.Same(shutdown, queue.ShutdownAsync());
+        Assert.NotNull(queue.Add(Source("rejected.wav")));
+        await queue.RunAsync((_, _, _) => throw new InvalidOperationException("Shutdown must block new decoders."));
+        release.SetException(new IOException("late decoder error"));
+        await Task.WhenAll(run, shutdown);
+        Assert.False(queue.Retry(queue.Jobs[0]));
+        Assert.NotNull(queue.Add(Source("still-rejected.wav")));
+        await queue.RunAsync((_, _, _) => throw new InvalidOperationException("Shutdown must remain permanent."));
+        Assert.True(queue.RunCompletion.IsCompletedSuccessfully);
+        Assert.Null(queue.Jobs[0].Result);
+    }
+
+    [Fact]
+    public async Task IdleShutdownIsIdempotentAndNeverStartsQueuedMedia()
+    {
+        var queue = new FileTranscriptionQueue();
+        Assert.Null(queue.Add(Source("never-started.wav")));
+        await queue.ShutdownAsync();
+        await queue.ShutdownAsync();
+        await queue.CancelAndDrainAsync();
+        await queue.RunAsync((_, _, _) => throw new InvalidOperationException("No decoder should start."));
+        Assert.True(queue.IsShutdown);
+        Assert.False(queue.Running);
+        Assert.Null(queue.Jobs[0].Result);
+    }
+
+    [Fact]
+    public async Task CompletionExistsBeforeReentrantShutdownNotification()
+    {
+        var queue = new FileTranscriptionQueue();
+        Assert.Null(queue.Add(Source("reentrant.wav")));
+        Task? shutdown = null;
+        queue.Changed += () =>
+        {
+            if (queue.Jobs[0].Status == FileTranscriptionStatus.Processing)
+            {
+                Assert.False(queue.RunCompletion.IsCompleted);
+                shutdown = queue.ShutdownAsync();
+            }
+        };
+        var run = queue.RunAsync((_, _, _) => throw new InvalidOperationException("Canceled before decoder entry."));
+        await run;
+        Assert.Same(run, shutdown);
+        Assert.Equal(FileTranscriptionStatus.Canceled, queue.Jobs[0].Status);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory)) Directory.Delete(_directory, true);

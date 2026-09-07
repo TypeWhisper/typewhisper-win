@@ -7,6 +7,22 @@ namespace TypeWhisper.Presentation.Tests;
 
 public sealed class DictationOutputTests
 {
+    [Fact]
+    public async Task CancelWhileHistoryLoadsPreventsHistoryCommitAndPaste()
+    {
+        var history = new Mock<IHistoryService>(MockBehavior.Strict);
+        var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.Setup(h => h.EnsureLoadedAsync()).Returns(loaded.Task);
+        using var cancellation = new CancellationTokenSource();
+        var pasted = false;
+        var pending = new DictationOutputDelivery(history.Object).DeliverAsync(Record(), new(), () => new(),
+            () => { pasted = true; return Task.FromResult(true); }, cancellation.Token);
+        cancellation.Cancel(); loaded.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.False(pasted);
+        history.Verify(h => h.TryAddRecord(It.IsAny<TranscriptionRecord>()), Times.Never());
+    }
+
     private static TranscriptionRecord Record() => new() { Id = "output-test", Timestamp = DateTime.UtcNow, RawText = "raw", FinalText = "Reviewed text" };
 
     [Theory]

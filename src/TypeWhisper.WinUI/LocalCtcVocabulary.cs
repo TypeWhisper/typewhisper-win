@@ -46,18 +46,19 @@ internal sealed class LocalCtcVocabulary : IAsyncDisposable
     }
 
     internal async Task<VocabularyOutcome> RefineAsync(Guid recording, string text, float[] audio,
-        IReadOnlyList<VocabularyTokenTiming> timings, IReadOnlyList<TypeWhisper.Core.Models.DictionaryEntry> terms)
+        IReadOnlyList<VocabularyTokenTiming> timings, IReadOnlyList<TypeWhisper.Core.Models.DictionaryEntry> terms, CancellationToken ct = default)
     {
         Trace($"{recording} host-start enabled={Enabled} samples={audio.Length} timings={timings.Count} terms={terms.Count}");
         if (timings.Count == 0 || terms.Count == 0 || audio.Length == 0)
             Trace($"{recording} pipeline-skipped reason={(timings.Count == 0 ? "no-token-timings" : terms.Count == 0 ? "no-terms" : "no-audio")}");
         try
         {
-            var result = await _session.RefineAsync(recording, text, audio, 16000, timings, terms.Select(t => new VocabularyTermHint(t.Original, t.CtcMinSimilarity)).ToArray());
+            var result = await _session.RefineAsync(recording, text, audio, 16000, timings, terms.Select(t => new VocabularyTermHint(t.Original, t.CtcMinSimilarity)).ToArray(), ct);
             Trace($"{recording} host-finish modified={result.Modified} error={result.Error ?? "none"}");
             return result;
         }
         // Disabling the optional add-on must not discard an already decoded dictation.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException) { Trace($"{recording} cancelled"); return new(text, false); }
         catch (ObjectDisposedException) { Trace($"{recording} disposed"); return new(text, false); }
     }

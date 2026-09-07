@@ -101,8 +101,10 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         host.SetSetting("Language", language); Changed?.Invoke();
     }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool translate = false)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool translate = false, CancellationToken ct = default)
     {
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(ct, _shutdown.Token);
+        var token = request.Token;
         (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability) result = ("", [], null, null);
         await RunAsync(async () =>
         {
@@ -110,9 +112,10 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
             if (translate && !SupportsTranslation) throw new NotSupportedException("Native English translation is unavailable for the selected Groq model.");
             var wav = EncodeWav(samples);
             var response = _registry is null ? await RequireLease().Engine.TranscribeAsync(wav,
-                Language == "auto" ? null : Language, translate, null, _shutdown.Token)
+                Language == "auto" ? null : Language, translate, null, token)
                 : await _registry.UseTranscriptionAsync(PluginId, (engine, ct) => engine.TranscribeAsync(wav,
-                    Language == "auto" ? null : Language, translate, null, ct), _shutdown.Token);
+                    Language == "auto" ? null : Language, translate, null, ct), token);
+            token.ThrowIfCancellationRequested();
             result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage, response.NoSpeechProbability);
         });
         return result;

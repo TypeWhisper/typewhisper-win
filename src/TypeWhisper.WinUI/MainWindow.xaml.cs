@@ -90,8 +90,11 @@ public sealed partial class MainWindow : Window
     private OverlayWindow? _liveOverlay;
     internal event Action<string, bool>? DictationChanged;
 
-    internal async Task InitializeDictationAsync()
+    private Task? _dictationInitialization;
+    internal Task InitializeDictationAsync() => _dictationInitialization ??= InitializeDictationCoreAsync();
+    private async Task InitializeDictationCoreAsync()
     {
+        if (_closing) return;
         try
         {
             _dictationInput = new(
@@ -109,6 +112,7 @@ public sealed partial class MainWindow : Window
             _dictation.Changed += _observeInputMode;
             _dictationHotkey = new DictationHotkeyRegistration(this, action =>
             {
+                if (action == HybridHotkeyAction.Cancel) _dictation.RequestCancel();
                 _ = _dictationInput.SubmitAsync(action switch
                 {
                     HybridHotkeyAction.Start => TypeWhisper.Presentation.DictationInputAction.Start,
@@ -124,14 +128,44 @@ public sealed partial class MainWindow : Window
             if (error is not null) { MetricsText.Text = error; DictationChanged?.Invoke(error, false); return; }
             await _dictation.InitializeAsync();
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException) { MetricsText.Text = "Dictation startup failed: " + ex.Message; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { if (!_closing) MetricsText.Text = "Dictation startup failed: " + ex.Message; }
     }
 
     internal void FinishDictationFromTray() { if (_dictation.IsRecording) _ = _dictation.ToggleAsync(); }
-    internal void DisposeDictation() { _dictationHotkey?.Dispose(); _dictationInput?.Dispose(); if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode; _dictation.Dispose(); _liveOverlay?.Close(); foreach (var review in _reviewWindows.ToArray()) review.Close(); }
+    internal bool CanCancelProcessing => !_closing && _dictation.CanCancelProcessing;
+    internal async Task CancelProcessingAsync()
+    {
+        if (!CanCancelProcessing) return;
+        try { await _dictation.CancelAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { System.Diagnostics.Trace.TraceError("Processing cancellation failed: {0}", ex); if (!_closing) MetricsText.Text = "Could not finish cancellation. Try again."; }
+    }
+    private bool _closing;
+    private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
+    internal Task ShutdownDictationAsync() => _shutdown.Run(async () =>
+    {
+        _closing = true;
+        _dictationHotkey?.Dispose();
+        _dictationInput?.Dispose();
+        if (_observeInputMode is not null) _dictation.Changed -= _observeInputMode;
+        MetricsText.Text = "Finishing shutdown…";
+        // Begin all cancellation requests before awaiting any drain.
+        var session = _dictation.ShutdownAsync();
+        var files = _fileTranscription?.ShutdownAsync() ?? Task.CompletedTask;
+        await Task.WhenAll(session, files, _dictationInput?.Completion ?? Task.CompletedTask,
+            _dictationInitialization ?? Task.CompletedTask);
+        _liveOverlay?.Close();
+        foreach (var review in _reviewWindows.ToArray()) review.Close();
+    });
+    internal void ShowShutdownFailure()
+    {
+        ShowFromActivation();
+        MetricsText.Text = "Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details.";
+    }
 
     private void UpdateLiveDictation()
     {
+        if (_closing) return;
         var revision = ++_overlayRevision;
         MetricsText.Text = _dictation.Status;
         UpdateTranscriptToggle();
