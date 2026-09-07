@@ -28,7 +28,8 @@ public static class DictationTextPipeline
         Func<string, CancellationToken, Task<string>>? expandSnippets = null,
         Func<string, string>? boostVocabulary = null,
         Func<string, string>? correctDictionary = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        TranscriptionTask task = TranscriptionTask.Transcribe)
     {
         ArgumentNullException.ThrowIfNull(rawText);
         ArgumentNullException.ThrowIfNull(preferences);
@@ -61,6 +62,7 @@ public static class DictationTextPipeline
             ShortUtterancePunctuationEnabled = preferences.ShortUtterancePunctuationEnabled,
             EnglishOutputVariant = preferences.EnglishOutputVariant,
             GermanOutputVariant = preferences.GermanOutputVariant,
+            TranscriptionTask = task,
             ConfiguredLanguage = configuredLanguage,
             DetectedLanguage = detectedLanguage,
             PluginPostProcessors = snippets,

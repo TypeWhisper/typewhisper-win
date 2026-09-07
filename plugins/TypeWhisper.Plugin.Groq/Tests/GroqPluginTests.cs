@@ -174,6 +174,43 @@ public class GroqPluginTests
         Assert.Equal("ok", result.Text);
     }
 
+    [Theory]
+    [InlineData(true, "de")]
+    [InlineData(true, "en")]
+    [InlineData(false, "de")]
+    public async Task TranscribeAsync_OnlySendsSourceLanguageForTranscription(bool translate, string language)
+    {
+        string? sentBody = null;
+        string? sentUrl = null;
+        var handler = new CapturingHandler((request, body) =>
+        {
+            sentUrl = request.RequestUri?.AbsoluteUri;
+            sentBody = body;
+            return JsonResponse("""{"text":"Good morning","language":"en","duration":1}""");
+        });
+        var host = new TestPluginHostServices();
+        host.Secrets["api-key"] = "test-key";
+        using var httpClient = new HttpClient(handler);
+        using var sut = new GroqPlugin(httpClient, httpClient,
+            _ => new GroqTranscriptionUpload([1, 2, 3], "audio.m4a", "audio/mp4"));
+        await sut.ActivateAsync(host);
+
+        await sut.TranscribeAsync([4, 5, 6], language, translate, null, CancellationToken.None);
+
+        Assert.Equal("https://api.groq.com/openai/v1/audio/" + (translate ? "translations" : "transcriptions"), sentUrl);
+        Assert.NotNull(sentBody);
+        if (translate)
+        {
+            Assert.DoesNotContain("name=language", sentBody);
+            Assert.DoesNotContain("name=\"language\"", sentBody);
+        }
+        else
+        {
+            AssertMultipartToken(sentBody, "name", "language");
+            Assert.Contains("\r\nde\r\n", sentBody);
+        }
+    }
+
     [Fact]
     public async Task TranscribeAsync_RemovesHighNoSpeechTerminalThankYouSegment()
     {

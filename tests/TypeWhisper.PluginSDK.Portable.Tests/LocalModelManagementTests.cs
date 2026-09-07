@@ -31,6 +31,28 @@ public sealed class LocalModelManagementTests : IDisposable
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
     [Fact]
+    public async Task NativeTranslationPassesTranslateFlagOnlyForCapableLoadedModel()
+    {
+        _downloaded.Add("canary");
+        _engine.SetupGet(e => e.SupportsTranslation).Returns(() => _loads.LastOrDefault() == "canary");
+        _engine.SetupGet(e => e.SupportedLanguages).Returns(["en", "de"]);
+        _engine.Setup(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), "de", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PluginTranscriptionResult("Good morning", "de", 1, null));
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        Assert.False(runtime.SupportsTranslation);
+        await Assert.ThrowsAsync<NotSupportedException>(() => runtime.DecodeAsync([0f], false, translate: true));
+        _engine.Verify(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        await runtime.ActivateAsync("canary"); runtime.SelectLanguage("de");
+        Assert.True(runtime.SupportsTranslation);
+        Assert.Equal("Good morning", (await runtime.DecodeAsync([0f], false, translate: true)).Text);
+        _engine.Verify(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), "de", true, It.IsAny<CancellationToken>()), Times.Once);
+        await runtime.ActivateAsync(LocalTranscriptionPlugin.ModelId);
+        Assert.False(runtime.SupportsTranslation);
+        await Assert.ThrowsAsync<NotSupportedException>(() => runtime.DecodeAsync([0f], false, translate: true));
+        _engine.Verify(e => e.TranscribePcmAsync(It.IsAny<ReadOnlyMemory<float>>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task MissingModelKeepsPluginAvailableForDownload()
     {
         _downloaded.Clear();

@@ -27,6 +27,38 @@ public sealed class CloudTranscriptionTests : IDisposable
     });
 
     [Fact]
+    public async Task NativeTranslationUsesTranslationEndpointAndOmitsInputLanguageFormField()
+    {
+        _respond = (_, _) => Task.FromResult(Json("{\"text\":\"Good morning\",\"language\":\"english\",\"duration\":1}"));
+        await using var runtime = Create();
+        await runtime.SetEnabledAsync(true); await runtime.SaveKeyAsync("key");
+        await runtime.SelectModelAsync("whisper-large-v3"); runtime.SelectLanguage("de");
+        Assert.True(runtime.SupportsTranslation);
+        var result = await runtime.DecodeAsync([0.1f], translate: true);
+        Assert.Equal("Good morning", result.Text);
+        var request = Assert.Single(_requests);
+        Assert.Equal("https://api.groq.com/openai/v1/audio/translations", request.Uri);
+        Assert.Contains("whisper-large-v3", request.Body);
+        Assert.Contains("audio/wav", request.Body);
+        Assert.DoesNotContain("name=language", request.Body);
+        Assert.DoesNotContain("name=\"language\"", request.Body);
+    }
+
+    [Fact]
+    public async Task TurboTranslationIsRejectedBeforeAudioEncodingOrUpload()
+    {
+        await using var runtime = Create();
+        await runtime.SetEnabledAsync(true); await runtime.SaveKeyAsync("key");
+        await runtime.SelectModelAsync("whisper-large-v3-turbo");
+        Assert.False(runtime.SupportsTranslation);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.DecodeAsync([float.NaN], translate: true));
+        Assert.Contains("cannot translate", error.Message);
+        Assert.Empty(_requests);
+        await runtime.SelectModelAsync("whisper-large-v3");
+        Assert.True(runtime.SupportsTranslation);
+    }
+
+    [Fact]
     public async Task FirstLaunchDoesNotLoadOrContactGroqAndMissingKeyBlocksAudio()
     {
         await using var runtime = Create(); await runtime.InitializeAsync();

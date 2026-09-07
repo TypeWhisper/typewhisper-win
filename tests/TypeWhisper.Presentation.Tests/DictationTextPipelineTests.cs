@@ -6,6 +6,18 @@ using Xunit;
 public sealed class DictationTextPipelineTests
 {
     [Fact]
+    public async Task NativeTranslationNormalizesEnglishOutputDespiteGermanSourceLanguage()
+    {
+        var result = await DictationTextPipeline.ProcessAsync("I have two favorite colors", new()
+        {
+            EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom,
+            GermanOutputVariant = GermanOutputVariant.Switzerland
+        }, "de", detectedLanguage: "de", task: TranscriptionTask.Translate);
+        Assert.Equal("I have 2 favourite colours", result.Text);
+        Assert.Empty(result.Warnings);
+    }
+
+    [Fact]
     public async Task SharedPipelineOrdersBuiltInsSnippetsBoostingCorrectionsAndRegionalSpelling()
     {
         var observed = new List<string>();

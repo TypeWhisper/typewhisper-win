@@ -16,6 +16,7 @@ internal sealed class LiveDictationSettings(LocalDictationSession session, Actio
         LiveHistoryRetentionSettings.Configure(category, content, pickers, session.HistoryRetention);
         LiveRecordingModeSettings.Configure(category, content, pickers, session);
         LiveTextProcessingSettings.Configure(category, content, pickers, session);
+        LiveTranscriptionTaskSettings.Configure(category, content, pickers, session);
         if (category == "Audio")
         {
             pickers.Clear();

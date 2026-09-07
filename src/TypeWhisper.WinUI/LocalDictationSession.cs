@@ -39,6 +39,22 @@ internal sealed class LocalDictationSession : IDisposable
     internal DictationTextPreferencesStore TextPreferences { get; } = new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "TypeWhisper-WinUI-DevUserData", "dictation-text.json"));
+    internal TranscriptionTaskPreferencesStore TranscriptionTaskPreferences { get; } = new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "TypeWhisper-WinUI-DevUserData", "transcription-task.json"));
+    internal bool SupportsTranslation => UsesGroq ? Groq.SupportsTranslation : Models.SupportsTranslation;
+    private TranscriptionTask _taskAtStart;
+    internal string? SelectTranscriptionTask(TranscriptionTask task)
+    {
+        if (!CanChangeProvider || !_gate.Wait(0)) return "Finish dictation before changing the task.";
+        try
+        {
+            if (task == TranscriptionTask.Translate && !SupportsTranslation)
+                return "This model does not support translation to English. Choose a compatible model first.";
+            return TranscriptionTaskPreferences.Save(task);
+        }
+        finally { _gate.Release(); Changed?.Invoke(); }
+    }
     private DictationTextPreferences _textAtStart = new();
     private DictationOutputPreferences _outputAtStart = new();
     internal event Action<DictationOutputResult>? ReviewRequested;
@@ -387,6 +403,12 @@ internal sealed class LocalDictationSession : IDisposable
             if (!IsReady) { SetStatus("No model is ready. Download a model or configure a cloud provider in plugin settings, then select it in Dictation."); return; }
             if (!_audio.IsRecording)
             {
+                if (TranscriptionTaskPreferences.Current == TranscriptionTask.Translate && !SupportsTranslation)
+                {
+                    SetStatus("This model cannot translate to English. Choose Transcribe or a translation-capable model in Dictation.");
+                    return;
+                }
+                _taskAtStart = TranscriptionTaskPreferences.Current;
                 _target = GetForegroundWindow();
                 GetWindowThreadProcessId(_target, out var processId);
                 if (_target == IntPtr.Zero || processId == Environment.ProcessId)
@@ -405,9 +427,9 @@ internal sealed class LocalDictationSession : IDisposable
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
-                _ctcAtStart = !UsesGroq && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
+                _ctcAtStart = _taskAtStart == TranscriptionTask.Transcribe && !UsesGroq && Models.ActiveModelId == "parakeet-tdt-0.6b" && CtcVocabulary.Enabled;
                 LivePreviewText = "";
-                if (LivePreviewEnabled && !UsesGroq)
+                if (LivePreviewEnabled && !UsesGroq && _taskAtStart == TranscriptionTask.Transcribe)
                     _livePreview.Start(() => _audio.HasSpeechEnergy ? _audio.GetCurrentBuffer() : null,
                         DecodeAsync,
                         text => { LivePreviewText = text; LivePreviewChanged?.Invoke(); },
@@ -484,7 +506,8 @@ internal sealed class LocalDictationSession : IDisposable
                     return expansion.Text;
                 },
                 boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
-                correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null);
+                correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
+                task: _taskAtStart);
             notices.AddRange(processed.Warnings);
             var text = processed.Text;
             var snippetError = notices.Count == 0 ? null : string.Join(" · ", notices);
@@ -493,7 +516,7 @@ internal sealed class LocalDictationSession : IDisposable
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 RawText = rawText, FinalText = text, DurationSeconds = samples.Length / 16000.0,
-                EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = "transcribe",
+                EngineUsed = UsesGroq ? "groq" : "sherpa-onnx", ModelUsed = ActiveModelId, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
                 Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
                 AppName = _targetApp == "Target app" ? null : _targetApp,
                 AppProcessName = _targetApp == "Target app" ? null : _targetApp
@@ -531,7 +554,8 @@ internal sealed class LocalDictationSession : IDisposable
     internal string? LastUnsavedText { get; private set; }
     private async Task<string> DecodeAsync(float[] samples) => (await DecodeFinalAsync(samples, false)).Text;
     private Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeFinalAsync(float[] samples, bool includeTimings = true) =>
-        UsesGroq ? Groq.DecodeAsync(samples) : _transcriptionPlugin.DecodeAsync(samples, includeTimings);
+        UsesGroq ? Groq.DecodeAsync(samples, _taskAtStart == TranscriptionTask.Translate)
+            : _transcriptionPlugin.DecodeAsync(samples, includeTimings, _taskAtStart == TranscriptionTask.Translate);
     private void StopSilenceMonitoring()
     {
         _silence = null;

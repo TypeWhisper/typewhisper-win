@@ -493,7 +493,9 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
         content.Add(new StringContent(model), "model");
         content.Add(new StringContent(responseFormat), "response_format");
 
-        if (!string.IsNullOrEmpty(language) && language != "auto")
+        // Translation targets English; Groq accepts no source-language hint here.
+        // https://console.groq.com/docs/speech-to-text (optional translation language: en only)
+        if (!translate && !string.IsNullOrEmpty(language) && language != "auto")
             content.Add(new StringContent(language), "language");
 
         if (!string.IsNullOrWhiteSpace(prompt))

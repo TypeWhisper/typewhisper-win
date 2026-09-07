@@ -23,6 +23,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
     internal string? Feedback { get; private set; }
     internal IReadOnlyList<PluginModelInfo> Models => _lease?.Engine.TranscriptionModels ?? [];
     internal string? ModelId => _lease?.Engine.SelectedModelId;
+    internal bool SupportsTranslation => _lease?.Engine.SupportsTranslation == true;
     internal string ModelName => Models.FirstOrDefault(m => m.Id == ModelId)?.DisplayName ?? "Groq";
     internal IReadOnlyList<string> Languages => _lease?.Engine.SupportedLanguages ?? [];
     internal string Language => host.GetSetting<string>("Language") is { } language && Languages.Contains(language) ? language : "auto";
@@ -81,14 +82,15 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
         host.SetSetting("Language", language); Changed?.Invoke();
     }
 
-    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples)
+    internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage)> DecodeAsync(float[] samples, bool translate = false)
     {
         (string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage) result = ("", [], null);
         await RunAsync(async () =>
         {
             if (!Ready) throw new InvalidOperationException("Add an API key in Plugins > Groq > Settings.");
+            if (translate && !SupportsTranslation) throw new NotSupportedException("Native English translation is unavailable for the selected Groq model.");
             var response = await RequireLease().Engine.TranscribeAsync(EncodeWav(samples),
-                Language == "auto" ? null : Language, false, null, _shutdown.Token);
+                Language == "auto" ? null : Language, translate, null, _shutdown.Token);
             result = (response.Text, response.TokenTimings.ToArray(), response.DetectedLanguage);
         });
         return result;
@@ -141,6 +143,7 @@ internal sealed class CloudTranscriptionPlugin(IPluginHostServices host, Func<Ta
             _ => "Groq could not complete the request. Check the selected model and try again."
         },
         OperationCanceledException => "Groq request canceled.",
+        NotSupportedException => "The selected Groq model cannot translate audio to English. Choose Whisper Large V3 or switch to Transcribe.",
         System.Reflection.TargetInvocationException { InnerException: { } inner } => DescribeError(inner),
         TypeLoadException or MissingMethodException or FileNotFoundException => "Groq package could not load: " + ex.Message,
         System.Security.Cryptography.CryptographicException => "The saved API key could not be decrypted. Remove the key and save it again.",
