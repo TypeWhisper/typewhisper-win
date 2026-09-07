@@ -77,6 +77,7 @@
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <StackPanel Spacing="6">
                 <TextBlock x:Name="WorkflowInstruction" FontSize="13" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                <local:HandCursorButton x:Name="WorkflowEnableButton" Content="Disable workflow" Click="WorkflowEnable_Click" HorizontalAlignment="Left" Style="{StaticResource PrototypeSecondaryButtonStyle}" />
                 <TextBlock x:Name="WorkflowExecutionSummary" Text="Choose a provider and model in Edit workflow." FontSize="11" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
             </StackPanel>
             <Grid Grid.Row="1">

@@ -60,6 +60,21 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
             foreach (var item in element.EnumerateArray()) RejectDuplicateProperties(item);
     }
 
+    /// <summary>Updates only enablement on the latest stored record, preserving unsupported semantics and metadata.</summary>
+    public Workflow SetEnabled(string id, bool enabled)
+    {
+        lock (MutationLock)
+        {
+            var items = Read().ToList();
+            var index = items.FindIndex(item => item.Id == id);
+            if (index < 0) throw new InvalidOperationException("This workflow no longer exists.");
+            var updated = items[index] with { IsEnabled = enabled };
+            items[index] = updated;
+            if (!_write(items.AsReadOnly())) throw new IOException("Workflow enablement could not be saved.");
+            return updated;
+        }
+    }
+
     /// <summary>Writes one manual workflow atomically; callers keep drafts when this throws.</summary>
     public void Save(Workflow workflow, bool allowAutomatic = false)
     {

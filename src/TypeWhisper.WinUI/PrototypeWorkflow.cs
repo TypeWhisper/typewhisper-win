@@ -24,10 +24,11 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     public string AppProcesses { get; init; } = "";
     /// <summary>Lower numbers win among equally specific rules.</summary>
     public int Priority { get; init; }
+    internal bool IsEditable => Stored is null || TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(Stored);
     internal Workflow? Stored { get; init; }
     internal string InstructionDescription => string.Join("\n", new[]
     {
-        Template == WorkflowTemplate.Custom ? null : WorkflowTemplateCatalog.DefinitionFor(Template).Description,
+        !Enum.IsDefined(Template) ? "Unknown template" : Template == WorkflowTemplate.Custom ? null : WorkflowTemplateCatalog.DefinitionFor(Template).Description,
         Template == WorkflowTemplate.Translation ? "Target language: " + (string.IsNullOrWhiteSpace(TranslationTarget) ? "English" : TranslationTarget) : null,
         string.IsNullOrWhiteSpace(Instruction) ? null : Instruction
     }.Where(text => text is not null));
@@ -53,7 +54,7 @@ public sealed record PrototypeWorkflow(string Id, string Title, string Descripti
     };
 
     internal static PrototypeWorkflow FromStored(Workflow workflow) => new(workflow.Id, workflow.Name,
-        (workflow.IsEnabled ? "" : "Disabled · ") + workflow.Trigger.Kind + " � " + workflow.Definition.Name, "workflow", workflow.Behavior.FineTuning)
+        (workflow.IsEnabled ? "" : "Disabled · ") + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : "Unsupported - ") + workflow.Trigger.Kind + " · " + (Enum.IsDefined(workflow.Template) ? workflow.Definition.Name : "Unknown template"), "workflow", workflow.Behavior.FineTuning)
     {
         ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
         TriggerKind = workflow.Trigger.Kind, AppProcesses = string.Join(", ", workflow.Trigger.ProcessNames), Priority = workflow.SortOrder,

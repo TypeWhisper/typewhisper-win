@@ -53,7 +53,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         try
         {
             _workflows.Clear();
-            _workflows.AddRange(_store.Read().Where(ManualWorkflowStore.IsEditable)
+            _workflows.AddRange(_store.Read()
                 .Select(PrototypeWorkflow.FromStored));
             _loadError = null;
         }
@@ -84,6 +84,10 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     public PrototypeWorkflowsView()
     {
         InitializeComponent();
+        WorkflowList.SelectionChanged += (_, _) =>
+        {
+            if (_page == Page.List) ConfigureWorkflowButton.IsEnabled = WorkflowList.SelectedItem is PrototypeWorkflow { IsEditable: true };
+        };
         ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
         ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTemplate.Configure("Template", "workflow", "Workflow template");
@@ -137,7 +141,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     internal void FocusEntry()
     {
-        if (_page == Page.Editor) WorkflowSource.Focus(FocusState.Programmatic);
+        if (_page == Page.Editor) { if (_opened?.IsEditable == false) WorkflowEnableButton.Focus(FocusState.Programmatic); else WorkflowSource.Focus(FocusState.Programmatic); }
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
@@ -167,7 +171,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigureWorkflowButton.Visibility = page is Page.List or Page.Editor ? Visibility.Visible : Visibility.Collapsed;
         NewWorkflowButton.IsEnabled = _loadError is null && _store is not null;
         NewWorkflowButton.Visibility = page == Page.List ? Visibility.Visible : Visibility.Collapsed;
-        ConfigureWorkflowButton.IsEnabled = page != Page.List || FilteredWorkflows.Count > 0;
+        ConfigureWorkflowButton.IsEnabled = page == Page.List
+            ? WorkflowList.SelectedItem is PrototypeWorkflow { IsEditable: true } : _opened?.IsEditable == true;
         ConfigurationModeChanged?.Invoke(page == Page.Configuration);
         UpdateSourceState();
     }
@@ -197,7 +202,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     {
         if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
-        if (_page != Page.Editor || _opened is null || _session is null) return;
+        if (_page != Page.Editor || _opened is null || !_opened.IsEditable || _session is null) return;
         using var cancellation = new CancellationTokenSource();
         _run = cancellation;
         var completion = _runCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -231,6 +236,22 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         }
     }
 
+    private void WorkflowEnable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_closing || _run is not null || _opened is null || _store is null || _loadError is not null) return;
+        try
+        {
+            var updated = PrototypeWorkflow.FromStored(_store.SetEnabled(_opened.Id, !_opened.IsEnabled));
+            var index = _workflows.FindIndex(item => item.Id == updated.Id);
+            if (index >= 0) _workflows[index] = updated;
+            _opened = updated;
+            WorkflowInstruction.Text = updated.InstructionDescription;
+            ShowPage(Page.Editor);
+            WorkflowSummary.Text = updated.IsEnabled ? "Workflow enabled" : "Workflow disabled";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { WorkflowInputHint.Text = "Enablement was not changed. " + ex.Message; }
+    }
     private void Source_Changed(object sender, TextChangedEventArgs e)
     {
         if (_opened is not null) _drafts[_opened.Id] = WorkflowSource.Text;
@@ -240,6 +261,19 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void UpdateSourceState()
     {
         if (_page == Page.Configuration) { UpdateConfigurationState(); return; }
+        WorkflowEnableButton.Content = _opened?.IsEnabled == true ? "Disable workflow" : "Enable workflow";
+        WorkflowEnableButton.IsEnabled = !_closing && _run is null;
+        if (_opened is { IsEditable: false })
+        {
+            WorkflowSource.IsReadOnly = true;
+            WorkflowPrimaryButton.IsEnabled = false;
+            ConfigureWorkflowButton.IsEnabled = false;
+            WorkflowInputHint.Text = "Unsupported workflow: editing and execution are unavailable. Enablement can change without changing other settings. An enabled matching App/Global rule with unsupported overrides sends dictation to review without pasting.";
+            WorkflowExecutionSummary.Text = "Stored settings are preserved. This detail is read-only.";
+            SourceWatermark.Visibility = Visibility.Collapsed;
+            return;
+        }
+        WorkflowSource.IsReadOnly = _run is not null;
         var empty = string.IsNullOrWhiteSpace(WorkflowSource.Text);
         if (_run is not null) return;
         WorkflowPrimaryButton.IsEnabled = _page == Page.Result || !empty && _opened is { IsEnabled: true } && Available(_opened.ProviderId, _opened.ModelId);
@@ -304,7 +338,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     {
         _creating = false;
         if (_page == Page.List) _opened = WorkflowList.SelectedItem as PrototypeWorkflow;
-        if (_opened is null) return;
+        if (_closing || _opened is null || !_opened.IsEditable) return;
         _configurationReturnPage = _page;
         LoadConfiguration();
     }
