@@ -102,7 +102,7 @@ public sealed partial class MainWindow : Window
                     HybridHotkeyAction.Cancel => _dictation.CancelAsync(),
                     _ => _dictation.ToggleAsync()
                 };
-            }, () => _dictation.IsRecording);
+            }, () => _dictation.IsRecording, () => _dictation.RecordingModePreferences.Current);
             var saved = File.Exists(DictationHotkeyPath) ? File.ReadAllText(DictationHotkeyPath) : "Ctrl+Shift+F9";
             var error = _dictationHotkey.TryChange(saved);
             _settingsValues["MainDictationHotkeys"] = _dictationHotkey.Value;

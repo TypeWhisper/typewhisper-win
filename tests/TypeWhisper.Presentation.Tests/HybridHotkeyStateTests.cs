@@ -1,8 +1,71 @@
 using TypeWhisper.WinUI;
+using TypeWhisper.Presentation;
 using Xunit;
 
 public class HybridHotkeyStateTests
 {
+    [Theory]
+    [InlineData(RecordingMode.Toggle, 50, false)]
+    [InlineData(RecordingMode.Toggle, 1000, false)]
+    [InlineData(RecordingMode.Hold, 50, true)]
+    [InlineData(RecordingMode.Hold, 1000, true)]
+    public void ExplicitModeDeterminesReleaseRegardlessOfDuration(RecordingMode mode, int duration, bool stop)
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        Assert.Null(state.Key(0xA2, true, 0, bindings, mode: mode));
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 0, bindings, mode: mode));
+        Assert.Null(state.Key(0xA0, true, 25, bindings, true, mode));
+        Assert.Equal(stop ? HybridHotkeyAction.Stop : (HybridHotkeyAction?)null,
+            state.Key(0xA0, false, duration, bindings, true, mode));
+        Assert.Null(state.Key(0xA2, false, duration + 10, bindings, !stop, mode));
+        state.Key(0xA2, true, duration + 20, bindings, !stop, mode);
+        Assert.Equal(stop ? HybridHotkeyAction.Start : HybridHotkeyAction.Stop,
+            state.Key(0xA0, true, duration + 30, bindings, !stop, mode));
+    }
+
+    [Theory]
+    [InlineData(RecordingMode.Toggle)]
+    [InlineData(RecordingMode.Hold)]
+    public void ModeChangeCannotCompleteAnAlreadyHeldChord(RecordingMode mode)
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        state.Key(0xA2, true, 0, bindings);
+        Assert.Null(state.Key(0xA0, true, 10, bindings, mode: mode));
+        Assert.Null(state.Key(0xA0, false, 20, bindings, mode: mode));
+        Assert.Null(state.Key(0xA0, true, 30, bindings, mode: mode));
+        Assert.Null(state.Key(0xA0, false, 40, bindings, mode: mode));
+        Assert.Null(state.Key(0xA2, false, 50, bindings, mode: mode));
+        state.Key(0xA2, true, 60, bindings, mode: mode);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 70, bindings, mode: mode));
+    }
+
+    [Fact]
+    public void ModeChangeOnRepeatedKeyCancelsOwnedGestureAndWaitsForRelease()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        state.Key(0xA2, true, 0, bindings);
+        state.Key(0xA0, true, 10, bindings);
+        Assert.Equal(HybridHotkeyAction.Cancel, state.Key(0xA0, true, 20, bindings, true, RecordingMode.Toggle));
+        Assert.Null(state.Key(0xA0, false, 30, bindings, false, RecordingMode.Toggle));
+        Assert.Null(state.Key(0xA2, false, 40, bindings, false, RecordingMode.Toggle));
+        state.Key(0xA2, true, 50, bindings, false, RecordingMode.Toggle);
+        Assert.Equal(HybridHotkeyAction.Start, state.Key(0xA0, true, 60, bindings, false, RecordingMode.Toggle));
+    }
+
+    [Fact]
+    public void HoldGestureDoesNotStopRecordingStartedElsewhere()
+    {
+        var state = new HybridHotkeyState();
+        var bindings = new HashSet<string> { "CTRL+SHIFT" };
+        state.Key(0xA2, true, 0, bindings, true, RecordingMode.Hold);
+        Assert.Null(state.Key(0xA0, true, 10, bindings, true, RecordingMode.Hold));
+        Assert.Null(state.Key(0xA0, false, 20, bindings, true, RecordingMode.Hold));
+        Assert.Null(state.Key(0xA2, false, 30, bindings, true, RecordingMode.Hold));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

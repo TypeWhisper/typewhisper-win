@@ -87,3 +87,7 @@ Window-title appearance: the prescribed Debug build/launch passed with shared ti
 ## Dictation provenance, 2026-09-07
 
 Provider adapters now preserve detected language; the session records the captured target process and resolves provider language names/codes without guessing automatic input. Targeted cloud/local adapter tests passed (23 cases), and language provenance tests passed (9 cases). These are portable fixture tests, not live provider acceptance. App/task presentation follows in the history-actions slice.
+
+## Recording modes and history actions, 2026-09-07
+
+The combined Presentation suite passed 153 cases, including mode state transitions/persistence and history edit/delete/export failure paths. The prescribed Debug build/launch passed. Computer Use opened the advanced Recording mode picker, selected Toggle and verified the persisted profile file. Actual physical tap/hold microphone acceptance remains separate from these state-machine tests.

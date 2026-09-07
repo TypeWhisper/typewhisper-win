@@ -1,3 +1,5 @@
+using TypeWhisper.Presentation;
+
 namespace TypeWhisper.WinUI;
 
 internal enum HybridHotkeyAction { Toggle, Start, Stop, Cancel }
@@ -11,26 +13,36 @@ internal sealed class HybridHotkeyState
     private long _pressedAt;
     private bool _startedByGesture;
     private bool _blocked;
+    private RecordingMode? _mode;
 
-    internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false)
+    internal HybridHotkeyAction? Key(int key, bool down, long now, IReadOnlySet<string> bindings, bool recording = false,
+        RecordingMode mode = RecordingMode.Hybrid)
     {
-        if (down && !_down.Add(key)) return null;
+        HybridHotkeyAction? action = null;
+        if (_mode is not null && _mode != mode)
+        {
+            // A changed setting must never reinterpret keys which are already held.
+            action = _startedByGesture && recording ? HybridHotkeyAction.Cancel : null;
+            _armed = null; _startedByGesture = false; _blocked = _down.Count > 0;
+        }
+        _mode = mode;
+        if (down && !_down.Add(key)) return action;
         if (!down) _down.Remove(key);
         var chord = Chord();
-        HybridHotkeyAction? action = null;
         if (_armed is not null && chord != _armed)
         {
             // Capture already started on key-down. A tap keeps it running.
             // Extra keys discard speculative capture instead of transcribing it.
             action = !_startedByGesture ? null : down ? HybridHotkeyAction.Cancel
-                : now - _pressedAt >= HoldMilliseconds ? HybridHotkeyAction.Stop : null;
+                : mode == RecordingMode.Hold || mode == RecordingMode.Hybrid && now - _pressedAt >= HoldMilliseconds
+                    ? HybridHotkeyAction.Stop : null;
             _armed = null; _startedByGesture = false; _blocked = true;
         }
         if (!_blocked && down && bindings.Contains(chord))
         {
             _armed = chord; _pressedAt = now;
             _startedByGesture = !recording;
-            action = recording ? HybridHotkeyAction.Stop : HybridHotkeyAction.Start;
+            action = recording ? mode == RecordingMode.Hold ? null : HybridHotkeyAction.Stop : HybridHotkeyAction.Start;
         }
         // Non-modifier keys outside a configured chord invalidate the gesture.
         if (down && _armed is null && !IsModifier(key)) _blocked = true;

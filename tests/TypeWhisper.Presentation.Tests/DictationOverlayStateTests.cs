@@ -1,8 +1,19 @@
 using TypeWhisper.WinUI;
+using TypeWhisper.Presentation;
 using Xunit;
 
 public sealed class DictationOverlayStateTests
 {
+    [Theory]
+    [InlineData(RecordingMode.Hybrid, "Hybrid")]
+    [InlineData(RecordingMode.Toggle, "Toggle")]
+    [InlineData(RecordingMode.Hold, "Hold")]
+    public void RuntimeStateLabelsSelectedRecordingMode(RecordingMode mode, string label)
+    {
+        var state = new DictationOverlayState(DictationPhase.Recording, TimeSpan.Zero, "Recording", "Notepad", RecordingMode: mode);
+        Assert.Equal(label, state.RecordingModeLabel);
+    }
+
     [Theory]
     [InlineData(0, "READY")]
     [InlineData(1, "RECORDING")]

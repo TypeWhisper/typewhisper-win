@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
@@ -12,14 +13,20 @@ internal sealed class DictationHotkeyRegistration : IDisposable
     private HybridHotkeyState _state = new();
     private bool _disposed;
     internal string Value { get; private set; } = "";
-    internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording)
+    internal DictationHotkeyRegistration(Microsoft.UI.Xaml.Window window, Action<HybridHotkeyAction> invoke, Func<bool> isRecording,
+        Func<RecordingMode>? recordingMode = null)
     {
+        recordingMode ??= () => RecordingMode.Hybrid;
         // Reserve ordinary chords, but use the hook for both press and release.
         _regular = new(window, () => { }, 0x6500);
-        void Dispatch(HybridHotkeyAction? action)
+        void Dispatch(HybridHotkeyAction? action, RecordingMode mode)
         {
             if (action is not null)
-                window.DispatcherQueue.TryEnqueue(() => { if (!_disposed && !PrototypeShortcutRecorder.AnyEditing) invoke(action.Value); });
+                window.DispatcherQueue.TryEnqueue(() =>
+                {
+                    // Settings may change while a press is queued on the UI thread.
+                    if (!_disposed && !PrototypeShortcutRecorder.AnyEditing && recordingMode() == mode) invoke(action.Value);
+                });
         }
         _callback = (code, message, data) =>
         {
@@ -31,7 +38,11 @@ internal sealed class DictationHotkeyRegistration : IDisposable
                     var down = message.ToInt64() is 0x100 or 0x104;
                     var up = message.ToInt64() is 0x101 or 0x105;
                     if (PrototypeShortcutRecorder.AnyEditing) _state = new();
-                    else if (down || up) Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording()));
+                    else if (down || up)
+                    {
+                        var mode = recordingMode();
+                        Dispatch(_state.Key((int)key.Key, down, Environment.TickCount64, _bindings, isRecording(), mode), mode);
+                    }
                 }
             }
             return CallNextHookEx(IntPtr.Zero, code, message, data);

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using TypeWhisper.Core.Interfaces;
 using TypeWhisper.Presentation;
+using RecordingMode = TypeWhisper.Presentation.RecordingMode;
 using TypeWhisper.Core.Models;
 using TypeWhisper.Windows.Services;
 using TypeWhisper.PluginSDK;
@@ -26,6 +27,15 @@ internal sealed class LocalDictationSession : IDisposable
     internal DictationOutputPreferencesStore OutputPreferences { get; } = new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "TypeWhisper-WinUI-DevUserData", "dictation-output.json"));
+    internal RecordingModePreferencesStore RecordingModePreferences { get; } = new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "TypeWhisper-WinUI-DevUserData", "recording-mode.json"));
+    internal string? SelectRecordingMode(RecordingMode mode)
+    {
+        if (!CanChangeProvider || !_gate.Wait(0)) return "Finish dictation before changing recording mode.";
+        try { return RecordingModePreferences.Save(mode); }
+        finally { _gate.Release(); Changed?.Invoke(); }
+    }
     private DictationOutputPreferences _outputAtStart = new();
     internal event Action<DictationOutputResult>? ReviewRequested;
     internal bool LivePreviewEnabled { get; set; } = true;
@@ -90,7 +100,7 @@ internal sealed class LocalDictationSession : IDisposable
     private string _targetApp = "";
     private uint _targetProcessId;
     internal DictationOverlayState OverlayState => new(_phase,
-        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId);
+        _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current);
     internal string Status { get; private set; } = "Loading local transcription plugin…";
     internal string Shortcut { get; set; } = "Ctrl+Shift+F9";
     internal bool IsRecording => _audio.IsRecording;
