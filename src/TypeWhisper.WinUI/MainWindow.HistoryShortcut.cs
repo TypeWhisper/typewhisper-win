@@ -50,7 +50,8 @@ public sealed partial class MainWindow
         if (_closing || _profileRestoreClosing || PrototypeShortcutRecorder.AnyEditing) return;
         var busy = _dictationInitialization is not { IsCompleted: true } || !_dictation.CanChangeProvider
             || _dictation.Models.Busy || _dictationInput?.IsRecordingOrStarting == true || _workflowTask is { IsCompleted: false };
-        var otherWorkspace = _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || _settingsWindow?.AppWindow.IsVisible == true;
+        // Settings has its own window; opening History here does not replace its draft.
+        var otherWorkspace = _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen;
         if (HistoryShortcutAdmission.Rejection(false, busy, otherWorkspace) is { } refusal)
         { ShowFromActivation(); ShowActivationNotice(refusal); return; }
         ShowFromActivation();
