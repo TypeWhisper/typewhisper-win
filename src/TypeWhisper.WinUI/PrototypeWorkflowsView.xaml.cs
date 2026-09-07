@@ -22,6 +22,21 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private PrototypeWorkflow? _selectionBeforeCreate;
     private Action? _afterConfigurationExit;
     private LocalDictationSession? _session;
+    // All lifecycle and UI callbacks are owned by the dispatcher thread.
+    private bool _closing;
+    private TaskCompletionSource? _runCompletion;
+    private TaskCompletionSource? _deleteCompletion;
+    private ContentDialog? _deleteDialog;
+    internal Task ShutdownAsync()
+    {
+        _closing = true;
+        IsEnabled = false;
+        _run?.Cancel();
+        try { _deleteDialog?.Hide(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Workflow dialog close failed: " + ex); }
+        return Task.WhenAll(_runCompletion?.Task ?? Task.CompletedTask, _deleteCompletion?.Task ?? Task.CompletedTask);
+    }
+
     private ManualWorkflowStore? _store;
     private string? _loadError;
     private CancellationTokenSource? _run;
@@ -38,7 +53,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         try
         {
             _workflows.Clear();
-            _workflows.AddRange(_store.Read().Where(ManualWorkflowStore.IsSupported)
+            _workflows.AddRange(_store.Read().Where(ManualWorkflowStore.IsEditable)
                 .Select(PrototypeWorkflow.FromStored));
             _loadError = null;
         }
@@ -69,6 +84,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     public PrototypeWorkflowsView()
     {
         InitializeComponent();
+        ConfigTrigger.Configure("Activation", "workflow", "Workflow activation");
+        ConfigTrigger.SelectionChanged += _ => UpdateConfigurationState();
         ConfigTemplate.Configure("Template", "workflow", "Workflow template");
         ConfigTemplate.SelectionChanged += _ => UpdateConfigurationState();
         ConfigProvider.Configure("Provider", "plugin", "Workflow provider");
@@ -124,7 +141,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-            else if (!ConfigTemplate.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigOutput.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+            else if (!ConfigTrigger.IsPopupOpen && !ConfigTemplate.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigOutput.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
         }
         else if (_page == Page.Result) WorkflowPrimaryButton.Focus(FocusState.Programmatic);
     }
@@ -138,7 +155,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         WorkflowConfigurationPage.Visibility = page == Page.Configuration ? Visibility.Visible : Visibility.Collapsed;
         WorkflowPageTitle.Text = page == Page.Configuration ? (_creating ? "New workflow" : "Edit workflow") : page == Page.List ? "Workflows" : _opened?.Title ?? "Workflow";
         WorkflowSummary.Text = page == Page.List
-            ? $"{FilteredWorkflows.Count} manual workflow{(FilteredWorkflows.Count == 1 ? "" : "s")}" : "Manual workflow";
+            ? $"{FilteredWorkflows.Count} workflow{(FilteredWorkflows.Count == 1 ? "" : "s")}" : "Workflow";
         UpdateBreadcrumbs();
         WorkflowNavigationHint.Text = page switch { Page.Configuration => "Esc Cancel   Ctrl S Save", Page.Editor => "Esc Back   Ctrl Enter Run", Page.Result => "⌫ / Esc Back", _ => "⌫ / Esc Back   ↑↓ Navigate   Enter Open" };
         WorkflowPrimaryButton.Visibility = page == Page.List ? Visibility.Collapsed : Visibility.Visible;
@@ -157,10 +174,11 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     internal void GoBack()
     {
+        if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            foreach (var picker in new[] { ConfigTemplate, ConfigProvider, ConfigModel, ConfigOutput })
+            foreach (var picker in new[] { ConfigTrigger, ConfigTemplate, ConfigProvider, ConfigModel, ConfigOutput })
                 if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { _afterConfigurationExit = null; DismissDiscard(); return; }
             if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -177,18 +195,21 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     private async void RunWorkflow()
     {
+        if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page != Page.Editor || _opened is null || _session is null) return;
         using var cancellation = new CancellationTokenSource();
         _run = cancellation;
-        WorkflowSource.IsReadOnly = true;
-        ConfigureWorkflowButton.IsEnabled = false;
-        WorkflowPrimaryButton.Content = "Cancel run";
-        WorkflowInputHint.Text = "Processing with the saved provider and model…";
+        var completion = _runCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
+            WorkflowSource.IsReadOnly = true;
+            ConfigureWorkflowButton.IsEnabled = false;
+            WorkflowPrimaryButton.Content = "Cancel run";
+            WorkflowInputHint.Text = "Processing with the saved provider and model…";
             var result = await ManualWorkflowRunner.RunAsync(_opened.ToStored(), WorkflowSource.Text,
                 Available, _session.ProcessLlmAsync, cancellation.Token);
+            if (_closing) return;
             WorkflowResultText.Text = result;
             ShowPage(Page.Result);
             WorkflowResultScroll.ChangeView(null, 0, null, true);
@@ -198,11 +219,15 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException) { WorkflowInputHint.Text = "Run failed. " + ex.Message; }
         finally
         {
+            try
+            {
             _run = null;
             WorkflowSource.IsReadOnly = false;
             ConfigureWorkflowButton.IsEnabled = true;
             WorkflowPrimaryButton.Content = _page == Page.Result ? "Copy result" : "Run workflow";
             WorkflowPrimaryButton.IsEnabled = _page == Page.Result || _opened is { IsEnabled: true } && Available(_opened.ProviderId, _opened.ModelId) && !string.IsNullOrWhiteSpace(WorkflowSource.Text);
+            }
+            finally { completion.TrySetResult(); }
         }
     }
 
@@ -261,9 +286,14 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private IReadOnlyList<PrototypeChoice> Models => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId)?.Models
         .Select(m => new PrototypeChoice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
+        || ConfigTrigger.SelectedId != _opened.TriggerKind.ToString() || ConfigAppProcesses.Text != _opened.AppProcesses
+        || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
         || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigOutput.SelectedId != _opened.OutputTarget || ConfigEnabled.IsOn != _opened.IsEnabled);
     private string? ConfigurationError => string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
+        : ConfigTrigger.SelectedId == "App" && (string.IsNullOrWhiteSpace(ConfigAppProcesses.Text)
+            || ConfigAppProcesses.Text.Split(',').Any(value => string.IsNullOrWhiteSpace(value) || value.Trim().IndexOfAny(['/', '\\', ':', '*', '?']) >= 0 || value.Trim().EndsWith(".exe", StringComparison.OrdinalIgnoreCase))) ? "Enter process names such as notepad, chrome (without paths or .exe)."
+        : !int.TryParse(ConfigPriority.Text, out _) ? "Enter a whole-number priority. Lower numbers win."
         : !Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var template) || !Enum.IsDefined(template) ? "Choose a workflow template."
         : template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(ConfigInstruction.Text) ? "Add instructions for this custom workflow."
         : ConfigProvider.SelectedId != "none" && !Models.Any(model => model.Id == ConfigModel.SelectedId)
@@ -299,6 +329,12 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigEnabled.IsOn = _opened.IsEnabled;
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         ConfigName.Text = _opened.Title;
+        ConfigTrigger.SetOptions([
+            new("Manual", "Manual", "Run explicitly with source text"),
+            new("App", "App", "Apply to dictation in matching Windows processes"),
+            new("Global", "Global fallback", "Apply when no app rule matches")], _opened.TriggerKind.ToString());
+        ConfigAppProcesses.Text = _opened.AppProcesses;
+        ConfigPriority.Text = _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture);
         ConfigTemplate.SetOptions(WorkflowTemplateCatalog.All.Select(definition => new PrototypeChoice(
             definition.Template.ToString(), definition.Name, definition.Description)).ToArray(), _opened.Template.ToString());
         ConfigTranslationTarget.Text = _opened.TranslationTarget ?? "";
@@ -331,6 +367,8 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void UpdateConfigurationState()
     {
         if (_loadingConfiguration) return;
+        ConfigAppSection.Visibility = ConfigTrigger.SelectedId == "App" ? Visibility.Visible : Visibility.Collapsed;
+        ConfigOutputSection.Visibility = ConfigTrigger.SelectedId == "Manual" ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
         ConfigTranslationSection.Visibility = template == WorkflowTemplate.Translation ? Visibility.Visible : Visibility.Collapsed;
         ConfigInstructionLabel.Text = template == WorkflowTemplate.Custom ? "INSTRUCTIONS (REQUIRED)" : "FINE-TUNING (OPTIONAL)";
@@ -339,7 +377,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         ConfigurationValidation.Text = error ?? (!ConfigEnabled.IsOn ? "Save as disabled. Enable this workflow before running it."
             : !Available(ConfigProvider.SelectedId, ConfigModel.SelectedId)
                 ? "You can save this workflow now. Configure the selected plugin before running it."
-                : "Saved on this device. Run manually and review before copying.");
+                : (ConfigTrigger.SelectedId == "Manual" ? "Saved on this device. Run manually and review before copying." : "Applies automatically to matching dictations. Uses your dictation paste and history settings."));
         ConfigurationValidation.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[error is null ? "MutedBrush" : "AccentBrush"];
         WorkflowSummary.Text = ConfigurationDirty ? "Unsaved changes" : "Workflow configuration";
         WorkflowPrimaryButton.IsEnabled = error is null && ConfigurationDirty && ConfigurationDiscardPrompt.Visibility != Visibility.Visible;
@@ -347,8 +385,10 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     private void SaveConfiguration()
     {
-        if (_opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
+        if (_closing || _opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
         var updated = _opened with { Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
+            TriggerKind = Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId), AppProcesses = ConfigAppProcesses.Text.Trim(),
+            Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
             ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId, OutputTarget = ConfigOutput.SelectedId,
@@ -357,7 +397,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         {
             if (_store is null || _loadError is not null) throw new InvalidOperationException("Workflow storage is unavailable.");
             var stored = updated.ToStored();
-            _store.Save(stored);
+            _store.Save(stored, allowAutomatic: true);
             updated = PrototypeWorkflow.FromStored(stored);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -384,19 +424,20 @@ public sealed partial class PrototypeWorkflowsView : UserControl
 
     private async void DeleteWorkflow_Click(object sender, RoutedEventArgs e)
     {
-        if (_creating || _opened is null || _store is null) return;
+        if (_closing || _deleteCompletion is { Task.IsCompleted: false } || _creating || _opened is null || _store is null) return;
+        var completion = _deleteCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         var workflow = _opened;
         DeleteWorkflowButton.IsEnabled = false;
         try
         {
-            var dialog = new ContentDialog
+            var dialog = _deleteDialog = new ContentDialog
             {
                 XamlRoot = XamlRoot, Title = "Delete this workflow?",
                 Content = $"Delete \"{workflow.Title}\" and its saved instructions? This cannot be undone. Unsaved edits and this workflow's source-text draft will also be discarded.",
                 PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
             };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-            _store.Delete(workflow.Id);
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
+            _store.Delete(workflow.Id, allowAutomatic: true);
             _workflows.RemoveAll(w => w.Id == workflow.Id);
             _drafts.Remove(workflow.Id);
             _opened = null;
@@ -409,7 +450,12 @@ public sealed partial class PrototypeWorkflowsView : UserControl
         {
             ConfigurationValidation.Text = "The workflow was not deleted. " + ex.Message;
         }
-        finally { DeleteWorkflowButton.IsEnabled = true; }
+        finally
+        {
+            _deleteDialog = null;
+            try { DeleteWorkflowButton.IsEnabled = !_closing; }
+            finally { completion.TrySetResult(); }
+        }
     }
 
     private void LeaveConfiguration()
@@ -444,6 +490,7 @@ public sealed partial class PrototypeWorkflowsView : UserControl
     private void DiscardConfiguration_Click(object sender, RoutedEventArgs e) => LeaveConfiguration();
     private void NavigateToAncestor(bool launcher)
     {
+        if (_closing) return;
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {

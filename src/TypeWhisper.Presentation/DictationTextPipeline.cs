@@ -10,6 +10,8 @@ public sealed record DictationTextPipelineResult
     public required string Text { get; init; }
     /// <summary>User-facing failures in execution order.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
+    /// <summary>A required workflow failure; hosts must retain the text for review and disable automatic insertion.</summary>
+    public string? WorkflowError { get; init; }
 }
 
 /// <summary>Runs the shared Core pipeline with asynchronous snippet expansion and explicit dictionary steps.</summary>
@@ -32,7 +34,8 @@ public static class DictationTextPipeline
         TranscriptionTask task = TranscriptionTask.Transcribe,
         string? targetProcessName = null,
         string? engineId = null,
-        string? modelId = null)
+        string? modelId = null,
+        Func<string, CancellationToken, Task<string>>? workflow = null)
     {
         ArgumentNullException.ThrowIfNull(rawText);
         ArgumentNullException.ThrowIfNull(preferences);
@@ -60,23 +63,49 @@ public static class DictationTextPipeline
                 return text;
             }
         })];
-        var result = await new PostProcessingPipeline().ProcessAsync(rawText, new PipelineOptions
+        var workflowFailed = false;
+        try
         {
-            TranscriptionNumberNormalizationEnabled = preferences.TranscriptionNumberNormalizationEnabled,
-            ShortUtterancePunctuationEnabled = preferences.ShortUtterancePunctuationEnabled,
-            EnglishOutputVariant = preferences.EnglishOutputVariant,
-            GermanOutputVariant = preferences.GermanOutputVariant,
-            TranscriptionTask = task,
-            ConfiguredLanguage = configuredLanguage,
-            DetectedLanguage = detectedLanguage,
-            PluginPostProcessors = snippets,
-            TargetProcessName = targetProcessName,
-            AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
-            SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
-            VocabularyBooster = Protect("Vocabulary boosting", boostVocabulary),
-            DictionaryCorrector = Protect("Dictionary corrections", correctDictionary)
-        }, ct);
-        ct.ThrowIfCancellationRequested();
-        return new() { Text = result.Text, Warnings = warnings.ToArray() };
+            var result = await new PostProcessingPipeline().ProcessAsync(rawText, new PipelineOptions
+            {
+                RequireLlmSuccess = workflow is not null,
+                LlmHandler = workflow is null ? null : async (text, token) =>
+                {
+                    try
+                    {
+                        var output = await workflow(text, token);
+                        token.ThrowIfCancellationRequested();
+                        if (string.IsNullOrWhiteSpace(output)) throw new InvalidOperationException("The workflow returned no text.");
+                        return output;
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { workflowFailed = true; throw; }
+                },
+                TranscriptionNumberNormalizationEnabled = preferences.TranscriptionNumberNormalizationEnabled,
+                ShortUtterancePunctuationEnabled = preferences.ShortUtterancePunctuationEnabled,
+                EnglishOutputVariant = preferences.EnglishOutputVariant,
+                GermanOutputVariant = preferences.GermanOutputVariant,
+                TranscriptionTask = task,
+                ConfiguredLanguage = configuredLanguage,
+                DetectedLanguage = detectedLanguage,
+                PluginPostProcessors = snippets,
+                TargetProcessName = targetProcessName,
+                AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
+                SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
+                VocabularyBooster = Protect("Vocabulary boosting", boostVocabulary),
+                DictionaryCorrector = Protect("Dictionary corrections", correctDictionary)
+            }, ct);
+            ct.ThrowIfCancellationRequested();
+            return new() { Text = result.Text, Warnings = warnings.ToArray() };
+        }
+        catch (Exception ex) when (workflowFailed && ex is not OutOfMemoryException && ex is not OperationCanceledException)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new()
+            {
+                Text = rawText, Warnings = warnings.ToArray(),
+                WorkflowError = "Workflow processing failed. Your transcript was retained for review; nothing was pasted."
+            };
+        }
     }
 }

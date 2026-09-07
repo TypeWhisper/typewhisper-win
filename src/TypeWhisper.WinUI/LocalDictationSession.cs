@@ -365,7 +365,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     private async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeRegistryAsync(float[] samples)
     {
-        var language = Language == "auto" ? null : Language;
+        var language = _languageAtStart == "auto" ? null : _languageAtStart;
         var translate = _taskAtStart == TranscriptionTask.Translate;
         var result = await PluginRuntime.UseTranscriptionAsync(RegistrySelectionId(_providerId), (engine, ct) =>
         {
@@ -551,6 +551,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _audio.WhisperModeEnabled = preferences.WhisperModeEnabled;
                 _outputAtStart = OutputPreferences.Current;
                 _textAtStart = TextPreferences.Current;
+                _languageAtStart = Language;
                 _audio.StartRecording(enableRecovery: false);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
@@ -580,6 +581,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _targetProcessId = processId;
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
                 catch (ArgumentException) { _targetApp = "Target app"; }
+                CaptureWorkflowAtStart();
                 SetStatus($"Recording · {Shortcut} to finish");
                 return;
             }
@@ -626,10 +628,12 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             else CtcVocabulary.Trace($"{recordingId} host-skipped enabledAtStart={_ctcAtStart} enabledNow={CtcVocabulary.Enabled} dictionaryLoaded={dictionary is not null}");
             var boostVocabulary = _boostVocabulary && !_ctcAtStart;
             var snippets = _snippetSnapshot is null ? null : await _snippetSnapshot;
-            var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, Language,
-                DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language), boostVocabulary,
-                ReadSnippetClipboardAsync, _operationCancellation.Token, _taskAtStart, _targetApp, _engineAtStart, _modelAtStart);
+            var processed = await new DictationLexiconSnapshot(dictionary, snippets).ProcessAsync(refinedText, _textAtStart, _languageAtStart,
+                DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart), boostVocabulary,
+                ReadSnippetClipboardAsync, _operationCancellation.Token, _taskAtStart, _targetApp, _engineAtStart, _modelAtStart,
+                WorkflowProcessor(_languageAtStart, decoded.DetectedLanguage));
             var notices = processed.Warnings.ToList();
+            if (processed.WorkflowError is { } workflowError) notices.Add(workflowError);
             var text = processed.Text;
             _operationCancellation.Token.ThrowIfCancellationRequested();
             if (_disposed) return;
@@ -640,14 +644,17 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             {
                 Id = recordingId.ToString(), Timestamp = _started, CreatedAt = DateTime.UtcNow,
                 SourceKind = "dictation",
+                WorkflowId = _workflowAtStart?.Id, ProfileName = _workflowAtStart?.Name,
+                Status = processed.WorkflowError is null ? TranscriptionRecordStatus.Succeeded : TranscriptionRecordStatus.WorkflowPostProcessingFailed,
+                WorkflowFailureMessage = processed.WorkflowError,
                 RawText = rawText, FinalText = text, DurationSeconds = rawDuration,
                 EngineUsed = _engineAtStart, ModelUsed = _modelAtStart, TranscriptionTaskUsed = _taskAtStart == TranscriptionTask.Translate ? "translate" : "transcribe",
-                Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, Language),
+                Language = DictationProvenance.ResolveLanguage(decoded.DetectedLanguage, _languageAtStart),
                 AppName = _targetApp == "Target app" ? null : _targetApp,
                 AppProcessName = _targetApp == "Target app" ? null : _targetApp
             };
             var delivery = new DictationOutputDelivery(_history);
-            var outcome = await delivery.DeliverAsync(record, _outputAtStart,
+            var outcome = await delivery.DeliverAsync(record, processed.WorkflowError is null ? _outputAtStart : _outputAtStart with { AutoPaste = false },
                 () => OutputPreferences.Current, async () =>
                 {
                     // Recheck after waiting: settings can change while modifiers are held.

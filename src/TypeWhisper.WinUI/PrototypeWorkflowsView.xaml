@@ -48,7 +48,7 @@
         <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="16">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="WorkflowPageTitle" Text="Workflows" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="WorkflowSummary" Grid.Column="1" Text="Manual workflows" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+            <TextBlock x:Name="WorkflowSummary" Grid.Column="1" Text="Workflows" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
         <Grid x:Name="WorkflowListPage" Grid.Row="1">
             <local:HandCursorListView x:Name="WorkflowList" ItemsSource="{x:Bind FilteredWorkflows}" ItemContainerStyle="{StaticResource PrototypeCommandItemStyle}"
@@ -68,7 +68,7 @@
             </local:HandCursorListView>
             <StackPanel x:Name="WorkflowEmptyState" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                 <local:TypeWhisperGlyph Kind="search" Width="28" Height="28" />
-                <TextBlock Text="No manual workflows found" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="No workflows found" FontSize="18" FontWeight="SemiBold" />
                 <local:HandCursorButton Content="Clear search" Click="ClearSearch_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}"
                     HorizontalAlignment="Center" AutomationProperties.Name="Clear workflow search" />
             </StackPanel>
@@ -114,6 +114,16 @@
                             Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
                     </StackPanel>
                     <StackPanel Spacing="7">
+                        <TextBlock Text="ACTIVATION" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <local:PrototypeChoicePicker x:Name="ConfigTrigger" />
+                        <TextBlock Text="App rules take precedence over the global fallback. Website and workflow-hotkey triggers, recording overrides and action plugins are not supported here; existing unsupported entries are preserved. Lower priority numbers win; equal priorities use the workflow name." TextWrapping="Wrap" FontSize="11" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel x:Name="ConfigAppSection" Spacing="7" Visibility="Collapsed">
+                        <TextBlock Text="WINDOWS PROCESS NAMES" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBox x:Name="ConfigAppProcesses" PlaceholderText="notepad, chrome (without .exe)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow process names" />
+                    </StackPanel>
+                    <TextBox x:Name="ConfigPriority" Header="Priority (lower wins)" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
+                    <StackPanel Spacing="7">
                         <TextBlock Text="TEMPLATE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                         <local:PrototypeChoicePicker x:Name="ConfigTemplate" />
                         <TextBlock x:Name="ConfigTemplateDescription" TextWrapping="Wrap" FontSize="12" Foreground="{ThemeResource MutedBrush}" />
@@ -140,12 +150,12 @@
                             <TextBlock Text="MODEL" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                             <local:PrototypeChoicePicker x:Name="ConfigModel" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2" Spacing="7">
+                        <StackPanel x:Name="ConfigOutputSection" Grid.Column="2" Spacing="7">
                             <TextBlock Text="OUTPUT DESTINATION" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                             <local:PrototypeChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="Workflows run only when you choose Run. Cloud providers receive your source text and instructions." FontSize="11"
+                    <TextBlock Text="Manual workflows run when you choose Run. App and Global workflows run automatically on matching dictations. Cloud providers receive your transcript and instructions. Automatic results use dictation output settings; failures open review without pasting." FontSize="11"
                         Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                     <local:HandCursorButton x:Name="DeleteWorkflowButton" Content="Delete workflow" Click="DeleteWorkflow_Click"
                         HorizontalAlignment="Left" Style="{StaticResource PrototypeDestructiveConfirmButtonStyle}"

@@ -9,7 +9,7 @@ namespace TypeWhisper.WinUI;
 internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dictionary, DictationSnippetSnapshot? snippets)
 {
     internal DictationDictionarySnapshot? Dictionary => dictionary;
-    internal sealed record Result(string Text, IReadOnlyList<string> Warnings, IReadOnlyList<string> AppliedSnippetIds);
+    internal sealed record Result(string Text, IReadOnlyList<string> Warnings, IReadOnlyList<string> AppliedSnippetIds, string? WorkflowError = null);
 
     internal static DictationLexiconSnapshot Load(string dictionaryPath, string snippetPath) =>
         new(DictationDictionarySnapshot.Load(dictionaryPath), DictationSnippetSnapshot.Load(snippetPath));
@@ -21,7 +21,8 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
     internal async Task<Result> ProcessAsync(string text, DictationTextPreferences preferences,
         string? configuredLanguage, string? detectedLanguage, bool boostVocabulary,
         Func<CancellationToken, Task<string>> readClipboard, CancellationToken ct,
-        TranscriptionTask task, string? targetProcessName, string? engineId, string? modelId)
+        TranscriptionTask task, string? targetProcessName, string? engineId, string? modelId,
+        Func<string, CancellationToken, Task<string>>? workflow = null)
     {
         var warnings = new List<string>();
         if (dictionary?.Error is { } dictionaryError) warnings.Add(dictionaryError);
@@ -45,9 +46,9 @@ internal sealed class DictationLexiconSnapshot(DictationDictionarySnapshot? dict
             },
             boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
             correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
-            ct: ct, task: task, targetProcessName: targetProcessName, engineId: engineId, modelId: modelId);
+            ct: ct, task: task, targetProcessName: targetProcessName, engineId: engineId, modelId: modelId, workflow: workflow);
         warnings.AddRange(processed.Warnings);
-        return new(processed.Text, warnings, appliedIds);
+        return new(processed.Text, warnings, appliedIds, processed.WorkflowError);
     }
 
     internal static string? RecordUsage(string path, IReadOnlyCollection<string> appliedIds)

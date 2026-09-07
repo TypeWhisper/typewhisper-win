@@ -19,6 +19,12 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
         && workflow.Trigger.Kind == WorkflowTriggerKind.Manual && workflow.Behavior.Settings.Count == 0
         && string.IsNullOrWhiteSpace(workflow.Output.TargetActionPluginId);
 
+    /// <summary>Identifies manual or supported App/Global workflows that the editor can preserve and execute.</summary>
+    public static bool IsEditable(Workflow workflow) => IsSupported(workflow) ||
+        (workflow.Trigger.Kind is WorkflowTriggerKind.App or WorkflowTriggerKind.Global
+            && (workflow.Trigger.Kind != WorkflowTriggerKind.App || workflow.Trigger.ProcessNames.Count > 0)
+            && AutomaticWorkflowSnapshot.UnsupportedReason(workflow) is null);
+
     /// <summary>Reads the current snapshot, preserving workflows outside the manual editor.</summary>
     public IReadOnlyList<Workflow> Read()
     {
@@ -55,10 +61,10 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     }
 
     /// <summary>Writes one manual workflow atomically; callers keep drafts when this throws.</summary>
-    public void Save(Workflow workflow)
+    public void Save(Workflow workflow, bool allowAutomatic = false)
     {
         ArgumentNullException.ThrowIfNull(workflow);
-        if (!IsSupported(workflow)) throw new InvalidOperationException("This workflow cannot be edited here.");
+        if (!(allowAutomatic ? IsEditable(workflow) : IsSupported(workflow))) throw new InvalidOperationException("This workflow cannot be edited here.");
         if (string.IsNullOrWhiteSpace(workflow.Id) || string.IsNullOrWhiteSpace(workflow.Name))
             throw new ArgumentException("A workflow name is required.", nameof(workflow));
         if (workflow.Template == WorkflowTemplate.Custom && string.IsNullOrWhiteSpace(workflow.Behavior.FineTuning))
@@ -67,7 +73,7 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
         {
             var items = Read().ToList();
             int index = items.FindIndex(w => w.Id == workflow.Id);
-            if (index >= 0 && !IsSupported(items[index]))
+            if (index >= 0 && !(allowAutomatic ? IsEditable(items[index]) : IsSupported(items[index])))
                 throw new InvalidOperationException("This workflow has changed and can no longer be edited here.");
             var updated = workflow with { UpdatedAt = DateTime.UtcNow };
             if (index < 0) items.Add(updated); else items[index] = updated;
@@ -77,14 +83,14 @@ public sealed class ManualWorkflowStore(string path, Func<IReadOnlyList<Workflow
     }
 
     /// <summary>Deletes a supported manual workflow after the caller obtains confirmation.</summary>
-    public void Delete(string id)
+    public void Delete(string id, bool allowAutomatic = false)
     {
         lock (MutationLock)
         {
             var items = Read().ToList();
             var current = items.FirstOrDefault(w => w.Id == id)
                 ?? throw new InvalidOperationException("This workflow no longer exists.");
-            if (!IsSupported(current)) throw new InvalidOperationException("This workflow cannot be deleted here.");
+            if (!(allowAutomatic ? IsEditable(current) : IsSupported(current))) throw new InvalidOperationException("This workflow cannot be deleted here.");
             items.Remove(current);
             if (!_write(items.AsReadOnly()))
                 throw new IOException("The workflow could not be deleted.");

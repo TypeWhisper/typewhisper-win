@@ -42,7 +42,7 @@ public sealed class DictationOutputDelivery(IHistoryService history)
         }
         var storage = saved ? "Saved to History." : "Not saved to History.";
         ct.ThrowIfCancellationRequested();
-        if (!atStart.RestrictedBy(current()).AutoPaste)
+        if (record.Status == TranscriptionRecordStatus.WorkflowPostProcessingFailed || !atStart.RestrictedBy(current()).AutoPaste)
             return new(record, saved, true, storage + " Review and copy your text; nothing was pasted.");
         try
         {

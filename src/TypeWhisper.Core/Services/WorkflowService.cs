@@ -174,7 +174,14 @@ public sealed class WorkflowService : IWorkflowService
     public WorkflowMatchResult? MatchWorkflow(string? processName, string? url)
     {
         EnsureCacheLoaded();
-        var enabled = _cache.Where(w => w.IsEnabled && w.Trigger.HasValues).ToList();
+        return MatchSnapshot(_cache, processName, url);
+    }
+
+    /// <summary>Matches an explicit workflow snapshot using the same precedence as the persisted catalog.</summary>
+    public static WorkflowMatchResult? MatchSnapshot(IEnumerable<Workflow> workflows, string? processName, string? url)
+    {
+        ArgumentNullException.ThrowIfNull(workflows);
+        var enabled = workflows.Where(w => w.IsEnabled && w.Trigger.HasValues).ToList();
         var domain = ExtractHost(url);
 
         if (!string.IsNullOrWhiteSpace(processName) && !string.IsNullOrWhiteSpace(domain))
