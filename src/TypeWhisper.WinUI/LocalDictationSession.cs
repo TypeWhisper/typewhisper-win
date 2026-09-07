@@ -143,8 +143,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal IReadOnlyList<string> SupportedLanguages => UsesRegistryProvider ? ActiveRegistryProvider?.SupportedLanguages ?? [] : Models.SupportedLanguages;
     internal string Language => UsesRegistryProvider ? ActiveRegistryProvider is { } provider
         ? WinUIPluginPackages.CreateServices(provider.PluginId).GetSetting<string>("Language") ?? "auto" : "auto" : Models.Language;
-    internal bool CanChangeProvider => !_disposed && !_fileBusy && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
-    internal bool CanSelectModel => !_disposed && !_fileBusy && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
+    internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Groq.Busy && !PluginRuntime.IsBusy;
+    internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring) && !Models.Busy && Models.Enabled && !Groq.Busy;
     private IntPtr _target;
     private DateTime _started;
     private bool _disposed;
@@ -157,7 +157,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         _audio.IsRecording ? _audio.RecordingDuration : _lastDuration, Status, _targetApp, _targetProcessId, RecordingModePreferences.Current);
     internal string Status { get; private set; } = "Loading local transcription plugin…";
     internal string Shortcut { get; set; } = "Ctrl+Shift+F9";
-    internal bool IsRecording => _audio.IsRecording;
+    internal bool IsRecording => !_recorderReserved && _audio.IsRecording;
     internal bool IsReady => UsesRegistryProvider ? ActiveRegistryProvider?.Ready == true : _transcriptionPlugin.Ready;
     internal string? LocalPluginError { get; private set; }
 

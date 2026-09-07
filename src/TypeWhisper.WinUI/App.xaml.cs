@@ -114,6 +114,11 @@ public partial class App : Application
             System.Diagnostics.Trace.TraceError("Application shutdown failed: {0}", ex);
             _tray?.SetShutdownState("Shutdown failed. Work is stopped.");
             _window?.ShowShutdownFailure();
+            if (_window?.CanRetryRecorderShutdown == true)
+            {
+                _exiting = false;
+                _tray?.AllowShutdownRetry();
+            }
         }
     }
 }

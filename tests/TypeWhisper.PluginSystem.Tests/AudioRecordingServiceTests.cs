@@ -490,6 +490,39 @@ public sealed class AudioRecordingServiceDeviceChangeTests
         Assert.Equal(2, captures.Created.Count);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FailedNativeReleaseRemainsObservableAndBlocksNewCaptureUntilRetry(bool canRestartAfterStop)
+    {
+        var devices = new FakeAudioInputDeviceProvider("USB Microphone");
+        var captures = new FakeAudioInputCaptureFactory { CanRestartAfterStop = canRestartAfterStop, StopException = new InvalidOperationException("stop failed") };
+        var primary = new FakeAudioInputCaptureFactory { StartException = new InvalidOperationException("activate fallback") };
+        var factory = new FallbackAudioInputCaptureFactory(primary, captures);
+        using var sut = new AudioRecordingService(devices, factory, Timeout.InfiniteTimeSpan);
+        sut.StartRecording();
+        var capture = Assert.Single(captures.Created);
+        short[] source = [8192, -8192];
+        var bytes = new byte[source.Length * sizeof(short)];
+        Buffer.BlockCopy(source, 0, bytes, 0, bytes.Length);
+        capture.RaiseData(bytes, bytes.Length);
+        capture.DisposeException = new InvalidOperationException("dispose failed");
+        var samples = sut.StopRecording();
+        Assert.Equal(source.Length, Assert.IsType<float[]>(samples).Length);
+        Assert.True(sut.HasUnreleasedCapture);
+        Assert.False(capture.Disposed);
+        Assert.Throws<InvalidOperationException>(() => sut.StartRecording());
+        Assert.Throws<InvalidOperationException>(sut.RetryFailedCaptureCleanup);
+        Assert.True(sut.HasUnreleasedCapture);
+        capture.DisposeException = null;
+        sut.RetryFailedCaptureCleanup();
+        Assert.False(sut.HasUnreleasedCapture);
+        Assert.True(capture.Disposed);
+        captures.StopException = null;
+        sut.StartRecording();
+        Assert.Equal(2, captures.Created.Count);
+    }
+
     [Fact]
     public void StopRecording_DisposesRestartableCaptureAfterStopFailureAndRecovers()
     {
@@ -1676,7 +1709,7 @@ public sealed class RecorderAudioPipelineTests
     {
         var factory = new FakeSystemAudioLoopbackCaptureFactory(
             [new SystemAudioOutputDevice("wave-link-monitor", "Wave Link Monitor")]);
-        using var sut = new SystemAudioCaptureService(factory);
+        using var sut = new SystemAudioCaptureService(factory, () => TimeSpan.Zero);
 
         sut.StartCapture("wave-link-monitor");
         var samples = sut.StopCapture();
@@ -1886,6 +1919,7 @@ internal sealed class FakeAudioInputCaptureFactory : IAudioInputCaptureFactory
 
 internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFormat) : IAudioInputCapture
 {
+    public Exception? DisposeException { get; set; }
     public int DeviceNumber { get; } = deviceNumber;
     public WaveFormat WaveFormat { get; } = waveFormat;
     public bool CanRestartAfterStop { get; init; }
@@ -1927,7 +1961,7 @@ internal sealed class FakeAudioInputCapture(int deviceNumber, WaveFormat waveFor
     public void RaiseStopped(Exception? exception = null) =>
         RecordingStopped?.Invoke(this, new AudioInputRecordingStoppedEventArgs(exception));
 
-    public void Dispose() => Disposed = true;
+    public void Dispose() { if (DisposeException is not null) throw DisposeException; Disposed = true; }
 
     public void RaiseData(byte[] buffer, int bytesRecorded) =>
         DataAvailable?.Invoke(this, new AudioInputDataAvailableEventArgs(buffer, bytesRecorded));

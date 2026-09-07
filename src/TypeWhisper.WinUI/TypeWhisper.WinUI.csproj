@@ -40,6 +40,7 @@
     <Compile Include="../TypeWhisper.Windows/Services/WasapiAudioInputCapture.cs" Link="Platform/WasapiAudioInputCapture.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioRecordingResult.cs" Link="Platform/AudioRecordingResult.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/RecorderCaptureModels.cs" Link="Platform/RecorderCaptureModels.cs" />
+    <Compile Include="../TypeWhisper.Windows/Services/RecorderTranscriptionBuffer.cs" Link="Platform/RecorderTranscriptionBuffer.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/SystemAudioCaptureService.cs" Link="Platform/SystemAudioCaptureService.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/AudioCaptureDiagnostics.cs" Link="Platform/AudioCaptureDiagnostics.cs" />
     <Compile Include="../TypeWhisper.Windows/Services/NonFatalExceptionFilter.cs" Link="Platform/NonFatalExceptionFilter.cs" />

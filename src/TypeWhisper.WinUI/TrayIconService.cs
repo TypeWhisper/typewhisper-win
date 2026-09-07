@@ -15,6 +15,7 @@ internal sealed class TrayIconService : IDisposable
     private readonly MenuFlyoutItem _status;
     private readonly MenuFlyoutItem _recordingAction;
     private readonly MenuFlyoutItem _cancelProcessing;
+    private readonly MenuFlyoutItem _exitAction;
     private readonly MenuFlyout _menu;
     private bool _closing;
 
@@ -61,7 +62,8 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Unavailable("Check for updates…", "\uE895"));
         menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(CreateItem("Exit", "\uE7E8", exit));
+        _exitAction = CreateItem("Exit", "\uE7E8", exit);
+        menu.Items.Add(_exitAction);
 
         _menuWindow = new TrayMenuWindow(menu);
         _icon = new TaskbarIcon
@@ -103,6 +105,7 @@ internal sealed class TrayIconService : IDisposable
     {
         if (!_closing) _cancelProcessing.IsEnabled = canCancel;
     }
+    internal void AllowShutdownRetry() => _exitAction.IsEnabled = true;
 
     private static MenuFlyoutItem Label(string text) => new()
     {

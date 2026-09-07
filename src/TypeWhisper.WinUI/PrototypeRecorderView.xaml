@@ -12,7 +12,7 @@
         </Grid.RowDefinitions>
         <Grid Margin="12,0,12,12" MinHeight="32">
             <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <TextBlock Text="Demo · no audio captured" FontSize="11" Foreground="{ThemeResource MutedBrush}"
+            <TextBlock Text="Local WAV recording" FontSize="11" Foreground="{ThemeResource MutedBrush}"
                 HorizontalAlignment="Right" VerticalAlignment="Center" />
         </Grid>
         <Grid Grid.Row="1" Margin="12,0,12,0">
@@ -66,14 +66,14 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <StackPanel Spacing="6" Margin="0,0,0,14">
-                        <TextBlock x:Name="CompletedTitle" Text="Demo session complete" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="CompletedTitle" Text="Recording saved" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <TextBlock x:Name="CompletedMetadata" FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
                         <Border Height="1" Background="{ThemeResource HairlineBrush}" Margin="0,8,0,0" />
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Spacing="10" Margin="0,0,20,12">
-                            <TextBlock Text="EXAMPLE TRANSCRIPT" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
-                            <TextBlock Text="Wir halten die wichtigsten Gedanken aus dem Gespräch fest. Die Aufnahme lässt sich pausieren und später fortsetzen, ohne eine neue Sitzung zu beginnen.&#x0a;&#x0a;Nach dem Abschluss können wir den Text prüfen und die nächsten Schritte zusammenfassen. Dieser Text ist nur ein Beispiel für die Vorschau – er wurde nicht aus Audio erzeugt."
+                            <TextBlock Text="AUDIO FILE READY" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource AccentBrush}" />
+                            <TextBlock Text="Your recording was saved locally. Choose Transcribe file to add it to the file queue. Transcription starts only when you explicitly choose Start there."
                                 FontSize="15" LineHeight="25" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                         </StackPanel>
                     </ScrollViewer>
@@ -82,8 +82,8 @@
                     BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="10" Padding="20"
                     VerticalAlignment="Center" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="12">
-                        <TextBlock Text="Discard this demo session?" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock Text="This resets the timer. No audio files will be deleted." FontSize="12"
+                        <TextBlock Text="Discard recording?" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="Discard is unavailable in this recorder." FontSize="12"
                             TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                             <local:HandCursorButton x:Name="KeepSessionButton" Content="Keep session" Click="KeepSession_Click"
@@ -105,13 +105,14 @@
                 <local:PrototypeBreadcrumbs x:Name="RecorderBreadcrumbs" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
                 <StackPanel x:Name="SessionActions" Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <local:HandCursorButton x:Name="ViewHistoryButton" Content="View in history" Click="ViewHistory_Click" Visibility="Collapsed"
-                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="View recorder in history" />
+                    <local:HandCursorButton x:Name="OpenFolderButton" Content="Open folder" Click="OpenFolder_Click" Visibility="Collapsed" />
+                    <local:HandCursorButton x:Name="ViewHistoryButton" Content="Transcribe file…" Click="ViewHistory_Click" Visibility="Collapsed"
+                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Transcribe saved recording" />
                     <local:HandCursorButton x:Name="DiscardButton" Content="Discard" Click="Discard_Click" Visibility="Collapsed"
                         Style="{StaticResource PrototypeDestructiveButtonStyle}" AutomationProperties.Name="Discard recorder session" />
                     <local:HandCursorButton x:Name="PauseButton" Content="Pause" Click="Pause_Click" Visibility="Collapsed"
                         Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Pause or resume recorder" />
-                    <local:HandCursorButton x:Name="PrimaryButton" Content="Start demo" Click="Primary_Click"
+                    <local:HandCursorButton x:Name="PrimaryButton" Content="Start recording" Click="Primary_Click"
                         Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Recorder primary action" />
                 </StackPanel>
             </Grid>

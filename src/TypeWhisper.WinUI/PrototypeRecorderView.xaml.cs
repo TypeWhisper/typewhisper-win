@@ -2,287 +2,136 @@ using System.Diagnostics;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using global::Windows.UI;
+using TypeWhisper.Presentation;
 
 namespace TypeWhisper.WinUI;
 
 public sealed partial class PrototypeRecorderView : UserControl
 {
-    private enum SessionState { Ready, Recording, Paused, Complete }
-    private SessionState _state;
-    private bool _initialized;
-    private bool _usedMicrophone;
-    private bool _usedSystemAudio;
-    private bool AnySource => MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true;
-    private string SourceSummary => DescribeSources(MicrophoneSource.IsChecked == true, SystemSource.IsChecked == true);
+    private RecorderController? _recorder;
+    private RecorderCaptureAdapter? _capture;
     private readonly Stopwatch _elapsed = new();
-    private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+    private bool _initialized;
     private bool _presented;
-    private bool _rendering;
-    private bool _animationsEnabled;
-    private long _displayedSecond = -1;
-    private Guid _sessionId;
-    private DateTimeOffset _sessionStartedAt;
-    private string _sessionTitle = string.Empty;
-    internal PrototypeHistoryEntry? CompletedEntry { get; private set; }
-    internal string SessionTitle
-    {
-        get => _sessionTitle;
-        set
-        {
-            _sessionTitle = value;
-            if (CompletedEntry is not { } completed) return;
-            CompletedEntry = completed with
-            {
-                Content = completed.Content with
-                {
-                    Title = EffectiveTitle,
-                    UpdatedAt = DateTimeOffset.UtcNow > completed.Content.UpdatedAt
-                        ? DateTimeOffset.UtcNow : completed.Content.UpdatedAt
-                }
-            };
-            CompletedTitle.Text = EffectiveTitle;
-            CompletedEntryChanged?.Invoke(CompletedEntry);
-        }
-    }
-    private string EffectiveTitle => string.IsNullOrWhiteSpace(SessionTitle) ? "Demo session complete" : SessionTitle.Trim();
+    private bool _automaticStop;
+    private string _recordingTitle = "";
+    internal string SessionTitle { get; set; } = "";
     internal event EventHandler? ExitRequested;
     internal event EventHandler? LauncherRequested;
-    internal event Action<PrototypeHistoryEntry>? CompletedEntryChanged;
-    internal event Action<Guid>? OpenInHistoryRequested;
+    internal event Action<string>? TranscribeRequested;
+    internal bool NeedsSaveRetry => _recorder?.State == RecorderState.SaveFailed || _recorder?.State == RecorderState.Recording && _recorder.Error is not null;
 
     public PrototypeRecorderView()
     {
         InitializeComponent();
-        RecorderBreadcrumbs.SetItems(new("Quick Launch", () =>
-        {
-            if (DiscardConfirmation.Visibility == Visibility.Visible) GoBack();
-            else LauncherRequested?.Invoke(this, EventArgs.Empty);
-        }, "Back from recorder"), new("Recorder"));
+        RecorderBreadcrumbs.SetItems(new("Quick Launch", () => LauncherRequested?.Invoke(this, EventArgs.Empty), "Back from recorder"), new("Recorder"));
         MicrophoneSource.IsChecked = true;
-        _initialized = true;
-        Unloaded += (_, _) => SetRendering(false);
-        UpdatePresentation();
-    }
-
-    internal void SetPresented(bool presented)
-    {
-        _presented = presented;
-        UpdatePresentation();
-    }
-
-    internal void FocusEntry() => PrimaryButton.Focus(FocusState.Programmatic);
-
-    internal void GoBack()
-    {
-        if (DiscardConfirmation.Visibility == Visibility.Visible)
+        _timer = DispatcherQueue.CreateTimer();
+        _timer.Interval = TimeSpan.FromMilliseconds(200);
+        _timer.Tick += async (_, _) =>
         {
-            DismissDiscard();
-            return;
-        }
-        ExitRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void UpdatePresentation()
-    {
-        var active = _state is SessionState.Recording or SessionState.Paused;
-        var complete = _state == SessionState.Complete;
-        UpdateSourceToggle(MicrophoneSource, MicrophoneState, MicrophoneIcon);
-        UpdateSourceToggle(SystemSource, SystemState, SystemIcon);
-        RecorderStatus.Text = _state switch
-        {
-            SessionState.Recording => AnySource ? "Recording demo" : "All sources muted",
-            SessionState.Paused => "Paused",
-            SessionState.Complete => "Demo complete",
-            _ => "Ready to record"
+            Refresh();
+            if (_recorder?.State == RecorderState.Recording && _elapsed.Elapsed >= TimeSpan.FromHours(1) && !_automaticStop)
+            {
+                _automaticStop = true; _elapsed.Stop(); _timer.Stop();
+                try { await _recorder.StopAtLimitAsync(_elapsed.Elapsed); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Automatic recorder save failed: {0}", ex); }
+                Refresh();
+            }
         };
-        RecorderStatus.Foreground = new SolidColorBrush(_state == SessionState.Paused || active && !AnySource
-            ? Color.FromArgb(255, 244, 188, 106) : _state == SessionState.Recording
-            ? Color.FromArgb(255, 59, 167, 255) : Color.FromArgb(255, 167, 181, 197));
-        RecorderDuration.Text = _elapsed.Elapsed.ToString(@"mm\:ss");
-        SessionHint.Text = active
-            ? AnySource ? $"{SourceSummary} · simulated signal · safe to leave this page"
-                : "All sources are off · the session continues silently"
-            : AnySource ? "Switch sources on or off, even during a session."
-                : "Enable at least one source to start a session.";
-        PauseButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-        DiscardButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-        PauseButton.Content = _state == SessionState.Paused ? "Resume" : "Pause";
-        PrimaryButton.Content = active ? "Finish demo" : complete ? "New session" : "Start demo";
-        PrimaryButton.IsEnabled = (_state != SessionState.Ready || AnySource)
-            && DiscardConfirmation.Visibility != Visibility.Visible;
-        SessionPanel.Visibility = complete ? Visibility.Collapsed : Visibility.Visible;
-        CompletedPanel.Visibility = complete ? Visibility.Visible : Visibility.Collapsed;
-        ViewHistoryButton.Visibility = complete ? Visibility.Visible : Visibility.Collapsed;
-        if (complete)
-        {
-            CompletedTitle.Text = string.IsNullOrWhiteSpace(SessionTitle) ? "Demo session complete" : SessionTitle.Trim();
-            CompletedMetadata.Text = $@"{_elapsed.Elapsed:mm\:ss} · {DescribeSources(_usedMicrophone, _usedSystemAudio)} · no audio file created";
-        }
-        _animationsEnabled = _uiSettings.AnimationsEnabled;
-        _displayedSecond = (long)_elapsed.Elapsed.TotalSeconds;
-        SetRendering(_presented && _state == SessionState.Recording);
-        SignalCanvas.Invalidate();
+        _initialized = true;
+        Refresh();
     }
-
-    private void SetRendering(bool enabled)
+    internal void Connect(LocalDictationSession session)
     {
-        if (_rendering == enabled) return;
-        _rendering = enabled;
-        if (enabled) CompositionTarget.Rendering += RenderFrame;
-        else CompositionTarget.Rendering -= RenderFrame;
+        if (_recorder is not null) return;
+        _capture = session.CreateRecorderCapture();
+        _recorder = new(session.ReserveRecorder, _capture.StartAsync, _capture.StopAsync,
+            samples => RecorderWavStore.SaveAsync(WinUIProfile.DataPath("recordings"), samples, _recordingTitle));
+        _recorder.Changed += Refresh;
+        Refresh();
     }
-
-    private void RenderFrame(object? sender, object args)
+    internal void SetPresented(bool presented) { _presented = presented; Refresh(); }
+    internal void FocusEntry() => PrimaryButton.Focus(FocusState.Programmatic);
+    internal void GoBack() => ExitRequested?.Invoke(this, EventArgs.Empty);
+    internal async Task ShutdownAsync()
     {
-        // Follow WinUI's render cadence rather than a competing dispatcher timer.
-        // Only touch text when its displayed value changes; bars need no layout.
-        var elapsed = _elapsed.Elapsed;
-        var second = (long)elapsed.TotalSeconds;
-        if (second != _displayedSecond)
-        {
-            _displayedSecond = second;
-            RecorderDuration.Text = elapsed.ToString(@"mm\:ss");
-            var enabled = _uiSettings.AnimationsEnabled;
-            if (enabled != _animationsEnabled) SignalCanvas.Invalidate();
-            _animationsEnabled = enabled;
-        }
-        if (_animationsEnabled && AnySource) SignalCanvas.Invalidate();
+        if (_recorder is null) return;
+        await _recorder.ShutdownAsync();
+        _timer.Stop(); _capture?.Dispose();
     }
-
-    private static string DescribeSources(bool microphone, bool systemAudio) => (microphone, systemAudio) switch
-    {
-        (true, true) => "Microphone + system audio",
-        (true, false) => "Microphone",
-        (false, true) => "System audio",
-        _ => "All sources off"
-    };
-
-    private void UpdateSourceToggle(HandCursorToggleButton button, TextBlock label, UIElement icon)
-    {
-        var enabled = button.IsChecked == true;
-        button.IsEnabled = _state != SessionState.Complete;
-        button.Background = new SolidColorBrush(enabled ? Color.FromArgb(255, 18, 48, 74) : Color.FromArgb(255, 17, 25, 35));
-        button.BorderBrush = new SolidColorBrush(enabled ? Color.FromArgb(255, 47, 131, 189) : Color.FromArgb(255, 43, 64, 84));
-        label.Text = enabled ? "On" : "Off";
-        label.Foreground = (Brush)Application.Current.Resources[enabled ? "AccentBrush" : "MutedBrush"];
-        icon.Opacity = enabled ? 1 : 0.45;
-    }
-
-    private void RememberActiveSources()
-    {
-        if (_state != SessionState.Recording) return;
-        _usedMicrophone |= MicrophoneSource.IsChecked == true;
-        _usedSystemAudio |= SystemSource.IsChecked == true;
-    }
-
-    private void Source_Changed(object sender, RoutedEventArgs e)
+    private void Refresh()
     {
         if (!_initialized) return;
-        RememberActiveSources();
-        UpdatePresentation();
-    }
-
-    private void Primary_Click(object sender, RoutedEventArgs e)
-    {
-        if (_state == SessionState.Ready && !AnySource) return;
-        if (_state is SessionState.Recording or SessionState.Paused)
+        var state = _recorder?.State ?? RecorderState.Ready;
+        var busy = _recorder?.Busy == true;
+        var active = state == RecorderState.Recording;
+        var saved = state == RecorderState.Saved && _recorder?.Error is null;
+        RecorderStatus.Text = _recorder?.Error ?? state switch
         {
-            _elapsed.Stop();
-            _state = SessionState.Complete;
-            var completedAt = DateTimeOffset.UtcNow;
-            CompletedEntry = PrototypeHistoryEntry.CreateRecorderSample(_sessionId, _sessionStartedAt,
-                completedAt >= _sessionStartedAt ? completedAt : _sessionStartedAt,
-                EffectiveTitle, _elapsed.Elapsed.TotalSeconds,
-                (_usedMicrophone ? PrototypeCaptureInputs.Microphone : PrototypeCaptureInputs.None)
-                | (_usedSystemAudio ? PrototypeCaptureInputs.SystemAudio : PrototypeCaptureInputs.None));
-            CompletedEntryChanged?.Invoke(CompletedEntry);
-        }
-        else if (_state == SessionState.Complete)
-        {
-            _state = SessionState.Ready;
-            _elapsed.Reset();
-            _usedMicrophone = _usedSystemAudio = false;
-            CompletedEntry = null;
-        }
-        else
-        {
-            _elapsed.Restart();
-            _sessionId = Guid.NewGuid();
-            _sessionStartedAt = DateTimeOffset.UtcNow;
-            CompletedEntry = null;
-            _state = SessionState.Recording;
-            RememberActiveSources();
-        }
-        UpdatePresentation();
+            RecorderState.Recording => "Recording", RecorderState.Saving => "Saving recording…",
+            RecorderState.SaveFailed => "Could not save. Audio is retained for retry.", RecorderState.Saved => "Recording saved", _ => "Ready to record"
+        };
+        RecorderDuration.Text = (active ? _elapsed.Elapsed : _recorder?.Duration ?? TimeSpan.Zero).ToString(@"hh\:mm\:ss");
+        SessionHint.Text = _capture?.Warning ?? "WAV · default system output · maximum 60 minutes, then automatic stop and save. Pause and source changes during recording are unavailable.";
+        MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
+        MicrophoneState.Text = MicrophoneSource.IsChecked == true ? "On" : "Off";
+        SystemState.Text = SystemSource.IsChecked == true ? "On" : "Off";
+        PrimaryButton.Content = active ? "Stop and save" : state == RecorderState.SaveFailed ? "Retry save" : "Start recording";
+        PrimaryButton.IsEnabled = _recorder is not null && !busy && (active || state == RecorderState.SaveFailed || MicrophoneSource.IsChecked == true || SystemSource.IsChecked == true);
+        PauseButton.Visibility = DiscardButton.Visibility = DiscardConfirmation.Visibility = Visibility.Collapsed;
+        SessionPanel.Visibility = saved ? Visibility.Collapsed : Visibility.Visible;
+        CompletedPanel.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
+        CompletedTitle.Text = _recordingTitle.Length == 0 ? "Recording saved" : _recordingTitle;
+        CompletedMetadata.Text = $"{_recorder?.Duration.ToString(@"hh\:mm\:ss")} · {_recorder?.FilePath}";
+        ViewHistoryButton.Content = "Transcribe file…";
+        ViewHistoryButton.Visibility = OpenFolderButton.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
+        if (_presented) SignalCanvas.Invalidate();
     }
-
-    private void Pause_Click(object sender, RoutedEventArgs e)
+    private async void Primary_Click(object sender, RoutedEventArgs e)
     {
-        if (_state == SessionState.Recording)
+        if (_recorder is null) return;
+        try
         {
-            _state = SessionState.Paused;
-            _elapsed.Stop();
+            if (_recorder.State == RecorderState.Recording) { await StopAsync(); return; }
+            if (_recorder.State == RecorderState.SaveFailed) await _recorder.RetrySaveAsync();
+            else
+            {
+                _recordingTitle = RecorderWavStore.NormalizeTitle(SessionTitle);
+                await _recorder.StartAsync(MicrophoneSource.IsChecked == true, SystemSource.IsChecked == true);
+                _elapsed.Restart(); _automaticStop = false; _timer.Start();
+            }
         }
-        else if (_state == SessionState.Paused)
-        {
-            _state = SessionState.Recording;
-            _elapsed.Start();
-            RememberActiveSources();
-        }
-        UpdatePresentation();
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); }
+        Refresh();
     }
-
-    private void Discard_Click(object sender, RoutedEventArgs e)
+    private async Task StopAsync()
     {
-        DiscardConfirmation.Visibility = Visibility.Visible;
-        SessionPanel.Opacity = 0.15;
-        DiscardButton.IsEnabled = PauseButton.IsEnabled = PrimaryButton.IsEnabled = false;
-        KeepSessionButton.Focus(FocusState.Programmatic);
+        if (_recorder is null) return;
+        _elapsed.Stop(); _timer.Stop();
+        try { await _recorder.StopAndSaveAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder saving failed: {0}", ex); }
+        Refresh();
     }
-
-    private void DismissDiscard()
-    {
-        DiscardConfirmation.Visibility = Visibility.Collapsed;
-        SessionPanel.Opacity = 1;
-        DiscardButton.IsEnabled = PauseButton.IsEnabled = PrimaryButton.IsEnabled = true;
-        PrimaryButton.Focus(FocusState.Programmatic);
-    }
-
-    private void KeepSession_Click(object sender, RoutedEventArgs e) => DismissDiscard();
-    private void ConfirmDiscard_Click(object sender, RoutedEventArgs e)
-    {
-        _elapsed.Reset();
-        _state = SessionState.Ready;
-        _usedMicrophone = _usedSystemAudio = false;
-        CompletedEntry = null;
-        DismissDiscard();
-        UpdatePresentation();
-    }
-    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+    private void Source_Changed(object sender, RoutedEventArgs e) => Refresh();
     private void ViewHistory_Click(object sender, RoutedEventArgs e)
+    { if (_recorder?.FilePath is { } path) TranscribeRequested?.Invoke(path); }
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
-        if (CompletedEntry is { } entry) OpenInHistoryRequested?.Invoke(entry.RecordId);
+        if (_recorder?.FilePath is not { } path) return;
+        try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { RecorderStatus.Text = "Could not open the folder: " + ex.Message; }
     }
-
+    private void Pause_Click(object sender, RoutedEventArgs e) { }
+    private void Discard_Click(object sender, RoutedEventArgs e) { }
+    private void KeepSession_Click(object sender, RoutedEventArgs e) { }
+    private void ConfirmDiscard_Click(object sender, RoutedEventArgs e) { }
+    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
     private void SignalCanvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (sender.Size.Width <= 0) return;
-        const int bars = 56;
-        var slot = (float)sender.Size.Width / bars;
-        var center = (float)sender.Size.Height / 2;
-        var phase = _animationsEnabled ? _elapsed.Elapsed.TotalSeconds * 3 : 1;
-        var active = _state == SessionState.Recording && AnySource;
-        var color = _state == SessionState.Paused ? Color.FromArgb(255, 244, 188, 106)
-            : Color.FromArgb(active ? (byte)255 : (byte)90, 59, 167, 255);
-        for (var index = 0; index < bars; index++)
-        {
-            var envelope = Math.Sin(index * Math.PI / (bars - 1));
-            var signal = (Math.Sin(index * 0.77 + phase) + Math.Sin(index * 0.23 - phase * 1.4) + 2) / 4;
-            var height = active ? (float)(3 + signal * envelope * 42) : 3;
-            args.DrawingSession.FillRoundedRectangle(index * slot + slot * 0.3f, center - height / 2,
-                Math.Max(2, slot * 0.4f), height, 2, 2, color);
-        }
+        var level = _recorder?.State == RecorderState.Recording ? _capture?.Level ?? 0 : 0;
+        args.DrawingSession.FillRoundedRectangle(0, 20, Math.Max(0, (float)sender.ActualWidth) * level, 10, 3, 3,
+            global::Windows.UI.Color.FromArgb(255, 59, 167, 255));
     }
 }

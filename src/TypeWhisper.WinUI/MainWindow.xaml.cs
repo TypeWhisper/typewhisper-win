@@ -142,7 +142,13 @@ public sealed partial class MainWindow : Window
     }
     private bool _closing;
     private readonly TypeWhisper.Presentation.AsyncShutdownCoordinator _shutdown = new();
-    internal Task ShutdownDictationAsync() => _shutdown.Run(async () =>
+    internal async Task ShutdownDictationAsync()
+    {
+        // The recorder owns the session gate while capturing; save it before session shutdown waits for that gate.
+        await RecorderView.ShutdownAsync();
+        await ShutdownCoreAsync();
+    }
+    private Task ShutdownCoreAsync() => _shutdown.Run(async () =>
     {
         _closing = true;
         _dictationHotkey?.Dispose();
@@ -160,8 +166,15 @@ public sealed partial class MainWindow : Window
     internal void ShowShutdownFailure()
     {
         ShowFromActivation();
+        if (RecorderView.NeedsSaveRetry)
+        {
+            if (!_recorderOpen) OpenRecorder();
+            MetricsText.Text = "Recording could not be saved. Retry saving in Recorder, then choose Exit again.";
+            return;
+        }
         MetricsText.Text = "Shutdown could not complete cleanly. Work is stopped; see the diagnostic log for details.";
     }
+    internal bool CanRetryRecorderShutdown => RecorderView.NeedsSaveRetry;
 
     private void UpdateLiveDictation()
     {
@@ -281,12 +294,12 @@ public sealed partial class MainWindow : Window
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
-        // Recorder previews must not be mixed into persisted history.
-        RecorderView.OpenInHistoryRequested += id =>
+        RecorderView.Connect(_dictation);
+        RecorderView.TranscribeRequested += path =>
         {
             CloseRecorder();
-            OpenHistory();
-            HistoryView.OpenEntry(id);
+            OpenFileTranscription();
+            _fileTranscription?.AddRecording(path);
         };
         HistoryView.ClearSearchRequested += (_, _) => SearchBox.Text = string.Empty;
         WorkflowsView.ExitRequested += (_, _) => CloseWorkflows();
