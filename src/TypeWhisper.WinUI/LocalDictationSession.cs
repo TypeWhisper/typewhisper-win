@@ -622,7 +622,7 @@ internal sealed class LocalDictationSession : IDisposable
                 },
                 boostVocabulary: boostVocabulary && dictionary is not null ? dictionary.ApplyBoosting : null,
                 correctDictionary: dictionary is not null ? dictionary.ApplyCorrections : null,
-                task: _taskAtStart);
+                task: _taskAtStart, targetProcessName: _targetApp, engineId: _engineAtStart, modelId: _modelAtStart);
             notices.AddRange(processed.Warnings);
             var text = processed.Text;
             if (_disposed) return;

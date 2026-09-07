@@ -15,9 +15,27 @@ public sealed record DictationTextPreferences
     public EnglishOutputVariant EnglishOutputVariant { get; init; } = EnglishOutputVariant.AsTranscribed;
     /// <summary>Preserves German spelling or converts sharp s to Swiss Standard German spelling.</summary>
     public GermanOutputVariant GermanOutputVariant { get; init; } = GermanOutputVariant.AsTranscribed;
+    /// <summary>Applies existing application-specific Markdown bullet formatting to known target processes.</summary>
+    public bool AppFormattingEnabled { get; init; }
+    /// <summary>Spoken formatting overrides keyed by engine, model and language; absent profiles retain engine output.</summary>
+    public IReadOnlyList<DictationSpokenFormattingProfile> SpokenFormattingProfiles { get; init; } = [];
 
     internal bool IsValid => Enum.IsDefined(EnglishOutputVariant) &&
-        GermanOutputVariant is GermanOutputVariant.AsTranscribed or GermanOutputVariant.Switzerland;
+        (GermanOutputVariant is GermanOutputVariant.AsTranscribed or GermanOutputVariant.Switzerland) &&
+        SpokenFormattingProfiles is not null && SpokenFormattingProfiles.All(profile => profile is not null &&
+            !string.IsNullOrWhiteSpace(profile.EngineId) && SpokenFormattingLanguageNormalizer.Normalize(profile.LanguageCode) is not null) &&
+        SpokenFormattingProfiles.Select(profile => DictationSpokenFormattingProfile.MakeKey(profile.EngineId.Trim(),
+            string.IsNullOrWhiteSpace(profile.ModelId) ? null : profile.ModelId.Trim(), SpokenFormattingLanguageNormalizer.Normalize(profile.LanguageCode)!))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Count() == SpokenFormattingProfiles.Count;
+
+    internal DictationTextPreferences Snapshot() => this with
+    {
+        SpokenFormattingProfiles = SpokenFormattingProfiles.Count == 0 ? [] : Array.AsReadOnly(SpokenFormattingProfiles.Select(profile => profile with
+        {
+            EngineId = profile.EngineId.Trim(), ModelId = string.IsNullOrWhiteSpace(profile.ModelId) ? null : profile.ModelId.Trim(),
+            LanguageCode = SpokenFormattingLanguageNormalizer.Normalize(profile.LanguageCode)!
+        }).ToArray())
+    };
 }
 
 /// <summary>Loads and atomically saves text-processing preferences in an explicit profile.</summary>
@@ -52,7 +70,7 @@ public sealed class DictationTextPreferencesStore
                 throw new JsonException("Incomplete text preferences.");
             var loaded = JsonSerializer.Deserialize<DictationTextPreferences>(json, JsonOptions);
             if (loaded is null || !loaded.IsValid) throw new JsonException("Invalid text preferences.");
-            Current = loaded;
+            Current = loaded.Snapshot();
         }
         catch (FileNotFoundException) { }
         catch (DirectoryNotFoundException) { }
@@ -65,13 +83,14 @@ public sealed class DictationTextPreferencesStore
     /// <summary>Persists valid choices; failed writes preserve the previous preferences.</summary>
     public string? Save(DictationTextPreferences next)
     {
-        if (!next.IsValid) return Error = "Choose supported regional spelling options.";
+        if (!next.IsValid) return Error = "Choose supported text-processing options and unique formatting profiles.";
         string? temporary = null;
         try
         {
             var directory = Path.GetDirectoryName(Path.GetFullPath(_path))!;
             Directory.CreateDirectory(directory);
             temporary = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+            next = next.Snapshot();
             File.WriteAllText(temporary, JsonSerializer.Serialize(next, JsonOptions));
             File.Move(temporary, _path, overwrite: true);
             temporary = null;

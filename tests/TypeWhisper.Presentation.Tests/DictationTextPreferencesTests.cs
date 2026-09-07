@@ -26,11 +26,17 @@ public sealed class DictationTextPreferencesTests : IDisposable
             TranscriptionNumberNormalizationEnabled = false,
             ShortUtterancePunctuationEnabled = false,
             EnglishOutputVariant = EnglishOutputVariant.UnitedKingdom,
-            GermanOutputVariant = GermanOutputVariant.Switzerland
+            GermanOutputVariant = GermanOutputVariant.Switzerland,
+            AppFormattingEnabled = true,
+            SpokenFormattingProfiles = [new()
+            {
+                EngineId = "sherpa-onnx", ModelId = "parakeet-tdt-0.6b", LanguageCode = "de",
+                StrategyOverrideRaw = "automatic"
+            }]
         };
         Assert.Null(store.Save(next));
-        Assert.Equal(next, new DictationTextPreferencesStore(PreferencesPath).Current);
-        Assert.Equal(new DictationTextPreferences(), captured);
+        AssertContentEqual(next, new DictationTextPreferencesStore(PreferencesPath).Current);
+        AssertContentEqual(new DictationTextPreferences(), captured);
         Assert.Single(Directory.GetFiles(_directory));
     }
 
@@ -58,10 +64,12 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var store = new DictationTextPreferencesStore(PreferencesPath);
         var saved = new DictationTextPreferences { ShortUtterancePunctuationEnabled = false };
         Assert.Null(store.Save(saved));
+        var capturedCurrent = store.Current;
         File.Delete(PreferencesPath);
         Directory.CreateDirectory(PreferencesPath);
         Assert.NotNull(store.Save(saved with { TranscriptionNumberNormalizationEnabled = false }));
-        Assert.Equal(saved, store.Current);
+        Assert.Same(capturedCurrent, store.Current);
+        AssertContentEqual(saved, store.Current);
         Assert.Empty(Directory.GetFiles(_directory));
     }
 
@@ -74,6 +82,16 @@ public sealed class DictationTextPreferencesTests : IDisposable
         var store = new DictationTextPreferencesStore(PreferencesPath);
         Assert.NotNull(store.Save(new() { GermanOutputVariant = variant }));
         Assert.False(File.Exists(PreferencesPath));
+    }
+
+    private static void AssertContentEqual(DictationTextPreferences expected, DictationTextPreferences actual)
+    {
+        Assert.Equal(expected.TranscriptionNumberNormalizationEnabled, actual.TranscriptionNumberNormalizationEnabled);
+        Assert.Equal(expected.ShortUtterancePunctuationEnabled, actual.ShortUtterancePunctuationEnabled);
+        Assert.Equal(expected.EnglishOutputVariant, actual.EnglishOutputVariant);
+        Assert.Equal(expected.GermanOutputVariant, actual.GermanOutputVariant);
+        Assert.Equal(expected.AppFormattingEnabled, actual.AppFormattingEnabled);
+        Assert.Equal(expected.SpokenFormattingProfiles.ToArray(), actual.SpokenFormattingProfiles.ToArray());
     }
 
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }

@@ -29,12 +29,16 @@ public static class DictationTextPipeline
         Func<string, string>? boostVocabulary = null,
         Func<string, string>? correctDictionary = null,
         CancellationToken ct = default,
-        TranscriptionTask task = TranscriptionTask.Transcribe)
+        TranscriptionTask task = TranscriptionTask.Transcribe,
+        string? targetProcessName = null,
+        string? engineId = null,
+        string? modelId = null)
     {
         ArgumentNullException.ThrowIfNull(rawText);
         ArgumentNullException.ThrowIfNull(preferences);
         if (!preferences.IsValid) throw new ArgumentException("Unsupported text preferences.", nameof(preferences));
         var warnings = new List<string>();
+        var spokenFormatting = DictationFormatting.Resolve(preferences, engineId, modelId, configuredLanguage, detectedLanguage, task);
         Func<string, string>? Protect(string name, Func<string, string>? step) => step is null ? null : text =>
         {
             try { return step(text); }
@@ -66,6 +70,9 @@ public static class DictationTextPipeline
             ConfiguredLanguage = configuredLanguage,
             DetectedLanguage = detectedLanguage,
             PluginPostProcessors = snippets,
+            TargetProcessName = targetProcessName,
+            AppFormatter = preferences.AppFormattingEnabled ? (text, process) => AppFormatterService.Format(text, process) : null,
+            SpokenFormatter = text => DictationFormatting.Apply(text, spokenFormatting),
             VocabularyBooster = Protect("Vocabulary boosting", boostVocabulary),
             DictionaryCorrector = Protect("Dictionary corrections", correctDictionary)
         }, ct);
