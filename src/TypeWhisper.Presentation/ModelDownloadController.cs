@@ -1,7 +1,11 @@
 namespace TypeWhisper.Presentation;
 
-/// <summary>An immutable state for one explicit download; progress is supplied only by the plugin.</summary>
-public sealed record ModelDownloadState(bool IsBusy, bool IsClosing, double? Progress, string? Message, bool Succeeded);
+/// <summary>An immutable state for one explicit model operation; progress is supplied only by the plugin.</summary>
+public sealed record ModelDownloadState(bool IsBusy, bool IsClosing, double? Progress, string? Message, bool Succeeded)
+{
+    /// <summary>Whether this operation removes model files rather than downloading them.</summary>
+    public bool IsRemoval { get; init; }
+}
 
 /// <summary>
 /// Thread-safe single-operation admission and cancellation drain. Callbacks must await the actual plugin operation.
@@ -27,6 +31,18 @@ public sealed class ModelDownloadController
     public Task RunAsync(Func<IProgress<double>, CancellationToken, Task> download)
     {
         ArgumentNullException.ThrowIfNull(download);
+        return RunOperationAsync(download, removal: false);
+    }
+
+    /// <summary>Runs one explicitly confirmed removal using the same admission and drain as downloads.</summary>
+    public Task RunRemovalAsync(Func<CancellationToken, Task> remove)
+    {
+        ArgumentNullException.ThrowIfNull(remove);
+        return RunOperationAsync((_, token) => remove(token), removal: true);
+    }
+
+    private Task RunOperationAsync(Func<IProgress<double>, CancellationToken, Task> operation, bool removal)
+    {
         CancellationTokenSource request;
         TaskCompletionSource completion;
         long generation;
@@ -36,11 +52,11 @@ public sealed class ModelDownloadController
                 throw new InvalidOperationException("Finish the current model operation before starting another.");
             request = _request = new();
             generation = ++_generation;
-            _state = new(true, false, null, "Downloading model…", false);
+            _state = new(true, false, null, removal ? "Removing model…" : "Downloading model…", false) { IsRemoval = removal };
             completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             _completion = completion.Task;
         }
-        _ = RunCoreAsync(download, request, generation, completion);
+        _ = RunCoreAsync(operation, request, generation, completion, removal);
         return completion.Task;
     }
 
@@ -54,7 +70,7 @@ public sealed class ModelDownloadController
             if (_request is { IsCancellationRequested: false })
             {
                 _callbacks = _request.CancelAsync();
-                _state = _state with { Message = "Canceling model download…" };
+                _state = _state with { Message = _state.IsRemoval ? "Canceling model removal…" : "Canceling model download…" };
             }
             completion = _completion;
         }
@@ -70,7 +86,7 @@ public sealed class ModelDownloadController
     }
 
     private async Task RunCoreAsync(Func<IProgress<double>, CancellationToken, Task> download,
-        CancellationTokenSource request, long generation, TaskCompletionSource completion)
+        CancellationTokenSource request, long generation, TaskCompletionSource completion, bool removal)
     {
         var succeeded = false;
         string message;
@@ -82,17 +98,17 @@ public sealed class ModelDownloadController
             await download(new InlineProgress(value => Report(generation, value)), request.Token).ConfigureAwait(false);
             request.Token.ThrowIfCancellationRequested();
             succeeded = true;
-            message = "Model downloaded. Select it explicitly to use it.";
+            message = removal ? "Model files removed." : "Model downloaded. Select it explicitly to use it.";
         }
         catch (OperationCanceledException)
-        { message = "Download canceled. Refresh model status before trying again; existing files are retained."; }
+        { message = CanceledMessage(removal); }
         catch (Exception ex) when (ex is not OutOfMemoryException)
-        { message = "The model could not be downloaded. Check its requirements and configuration before trying again."; }
+        { message = removal ? "The model could not be removed. Refresh model status; some files may have been removed." : "The model could not be downloaded. Check its requirements and configuration before trying again."; }
         catch (Exception ex)
-        { fatal = ex; message = "The model download could not finish."; }
+        { fatal = ex; message = removal ? "The model removal could not finish." : "The model download could not finish."; }
         lock (_sync)
             if (succeeded && generation == _generation && !request.IsCancellationRequested)
-                _state = _state with { Message = "Finishing model download…" };
+                _state = _state with { Message = removal ? "Finishing model removal…" : "Finishing model download…" };
         Notify();
         Task callbacks;
         lock (_sync) { callbacks = _callbacks; _request = null; }
@@ -104,7 +120,7 @@ public sealed class ModelDownloadController
             if (generation != _generation || request.IsCancellationRequested || _state.IsClosing)
             {
                 succeeded = false;
-                message = "Download canceled. Refresh model status before trying again; existing files are retained.";
+                message = CanceledMessage(removal);
             }
             request.Dispose();
             _callbacks = Task.CompletedTask;
@@ -114,6 +130,10 @@ public sealed class ModelDownloadController
         }
         Notify();
     }
+
+    private static string CanceledMessage(bool removal) => removal
+        ? "Removal canceled. Refresh model status; some files may have been removed."
+        : "Download canceled. Refresh model status before trying again; existing files are retained.";
 
     private void Report(long generation, double value)
     {

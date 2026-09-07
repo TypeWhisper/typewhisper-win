@@ -37,6 +37,11 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
     }
     internal string ActiveModelName => Models.FirstOrDefault(m => m.Model.Id == ActiveModelId)?.Model.DisplayName ?? "No model loaded";
     internal string? DownloadingModelId { get; private set; }
+    internal string? RemovingModelId { get; private set; }
+    internal long Generation { get; private set; }
+    internal bool SupportsModelRemoval => _lease?.Engine.SupportsModelRemoval == true;
+    internal bool CanRemoveModel(string modelId) => Enabled && SupportsModelRemoval &&
+        ActiveModelId != modelId && _lease?.Engine.SelectedModelId != modelId;
     internal double Progress { get; private set; }
     internal string? Error { get; private set; }
     internal string? Feedback { get; private set; }
@@ -87,6 +92,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
             if (Enabled) return;
             Error = null; Feedback = null;
             _lease = await _load();
+            Generation++;
             _lease.Engine.SetAccelerationPreference(TranscriptionAccelerationPreference.Cpu);
             try { _host.SetSetting("Enabled", true); }
             catch { await ReleaseAsync(); throw; }
@@ -167,6 +173,33 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         finally { _download = null; DownloadingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
     }
     internal void CancelDownload() => _download?.Cancel();
+
+    internal async Task RemoveAsync(string modelId, long expectedGeneration, CancellationToken ct)
+    {
+        if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException("A model operation is already in progress.");
+        Busy = true; Error = null; Feedback = null;
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (Generation != expectedGeneration) throw new InvalidOperationException("The plugin changed. Reopen its settings before removing a model.");
+            var engine = _lease?.Engine ?? throw new InvalidOperationException("Enable the plugin before managing its models.");
+            if (!engine.TranscriptionModels.Any(m => m.Id == modelId)) throw new ArgumentException("Unknown model.", nameof(modelId));
+            if (!engine.SupportsModelRemoval) throw new NotSupportedException("This plugin does not support model removal.");
+            if (!CanRemoveModel(modelId)) throw new InvalidOperationException("Select a different model in this plugin before removing this one.");
+            ct.ThrowIfCancellationRequested();
+            RemovingModelId = modelId; Changed?.Invoke();
+            if (engine.IsModelDownloaded(modelId))
+                await engine.RemoveModelAsync(modelId, ct);
+            ct.ThrowIfCancellationRequested();
+            if (engine.IsModelDownloaded(modelId)) throw new IOException("The plugin still reports this model as downloaded.");
+            Feedback = "Model removed. Download it again to use it.";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        { Feedback = "Removal canceled. Refresh model status; some files may already have been removed."; throw; }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        { Error = "Could not remove model: " + ex.Message; throw; }
+        finally { RemovingModelId = null; Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
     private sealed class InlineProgress(Action<double> report) : IProgress<double> { public void Report(double value) => report(value); }
 
     internal async Task<(string Text, VocabularyTokenTiming[] Timings, string? DetectedLanguage, float? NoSpeechProbability)> DecodeAsync(float[] samples, bool includeTimings, bool translate = false, CancellationToken ct = default)
@@ -189,6 +222,7 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
 
     private async Task ReleaseAsync()
     {
+        Generation++;
         ActiveModelId = null;
         var lease = _lease; _lease = null;
         if (lease is not null) await lease.Lifetime.DisposeAsync();

@@ -180,4 +180,97 @@ public sealed class LocalModelManagementTests : IDisposable
         await runtime.ActivateAsync(LocalTranscriptionPlugin.ModelId);
         Assert.True(runtime.Ready); Assert.Null(runtime.Error);
     }
+
+    private void AllowRemoval()
+    {
+        _downloaded.Add("canary");
+        _engine.SetupGet(e => e.SupportsModelRemoval).Returns(true);
+        _engine.Setup(e => e.RemoveModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string id, CancellationToken _) => { _downloaded.Remove(id); return Task.CompletedTask; });
+    }
+
+    [Fact]
+    public async Task RemovalPreservesLoadedModelAndSavedSelection()
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        Assert.DoesNotContain("canary", _downloaded);
+        Assert.Contains(LocalTranscriptionPlugin.ModelId, _downloaded);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, runtime.ActiveModelId);
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, new VocabularyHostServices(_root).GetSetting<string>("SelectedModelId"));
+        Assert.Single(_loads);
+        Assert.False(runtime.Busy);
+        Assert.Null(runtime.RemovingModelId);
+    }
+
+    [Fact]
+    public async Task LoadedAndPluginSelectedModelsCannotBeRemoved()
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RemoveAsync(LocalTranscriptionPlugin.ModelId, runtime.Generation, default));
+        _engine.SetupGet(e => e.SelectedModelId).Returns("canary");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RemoveAsync("canary", runtime.Generation, default));
+        _engine.Verify(e => e.RemoveModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RemovalRejectsReactivatedPackageAndUnknownModel()
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        var oldGeneration = runtime.Generation;
+        await runtime.SetEnabledAsync(false); await runtime.SetEnabledAsync(true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.RemoveAsync("canary", oldGeneration, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => runtime.RemoveAsync("../canary", runtime.Generation, default));
+        _engine.Verify(e => e.RemoveModelAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UnsupportedRemovalAndFalseSuccessPreserveRetry()
+    {
+        _downloaded.Add("canary");
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await Assert.ThrowsAsync<NotSupportedException>(() => runtime.RemoveAsync("canary", runtime.Generation, default));
+        _engine.SetupGet(e => e.SupportsModelRemoval).Returns(true);
+        _engine.Setup(e => e.RemoveModelAsync("canary", It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        await Assert.ThrowsAsync<IOException>(() => runtime.RemoveAsync("canary", runtime.Generation, default));
+        Assert.False(runtime.Busy);
+        AllowRemoval();
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        Assert.Null(runtime.Error);
+    }
+
+    [Fact]
+    public async Task CancellationDrainsRemovalBeforeCompetingChanges()
+    {
+        AllowRemoval();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _engine.Setup(e => e.RemoveModelAsync("canary", It.IsAny<CancellationToken>()))
+            .Returns(async () => { entered.SetResult(); await finish.Task; _downloaded.Remove("canary"); });
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var cancellation = new CancellationTokenSource();
+        var operation = runtime.RemoveAsync("canary", runtime.Generation, cancellation.Token);
+        await entered.Task; cancellation.Cancel();
+        Assert.False(operation.IsCompleted);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.ActivateAsync("canary"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => runtime.SetEnabledAsync(false));
+        finish.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.False(runtime.Busy);
+        Assert.Contains("some files may already", runtime.Feedback);
+        Assert.True(runtime.Ready);
+    }
+
+    [Fact]
+    public async Task MissingModelRemovalDoesNotCallPluginAgain()
+    {
+        AllowRemoval();
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        await runtime.RemoveAsync("canary", runtime.Generation, default);
+        _engine.Verify(e => e.RemoveModelAsync("canary", It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

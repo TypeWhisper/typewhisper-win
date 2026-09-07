@@ -45,9 +45,19 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     /// <inheritdoc />
     public IReadOnlyList<PluginModelInfo> SupportedModels => [new("llm", "Fixture LLM")];
     /// <inheritdoc />
-    public string? SelectedModelId => "transcription";
+    public string? SelectedModelId => _host?.GetSetting<bool>("NoSelectedModel") == true ? null : "transcription";
     /// <inheritdoc />
     public bool SupportsModelDownload => _host?.GetSetting<bool>("LocalModels") == true;
+    /// <inheritdoc />
+    public bool SupportsModelRemoval => _host?.GetSetting<bool>("ModelRemoval") == true;
+    /// <inheritdoc />
+    public async Task RemoveModelAsync(string modelId, CancellationToken ct)
+    {
+        _host!.SetSetting("removeCalls", _host.GetSetting<int>("removeCalls") + 1);
+        await ProcessAsync("", "", "", ct);
+        if (_host.GetSetting<bool>("RemoveThrows")) throw new IOException("private remove error");
+        if (!_host.GetSetting<bool>("FilesRemainAfterRemove")) _host.SetSetting("Downloaded", false);
+    }
     /// <inheritdoc />
     public bool IsModelDownloaded(string modelId) => !SupportsModelDownload || _host!.GetSetting<bool>("Downloaded");
     /// <inheritdoc />
@@ -65,7 +75,11 @@ public class RuntimeProbePlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin
     {
         _host!.SetSetting("loadCalls", _host.GetSetting<int>("loadCalls") + 1);
         if (_host.GetSetting<bool>("HoldLoad")) await ProcessAsync("", "", "", ct);
+        if (_host.GetSetting<bool>("LoadThrows")) throw new IOException("private load error");
     }
+    /// <inheritdoc />
+    public Task UnloadModelAsync()
+    { _host!.SetSetting("unloadCalls", _host.GetSetting<int>("unloadCalls") + 1); return Task.CompletedTask; }
     /// <inheritdoc />
     public event EventHandler? ModelDownloadRequirementsChanged { add { } remove { } }
     /// <inheritdoc />
