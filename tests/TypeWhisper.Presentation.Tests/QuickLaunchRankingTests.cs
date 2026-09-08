@@ -30,4 +30,21 @@ public sealed class QuickLaunchRankingTests
         var result = QuickLaunchRanking.Order(["older", "recent", "frequent"], new HashSet<string> { "older", "frequent" }, _usage, false);
         Assert.Equal(["older", "frequent", "recent"], result);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ManualPinOrderOverridesUsageAndCandidateOrder(bool searching)
+    {
+        var result = QuickLaunchRanking.Order(["older", "recent", "frequent"],
+            new HashSet<string> { "older", "frequent" }, _usage, searching, ["frequent", "older"]);
+        Assert.Equal(["frequent", "older", "recent"], result);
+    }
+
+    [Fact]
+    public void HiddenPinsDoNotAffectVisibleOrder()
+    {
+        var result = QuickLaunchRanking.Order(["older", "frequent"],
+            new HashSet<string> { "older", "frequent", "deleted" }, _usage, false, ["frequent", "deleted", "older"]);
+        Assert.Equal(["frequent", "older"], result);
+    }
 }
