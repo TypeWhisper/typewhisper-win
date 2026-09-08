@@ -1,5 +1,13 @@
 # Windows 1.1 progress
 
+## History read-back (`90a3914b`), 2026-09-08
+
+History details now offer Read aloud / Stop reading in the bottom action area with P. Saved-audio playback moves to A; F still opens its folder and Enter still copies text. The displayed entry text and language reach the existing local speech controller with current voice/output preferences, independently of automatic feedback. Reading does not replace the last-dictation snapshot or write History/clipboard data.
+
+Navigation back, closing History, editing, deletion and shutdown request cancellation of the owned history playback. Cancellation matches the exact request reference, so stale History cleanup cannot stop newer automatic/shortcut speech. Background History refresh is deferred during playback, including synchronous startup notifications, to avoid canceling a newly started read. Text inputs, modifiers and dialogs retain their keyboard behavior. Existing speech size/duration limits remain visible rejections without truncation.
+
+Focused Presentation validation passed **757 tests**, including three request-ownership cases covering cancellation drain, equal-but-distinct requests and stale cleanup after newer speech starts. The prescribed normal-profile Debug build/launch passed (`artifacts/history-readback-build.log`); no native UI automation was used. Marco confirmed last-dictation read/stop via hotkey before this change. History P start/stop, returning to the list, editor/delete cancellation, saved-audio A and narrow-layout acceptance remain manual checks; new-head CI is pending.
+
 ## Read last dictation shortcut (`26e6d088`), 2026-09-08
 
 Read last transcription is connected in Quick Launch and Settings > Shortcuts, with an unassigned-by-default persistent global binding and bidirectional conflicts against the other connected shortcuts. It reads the final session snapshot through the shared Windows speech controller and current voice/output selections, independently of the automatic spoken-feedback toggle. Repeating the action cancels active speech and waits for synthesis/playback drain; it does not queue a second reading. Shutdown/profile restore unregister the shortcut and drain the shared speech activity. Successful playback does not activate Main, write History, copy or paste text.
