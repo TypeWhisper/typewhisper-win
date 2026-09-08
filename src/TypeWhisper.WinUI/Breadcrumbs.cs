@@ -7,14 +7,23 @@ namespace TypeWhisper.WinUI;
 
 internal sealed record Crumb(string Label, Action? Navigate = null, string? AutomationName = null);
 
-// Compact footer navigation, using the same pointer and focus treatment as actions.
+// Shared navigation content; the main shell can mirror it in the title bar.
 public sealed class Breadcrumbs : UserControl
 {
     private readonly StackPanel _items = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-    public Breadcrumbs() => Content = _items;
+    internal static List<Breadcrumbs> LoadedSources { get; } = [];
+    internal Crumb[] Items { get; private set; } = [];
+    internal bool IsTitleDestination { get; set; }
+    public Breadcrumbs()
+    {
+        Content = _items;
+        Loaded += (_, _) => { if (!LoadedSources.Contains(this)) LoadedSources.Add(this); };
+        Unloaded += (_, _) => LoadedSources.Remove(this);
+    }
 
     internal void SetItems(params Crumb[] items)
     {
+        Items = items;
         _items.Children.Clear();
         foreach (var item in items)
         {

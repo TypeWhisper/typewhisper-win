@@ -18,18 +18,14 @@
         <StackPanel Grid.Row="0">
         <Grid x:Name="DragRegion" Height="38" Padding="14,0,8,0" Background="Transparent">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <local:TypeWhisperGlyph Kind="signal" Width="14" Height="14" />
-                <TextBlock Text="TYPEWHISPER" FontFamily="{StaticResource InterfaceFont}" FontSize="11"
-                           FontWeight="SemiBold" CharacterSpacing="90" Foreground="{ThemeResource MutedBrush}" />
-
-            </StackPanel>
+            <local:Breadcrumbs x:Name="TitleBreadcrumbs" VerticalAlignment="Center" MaxWidth="440" />
+            <Grid x:Name="TitleDragSurface" Grid.Column="1" Background="Transparent" />
 
             <local:HandCursorButton Grid.Column="2" Content="—" Click="MinimizeButton_Click"
                     Style="{StaticResource IconButtonStyle}" AutomationProperties.Name="Minimize" />
@@ -245,7 +241,8 @@
             </StackPanel>
         </Border>
 
-        <Grid x:Name="QuickLaunchFooter" Grid.Row="4" Margin="18,0">
+        <local:TypeWhisperGlyph Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Kind="signal" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0,0,0" ToolTipService.ToolTip="TypeWhisper" AutomationProperties.Name="TypeWhisper" />
+        <Grid x:Name="QuickLaunchFooter" Grid.Row="4" Margin="42,0,18,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

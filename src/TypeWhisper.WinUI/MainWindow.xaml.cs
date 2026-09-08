@@ -508,7 +508,9 @@ public sealed partial class MainWindow : Window
             new PointerEventHandler(SearchSurface_PointerPressed),
             handledEventsToo: true);
         ExtendsContentIntoTitleBar = true;
-        SetTitleBar(DragRegion);
+        SetTitleBar(TitleDragSurface);
+        TitleBreadcrumbs.IsTitleDestination = true;
+        WindowRoot.LayoutUpdated += (_, _) => UpdateTitleBreadcrumbs();
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
