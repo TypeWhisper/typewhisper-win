@@ -168,6 +168,10 @@ public sealed class TypeWhisperGlyph : UserControl
                 Line(drawing, 4, 10, 8, 14);
                 Line(drawing, 8, 14, 16, 6);
                 break;
+            case "chevron-up":
+                Line(drawing, 5, 13, 10, 8);
+                Line(drawing, 10, 8, 15, 13);
+                break;
             case "chevron-down":
                 Line(drawing, 5, 8, 10, 13);
                 Line(drawing, 10, 13, 15, 8);

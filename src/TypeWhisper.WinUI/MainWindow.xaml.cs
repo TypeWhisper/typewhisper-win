@@ -541,8 +541,7 @@ public sealed partial class MainWindow : Window
 
         LoadLauncherPins();
         EntryActionMenu.Attach(CompactResults, LauncherActions);
-        foreach (var command in OrderedLauncherCommands(Commands))
-            FilteredItems.Add(command);
+        PopulateLauncherItems(LauncherCommands());
         RebuildLauncherGroups();
 
         Activated += MainWindow_Activated;
@@ -754,9 +753,7 @@ public sealed partial class MainWindow : Window
                 .ThenByDescending(command => command.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
 
-        FilteredItems.Clear();
-        foreach (var command in OrderedLauncherCommands(matches))
-            FilteredItems.Add(command);
+        PopulateLauncherItems(matches);
         RebuildLauncherGroups();
         sw.Stop();
 
@@ -834,6 +831,7 @@ public sealed partial class MainWindow : Window
     private void RunSelected()
     {
         if (FileTranscriptionOpen || LexiconOpen || UtilityOpen) return;
+        if (LauncherCommandsVisible && _selected?.IsSuggestionsToggle == true) { ToggleSuggestions(); return; }
         ActionPanel.Visibility = Visibility.Collapsed;
         if (_recorderOpen) return;
         if (!_marketplaceOpen && !_pluginsOpen && !_workflowsOpen && !_historyOpen && _selected is { } command)

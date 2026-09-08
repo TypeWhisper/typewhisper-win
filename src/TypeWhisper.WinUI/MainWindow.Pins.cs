@@ -11,6 +11,7 @@ public sealed partial class MainWindow
     private readonly CollectionViewSource _launcherSource = new() { IsSourceGrouped = true, ItemsPath = new Microsoft.UI.Xaml.PropertyPath("Items") };
     private Dictionary<string, QuickLaunchUsage> _launcherUsage = new(StringComparer.Ordinal);
     private static string LauncherUsagePath => WinUIProfile.DataPath("quick-launch-usage.json");
+    private bool _suggestionsExpanded;
     private List<string> _pinOrder = [];
     private string? _draggedPin;
     private HashSet<string> _pinnedCommands = new(StringComparer.Ordinal);
@@ -51,7 +52,7 @@ public sealed partial class MainWindow
         {
             _pinOrder = File.Exists(LauncherPinsPath)
                 ? (JsonSerializer.Deserialize<string[]>(File.ReadAllText(LauncherPinsPath)) ?? []).Distinct(StringComparer.Ordinal).ToList()
-                : Commands.Where(command => command.Category == "Pinned").Select(command => command.Key).ToList();
+                : ["Settings", "History", "Dictionary"];
             _pinnedCommands = _pinOrder.ToHashSet(StringComparer.Ordinal);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
@@ -60,7 +61,7 @@ public sealed partial class MainWindow
 
     private IEnumerable<EntryActionMenu.Action> LauncherActions()
     {
-        if (_selected is not { } command) yield break;
+        if (_selected is not { } command || command.IsSuggestionsToggle) yield break;
         yield return new("Run command · Enter", () => { _selected = command; RunSelected(); });
         yield return new("Set shortcut…", () => { _ = ConfigureCommandShortcutAsync(command); });
         yield return new(_pinnedCommands.Contains(command.Key) ? "Unpin from Quick Launch" : "Pin to Quick Launch",
@@ -210,6 +211,33 @@ public sealed partial class MainWindow
         return QuickLaunchRanking.Order(candidates.Select(command => command.Key), _pinnedCommands, _launcherUsage,
                 !string.IsNullOrWhiteSpace(SearchBox.Text), _pinOrder)
             .Select(title => byTitle[title] with { IsPinned = _pinnedCommands.Contains(title), Shortcut = CommandShortcut(byTitle[title]) });
+    }
+
+    private void PopulateLauncherItems(IEnumerable<Command> candidates)
+    {
+        var ordered = OrderedLauncherCommands(candidates).ToArray();
+        FilteredItems.Clear();
+        if (!string.IsNullOrWhiteSpace(SearchBox.Text))
+        {
+            foreach (var command in ordered) FilteredItems.Add(command);
+            return;
+        }
+        foreach (var command in ordered.Where(command => command.IsPinned)) FilteredItems.Add(command);
+        var others = ordered.Where(command => !command.IsPinned).ToArray();
+        if (others.Length == 0) return;
+        FilteredItems.Add(new Command("Suggestions", _suggestionsExpanded ? "chevron-up" : "chevron-down",
+            _suggestionsExpanded ? "Less" : "More", _suggestionsExpanded ? "Hide suggestions" : "Show all commands", "", "")
+            { IsSuggestionsToggle = true });
+        if (_suggestionsExpanded)
+            foreach (var command in others) FilteredItems.Add(command);
+    }
+
+    private void ToggleSuggestions()
+    {
+        _suggestionsExpanded = !_suggestionsExpanded;
+        SearchBox_TextChanged(SearchBox, null!);
+        CompactResults.SelectedItem = FilteredItems.FirstOrDefault(command => command.IsSuggestionsToggle);
+        CompactResults.Focus(Microsoft.UI.Xaml.FocusState.Keyboard);
     }
 
     private void RebuildLauncherGroups()
