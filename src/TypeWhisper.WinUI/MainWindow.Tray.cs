@@ -24,7 +24,7 @@ public sealed partial class MainWindow
     private bool IsNormalLauncherStatus => !_closing && !_profileRestoreClosing && !_historyOpen && !_recorderOpen
         && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen
         && string.IsNullOrWhiteSpace(SearchBox.Text) && !(_workflowTask is { IsCompleted: false });
-    private string DictationStatusForDisplay => DictationHotkeysPaused && _dictation.OverlayState.Phase == DictationPhase.Idle
+    private string DictationStatusForDisplay => _dictation.FileProcessingStatus is { } fileStatus ? fileStatus : DictationHotkeysPaused && _dictation.OverlayState.Phase == DictationPhase.Idle
         ? "Dictation hotkeys paused. Resume them from the tray menu." : _dictation.Status;
 
     internal void ToggleDictationHotkeyPause()

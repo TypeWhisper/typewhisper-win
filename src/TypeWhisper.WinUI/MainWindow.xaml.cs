@@ -159,6 +159,7 @@ public sealed partial class MainWindow : Window
             }
             _settingsValues["CancelProcessingHotkeys"] = _cancelProcessingHotkey?.Value ?? "";
             await _dictation.InitializeAsync();
+            EnsureFileTranscription();
             InitializeWorkflowShortcuts();
             InitializeHistoryShortcut();
             InitializeCopyLastShortcut();
@@ -868,6 +869,8 @@ public sealed partial class MainWindow : Window
         }
         if (FileTranscriptionOpen)
         {
+            _fileTranscription?.HandleActionKey(e);
+            if (e.Handled) return;
             if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox)
             {
                 _fileTranscription?.GoBack(); e.Handled = true;
@@ -903,6 +906,8 @@ public sealed partial class MainWindow : Window
         }
         if (FileTranscriptionOpen)
         {
+            _fileTranscription?.HandleActionKey(e);
+            if (e.Handled) return;
             if (e.Key == global::Windows.System.VirtualKey.Escape) { _fileTranscription?.GoBack(); e.Handled = true; }
             return;
         }
@@ -1062,7 +1067,7 @@ public sealed partial class MainWindow : Window
         _lexicon.Present(snippets);
     }
 
-    internal void OpenFileTranscription()
+    private void EnsureFileTranscription()
     {
         if (_fileTranscription is null)
         {
@@ -1077,9 +1082,14 @@ public sealed partial class MainWindow : Window
             };
             FileTranscriptionHost.Child = _fileTranscription;
         }
+    }
+
+    internal void OpenFileTranscription()
+    {
+        EnsureFileTranscription();
         SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         FileTranscriptionHost.Visibility = Visibility.Visible;
-        _fileTranscription.Present();
+        _fileTranscription!.Present();
     }
 
     internal void OpenSettings()
@@ -1116,6 +1126,20 @@ public sealed partial class MainWindow : Window
             {
                 dictationSettings.Configure(category, content, pickers);
                 LiveStartupSettings.Configure(category, content, pickers, startup);
+                if (category == "Automation")
+                {
+                    content.Children.Clear(); pickers.Clear();
+                    var information = new TextBlock { Text = "Automatically transcribe files from a folder and save transcripts. Configure and monitor processing in Files > Watch folder.", TextWrapping = TextWrapping.Wrap };
+                    content.Children.Add(information);
+                    var open = new HandCursorButton { Content = "Open watch folder", Style = (Style)Application.Current.Resources["PrimaryButtonStyle"] };
+                    open.Click += (_, _) =>
+                    {
+                        if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || _historyOpen)
+                        { information.Text = "Return to Quick Launch to open Files. Your current workspace is kept intact."; return; }
+                        _settingsWindow?.AppWindow.Hide(); OpenFileTranscription(); _fileTranscription?.ShowWatchFolder(); ShowFromActivation();
+                    };
+                    content.Children.Add(open);
+                }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });
                 if (category == "Files & recovery")

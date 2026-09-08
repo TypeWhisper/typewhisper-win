@@ -8,6 +8,7 @@ namespace TypeWhisper.WinUI;
 internal sealed partial class LocalDictationSession
 {
     private bool _fileBusy;
+    internal string? FileProcessingStatus { get; private set; }
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _fileDispatcher;
     internal bool CanTranscribeFile => CanChangeProvider && IsReady && !Models.Busy;
 
@@ -17,10 +18,17 @@ internal sealed partial class LocalDictationSession
         if (!CanTranscribeFile || !await _gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Finish the current recording or model operation before transcribing a file.");
         _fileBusy = true;
+        FileProcessingStatus = "Loading audio · open Files for progress or cancellation";
         void Report(string message)
         {
-            if (_fileDispatcher.HasThreadAccess) stage(message);
-            else _fileDispatcher.TryEnqueue(() => { if (!ct.IsCancellationRequested) stage(message); });
+            void Publish()
+            {
+                if (ct.IsCancellationRequested) return;
+                FileProcessingStatus = message + " · Files";
+                stage(message); Changed?.Invoke();
+            }
+            if (_fileDispatcher.HasThreadAccess) Publish();
+            else _fileDispatcher.TryEnqueue(Publish);
         }
         try
         {
@@ -125,6 +133,7 @@ internal sealed partial class LocalDictationSession
         finally
         {
             _fileBusy = false;
+            FileProcessingStatus = null;
             _gate.Release();
             Changed?.Invoke();
         }

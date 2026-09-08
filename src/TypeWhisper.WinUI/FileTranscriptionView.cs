@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Windows.Storage.Pickers;
 using global::Windows.ApplicationModel.DataTransfer;
@@ -10,16 +11,18 @@ using global::Windows.Storage;
 
 namespace TypeWhisper.WinUI;
 
-public sealed class FileTranscriptionView : UserControl
+public sealed partial class FileTranscriptionView : UserControl
 {
     private readonly FileTranscriptionQueue _queue = new(new FileTranscriptionQueueStore(WinUIProfile.DataPath("file-queue.json")));
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly TextBlock _notice = Text("", 12, true);
     private readonly Breadcrumbs _crumbs = new();
+    private readonly Border _primaryHost = new();
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private LocalDictationSession? _session;
     private readonly ScrollViewer _scroll;
     private FileTranscriptionJob? _result;
+    private FileTranscriptionJob? _selectedJob;
     private ChoicePicker? _formatPicker;
     private string _format = "txt";
     private bool _picking;
@@ -32,14 +35,23 @@ public sealed class FileTranscriptionView : UserControl
     {
         var root = new Grid { Background = Brush("InkBrush"), RowSpacing = 10, Padding = new Thickness(24, 8, 24, 0) };
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new()); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        var header = new StackPanel { Spacing = 14 };
+        _tabs.SetItems([new("queue", "Files"), new("watch", "Watch folder")], "queue");
+        _tabs.SelectionChanged += id => { _watchTab = id == "watch"; _result = null; Render(); _tabs.SelectedControl.Focus(FocusState.Programmatic); };
+        header.Children.Add(_tabs);
         var heading = Text("File transcription", 22); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1); root.Children.Add(heading);
+        AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1); header.Children.Add(heading); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, HorizontalContentAlignment = HorizontalAlignment.Stretch, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite); Grid.SetRow(_notice, 2); root.Children.Add(_notice);
-        var footer = new Grid { MinHeight = 52, ColumnSpacing = 12 };
-        footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        footer.Children.Add(_crumbs); Grid.SetColumn(_actions, 1); footer.Children.Add(_actions);
+        var footer = new Grid { MinHeight = 76, RowSpacing = 10 };
+        footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        footer.Children.Add(_crumbs);
+        var actionRow = new Grid { ColumnSpacing = 8 };
+        actionRow.ColumnDefinitions.Add(new()); actionRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        actionRow.Children.Add(_actions); Grid.SetColumn(_primaryHost, 1); actionRow.Children.Add(_primaryHost);
+        Grid.SetRow(actionRow, 1); footer.Children.Add(actionRow);
         var border = new Border { Child = footer, BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Brush("HairlineBrush") };
         Grid.SetRow(border, 3); root.Children.Add(border);
         Content = root;
@@ -48,13 +60,14 @@ public sealed class FileTranscriptionView : UserControl
             if (DispatcherQueue.HasThreadAccess) Render();
             else DispatcherQueue.TryEnqueue(Render);
         };
-        Unloaded += (_, _) => Stop();
+        InitializeWatcher();
         Render();
     }
     internal void Connect(LocalDictationSession session)
     {
         _session = session;
-        session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_queue.Running && !_picking && _result is null) Render(); });
+        if (_watcher.Settings?.StartWithApp == true) _watcher.Start();
+        session.Changed += () => DispatcherQueue.TryEnqueue(() => { if (IsLoaded && !_watchTab && !_queue.Running && !_picking && _result is null) Render(); });
     }
     internal void Present() { _notice.Text = "Uses the model selected in Dictation. Cloud providers receive the selected audio when you choose Start."; Render(); }
     internal void Stop() { _queue.Cancel(); _recoveryDialog?.Hide(); }
@@ -66,19 +79,55 @@ public sealed class FileTranscriptionView : UserControl
         IsEnabled = false;
         var drain = _queue.ShutdownAsync();
         _recoveryDialog?.Hide();
-        await Task.WhenAll(_recoveryOperation, drain, _exportOperation);
+        _watchTimer.Stop();
+        await Task.WhenAll(_recoveryOperation, drain, _exportOperation, _watcher.ShutdownAsync());
     }
     internal void GoBack()
     {
         if (_picking) return;
         if (_formatPicker?.IsPopupOpen == true) { _formatPicker.ClosePopup(); return; }
-        if (_result is not null) { _result = null; Render(); }
-        else { Stop(); ExitRequested?.Invoke(); }
+        if (_watchTab && _watchResult is not null) { _watchResult = null; Render(); FocusPrimaryAction(); }
+        else if (_result is not null) { _result = null; Render(); FocusPrimaryAction(); }
+        else ExitRequested?.Invoke();
     }
     private void Render()
     {
-        _body.Children.Clear(); _actions.Children.Clear(); _formatPicker = null;
-        _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) { Stop(); ExitRequested?.Invoke(); } }),
+        var focused = XamlRoot is null ? null : FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var restoreFocus = false;
+        for (var current = focused; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (current == _body || current == _actions || current == _primaryHost || current == _crumbs) { restoreFocus = true; break; }
+        var previousName = focused is FrameworkElement element ? AutomationProperties.GetName(element) : "";
+        _primaryHost.Child = null;
+        RenderContent();
+        var primary = _actions.Children.OfType<HandCursorButton>().LastOrDefault(button =>
+            button.Style == (Style)Application.Current.Resources["PrimaryButtonStyle"] || button.Content?.ToString()?.StartsWith("Cancel run") == true);
+        if (primary is not null) { _actions.Children.Remove(primary); _primaryHost.Child = primary; }
+        if (!_watchTab && (_queue.Running || _picking))
+            foreach (var action in _actions.Children.OfType<Control>()) action.IsEnabled = false;
+        if (restoreFocus) DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!IsLoaded || (_watchTab && _watchEditing)) return;
+            UpdateLayout();
+            var candidates = _body.Children.OfType<Control>().Concat(_actions.Children.OfType<Control>());
+            var replacement = string.IsNullOrEmpty(previousName) ? null : candidates.FirstOrDefault(c => AutomationProperties.GetName(c) == previousName);
+            var next = replacement ?? _primaryHost.Child as Control;
+            if (next is { IsEnabled: true }) next.Focus(FocusState.Keyboard);
+        });
+    }
+
+    private void FocusPrimaryAction()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateLayout();
+            if (_primaryHost.Child is Control { IsEnabled: true } primary) primary.Focus(FocusState.Keyboard);
+        });
+    }
+    private void RenderContent()
+    {
+        _body.Children.Clear(); _actions.Children.Clear(); _formatPicker = null; _primaryAction = null;
+        if (_watchTab) { RenderWatcher(); return; }
+        _crumbs.SetItems(new("Quick Launch", () => { if (!_picking) ExitRequested?.Invoke(); }),
             new("Files", _result is null ? null : () => { _result = null; Render(); }), new(_result is null ? "Queue" : "Result"));
         if (_result is not null) { RenderResult(_result); return; }
         var recovery = new CheckBox
@@ -99,8 +148,10 @@ public sealed class FileTranscriptionView : UserControl
         }
         recovery.Checked += (_, _) => ChangeRecovery();
         recovery.Unchecked += (_, _) => ChangeRecovery();
-        _body.Children.Add(recovery);
-        _body.Children.Add(Text("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.", 11, true));
+        var recoveryContent = new StackPanel { Spacing = 6 };
+        recoveryContent.Children.Add(recovery);
+        recoveryContent.Children.Add(Text("Recovery saves file paths and transcripts locally, including when History is off. Original media files are not copied. Turn recovery off to remove its saved data.", 11, true));
+        _body.Children.Add(new Expander { Header = _queue.RecoveryEnabled ? "Queue recovery is on" : "Queue recovery", Content = recoveryContent, HorizontalAlignment = HorizontalAlignment.Stretch });
         if (_queue.RecoveryError is { } recoveryError) _body.Children.Add(Text(recoveryError, 12, true));
         if (_queue.RecoveryError is not null)
         {
@@ -134,30 +185,57 @@ public sealed class FileTranscriptionView : UserControl
             catch (Exception) { _notice.Text = "Could not accept this drop. Try Choose files instead."; }
             finally { drop.BorderBrush = Brush("HairlineBrush"); deferral.Complete(); }
         };
-        _body.Children.Add(drop);
+        if (_queue.Jobs.Count == 0) _body.Children.Add(drop);
+        else _actions.Children.Add(Button("Add files…", async () => await ChooseFiles()));
         if (_session?.IsReady != true) _body.Children.Add(Text("Choose a ready model in Dictation before starting.", 12, true));
         else if (!_queue.Running && !_session.CanTranscribeFile) _body.Children.Add(Text("Finish the current recording or model operation before starting.", 12, true));
         if (_queue.Jobs.Count == 0) _body.Children.Add(Text("Choose audio or video files to transcribe. Turn on queue recovery to keep results after closing the app.", 13, true));
         else
         {
             _body.Children.Add(Text($"{_queue.Jobs.Count} {(_queue.Jobs.Count == 1 ? "file" : "files")} · {_session?.ActiveModelName ?? "No model selected"}", 12, true));
+            if (_selectedJob is null || !_queue.Jobs.Contains(_selectedJob)) _selectedJob = _queue.Jobs.FirstOrDefault();
             foreach (var job in _queue.Jobs) AddRow(job);
         }
-        if (_queue.Running) _actions.Children.Add(Button("Cancel run", () => { Stop(); _notice.Text = "Canceling… Waiting for the current decoder to stop. Completed results are kept."; Render(); }, destructive: true));
+        if (!_queue.Running && _selectedJob is { } selected)
+        {
+            var remove = Button("Remove · Del", () => RemoveSelected(), destructive: true); remove.IsEnabled = !_picking;
+            _actions.Children.Add(remove);
+            if (selected.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)
+                _actions.Children.Add(Button("Retry · R", async () => { if (_queue.Retry(selected)) await RunQueue(selected); }));
+
+        }
+        if (!_queue.Running && _queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready) > 1)
+            _actions.Children.Add(Button("Export all… · X", async () => await ExportAllAsync()));
+        if (_queue.Running)
+        {
+            _primaryAction = () => { Stop(); _notice.Text = "Canceling… Completed results are kept."; Render(); };
+            _actions.Children.Add(Button("Cancel run · Enter", _primaryAction, destructive: true));
+        }
         else
         {
-            var start = Button("Start transcription", async () => await RunQueue(), primary: true);
-            start.IsEnabled = _session?.CanTranscribeFile == true && !_picking && _queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued); _actions.Children.Add(start);
+            if (!_queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued) && _selectedJob?.Status == FileTranscriptionStatus.Ready)
+            {
+                _primaryAction = OpenSelectedResult;
+                _actions.Children.Add(Button("View result · Enter", _primaryAction, primary: true));
+            }
+            else
+            {
+                _primaryAction = async () => await RunQueue();
+                var start = Button("Start transcription · Enter", _primaryAction, primary: true);
+                start.IsEnabled = _session?.CanTranscribeFile == true && !_picking && _queue.Jobs.Any(job => job.Status == FileTranscriptionStatus.Queued); _actions.Children.Add(start);
+            }
         }
     }
-    private async Task RunQueue()
+    private async Task RunQueue(FileTranscriptionJob? onlyJob = null)
     {
         if (_session is null || !_session.CanTranscribeFile || _queue.Running) return;
         _notice.Text = "Transcribing with the model selected in Dictation…";
-        try { await _queue.RunAsync(_session.TranscribeFileAsync, _session.AcceptFileResult); }
+        try { await _queue.RunAsync(_session.TranscribeFileAsync, _session.AcceptFileResult, onlyJob); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
         _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
+        if (onlyJob?.Status == FileTranscriptionStatus.Ready) { _selectedJob = onlyJob; _result = onlyJob; }
         Render();
+        if (onlyJob?.Status == FileTranscriptionStatus.Ready && !_watchTab) FocusPrimaryAction();
     }
     private async Task DiscardRecoveryAsync()
     {
@@ -187,22 +265,34 @@ public sealed class FileTranscriptionView : UserControl
     }
     private void AddRow(FileTranscriptionJob job)
     {
-        var row = new Grid { ColumnSpacing = 12 }; row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var labels = new StackPanel { Spacing = 6 }; var name = Text(job.Name, 13); name.TextTrimming = TextTrimming.CharacterEllipsis; name.TextWrapping = TextWrapping.NoWrap; ToolTipService.SetToolTip(name, job.Name); labels.Children.Add(name);
-        var status = Text("", 11, true); labels.Children.Add(status);
-        var progress = new ProgressBar { Height = 2, IsIndeterminate = true, Visibility = job.Status == FileTranscriptionStatus.Processing ? Visibility.Visible : Visibility.Collapsed }; labels.Children.Add(progress);
-        status.Text = job.Stage;
-        row.Children.Add(labels);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        if (job.Status == FileTranscriptionStatus.Ready) actions.Children.Add(Button("View result", () => { _result = job; _scroll.ChangeView(null, 0, null, true); Render(); }));
-        if (job.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled)
+        var labels = new StackPanel { Spacing = 6 };
+        var name = Text(job.Name, 13); name.TextTrimming = TextTrimming.CharacterEllipsis;
+        name.TextWrapping = TextWrapping.NoWrap; ToolTipService.SetToolTip(name, job.Name); labels.Children.Add(name);
+        labels.Children.Add(Text(job.Stage, 11, true));
+        if (job.Status == FileTranscriptionStatus.Processing) labels.Children.Add(new ProgressBar { Height = 2, IsIndeterminate = true });
+        var row = new HandCursorButton { Content = labels, Padding = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources[_selectedJob == job ? "PrimaryButtonStyle" : "SecondaryButtonStyle"] };
+        AutomationProperties.SetName(row, job.Name + ", " + job.Stage);
+        AutomationProperties.SetItemStatus(row, _selectedJob == job ? "Selected" : "Not selected");
+        row.Click += (_, _) => { _selectedJob = job; Render(); };
+        row.PreviewKeyDown += async (_, e) =>
         {
-            var retry = Button("Retry", () => { if (_queue.Retry(job)) _notice.Text = "Queued again. Choose Start transcription to retry."; Render(); }); retry.IsEnabled = !_queue.Running; actions.Children.Add(retry);
-        }
-        var remove = Button("×", () => { _queue.Remove(job); _notice.Text = "Removed from the queue. The original file is unchanged."; Render(); }, destructive: true);
-        AutomationProperties.SetName(remove, $"Remove {job.Name} from queue"); remove.IsEnabled = !_queue.Running && !_picking; actions.Children.Add(remove);
-        Grid.SetColumn(actions, 1); row.Children.Add(actions);
-        _body.Children.Add(new Border { Child = row, Padding = new Thickness(14), CornerRadius = new CornerRadius(8), Background = Brush("SurfaceBrush") });
+            if (e.Key != global::Windows.System.VirtualKey.Enter) return;
+            e.Handled = true; _selectedJob = job;
+            if (job.Status == FileTranscriptionStatus.Ready) OpenSelectedResult();
+            else if (job.Status == FileTranscriptionStatus.Queued) await RunQueue(job);
+        };
+        _body.Children.Add(row);
+    }
+    private void OpenSelectedResult()
+    {
+        if (_selectedJob?.Status != FileTranscriptionStatus.Ready) return;
+        _result = _selectedJob; _scroll.ChangeView(null, 0, null, true); Render(); FocusPrimaryAction();
+    }
+    private void RemoveSelected()
+    {
+        if (_selectedJob is null || _picking || _queue.Running) return;
+        _queue.Remove(_selectedJob); _notice.Text = "Removed from the queue. The original file is unchanged."; Render();
     }
     private void RenderResult(FileTranscriptionJob job)
     {
@@ -223,14 +313,26 @@ public sealed class FileTranscriptionView : UserControl
         else { _format = "txt"; _body.Children.Add(Text("Subtitle export is unavailable because this provider did not return usable timing.", 12, true)); }
         _formatPicker.SetOptions(formats, _format);
         _formatPicker.SelectionChanged += selected => _format = selected; _body.Children.Add(_formatPicker);
-        _actions.Children.Add(Button("Export transcript…", async () => await Export(job), primary: true));
+        _actions.Children.Add(Button("Export… · X", async () => await Export(job)));
+        _primaryAction = () => CopyResult(job.Result.Text);
+        _actions.Children.Add(Button("Copy text · Enter", _primaryAction, primary: true));
     }
-    internal void AddRecording(string path) => AddPaths([path]);
-    internal bool CanAcceptActivation => !_queue.IsShutdown && !_queue.Running && !_picking && _result is null
+    internal async void AddRecording(string path)
+    {
+        _watchTab = false; _tabs.SetSelected("queue"); _result = null;
+        var existing = _queue.Jobs.FirstOrDefault(j => string.Equals(j.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+        if (existing is null) { AddPaths([path]); existing = _queue.Jobs.LastOrDefault(j => string.Equals(j.Path, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase)); }
+        if (existing is null) return;
+        if (existing.Status == FileTranscriptionStatus.Ready) { _result = existing; Render(); return; }
+        if (existing.Status is FileTranscriptionStatus.Failed or FileTranscriptionStatus.Canceled) _queue.Retry(existing);
+        if (_session?.CanTranscribeFile == true) await RunQueue(existing);
+    }
+    internal bool CanAcceptActivation => !(_watchTab && (_watchEditing || _watchResult is not null)) && !_queue.IsShutdown && !_queue.Running && !_picking && _result is null
         && _recoveryDialog is null && _recoveryOperation.IsCompleted && _exportOperation.IsCompleted;
     internal string AddActivatedFiles(IReadOnlyList<string> paths)
     {
         if (!CanAcceptActivation) return "Files were not added. Finish the current file operation or close the result, then retry.";
+        _watchTab = false; _tabs.SetSelected("queue");
         AddPaths(paths);
         return _notice.Text;
     }

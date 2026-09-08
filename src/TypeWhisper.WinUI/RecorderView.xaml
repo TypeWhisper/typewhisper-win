@@ -113,7 +113,7 @@
                 <TextBlock Grid.Column="1" Text="⌫ / Esc Back" FontSize="10" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
                 <StackPanel x:Name="SessionActions" Grid.Row="1" Grid.ColumnSpan="3" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <TextBlock x:Name="LibraryRecordingStatus" Visibility="Collapsed" VerticalAlignment="Center" FontSize="12" MaxWidth="240" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
-                    <local:HandCursorButton x:Name="LibraryQueueButton" Content="Add to transcription queue &#x00B7; T" Click="LibraryQueue_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
+                    <local:HandCursorButton x:Name="LibraryQueueButton" Content="Transcribe &#x00B7; T" Click="LibraryQueue_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
                     <local:HandCursorButton x:Name="LibraryFolderButton" Content="Folder &#x00B7; F" Click="LibraryFolder_Click" Visibility="Collapsed" Style="{StaticResource SecondaryButtonStyle}" />
                     <local:HandCursorButton x:Name="LibraryDeleteButton" Content="Delete &#x00B7; Del" Click="LibraryDelete_Click" Visibility="Collapsed" Style="{StaticResource DestructiveButtonStyle}" />
                     <local:HandCursorButton x:Name="LibraryPlayButton" Content="Play audio &#x00B7; Enter" Click="LibraryPlay_Click" Visibility="Collapsed" Style="{StaticResource PrimaryButtonStyle}" />

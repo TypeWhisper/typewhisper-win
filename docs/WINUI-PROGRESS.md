@@ -1,5 +1,17 @@
 # Windows 1.1 progress
 
+## File processing and watched folders, 2026-09-08
+
+File transcription now uses the shared Files / Watch folder tabs above the heading. Recorder **Transcribe** starts only the selected saved recording and opens its completed transcript; unrelated queued jobs remain queued. A failed selected job retries directly. Manual file runs continue when navigating away, with processing status in Quick Launch. Completed queue results support a single folder selection for batch TXT export, preserving existing files. Result copy uses Enter; export uses X; queue removal uses Delete; retry uses R. Actions remain in the footer with the primary action on the right. Rebuilt views restore focus to the final live control, including successive Start/Pause and result/back transitions.
+
+The watched-folder service processes stable, readable source revisions serially through the real selected dictation provider. Initial setup needs one input folder; the default output is its **Transcripts** subfolder, with an optional separate output path. Start authorizes existing and new top-level media files. Optional startup resume is persisted and works without opening the file page. Sources are never deleted; subfolders and file reparse points are excluded. TXT works for every usable result; SRT/VTT require actual provider timing. Results/progress are checkpointed independently of History; automatic exports do not add History entries or replay snippet usage. Interrupted provider requests require explicit retry. Export failures retain text and retry publication without another transcription. Failed jobs do not block other files, and changing the input folder isolates its pending work from previous folders. A failed progress write pauses work before another provider request; unreadable checkpoints are preserved.
+
+Validation: **1,725 headless tests passed, one platform-specific NVIDIA test skipped** (`artifacts/watch-folder-headless-final.log`, `artifacts/test-results/watch-folder-final`). The prescribed WinUI build passed. Native Computer Use in the isolated `watch-folder-20260908` profile verified local Canary inference on synthesized speech, TXT publication, persisted result viewing, startup background processing, direct Recorder transcription, and repeated Enter/Escape focus transitions. No personal recordings or cloud credentials were used. Structured native evidence is in `artifacts/watch-folder-native-evidence.json`. Batch export collision handling, missing subtitle timing, cancellation, checkpoint corruption, folder switching and retry semantics have automated coverage; the native batch folder picker and hardware capture are not covered by this checkpoint.
+
+Limits: one configured folder, no recursive watching or source deletion, 2,000 remembered source revisions / 32 MiB of saved progress, existing 60-minute decoder limit, model/language from Dictation, and no per-folder provider overrides. Discovery runs every three seconds and processes at most one file per pass. Latest activity shows up to 40 entries, prioritizing failures; all successful exports remain in the output folder. Legacy Windows plugins and feeds are unchanged.
+
+Marco also confirmed the preceding Deepgram live transcription and installed-plugin updates work in his real profile; their earlier pending manual-acceptance notes are superseded.
+
 ## Installed integration updates — 2026-09-08
 
 Installed and Discover share update availability and a footer Update all action. Installed

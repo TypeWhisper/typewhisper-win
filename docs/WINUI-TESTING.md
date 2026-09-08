@@ -484,3 +484,15 @@ History list and detail actions now share a fixed bottom action area. Detail sho
 The prescribed development build and launch succeeded on 2026-09-07 (artifacts/history-footer-build.log). No automated native click or keyboard acceptance was performed. Marco should verify the footer at the normal window size, keyboard copy/edit/export, Delete followed by cancellation, text entry in the editor, and Tab/Shift+Tab navigation. Also verify the History shortcut with Settings open and that Groq shows no live transcript while recording but still returns its final text after stopping.
 
 Product convention: place page actions at the bottom, expose keyboard shortcuts, and use Enter for the primary action while preserving text editing and focused-control behavior. This change applies that convention to History; it does not claim a completed application-wide audit.
+
+## Watched-folder and direct file-processing acceptance (2026-09-08)
+
+Use an isolated Debug profile and locally synthesized speech for unattended native checks. The `watch-folder-20260908` run used a copied Canary 180M model and no cloud credentials. Do not point an automatic watcher at personal folders during smoke tests.
+
+- Files > Watch folder: choose an input folder; blank output defaults to its Transcripts subfolder. Start, add a completed WAV, and verify one real TXT export and an unchanged original.
+- Open the result in one click, copy with Enter, return with Escape, then alternate Enter Start/Pause. Focus must remain on the current primary action rather than the title-bar controls.
+- A normal restart retains the result but does not resume unless startup watching was enabled. Startup resume must also work while Quick Launch is the visible page.
+- Recorder > Recordings > Transcribe starts only that recording and opens the resulting transcript. Other queued files must not start implicitly.
+- Automated suites cover source stability, exclusive-write contention, interrupted requests, late-result cancellation, atomic progress failures, safe export recovery, folder isolation, Unicode, collisions and real-timestamp subtitle requirements.
+
+Evidence: `artifacts/watch-folder-native-evidence.json`, `artifacts/watch-folder-headless-final.log`. The native batch export picker and newly recorded microphone/system-audio quality remain outside this acceptance run.
