@@ -1,12 +1,15 @@
 {
   "id": "com.typewhisper.groq",
   "name": "Groq",
-  "version": "1.0.6",
-  "minHostVersion": "1.0.9",
+  "version": "1.1.0",
+  "minHostVersion": "1.1.0",
   "author": "TypeWhisper",
   "description": "Cloud transcription with OpenAI Whisper models hosted by Groq.",
   "category": "transcription",
-  "categories": ["transcription", "llm"],
+  "categories": [
+    "transcription",
+    "llm"
+  ],
   "assemblyName": "TypeWhisper.Plugin.Groq.dll",
   "pluginClass": "TypeWhisper.Plugin.Groq.GroqPlugin"
 }

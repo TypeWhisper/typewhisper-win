@@ -149,3 +149,15 @@ NVIDIA and Groq package versions are 1.1.0. Existing installations are not overw
 builds: use a package update to adopt the new declarations. Deepgram is built but is not bootstrapped
 into existing or fresh profiles and has not been published to the v2 catalog. Its own tests run without
 keys, models or network requests and verify its installation through the generic package/registry APIs.
+
+## Keep the legacy catalog and packages independent
+
+`manifest.json` remains the legacy Windows manifest. Multi-target providers use
+`manifest.portable.json` for the net10.0 package, publishing it under the expected
+`manifest.json` name in the portable output. WPF targets retain their original version;
+portable versions can evolve independently. Deepgram also has a separate portable
+implementation; it does not replace the existing Windows provider implementation.
+
+Publishing v2 requires separate portable ZIP assets and entries containing their actual
+URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
+when publishing `plugins-v2.json`. Local development installation is not publication.

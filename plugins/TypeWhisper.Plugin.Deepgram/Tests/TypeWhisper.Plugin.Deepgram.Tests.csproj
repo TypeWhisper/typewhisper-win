@@ -9,6 +9,6 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../../src/TypeWhisper.PluginHost/TypeWhisper.PluginHost.csproj" />
     <ProjectReference Include="../TypeWhisper.Plugin.Deepgram.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
-    <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../manifest.portable.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

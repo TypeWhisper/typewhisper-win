@@ -8,6 +8,6 @@
     <PackageReference Include="xunit" Version="2.*" /><PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
     <Using Include="Xunit" />
     <ProjectReference Include="../TypeWhisper.Plugin.SherpaOnnx.csproj" SetTargetFramework="TargetFramework=net10.0" SkipGetTargetFrameworkProperties="true" />
-    <None Include="../manifest.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../manifest.portable.json" Link="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

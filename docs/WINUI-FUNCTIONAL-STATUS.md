@@ -1,5 +1,11 @@
 # Windows 1.1 functional comparison
 
+## Legacy package isolation and local Deepgram installation, 2026-09-08
+
+The legacy `manifest.json` files for Groq, NVIDIA, Deepgram and CTC are restored byte-for-byte to the pre-expansion state. Portable builds use separate `manifest.portable.json` files, copied as `manifest.json` only into the 1.1 output. Groq/NVIDIA report their previous versions on the Windows/WPF target and 1.1.0 on the portable target. Deepgram's existing Windows implementation is restored; the new implementation is compiled from `DeepgramPlugin.Portable.cs` only for the portable target. The CTC portable manifest is supplied only inside NVIDIA's portable dependency folder.
+
+Validation: all headless suites passed (`artifacts/test-results/plugin-isolation-headless/`); 54 selected existing Windows plugin tests passed (`artifacts/test-results/plugin-isolation/legacy-plugin-isolation.trx`), and the legacy Deepgram Windows build passed without warnings. These checks do not claim native acceptance for every legacy plugin. The development build/relaunch passed. Deepgram 1.1.0 was subsequently installed and enabled in Marco's normal WinUI development profile using the verified local ZIP and the existing package-store API, with the app stopped during installation. No API key was changed. The app was relaunched using the prescribed script. No public feed or release asset was published; the old catalog and published packages remain untouched.
+
 ## Portable provider expansion (`e9b3cde2`, `c0827132`), 2026-09-08
 
 Groq now uses the generic registry for settings, activation, model selection, credentials and all recorded/file/recovery transcription paths. Its dedicated settings view and session configuration wrapper are removed. Shared settings distinguish a saved key from a successful connection check. Existing stored Groq selection IDs are preserved. WAV upload limits and opt-in local PCM preview come from SDK capabilities; streaming support alone never opens a live-text window. The NVIDIA model adapter chooses its initial model from saved/plugin/recommended metadata instead of a fixed model ID.

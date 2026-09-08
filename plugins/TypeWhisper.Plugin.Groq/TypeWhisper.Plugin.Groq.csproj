@@ -19,7 +19,13 @@
     <ProjectReference Include="..\..\src\TypeWhisper.PluginSDK\TypeWhisper.PluginSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="manifest.json">
+    <Content Include="manifest.json" Condition="'$(TargetFramework)' != 'net10.0'">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
+    <Content Include="manifest.portable.json" Condition="'$(TargetFramework)' == 'net10.0'">
+      <Link>manifest.json</Link>
+      <TargetPath>manifest.json</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
@@ -40,7 +46,7 @@
     <MakeDir Directories="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
-    <Copy SourceFiles="$(ProjectDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
+    <Copy SourceFiles="$(TargetDir)manifest.json" DestinationFolder="$(PluginOutputDir)" />
     <ItemGroup>
       <_LocalizationFiles Include="$(ProjectDir)Localization\*.json" />
       <_DependencyFiles Include="$(TargetDir)*.dll"

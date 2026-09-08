@@ -1,7 +1,9 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+#if WINDOWS
 using System.Windows.Controls;
+#endif
 using TypeWhisper.PluginSDK;
 using TypeWhisper.PluginSDK.Models;
 
@@ -10,11 +12,15 @@ namespace TypeWhisper.Plugin.Deepgram;
 /// <summary>
 /// Provides deepgram plugin behavior.
 /// </summary>
-public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
+public sealed class DeepgramPlugin : ITranscriptionEnginePlugin, IApiKeyPlugin
 {
     private const string BaseUrl = "https://api.deepgram.com";
 
-    private readonly HttpClient _httpClient = new();
+    private readonly HttpClient _httpClient;
+
+    /// <summary>Creates the provider transport.</summary>
+    public DeepgramPlugin() : this(new HttpClient { Timeout = TimeSpan.FromMinutes(3) }) { }
+    internal DeepgramPlugin(HttpClient httpClient) => _httpClient = httpClient;
     private IPluginHostServices? _host;
     private string? _apiKey;
     private string? _selectedModelId;
@@ -38,7 +44,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
     /// <summary>
     /// Gets the plugin version reported to the host.
     /// </summary>
-    public string PluginVersion => "1.0.0";
+    public string PluginVersion => "1.1.0";
 
     /// <summary>
     /// Activates the plugin and loads any persisted configuration.
@@ -47,6 +53,8 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
     {
         _host = host;
         _apiKey = await host.LoadSecretAsync("api-key");
+        var savedModel = host.GetSetting<string>("SelectedModelId");
+        _selectedModelId = Models.Any(model => model.Id == savedModel) ? savedModel : Models[0].Id;
         host.Log(PluginLogLevel.Info, $"Activated (configured={IsConfigured})");
     }
 
@@ -56,13 +64,17 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
     public Task DeactivateAsync()
     {
         _host = null;
+        _apiKey = null;
+        _selectedModelId = null;
         return Task.CompletedTask;
     }
 
+#if WINDOWS
     /// <summary>
     /// Creates the settings view shown by the host, or null when no UI is required.
     /// </summary>
     public UserControl? CreateSettingsView() => new DeepgramSettingsView(this);
+#endif
 
     // ITranscriptionEnginePlugin
 
@@ -115,6 +127,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
     {
         if (Models.All(m => m.Id != modelId))
             throw new ArgumentException($"Unknown model: {modelId}");
+        _host?.SetSetting("SelectedModelId", modelId);
         _selectedModelId = modelId;
     }
 
@@ -127,9 +140,11 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
         if (!IsConfigured || _selectedModelId is null)
             throw new InvalidOperationException("Plugin not configured. API key and model required.");
 
+        if (translate) throw new NotSupportedException("Deepgram does not support native translation.");
+        ct.ThrowIfCancellationRequested();
         var langParam = string.IsNullOrEmpty(language) || language == "auto"
             ? "&detect_language=true"
-            : $"&language={language}";
+            : $"&language={Uri.EscapeDataString(language)}";
         var url = $"{BaseUrl}/v1/listen?model={_selectedModelId}&smart_format=true&punctuate=true{langParam}";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
@@ -137,11 +152,8 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
         request.Content = new ByteArrayContent(wavAudio);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
 
-        var response = await _httpClient.SendAsync(request, ct);
+        using var response = await SendAsync(request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);
-
-        if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Deepgram API error {(int)response.StatusCode}: {json}");
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -167,16 +179,47 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
     internal string? ApiKey => _apiKey;
     internal IPluginLocalization? Loc => _host?.Localization;
 
-    internal async Task SetApiKeyAsync(string apiKey)
+    /// <summary>Persists credentials before publishing the new configuration.</summary>
+    public async Task SetApiKeyAsync(string apiKey)
     {
-        _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
-        if (_host is not null)
+        var host = _host ?? throw new InvalidOperationException("Activate the plugin first.");
+        var value = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+        if (value is null) await host.DeleteSecretAsync("api-key");
+        else await host.StoreSecretAsync("api-key", value);
+        _apiKey = value;
+    }
+
+    /// <summary>Checks credentials without uploading audio.</summary>
+    public async Task ValidateConfigurationAsync(CancellationToken ct)
+    {
+        if (!IsConfigured) throw new PluginRequestException("Configure an API key first.", PluginRequestFailureKind.Configuration);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/v1/projects");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Token", _apiKey);
+        using var response = await SendAsync(request, ct);
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try { response = await _httpClient.SendAsync(request, ct); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new PluginRequestException("Deepgram timed out.", PluginRequestFailureKind.Timeout); }
+        catch (HttpRequestException)
+        { throw new PluginRequestException("Could not reach Deepgram.", PluginRequestFailureKind.Network); }
+        if (response.IsSuccessStatusCode) return response;
+        var status = (int)response.StatusCode;
+        response.Dispose();
+        var kind = status switch
         {
-            if (string.IsNullOrWhiteSpace(apiKey))
-                await _host.DeleteSecretAsync("api-key");
-            else
-                await _host.StoreSecretAsync("api-key", apiKey);
-        }
+            401 => PluginRequestFailureKind.Authentication,
+            403 => PluginRequestFailureKind.Permission,
+            429 => PluginRequestFailureKind.RateLimit,
+            413 => PluginRequestFailureKind.RequestTooLarge,
+            >= 500 => PluginRequestFailureKind.ServerError,
+            _ => PluginRequestFailureKind.InvalidRequest
+        };
+        // Never include the provider response body, which can echo input or credentials.
+        throw new PluginRequestException("Deepgram rejected the request.", kind, status);
     }
 
     internal async Task<bool> ValidateApiKeyAsync(string apiKey, CancellationToken ct = default)
@@ -185,7 +228,7 @@ public sealed class DeepgramPlugin : ITranscriptionEnginePlugin
         request.Headers.Authorization = new AuthenticationHeaderValue("Token", apiKey);
         try
         {
-            var response = await _httpClient.SendAsync(request, ct);
+            using var response = await _httpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
         catch
