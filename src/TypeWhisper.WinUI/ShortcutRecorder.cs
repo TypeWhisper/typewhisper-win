@@ -218,6 +218,8 @@ public sealed class ShortcutRecorder : UserControl
         _shell.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _record.Style = (Style)Application.Current.Resources["SecondaryButtonStyle"];
     }
+    internal void StartEditing() => Begin(Current.Length > 0 ? 0 : -1);
+
     private void Begin(int index = -1)
     {
         if (_commitRefreshQueued) return;

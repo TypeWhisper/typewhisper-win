@@ -119,7 +119,7 @@ public sealed partial class WorkflowsView : UserControl
     public WorkflowsView()
     {
         InitializeComponent();
-        EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(ContextActionsFooter));
+        EntryActionMenu.Attach(this, WorkflowContextActions);
         TemplateHelp.Child = HelpHeading("Template", _templateHelp);
         ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
         ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable.", 12);
@@ -399,6 +399,31 @@ public sealed partial class WorkflowsView : UserControl
         LoadConfiguration();
     }
 
+    private IEnumerable<EntryActionMenu.Action> WorkflowContextActions()
+    {
+        foreach (var action in EntryActionMenu.FromButtons(ContextActionsFooter)) yield return action;
+        var workflow = _page == Page.List ? WorkflowList.SelectedItem as WorkflowDraft : _opened;
+        if (_page is not (Page.List or Page.Editor) || workflow?.IsEditable != true) yield break;
+        yield return new("Set shortcut for selected text…", () => ConfigureShortcut("Hotkey"), !IsBusy);
+        yield return new("Set shortcut for dictation…", () => ConfigureShortcut("DictationHotkey"), !IsBusy);
+    }
+
+    private void ConfigureShortcut(string activation)
+    {
+        if (_closing || IsBusy) return;
+        if (_page == Page.List) _opened = WorkflowList.SelectedItem as WorkflowDraft;
+        if (_opened?.IsEditable != true) return;
+        _configurationReturnPage = _page;
+        LoadConfiguration(activation);
+        UpdateConfigurationState();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_page != Page.Configuration) return;
+            ConfigShortcutSection.StartBringIntoView();
+            ConfigShortcutHost.Children.OfType<ShortcutRecorder>().FirstOrDefault()?.StartEditing();
+        });
+    }
+
     private void NewWorkflow_Click(object sender, RoutedEventArgs e)
     {
         if (_page != Page.List) return;
@@ -409,7 +434,7 @@ public sealed partial class WorkflowsView : UserControl
         LoadConfiguration();
     }
 
-    private void LoadConfiguration()
+    private void LoadConfiguration(string? activation = null)
     {
         _apiConfigurationConflict = null;
         if (_opened is null) return;
@@ -426,7 +451,7 @@ public sealed partial class WorkflowsView : UserControl
             new("DictationHotkey", "Shortcut \u00b7 dictation", "Press to start dictation with this workflow; press again to stop"),
             new("App", "App", "Apply to dictation in matching Windows processes"),
             new("Website", "Website", "Apply to dictation on matching browser domains"),
-            new("Global", "Global fallback", "Apply when no app or website rule matches")], _opened.ActivationId);
+            new("Global", "Global fallback", "Apply when no app or website rule matches")], activation ?? _opened.ActivationId);
         ConfigAppProcesses.Text = _opened.AppProcesses;
         _shortcutDraft["WorkflowSelectedTextHotkeys"] = _opened.Hotkeys;
         ConfigShortcutHost.Children.Clear();
