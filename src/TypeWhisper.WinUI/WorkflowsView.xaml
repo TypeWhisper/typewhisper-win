@@ -115,6 +115,7 @@
                         <TextBox x:Name="ConfigName" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap"
                             Height="44" MaxLength="80" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow name" />
                     </StackPanel>
+                    <Border x:Name="ConfigIconHost" />
                     <StackPanel Spacing="7">
                         <Border x:Name="ActivationHelp" />
                     <local:ChoicePicker x:Name="ConfigTrigger" />

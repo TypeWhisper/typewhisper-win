@@ -445,6 +445,9 @@ public sealed record Workflow
     /// Gets or sets the name value.
     /// </summary>
     public required string Name { get; init; }
+
+    /// <summary>Visual identifier used to distinguish this workflow in launchers and lists.</summary>
+    public string Icon { get; init; } = "workflow";
     /// <summary>
     /// Gets or sets the is enabled value.
     /// </summary>

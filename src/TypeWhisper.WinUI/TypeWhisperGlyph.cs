@@ -59,6 +59,46 @@ public sealed class TypeWhisperGlyph : UserControl
 
         switch (Kind)
         {
+            case "correction":
+                Line(drawing, 3, 14, 3, 18); Line(drawing, 3, 18, 7, 17);
+                Line(drawing, 3, 14, 14, 3); Line(drawing, 7, 17, 18, 6);
+                Line(drawing, 14, 3, 18, 6); Line(drawing, 12, 5, 16, 9);
+                break;
+            case "packs":
+                drawing.DrawRoundedRectangle(3, 7, 14, 11, 1, 1, Accent, 1.4f);
+                Line(drawing, 5, 4, 15, 4); Line(drawing, 7, 1, 13, 1);
+                Line(drawing, 7, 11, 13, 11); Line(drawing, 7, 14, 11, 14);
+                break;
+            case "library":
+                Line(drawing, 2, 4, 2, 17); Line(drawing, 5, 3, 5, 17);
+                drawing.DrawRoundedRectangle(8, 3, 10, 14, 1, 1, Accent, 1.4f);
+                Line(drawing, 11, 7, 15, 10); Line(drawing, 15, 10, 11, 13); Line(drawing, 11, 13, 11, 7);
+                break;
+            case "speech-history":
+                drawing.DrawRoundedRectangle(2, 3, 16, 11, 3, 3, Accent, 1.4f);
+                Line(drawing, 5, 14, 5, 18); Line(drawing, 5, 18, 9, 14);
+                Line(drawing, 6, 7, 14, 7); Line(drawing, 6, 10, 11, 10);
+                break;
+            case "wave-history":
+                drawing.DrawCircle(10, 10, 8, Accent, 1.4f);
+                Line(drawing, 5, 8, 5, 12); Line(drawing, 8, 5, 8, 15);
+                Line(drawing, 11, 7, 11, 13); Line(drawing, 14, 9, 14, 11);
+                break;
+            case "discover":
+                drawing.DrawCircle(8, 8, 5, Accent, 1.4f); Line(drawing, 12, 12, 18, 18);
+                Line(drawing, 5, 8, 11, 8); Line(drawing, 8, 5, 8, 11);
+                break;
+            case "record-settings":
+                drawing.DrawCircle(10, 10, 8, Accent, 1.4f);
+                drawing.FillCircle(10, 10, 3.5f, Accent);
+                break;
+            case "sparkle":
+                Line(drawing, 9, 2, 11, 8); Line(drawing, 11, 8, 17, 10);
+                Line(drawing, 17, 10, 11, 12); Line(drawing, 11, 12, 9, 18);
+                Line(drawing, 9, 18, 7, 12); Line(drawing, 7, 12, 1, 10);
+                Line(drawing, 1, 10, 7, 8); Line(drawing, 7, 8, 9, 2);
+                Line(drawing, 16, 1, 16, 5); Line(drawing, 14, 3, 18, 3);
+                break;
             case "home":
                 Line(drawing, 2, 9, 10, 2); Line(drawing, 10, 2, 18, 9);
                 Line(drawing, 4, 8, 4, 18); Line(drawing, 4, 18, 16, 18); Line(drawing, 16, 18, 16, 8);

@@ -49,6 +49,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     }) with
     {
         Name = Title,
+        Icon = TypeWhisper.Presentation.WorkflowIcons.Normalize(IconKind),
         Template = Template,
         IsEnabled = IsEnabled,
         SortOrder = Priority,
@@ -73,7 +74,7 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
         .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     internal static WorkflowDraft FromStored(Workflow workflow) => new(workflow.Id, workflow.Name,
-        (workflow.IsEnabled ? "" : "Disabled · ") + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : "Unsupported - ") + workflow.Trigger.Kind + " · " + (Enum.IsDefined(workflow.Template) ? workflow.Definition.Name : "Unknown template"), "workflow", workflow.Behavior.FineTuning)
+        (workflow.IsEnabled ? "" : "Disabled · ") + (TypeWhisper.Presentation.ManualWorkflowStore.IsEditable(workflow) ? "" : "Unsupported - ") + workflow.Trigger.Kind + " · " + (Enum.IsDefined(workflow.Template) ? workflow.Definition.Name : "Unknown template"), TypeWhisper.Presentation.WorkflowIcons.Normalize(workflow.Icon), workflow.Behavior.FineTuning)
     {
         ProviderId = workflow.Behavior.ProviderOverride ?? "none", ModelId = workflow.Behavior.ModelOverride ?? "", IsEnabled = workflow.IsEnabled,
         TriggerKind = workflow.Trigger.Kind, AppProcesses = string.Join(", ", workflow.Trigger.ProcessNames), Priority = workflow.SortOrder,

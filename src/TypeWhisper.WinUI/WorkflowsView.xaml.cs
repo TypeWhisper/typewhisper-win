@@ -121,6 +121,7 @@ public sealed partial class WorkflowsView : UserControl
         InitializeComponent();
         EntryActionMenu.Attach(this, WorkflowContextActions);
         TemplateHelp.Child = HelpHeading("Template", _templateHelp);
+        InitializeIconPicker();
         ShortcutHelp.Child = HelpHeading("Shortcut", _shortcutHelp);
         ActivationHelp.Child = SettingsHelp.Label("Activation", "Matching app and website rules take precedence, followed by website, app, then global fallback. Lower priority numbers win within a group; equal priorities use the workflow name. Dictation shortcuts apply their workflow for one recording, overriding these automatic rules. Recording overrides and action plugins remain unavailable.", 12);
         AppProcessesHelp.Child = SettingsHelp.Label("Windows process names", "Required for App activation; optional for Website activation. Separate process names with commas.", 12);
@@ -178,7 +179,7 @@ public sealed partial class WorkflowsView : UserControl
     internal Func<string, bool>? IsPinned { get; set; }
     internal Action<Command>? TogglePin { get; set; }
     internal IEnumerable<Command> LauncherEntries => _workflows.Select(workflow => new Command(
-        "Workflow", "workflow", workflow.Title, workflow.Description, "", "Open workflow") { WorkflowId = workflow.Id });
+        "Workflow", workflow.IconKind, workflow.Title, workflow.Description, "", "Open workflow") { WorkflowId = workflow.Id });
 
     internal void OpenWorkflow(string id)
     {
@@ -381,6 +382,7 @@ public sealed partial class WorkflowsView : UserControl
     private IReadOnlyList<Choice> Models => _session?.LlmProviders.FirstOrDefault(p => p.SelectionId == ConfigProvider.SelectedId)?.Models
         .Select(m => new Choice(m.Id, m.DisplayName, m.Id)).ToArray() ?? [];
     private bool ConfigurationDirty => _opened is not null && (ConfigName.Text != _opened.Title || ConfigInstruction.Text.ReplaceLineEndings("\n") != _opened.Instruction.ReplaceLineEndings("\n")
+        || _draftIcon != _opened.IconKind
         || ConfigTrigger.SelectedId != _opened.ActivationId || ConfigAppProcesses.Text != _opened.AppProcesses
         || DraftHotkeys != _opened.Hotkeys
         || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
@@ -466,6 +468,7 @@ public sealed partial class WorkflowsView : UserControl
         ConfigEnabled.IsOn = _opened.IsEnabled;
         DeleteWorkflowButton.Visibility = _creating ? Visibility.Collapsed : Visibility.Visible;
         ConfigName.Text = _opened.Title;
+        SetDraftIcon(_opened.IconKind);
         ConfigTrigger.SetOptions([
             new("Manual", "Manual", "Run explicitly with source text"),
             new("Hotkey", "Shortcut \u00b7 selected text", "Send the selected text to this workflow and review the result"),
@@ -553,7 +556,7 @@ public sealed partial class WorkflowsView : UserControl
     private void SaveConfiguration()
     {
         if (_closing || _opened is null || ConfigurationError is not null || !ConfigurationDirty || ConfigurationDiscardPrompt.Visibility == Visibility.Visible) return;
-        var updated = _opened with { Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
+        var updated = _opened with { IconKind = _draftIcon, Title = ConfigName.Text.Trim(), Instruction = ConfigInstruction.Text.Trim().ReplaceLineEndings("\n"),
             TriggerKind = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowTriggerKind.Hotkey : Enum.Parse<WorkflowTriggerKind>(ConfigTrigger.SelectedId),
             HotkeyBehavior = ConfigTrigger.SelectedId == "DictationHotkey" ? WorkflowHotkeyBehavior.StartDictation : WorkflowHotkeyBehavior.ProcessSelectedText, AppProcesses = ConfigAppProcesses.Text.Trim(),
             Hotkeys = WorkflowShortcutCatalog.Canonical(DraftHotkeys),

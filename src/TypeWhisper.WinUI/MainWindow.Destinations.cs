@@ -7,15 +7,31 @@ public sealed partial class MainWindow
 
     private static IEnumerable<Command> WorkspaceCommands => new Command[]
     {
-        Destination("Corrections", "dictionary", "Dictionary · preferred spellings and misheard variants", "corrections"),
-        Destination("Term packs", "dictionary", "Dictionary · enable vocabulary collections", "packs"),
-        Destination("Watch folder", "file", "Files · automatic folder transcription", "watch"),
-        Destination("Recordings", "recorder", "Recorder · saved audio library", "recordings"),
-        Destination("Dictation history", "history", "History · dictated transcriptions", "history-dictation"),
-        Destination("Recording history", "history", "History · transcribed recordings", "history-recording"),
-        Destination("Discover plugins", "plugin", "Integrations · browse the marketplace", "discover"),
-        Destination("Overlay editor", "desktop", "Appearance · customize the recording overlay", "settings:Overlay editor")
-    }.Concat(SettingsDestinations.Select(category => Destination(category + " settings", "settings", "Settings · " + category, "settings:" + category)));
+        Destination("Corrections", "correction", "Dictionary · preferred spellings and misheard variants", "corrections"),
+        Destination("Term packs", "packs", "Dictionary · enable vocabulary collections", "packs"),
+        Destination("Watch folder", "folder", "Files · automatic folder transcription", "watch"),
+        Destination("Recordings", "library", "Recorder · saved audio library", "recordings"),
+        Destination("Dictation history", "speech-history", "History · dictated transcriptions", "history-dictation"),
+        Destination("Recording history", "wave-history", "History · transcribed recordings", "history-recording"),
+        Destination("Discover plugins", "discover", "Integrations · browse the marketplace", "discover"),
+        Destination("Overlay editor", "layout", "Appearance · customize the recording overlay", "settings:Overlay editor")
+    }.Concat(SettingsDestinations.Select(category => Destination(category + " settings", SettingsIcon(category), "Settings · " + category, "settings:" + category)));
+
+    private static string SettingsIcon(string category) => category switch
+    {
+        "General" => "home",
+        "Shortcuts" => "keyboard",
+        "Dictation" => "signal",
+        "Audio" => "speaker",
+        "Recorder" => "record-settings",
+        "Files & recovery" => "restore",
+        "Appearance" => "desktop",
+        "Privacy" => "lock",
+        "Advanced" => "chip",
+        "Premium" => "sparkle",
+        "Account & about" => "info",
+        _ => "settings"
+    };
 
     private static Command Destination(string title, string icon, string subtitle, string route) =>
         new("Workspace", icon, title, subtitle, "", "Open " + title) { Route = route };
