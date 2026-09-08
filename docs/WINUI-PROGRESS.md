@@ -1,5 +1,11 @@
 # Windows 1.1 progress
 
+## Workflow configuration feedback (`fbf956d4`), 2026-09-08
+
+Marco reported that workflow dictation worked after choosing an LLM, but the missing selection had not been clearly explained. The editor now highlights distinct messages for a missing LLM provider, missing model and unavailable configuration while allowing incomplete setup to be saved. Dictation workflow shortcuts check this configuration before recording and bring up a visible notice with the workflow name and corrective action. A stop press still finishes an existing capture. The selected-text activation label also replaces its malformed separator with a Unicode escape.
+
+Validation: 766 Presentation tests passed (`artifacts/test-results/workflow-configuration/workflow-configuration.trx`). The prescribed normal-profile build/relaunch passed (`artifacts/workflow-configuration-build.log`), with a nonzero main-window handle, Quick Launch title and unchanged diagnostic log. Manual acceptance of the new warning and corrected label remains pending. Marco's workflow success report does not establish the separate isolation, cancellation or restart checks.
+
 ## Workflow dictation shortcuts (`fceab952`), 2026-09-08
 
 The workflow editor now offers **Shortcut - dictation** alongside selected-text shortcuts. A press starts a normal recording with an immutable snapshot of that workflow; the next dictation-workflow shortcut press stops capture without switching the active snapshot. The explicit workflow takes precedence over app/website/global matching for that recording only. Ordinary dictation still selects its own rules. Processing uses the saved LLM provider/model and the existing dictation delivery, review-on-error and History preferences. Recording/model/output overrides remain unsupported.
