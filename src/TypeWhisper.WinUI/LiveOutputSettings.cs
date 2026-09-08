@@ -72,9 +72,9 @@ internal static class LiveOutputSettings
                 ?? "Saved. Turning audio storage off also applies to a dictation that has not been saved yet. Existing recordings are kept.";
             restoring = true; audioToggle.IsOn = store.Current.SaveHistoryAudio; restoring = false;
         };
-        foreach (var key in new[] { "HistoryRetentionMode", "HistoryRetentionMinutes", "MemoryEnabled", "TargetAppCorrectionLearningEnabled" })
+        foreach (var key in new[] { "HistoryRetentionMode", "HistoryRetentionMinutes", "MemoryEnabled" })
             DisablePreview(content, key);
-        content.Children.Add(Label("Automatic history deletion, personal memory and correction learning are not available yet."));
+        content.Children.Add(Label("Automatic history deletion and personal memory are not available yet."));
     }
 
     private static void DisablePreview(StackPanel root, string key)

@@ -112,7 +112,6 @@ internal static partial class SettingsCatalog
         Choice("Privacy", "HistoryRetentionMode", "History retention", "For a duration", "For a duration|Forever|Until the app closes"),
         Choice("Privacy", "HistoryRetentionMinutes", "Keep history for", "90 days", "1 day|7 days|30 days|90 days|180 days"),
         Toggle("Privacy", "MemoryEnabled", "Personal memory"),
-        Toggle("Privacy", "TargetAppCorrectionLearningEnabled", "Learn from corrections", true, "Uses corrections made in the target app when supported."),
 
 
         Text("Sync & backup", "CloudFolderSyncFolderPath", "Cloud sync folder", "", "Use a shared cloud folder across your devices. No sync or file access occurs here."),
