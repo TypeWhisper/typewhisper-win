@@ -1,5 +1,13 @@
 # Testing the 1.1 application
 
+## Public v2 marketplace preview, 2026-09-08
+
+The [v2 catalog](https://typewhisper.github.io/typewhisper-win/plugins-v2.json) is now published on `gh-pages` at `afdaf5b9c83d898283468b0a1dc3fb7e7c50acb5`. It contains NVIDIA Parakeet, Groq and Deepgram 1.1.0 for Windows x64, backed by separate assets in the [portable plugin preview release](https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-preview-20260908). The release is a prerelease and is not marked latest. The old `plugins.json` blob and the existing latest-release identity were checked before/after and are unchanged.
+
+Each public ZIP was downloaded and verified against its catalog size/SHA-256. The actual `PortablePluginCatalog`, `PortablePluginStore` and package loader then fetched, installed and activated all three public packages in an isolated profile (`artifacts/marketplace-v2/public-install-validation.log`). This checks public distribution and package loading, without provider requests or local model downloads. Existing personal plugin versions were not updated. Marco separately confirmed a real Deepgram Nova-3 dictation in History after configuring his key.
+
+The selected-provider tests passed on Windows and Linux. The full headless run at `80989c12` had an unrelated Ubuntu failure in Obsidian's concurrent same-name writer test; Obsidian is not in this initial catalog. This publication does not claim that the entire PR's CI is green, nor ARM64 or real-weight update acceptance.
+
 ## Legacy package isolation and local Deepgram installation, 2026-09-08
 
 The legacy `manifest.json` files for Groq, NVIDIA, Deepgram and CTC are restored byte-for-byte to the pre-expansion state. Portable builds use separate `manifest.portable.json` files, copied as `manifest.json` only into the 1.1 output. Groq/NVIDIA report their previous versions on the Windows/WPF target and 1.1.0 on the portable target. Deepgram's existing Windows implementation is restored; the new implementation is compiled from `DeepgramPlugin.Portable.cs` only for the portable target. The CTC portable manifest is supplied only inside NVIDIA's portable dependency folder.

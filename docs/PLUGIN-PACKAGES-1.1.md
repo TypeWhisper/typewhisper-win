@@ -161,3 +161,14 @@ implementation; it does not replace the existing Windows provider implementation
 Publishing v2 requires separate portable ZIP assets and entries containing their actual
 URLs, sizes and SHA-256 hashes. Do not replace existing release assets or edit `plugins.json`
 when publishing `plugins-v2.json`. Local development installation is not publication.
+
+## Published preview and manual catalog updates
+
+The initial v2 catalog is live with NVIDIA Parakeet, Groq and Deepgram 1.1.0 for Windows x64.
+Edit only `plugins-v2.json` on `gh-pages` for manual v2 catalog changes. Upload new, separately
+versioned portable release assets first; then add their public HTTPS URLs, exact byte sizes,
+SHA-256 hashes, minimum host version and supported architectures. Verify the public downloads
+before changing the catalog. Keep old assets available; do not overwrite legacy packages or
+`plugins.json`. Publish new plugin releases as prereleases with `latest=false` while 1.1 is in preview.
+
+Current assets: https://github.com/TypeWhisper/typewhisper-win/releases/tag/plugins-v2-preview-20260908
