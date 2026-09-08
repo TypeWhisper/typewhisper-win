@@ -36,6 +36,9 @@ public sealed partial class PrototypeMarketplaceView : UserControl
     public PrototypeMarketplaceView()
     {
         InitializeComponent();
+        IntegrationTabs.SetItems([new("installed", "Installed"), new("discover", "Discover")], "discover");
+        IntegrationTabs.SelectionChanged += id =>
+        { IntegrationTabs.SetSelected("discover"); if (id == "installed") Installed_Click(this, new RoutedEventArgs()); };
         UpdateCategories();
         Filter(string.Empty);
     }

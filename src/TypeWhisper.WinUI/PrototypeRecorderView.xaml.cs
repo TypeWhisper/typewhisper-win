@@ -30,6 +30,8 @@ public sealed partial class PrototypeRecorderView : UserControl
     public PrototypeRecorderView()
     {
         InitializeComponent();
+        RecorderTabs.SetItems([new("record", "Record"), new("recordings", "Recordings")], "record");
+        RecorderTabs.SelectionChanged += id => ShowLibrary(id == "recordings");
         RecorderBreadcrumbs.SetItems(new("Quick Launch", () => LauncherRequested?.Invoke(this, EventArgs.Empty), "Back from recorder"), new("Recorder"));
         MicrophoneSource.IsChecked = true;
         _timer = DispatcherQueue.CreateTimer();

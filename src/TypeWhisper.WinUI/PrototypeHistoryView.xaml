@@ -47,11 +47,7 @@
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <Grid Margin="8,0,8,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <local:HandCursorButton x:Name="AllFilter" Content="All" Tag="all" Click="Kind_Click" AutomationProperties.Name="Filter history all" />
-                    <local:HandCursorButton x:Name="DictationFilter" Content="Dictations" Tag="Dictation" Click="Kind_Click" AutomationProperties.Name="Filter history dictations" />
-                    <local:HandCursorButton x:Name="RecordingFilter" Content="Recordings" Tag="Recording" Click="Kind_Click" AutomationProperties.Name="Filter history recordings" />
-                </StackPanel>
+                <local:PrototypeTabBar x:Name="HistoryTabs" />
                 <local:HandCursorButton x:Name="DeviceFilter" Grid.Column="1" MinWidth="146" MaxWidth="230"
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Choose history device">
                     <Grid ColumnSpacing="9">

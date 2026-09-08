@@ -9,10 +9,7 @@
             <TextBlock x:Name="MarketTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="MarketSummary" Grid.Column="1" Text="Discover" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
-        <StackPanel x:Name="IntegrationTabs" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="8,0,8,12">
-            <local:HandCursorButton Content="Installed" Click="Installed_Click" Style="{StaticResource PrototypeIconButtonStyle}" AutomationProperties.Name="Integrations installed tab" />
-            <local:HandCursorButton Content="Discover" Click="Reset_Click" Style="{StaticResource PrototypePrimaryButtonStyle}" AutomationProperties.Name="Integrations discover tab" />
-        </StackPanel>
+        <local:PrototypeTabBar x:Name="IntegrationTabs" Grid.Row="1" Margin="8,0,8,12" />
         <Grid x:Name="MarketListPage" Grid.Row="2" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <StackPanel x:Name="CatalogFilters" Orientation="Horizontal" Spacing="6" Margin="8,0">

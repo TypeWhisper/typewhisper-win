@@ -164,6 +164,11 @@ public sealed partial class PrototypePluginsView : UserControl
     public PrototypePluginsView()
     {
         InitializeComponent();
+        IntegrationTabs.SetItems([new("installed", "Installed"), new("discover", "Discover")], "installed");
+        IntegrationTabs.SelectionChanged += id =>
+        { IntegrationTabs.SetSelected("installed"); if (id == "discover") Marketplace_Click(this, new RoutedEventArgs()); };
+        PluginFilterTabs.SetItems([new("all", "All"), new("enabled", "Enabled"), new("attention", "Needs attention")], "all");
+        PluginFilterTabs.SelectionChanged += id => { _filter = id; UpdateFilterButtons(); Filter(_query); };
         LanguagePicker.Configure("Language", "dictionary", "Plugin language");
         PreferencePicker.SelectionChanged += _ => UpdateDraft();
         LanguagePicker.SelectionChanged += _ => UpdateDraft();
@@ -479,22 +484,7 @@ public sealed partial class PrototypePluginsView : UserControl
         finally { _uninstallMessage = null; _changingPlugin = false; UpdateRuntimeAction(); }
     }
 
-    private void Filter_Click(object sender, RoutedEventArgs e)
-    {
-        _filter = (string)((Button)sender).Tag;
-        UpdateFilterButtons();
-        Filter(_query);
-    }
-
-    private void UpdateFilterButtons()
-    {
-        foreach (var button in new[] { AllFilter, EnabledFilter, AttentionFilter })
-        {
-            var selected = (string)button.Tag == _filter;
-            button.Style = (Style)Application.Current.Resources[selected ? "PrototypePrimaryButtonStyle" : "PrototypeIconButtonStyle"];
-            AutomationProperties.SetItemStatus(button, selected ? "Selected" : "Not selected");
-        }
-    }
+    private void UpdateFilterButtons() => PluginFilterTabs.SetSelected(_filter);
 
     private void Reset_Click(object sender, RoutedEventArgs e) { ShowList(true); _ = RefreshRuntimeAsync(); }
     private void Marketplace_Click(object sender, RoutedEventArgs e)

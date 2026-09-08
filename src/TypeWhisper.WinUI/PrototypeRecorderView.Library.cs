@@ -23,11 +23,6 @@ public sealed partial class PrototypeRecorderView
     internal Func<string, bool>? IsQueuedSource { get; set; }
     internal event Action<bool>? LibraryModeChanged;
 
-    private void Library_Click(object sender, RoutedEventArgs e)
-    {
-        ShowLibrary(true);
-    }
-    private void RecordTab_Click(object sender, RoutedEventArgs e) => ShowLibrary(false);
     private void ShowLibrary(bool open)
     {
         StopAudioPlayback();
@@ -35,8 +30,7 @@ public sealed partial class PrototypeRecorderView
         LibraryModeChanged?.Invoke(open);
         RecordingContent.Visibility = _libraryOpen ? Visibility.Collapsed : Visibility.Visible;
         LibraryPanel.Visibility = _libraryOpen ? Visibility.Visible : Visibility.Collapsed;
-        LibraryButton.Style = (Style)Application.Current.Resources[_libraryOpen ? "PrototypePrimaryButtonStyle" : "PrototypeSecondaryButtonStyle"];
-        RecordTab.Style = (Style)Application.Current.Resources[_libraryOpen ? "PrototypeSecondaryButtonStyle" : "PrototypePrimaryButtonStyle"];
+        RecorderTabs.SetSelected(_libraryOpen ? "recordings" : "record");
         if (_libraryOpen) BeginLibraryRefresh();
         Refresh();
         if (_presented) FocusEntry();

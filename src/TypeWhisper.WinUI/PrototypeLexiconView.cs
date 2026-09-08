@@ -24,7 +24,7 @@ public sealed class PrototypeLexiconView : UserControl
 
     private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
     private bool _showPacks;
-    private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+    private readonly PrototypeTabBar _tabs = new();
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly StackPanel _rows = new() { Spacing = 6 };
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
@@ -43,12 +43,20 @@ public sealed class PrototypeLexiconView : UserControl
 
     public PrototypeLexiconView()
     {
-        var root = new Grid { Background = Brush("InkBrush"), Padding = new Thickness(24, 8, 24, 0), RowSpacing = 12 };
+        var root = new Grid { Background = Brush("InkBrush"), Padding = new Thickness(8, 0, 8, 0), RowSpacing = 12 };
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
         _heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1);
-        var header = new StackPanel { Spacing = 14 };
+        var header = new StackPanel { Spacing = 12 };
+        _heading.FontSize = 20; _heading.MinHeight = 32; _heading.Margin = new Thickness(4, 0, 0, 0);
+        _tabs.SetItems([new("Word", "Words"), new("Correction", "Corrections"), new("Snippet", "Snippets"), new("packs", "Term packs")], "Word");
+        _tabs.SelectionChanged += id =>
+        {
+            _showPacks = id == "packs";
+            if (!_showPacks) { _kind = Enum.Parse<PrototypeLexiconKind>(id); _query = ""; }
+            Render();
+        };
         header.Children.Add(_heading); header.Children.Add(_tabs); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 8, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -93,7 +101,6 @@ public sealed class PrototypeLexiconView : UserControl
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
-        _tabs.Children.Clear();
         _tabs.Visibility = _draft is null ? Visibility.Visible : Visibility.Collapsed;
         if (_draft is null) RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
@@ -107,29 +114,7 @@ public sealed class PrototypeLexiconView : UserControl
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
 
-    private void RenderTabs()
-    {
-        foreach (var kind in Enum.GetValues<PrototypeLexiconKind>())
-        {
-            var label = kind switch { PrototypeLexiconKind.Word => "Words", PrototypeLexiconKind.Correction => "Corrections", _ => "Snippets" };
-            var selected = !_showPacks && kind == _kind;
-            var index = _tabs.Children.Count;
-            var tab = Button(label, () =>
-            {
-                _showPacks = false; _kind = kind; _query = ""; Render();
-                (_tabs.Children[index] as Control)?.Focus(FocusState.Programmatic);
-            }, primary: selected);
-            AutomationProperties.SetName(tab, label + (selected ? ", selected" : ""));
-            _tabs.Children.Add(tab);
-        }
-        var packs = Button("Term packs", () =>
-        {
-            _showPacks = true; Render();
-            (_tabs.Children.Last() as Control)?.Focus(FocusState.Programmatic);
-        }, primary: _showPacks);
-        AutomationProperties.SetName(packs, "Term packs" + (_showPacks ? ", selected" : ""));
-        _tabs.Children.Add(packs);
-    }
+    private void RenderTabs() => _tabs.SetSelected(_showPacks ? "packs" : _kind.ToString());
 
     private void RenderList()
     {

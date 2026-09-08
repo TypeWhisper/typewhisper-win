@@ -113,6 +113,9 @@ public sealed partial class PrototypeHistoryView : UserControl
     public PrototypeHistoryView()
     {
         InitializeComponent();
+        HistoryTabs.SetItems([new("all", "All"), new("Dictation", "Dictations"), new("Recording", "Recordings")], "all");
+        HistoryTabs.SelectionChanged += id =>
+        { _kind = Enum.TryParse<PrototypeHistoryEntryKind>(id, out var kind) ? kind : null; ApplyFilters(); };
         Filter(string.Empty);
     }
 
@@ -151,9 +154,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         }
         else Entries.SelectedItem = FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == selectedId)
                 ?? FilteredEntries.FirstOrDefault();
-        AllFilter.Style = FilterStyle(_kind is null);
-        DictationFilter.Style = FilterStyle(_kind == PrototypeHistoryEntryKind.Dictation);
-        RecordingFilter.Style = FilterStyle(_kind == PrototypeHistoryEntryKind.Recording);
+        HistoryTabs.SetSelected(_kind?.ToString() ?? "all");
         var device = _store.Devices.FirstOrDefault(device => device.DeviceId == _deviceId);
         DeviceFilterLabel.Text = device?.DeviceName ?? "All devices";
         DeviceFilterIcon.Kind = DeviceIcon(device?.Platform);
@@ -187,12 +188,6 @@ public sealed partial class PrototypeHistoryView : UserControl
         ApplyFilters();
         Entries.SelectedItem = FilteredEntries.FirstOrDefault(item => item.Entry.RecordId == recordId);
         OpenSelected();
-    }
-
-    private void Kind_Click(object sender, RoutedEventArgs e)
-    {
-        _kind = Enum.TryParse<PrototypeHistoryEntryKind>((string)((Button)sender).Tag, out var kind) ? kind : null;
-        ApplyFilters();
     }
 
     private void Devices_Opening(object sender, object e)
@@ -441,7 +436,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void RestoreBulkFocus(Control preferred)
     {
-        var target = preferred.IsEnabled ? preferred : SelectEntriesButton.IsEnabled ? SelectEntriesButton : (Control)AllFilter;
+        var target = preferred.IsEnabled ? preferred : SelectEntriesButton.IsEnabled ? SelectEntriesButton : HistoryTabs.SelectedControl;
         target.Focus(FocusState.Programmatic);
     }
 
