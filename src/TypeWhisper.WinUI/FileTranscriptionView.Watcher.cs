@@ -33,7 +33,7 @@ public sealed partial class FileTranscriptionView
         _watcher.Changed += () =>
         {
             if (_watchStatus is not null) _watchStatus.Text = _watcher.Error ?? _watcher.Status;
-            if (_watchTab && !_watchEditing && !_picking && IsLoaded && _watchRenderedState != WatchState) Render();
+            if (_watchTab && _watchResult is null && !_watchEditing && !_picking && IsLoaded && _watchRenderedState != WatchState) Render();
         };
         _watchTimer.Tick += async (_, _) =>
         {

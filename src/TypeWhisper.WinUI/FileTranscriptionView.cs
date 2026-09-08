@@ -57,8 +57,10 @@ public sealed partial class FileTranscriptionView : UserControl
         Content = root;
         _queue.Changed += () =>
         {
-            if (DispatcherQueue.HasThreadAccess) Render();
-            else DispatcherQueue.TryEnqueue(Render);
+            // Background progress must not replace a transcript the user is selecting or reading.
+            void UpdateQueue() { if (!_watchTab && _result is null) Render(); }
+            if (DispatcherQueue.HasThreadAccess) UpdateQueue();
+            else DispatcherQueue.TryEnqueue(UpdateQueue);
         };
         InitializeWatcher();
         Render();
@@ -234,7 +236,7 @@ public sealed partial class FileTranscriptionView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException) { _notice.Text = "File processing failed: " + ex.Message; return; }
         _notice.Text = $"{_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Ready)} completed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Failed)} failed · {_queue.Jobs.Count(j => j.Status == FileTranscriptionStatus.Canceled)} canceled";
         if (onlyJob?.Status == FileTranscriptionStatus.Ready) { _selectedJob = onlyJob; _result = onlyJob; }
-        Render();
+        if (!_watchTab && (_result is null || onlyJob?.Status == FileTranscriptionStatus.Ready)) Render();
         if (onlyJob?.Status == FileTranscriptionStatus.Ready && !_watchTab) FocusPrimaryAction();
     }
     private async Task DiscardRecoveryAsync()
