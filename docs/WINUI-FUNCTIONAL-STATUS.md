@@ -1,5 +1,19 @@
 # Windows 1.1 functional comparison
 
+## Workflow dictation shortcuts (`fceab952`), 2026-09-08
+
+The workflow editor now offers **Shortcut - dictation** alongside selected-text shortcuts. A press starts a normal recording with an immutable snapshot of that workflow; the next dictation-workflow shortcut press stops capture without switching the active snapshot. The explicit workflow takes precedence over app/website/global matching for that recording only. Ordinary dictation still selects its own rules. Processing uses the saved LLM provider/model and the existing dictation delivery, review-on-error and History preferences. Recording/model/output overrides remain unsupported.
+
+Both shortcut kinds share native registration, persistence, enablement/deletion and conflict checks. The input coordinator owns the one-shot start callback, including pending stop/cancel and rejected competing starts, so a canceled or failed start cannot leave a workflow override for a later recording.
+
+Validation: 761 Presentation tests passed (`artifacts/test-results/workflow-dictation/workflow-dictation.trx`), including snapshot isolation, editor round-trip, both registration kinds, rapid stop during start and canceled queued starts. The prescribed normal-profile Debug build/relaunch passed (`artifacts/workflow-dictation-build.log`). The process exposed a nonzero main-window handle and Quick Launch title, with no new diagnostic-log entries. Native workflow dictation and real LLM processing are still pending manual acceptance; no Computer Use was performed.
+
+Manual check: create/edit a workflow, select Shortcut - dictation, choose a configured LLM provider/model and assign a free chord. Save, focus an external text field, press once, dictate and press again. Confirm the processed result follows dictation output settings. Then use ordinary dictation and confirm the explicit workflow has not carried over. Check cancellation and disabled/restarted shortcut behavior separately.
+
+### History player acceptance update
+
+Marco confirmed internal audio playback, deletion of the associated audio when deleting the entry, and playback stopping on Esc back to the History list. These are user-reported native results. Seek, individual pause/end/replay cases, device errors, capture interruption and the separate P text-readback action remain unverified.
+
 ## Inline History audio player (`7340cbf8`), 2026-09-08
 
 Saved History audio now plays inside TypeWhisper instead of launching the associated desktop player. The footer contains a source-owned play/pause icon and A shortcut, position/duration, and a keyboard-accessible seek slider. F still opens the audio folder. P remains the separate text read-aloud action. The implementation uses Windows MediaPlayer/MediaSource with the verified local audio path and system-default playback output; it does not yet route this audio through the saved spoken-feedback output selection.
