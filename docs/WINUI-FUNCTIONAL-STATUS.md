@@ -1,5 +1,11 @@
 # Windows 1.1 functional comparison
 
+## Persistent lexicon tabs (`41907c35`), 2026-09-08
+
+Words, Corrections, Snippets and Term packs now share a fixed tab row above the scrollable content. Term packs uses the Dictionary heading and selected-tab styling; switching back clears the pack state, and keyboard focus returns to the activated tab. Esc from the pack list now exits to Quick Launch as from the other lists. Pack enablement and persistence are unchanged.
+
+The prescribed build/relaunch passed (`artifacts/term-pack-tabs-build.log`), with a nonzero main-window handle and unchanged diagnostic log. The source-encoding regression test passed. Native tab switching, scrolling and keyboard/layout acceptance remain pending; no Computer Use was performed.
+
 ## Existing snippet integration verified, 2026-09-08
 
 The proposed snippet implementation was already connected. Inspection confirms that normal dictation captures the snippet catalog, applies enabled replacements through DictationLexiconSnapshot after the optional LLM step, and passes the resulting final text to both insertion and History delivery. Existing tests cover persistence, case/punctuation/multiline expansion, placeholders, disabled entries, clipboard access, snapshot isolation and usage metadata. No duplicate implementation was added.
