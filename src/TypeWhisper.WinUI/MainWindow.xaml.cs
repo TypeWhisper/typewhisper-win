@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
         new("Suggested", "file", "Copy last transcription", "Copy the last completed dictation from this session", "", "Copies final dictated text, including when History is off. Configure its global shortcut in Settings > Shortcuts."),
         new("Suggested", "audio", "Read last transcription", "Read the last dictation aloud; run again to stop", "", "Uses the selected Windows voice and audio output. Works independently of automatic spoken feedback."),
         new("Suggested", "home", "Dashboard", "Your activity and recent transcriptions", "", "Opens the activity dashboard."),
+        new("Suggested", "devices", "Sync & backup", "Export or restore your TypeWhisper data", "", "Create local backups and review data before restoring."),
         new("Suggested", "stats", "Statistics", "Words, streaks, apps, and models", "", "Explore your usage over time."),
     ];
 
@@ -432,6 +433,7 @@ public sealed partial class MainWindow : Window
         {
             if (_historyOpen) await HistoryView.RefreshAsync();
             if (_settingsWindow is not null) await _settingsWindow.RefreshActivityAsync();
+            if (UtilityOpen && _utilityActivity is not null) await _utilityActivity.RefreshAsync();
         });
         PluginsView.ConfigureRuntime(_dictation);
         _dictation.Changed += () => DispatcherQueue.TryEnqueue(UpdateLiveDictation);
@@ -504,9 +506,13 @@ public sealed partial class MainWindow : Window
         SetTitleBar(DragRegion);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         if (AppWindow.Presenter is OverlappedPresenter presenter)
-            presenter.SetBorderAndTitleBar(false, false);
+        {
+            presenter.IsResizable = true;
+            presenter.SetBorderAndTitleBar(true, false);
+        }
+        ConfigureLauncherMinimumSize();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "app.ico"));
-        NativeWindowAppearance.RemoveSystemBorder(this);
+        NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         AppWindow.Closing += (_, args) =>
         {
             args.Cancel = true;
@@ -532,10 +538,10 @@ public sealed partial class MainWindow : Window
             FilteredItems.Add(command);
 
         Activated += MainWindow_Activated;
-        SizeChanged += (_, _) => PositionNearTopCenter();
         AppWindow.Changed += AppWindow_Changed;
         ResizeForCurrentMonitor();
-        PlaceOnInvocationMonitor();
+        if (!RestoreLauncherPlacement()) PlaceOnInvocationMonitor();
+        _placementReady = true;
         SelectFirstResult();
     }
 
@@ -543,11 +549,11 @@ public sealed partial class MainWindow : Window
     {
         if (_profileRestoreClosing) return;
         if (!_closing && !_historyOpen && !_recorderOpen && !_workflowsOpen &&
-            !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen)
+            !_pluginsOpen && !_marketplaceOpen && !LexiconOpen && !FileTranscriptionOpen && !UtilityOpen)
             MetricsText.Text = DictationStatusForDisplay;
         _isSearchEditing = false;
         UpdateSearchPresentation();
-        PlaceOnInvocationMonitor();
+        KeepLauncherOnScreen();
         AppWindow.Show();
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -586,9 +592,10 @@ public sealed partial class MainWindow : Window
             _activationStopwatch.Stop();
             Debug.WriteLine($"Main window first activation: {_activationStopwatch.Elapsed.TotalMilliseconds:0.0} ms");
         }
-        NativeWindowAppearance.RemoveSystemBorder(this);
+        NativeWindowAppearance.RemoveSystemBorder(this, resizable: true);
         // Closing a settings picker reactivates the window. Keep its current
         // field focused instead of jumping back to the name and scrolling up.
+        if (UtilityOpen) return;
         if (_workflowsOpen && WorkflowsView.IsConfiguring) return;
         if (_pluginsOpen && PluginsView.IsDetail) return;
         if (_marketplaceOpen && MarketplaceView.IsDetail) return;
@@ -602,15 +609,11 @@ public sealed partial class MainWindow : Window
         if (_closing || _profileRestoreClosing) return;
         if (args.DidVisibilityChange)
             RecorderView.SetPresented(_recorderOpen && sender.IsVisible);
-        if (!args.DidPositionChange)
-            return;
-
-        var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
-        if (dpi == 0 || dpi == _appliedWindowDpi)
-            return;
-
-        ResizeForCurrentMonitor();
-        PositionNearTopCenter();
+        if (args.DidPositionChange || args.DidSizeChange)
+        {
+            _appliedWindowDpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            SaveLauncherPlacement();
+        }
     }
 
     private void ResizeForCurrentMonitor(RectInt32? targetWorkArea = null)
@@ -814,7 +817,7 @@ public sealed partial class MainWindow : Window
 
     private void RunSelected()
     {
-        if (FileTranscriptionOpen || LexiconOpen) return;
+        if (FileTranscriptionOpen || LexiconOpen || UtilityOpen) return;
         ActionPanel.Visibility = Visibility.Collapsed;
         if (_recorderOpen) return;
         if (_marketplaceOpen)
@@ -845,6 +848,8 @@ public sealed partial class MainWindow : Window
             OpenLexicon(true);
         else if (_selected?.Title == "Settings")
             OpenSettings();
+        else if (_selected?.Title == "Sync & backup")
+            OpenSyncBackup();
         else if (_selected?.Title is "Dashboard" or "Statistics")
             OpenDashboard(_selected.Title == "Statistics");
         else if (_selected?.Title.Contains("dictation", StringComparison.OrdinalIgnoreCase) == true)
@@ -894,6 +899,12 @@ public sealed partial class MainWindow : Window
 
     private void WindowRoot_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (UtilityOpen)
+        {
+            if (e.Key == global::Windows.System.VirtualKey.Back && FocusManager.GetFocusedElement(WindowRoot.XamlRoot) is not TextBox and not PasswordBox and not RichEditBox)
+            { CloseUtility(); e.Handled = true; }
+            return;
+        }
         if (_historyOpen)
         {
             HistoryView.HandleActionKey(e);
@@ -937,6 +948,11 @@ public sealed partial class MainWindow : Window
 
     private void WindowRoot_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (UtilityOpen)
+        {
+            if (e.Key == global::Windows.System.VirtualKey.Escape) { CloseUtility(); e.Handled = true; }
+            return;
+        }
         if (LexiconOpen)
         {
             if (e.Key == global::Windows.System.VirtualKey.Escape) { _lexicon?.GoBack(); e.Handled = true; }
@@ -1188,12 +1204,12 @@ public sealed partial class MainWindow : Window
                     _ = recoveryView.PresentAsync();
                 }
             };
-            _settingsWindow.RestoreProfile = RestoreProfile;
+            _settingsWindow.WorkspaceRequested += OpenUtility;
             _settingsWindow.ConfigureActivity = activity => activity.Connect(_dictation.HistoryReader, () => _dictation.OutputPreferences.Current.SaveToHistory);
             _settingsWindow.HistoryRequested += () =>
             {
                 if (_historyOpen) { _settingsWindow?.AppWindow.Hide(); ShowFromActivation(); return; }
-                if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen)
+                if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
                 {
                     _settingsWindow?.ShowHistoryNavigationHint();
                     return;
@@ -1245,12 +1261,12 @@ public sealed partial class MainWindow : Window
 
     internal void OpenDashboard(bool statistics = false)
     {
-        OpenSettings(); _settingsWindow!.ShowActivity(statistics);
+        OpenUtility(statistics ? "Statistics" : "Dashboard");
     }
 
     internal void OpenSyncBackup()
     {
-        OpenSettings(); _settingsWindow!.ShowSyncBackup();
+        OpenUtility("Sync & backup");
     }
 
     internal void OpenAccount()
@@ -1275,7 +1291,7 @@ public sealed partial class MainWindow : Window
 
     private async void OpenProviderSettings(string pluginId)
     {
-        if (_historyOpen || _recorderOpen || _workflowsOpen || LexiconOpen || FileTranscriptionOpen)
+        if (_historyOpen || _recorderOpen || _workflowsOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
         {
             _settingsWindow?.ShowIntegrationNavigationHint();
             return;
@@ -1390,7 +1406,7 @@ public sealed partial class MainWindow : Window
     {
         ShowFromActivation();
         if (_historyOpen) return;
-        if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen)
+        if (_recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen)
         {
             MetricsText.Text = "Return to Quick Launch before opening History.";
             return;

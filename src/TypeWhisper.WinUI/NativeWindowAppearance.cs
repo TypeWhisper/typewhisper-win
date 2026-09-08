@@ -46,12 +46,13 @@ internal static class NativeWindowAppearance
     private const int DwmwcpRound = 2;
     private const int DwmColorNone = unchecked((int)0xFFFFFFFE);
 
-    internal static void RemoveSystemBorder(Window window)
+    internal static void RemoveSystemBorder(Window window, bool resizable = false)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
         var style = GetWindowLongPtr(hwnd, GwlStyle).ToInt64();
         style &= ~(WsCaption | WsThickframe | WsSysmenu | WsMinimizebox | WsMaximizebox);
         style |= WsPopup;
+        if (resizable) style |= WsThickframe;
         _ = SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
         _ = SetWindowPos(
             hwnd,

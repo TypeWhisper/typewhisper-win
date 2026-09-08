@@ -24,7 +24,7 @@ public sealed partial class MainWindow
     private void ActivationNoticeAction_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (_closing || _profileRestoreClosing || _noticeWorkflowId is not { } id) return;
-        if (_recorderOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || _historyOpen)
+        if (_recorderOpen || _pluginsOpen || _marketplaceOpen || LexiconOpen || FileTranscriptionOpen || UtilityOpen || _historyOpen)
         {
             ActivationNoticeText.Text = "Return to Quick Launch, then choose Edit workflow here. Your current work has been kept.";
             return;
@@ -47,7 +47,7 @@ public sealed partial class MainWindow
         ShowFromActivation();
         if (request.Error is { } error) { ShowActivationNotice(error); return; }
         var filesOpen = FileTranscriptionOpen && !LexiconOpen && !_historyOpen && !_recorderOpen && !_workflowsOpen && !_pluginsOpen && !_marketplaceOpen;
-        var workspaceOpen = FileTranscriptionOpen || LexiconOpen || _historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen;
+        var workspaceOpen = FileTranscriptionOpen || LexiconOpen || UtilityOpen || _historyOpen || _recorderOpen || _workflowsOpen || _pluginsOpen || _marketplaceOpen;
         if (ActivationAdmission.Reject(false, workspaceOpen, filesOpen, _fileTranscription?.CanAcceptActivation == true, request.Route) is { } rejection)
         { ShowActivationNotice(rejection); return; }
         switch (request.Route)

@@ -22,7 +22,7 @@ public sealed partial class SettingsWindow : Window
     internal Func<string, string?>? CommitReadLastTranscriptionHotkeys { get; set; }
     internal Action<string, StackPanel, List<ChoicePicker>>? ConfigureLiveSettings { get; set; }
     internal Action<ActivityView>? ConfigureActivity { get; set; }
-    internal Func<TypeWhisper.Core.Services.PersistedProfileBackup, TypeWhisper.Core.Services.PersistedProfileBackupPreview, Task>? RestoreProfile { get; set; }
+    internal event Action<string>? WorkspaceRequested;
     internal Task RefreshActivityAsync() => _activity?.RefreshAsync() ?? Task.CompletedTask;
     private bool _updating = true;
     private bool _liveTranscriptionAvailable = true;
@@ -62,7 +62,7 @@ public sealed partial class SettingsWindow : Window
             ("APP", [("Home", "home"), ("General", "settings"), ("Shortcuts", "keyboard")]),
             ("RECORDING", [("Dictation", "microphone"), ("Audio", "speaker"), ("Recorder", "signal"), ("Files & recovery", "file")]),
             ("PERSONALIZATION", [("Appearance", "desktop")]),
-            ("DATA & SYSTEM", [("Statistics", "stats"), ("Privacy", "lock"), ("Sync & backup", "devices"), ("Advanced", "settings"), ("Premium", "lock"), ("Account & about", "info")])
+            ("DATA & SYSTEM", [("Privacy", "lock"), ("Advanced", "settings"), ("Premium", "lock"), ("Account & about", "info")])
         ];
         foreach (var group in groups)
         {
@@ -272,6 +272,7 @@ public sealed partial class SettingsWindow : Window
 
     private void ShowCategory(string category)
     {
+        if (category is "Statistics" or "Sync & backup") { WorkspaceRequested?.Invoke(category); return; }
         ActivityHost.Visibility = Visibility.Collapsed;
         // TextChanged can arrive after the programmatic clear. It must not rebuild
         // this page again and remove the control focused by OpenSearchResult.
@@ -299,7 +300,7 @@ public sealed partial class SettingsWindow : Window
         if (catalog)
         {
             _catalogPickers.Clear();
-            if (category is "Home" or "Statistics")
+            if (category == "Home")
             {
                 CatalogContent.Children.Clear(); CatalogScroll.Visibility = Visibility.Collapsed;
                 if (_activity is null)
@@ -314,7 +315,7 @@ public sealed partial class SettingsWindow : Window
                     };
                     ActivityHost.Child = _activity;
                 }
-                ActivityHost.Visibility = Visibility.Visible; _activity.Present(category == "Statistics");
+                ActivityHost.Visibility = Visibility.Visible; _activity.Present(false);
                 SessionHint.Text = "Statistics reflect retained history · deletion and retention reduce these totals";
                 return;
             }
@@ -322,11 +323,6 @@ public sealed partial class SettingsWindow : Window
             ConfigureLiveSettings?.Invoke(category, CatalogContent, _catalogPickers);
             if (category == "General" && ConfigureLiveSettings is not null)
                 SessionHint.Text = "Development startup registration is connected · other unavailable controls are disabled";
-            if (category == "Sync & backup")
-            {
-                Descendants(CatalogContent).OfType<SyncBackupView>().FirstOrDefault()?.ConnectRestore(RestoreProfile);
-                SessionHint.Text = "Local backup and restore are connected · device sync is not available yet";
-            }
             if (category == "Premium")
                 SessionHint.Text = PremiumAccessState.CanOverride ? "Development access is saved in this profile only" : "Premium access and feature availability";
             if (category == "Advanced") SessionHint.Text = "Advanced settings are saved in this profile";
@@ -355,8 +351,6 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    internal void ShowActivity(bool statistics) => ShowCategory(statistics ? "Statistics" : "Home");
-    internal void ShowSyncBackup() => ShowCategory("Sync & backup");
     internal void ShowRecoveryFromTray(bool allowNavigation)
     {
         if (_currentCategory == "Files & recovery") return;
@@ -407,7 +401,6 @@ public sealed partial class SettingsWindow : Window
     private static readonly SettingSearchEntry[] AppearanceSearchEntries =
     [
         new("Home", "", "Dashboard", "Your activity and recent transcriptions.", "home", "start overview"),
-        new("Statistics", "", "Usage statistics", "Words, streaks, apps, models, and hourly activity.", "stats", "week month time saved"),
         new("Appearance", "StandardChoice", "Recording overlay", "Choose Standard, Compact or Minimal.", "microphone", "waveform indicator"),
         new("Appearance", "LiveTextToggle", "Live transcription", "Show streaming text beside the recording block.", "text"),
         new("Appearance", "DetailsToggle", "Technical details", "Show audio level and render frequency.", "signal", "dB FPS"),

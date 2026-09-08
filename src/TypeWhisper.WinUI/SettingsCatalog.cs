@@ -114,10 +114,9 @@ internal static partial class SettingsCatalog
         Toggle("Privacy", "MemoryEnabled", "Personal memory"),
 
 
-        Text("Sync & backup", "CloudFolderSyncFolderPath", "Cloud sync folder", "", "Use a shared cloud folder across your devices. No sync or file access occurs here."),
     ];
 
-    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Sync & backup", "Premium", "Account & about"];
+    internal static readonly string[] Categories = ["General", "Dictation", "Audio", "Shortcuts", "Live text", "Recorder", "Files & recovery", "Privacy", "Premium", "Account & about"];
 
     internal static IEnumerable<SettingSearchEntry> SearchEntries => Fields.Select(setting => new SettingSearchEntry(
         setting.Category == "Live text" ? "Appearance" : setting.Category, setting.Key, setting.Label, setting.Hint,
@@ -155,11 +154,7 @@ internal static partial class SettingsCatalog
             target.Children.Add(new AccountView(values, pickers));
             return;
         }
-        if (category == "Sync & backup")
-        {
-            target.Children.Add(new SyncBackupView(values));
-            return;
-        }
+
         if (category == "Shortcuts")
         {
             var guide = Label("Your actions, your keys. Add alternatives with + or click a key to change it.", 13, true);

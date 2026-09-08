@@ -26,7 +26,9 @@ internal sealed class SyncBackupView : UserControl
     private bool _unloaded;
     private ContentDialog? _dialog;
 
-    internal SyncBackupView(Dictionary<string, string> values)
+    internal StackPanel Actions { get; } = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+
+    internal SyncBackupView()
     {
         Content = _body;
         _body.Children.Add(SettingsHelp.Label("Local backup", "Save a portable JSON file or merge data from an existing TypeWhisper backup. Audio, model files, API keys, licenses, plugin installation and device preferences are excluded.", 22));
@@ -43,10 +45,9 @@ internal sealed class SyncBackupView : UserControl
             _selection.Children.Add(toggle);
         }
         _body.Children.Add(_selection);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         _export = Button("Export backup…", () => RunAsync(ExportAsync));
         _import = Button("Choose backup to restore…", () => RunAsync(PreviewAsync));
-        actions.Children.Add(_export); actions.Children.Add(_import); _body.Children.Add(actions);
+        Actions.Children.Add(_export); Actions.Children.Add(_import);
         AutomationProperties.SetLiveSetting(_notice, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         _body.Children.Add(_notice); _body.Children.Add(_review);
         _body.Children.Add(new Border { Height = 1, Background = Brush("HairlineBrush"), Margin = new(0, 8, 0, 8) });
@@ -67,11 +68,12 @@ internal sealed class SyncBackupView : UserControl
     }
 
     private void InvalidatePreview()
-    { _preview = null; _review.Children.Clear(); UpdateButtons(); }
+    { _preview = null; _review.Children.Clear(); Actions.Children.Clear(); Actions.Children.Add(_export); Actions.Children.Add(_import); UpdateButtons(); }
 
     private void UpdateButtons()
     {
         if (_export is null) return;
+        foreach (var button in Actions.Children.OfType<Button>()) button.IsEnabled = !_busy;
         foreach (var control in _selection.Children.OfType<Control>()) control.IsEnabled = !_busy;
         _export.IsEnabled = !_busy && _categories != BackupCategory.None;
         _import.IsEnabled = !_busy && _categories != BackupCategory.None && _restore is not null;
@@ -125,10 +127,10 @@ internal sealed class SyncBackupView : UserControl
             _review.Children.Add(Copy($"{pair.Key}: {pair.Value.Imported} to add · {pair.Value.Skipped} skipped · {pair.Value.Conflicts} conflicts", 13));
         foreach (var warning in preview.Merge.Warnings) _review.Children.Add(Copy(warning, 12, true));
         _review.Children.Add(Copy($"{preview.ChangedFileCount} profile {(preview.ChangedFileCount == 1 ? "file" : "files")} will change. Existing items are kept according to the merge rules. The app closes after restoring; reopen it to use the restored data.", 13, true));
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        actions.Children.Add(Button("Cancel restore", () => { InvalidatePreview(); _notice.Text = "Restore canceled. No data changed."; return Task.CompletedTask; }));
-        actions.Children.Add(Button("Restore and close app…", () => RunAsync(ConfirmRestoreAsync), primary: true));
-        _review.Children.Add(actions);
+        Actions.Children.Clear();
+        Actions.Children.Add(Button("Cancel restore", () => { InvalidatePreview(); _notice.Text = "Restore canceled. No data changed."; return Task.CompletedTask; }));
+        Actions.Children.Add(Button("Restore and close app…", () => RunAsync(ConfirmRestoreAsync), primary: true));
+
     }
 
     private async Task ConfirmRestoreAsync()

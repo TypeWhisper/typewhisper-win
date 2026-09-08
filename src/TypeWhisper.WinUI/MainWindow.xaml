@@ -231,6 +231,7 @@
                        Foreground="{ThemeResource MutedBrush}" />
         </Grid>
         <Border x:Name="FileTranscriptionHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
+        <Border x:Name="UtilityHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
         <Border x:Name="LexiconHost" Grid.Row="1" Grid.RowSpan="4" Visibility="Collapsed" />
     </Grid>
 </Window>
