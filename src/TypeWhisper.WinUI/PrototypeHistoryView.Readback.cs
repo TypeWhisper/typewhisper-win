@@ -44,6 +44,7 @@ public sealed partial class PrototypeHistoryView
                 return;
             }
             // Capture the displayed entry; reading never changes the last-dictation snapshot.
+            StopAudioPlayback();
             _readbackStarting = true;
             try { _readback = ReadTranscript(_opened.Text, _opened.Entry.Content.LanguageCode); }
             finally { _readbackStarting = false; }

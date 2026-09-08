@@ -195,6 +195,15 @@ public sealed class TypeWhisperGlyph : UserControl
                 Line(drawing, 15.5f, 4.5f, 18, 10);
                 Line(drawing, 18, 10, 15.5f, 15.5f);
                 break;
+            case "play":
+                using (var play = new CanvasPathBuilder(drawing))
+                {
+                    play.BeginFigure(6, 3); play.AddLine(17, 10); play.AddLine(6, 17);
+                    play.EndFigure(CanvasFigureLoop.Closed);
+                    using var geometry = CanvasGeometry.CreatePath(play);
+                    drawing.FillGeometry(geometry, Accent);
+                }
+                break;
             case "pause":
                 drawing.FillRoundedRectangle(5.5f, 4, 3, 12, 1.5f, 1.5f, Accent);
                 drawing.FillRoundedRectangle(11.5f, 4, 3, 12, 1.5f, 1.5f, Accent);

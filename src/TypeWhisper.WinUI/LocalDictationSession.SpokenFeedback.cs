@@ -8,6 +8,7 @@ internal sealed partial class LocalDictationSession
     internal SpokenFeedbackController SpokenFeedback { get; } = new(new WindowsSystemVoiceBackend());
     private DictationAudioPreferences _spokenFeedbackAtStart = new();
     private Task _spokenFeedbackActivity = Task.CompletedTask;
+    internal Action? StopHistoryPlayback { get; set; }
     private SpokenFeedbackRequest? _historySpeechRequest;
 
     internal Task StopHistoryReadbackAsync() => _historySpeechRequest is { } request
@@ -44,6 +45,7 @@ internal sealed partial class LocalDictationSession
 
     private async Task<SpokenFeedbackResult> ReadLastDictationCoreAsync()
     {
+        StopHistoryPlayback?.Invoke();
         var playback = LastDictationReadback.ToggleAsync(SpokenFeedback, LastCompletedDictation,
             AudioPreferences.SpokenFeedbackVoiceId, AudioPreferences.OutputDeviceId);
         Changed?.Invoke();
@@ -78,6 +80,7 @@ internal sealed partial class LocalDictationSession
 
     private async Task<SpokenFeedbackResult> RunSpokenFeedbackAsync(SpokenFeedbackRequest request, bool reportFailure)
     {
+        StopHistoryPlayback?.Invoke();
         var playback = SpokenFeedback.SpeakAsync(request);
         Changed?.Invoke();
         var result = await playback;

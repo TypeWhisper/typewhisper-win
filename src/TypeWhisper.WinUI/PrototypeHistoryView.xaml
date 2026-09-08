@@ -132,10 +132,27 @@
                 </Grid>
                 <local:HandCursorButton x:Name="RetryAudioCleanupButton" Content="Retry audio cleanup · R" Visibility="Collapsed" Click="RetryAudioCleanup_Click"
                     Style="{StaticResource PrototypeSecondaryButtonStyle}" HorizontalAlignment="Left" />
-                <StackPanel x:Name="AudioActions" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                    <local:HandCursorButton x:Name="PlayAudioButton" Content="Play audio � A" Click="PlayAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio" />
-                    <local:HandCursorButton x:Name="ShowAudioButton" Content="Show in folder · F" Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
-                </StackPanel>
+                <Grid x:Name="AudioActions" ColumnSpacing="12" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <local:HandCursorButton x:Name="PlayAudioButton" Click="PlayAudio_Click" MinWidth="130"
+                        Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Play history audio">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <local:TypeWhisperGlyph x:Name="PlayAudioIcon" Kind="play" Width="16" Height="16" />
+                            <TextBlock x:Name="PlayAudioLabel" Text="Play audio" />
+                            <TextBlock Text="A" Foreground="{ThemeResource MutedBrush}" />
+                        </StackPanel>
+                    </local:HandCursorButton>
+                    <Slider x:Name="AudioTimeline" Grid.Column="1" MinWidth="100" Minimum="0" Maximum="1" IsEnabled="False"
+                        StepFrequency="0.1" SmallChange="1" LargeChange="5" VerticalAlignment="Center"
+                        ValueChanged="AudioTimeline_ValueChanged" AutomationProperties.Name="Audio playback position" />
+                    <TextBlock x:Name="AudioPosition" Grid.Column="2" Text="0:00 / 0:00" MinWidth="90"
+                        FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
+                    <local:HandCursorButton x:Name="ShowAudioButton" Grid.Column="3" Content="Show in folder &#x00B7; F"
+                        Click="ShowAudio_Click" Style="{StaticResource PrototypeSecondaryButtonStyle}" AutomationProperties.Name="Show history audio in folder" />
+                </Grid>
                 <Grid x:Name="ListActions">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <StackPanel x:Name="BulkToolbar" Spacing="8" Margin="0">

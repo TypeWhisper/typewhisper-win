@@ -557,6 +557,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 if (_disposed) return;
                 var preferences = AudioPreferences;
                 _spokenFeedbackAtStart = preferences;
+                StopHistoryPlayback?.Invoke();
                 await SpokenFeedback.CancelAndDrainAsync();
                 await _livePreview.StopAsync();
                 _operationCancellation.Token.ThrowIfCancellationRequested();

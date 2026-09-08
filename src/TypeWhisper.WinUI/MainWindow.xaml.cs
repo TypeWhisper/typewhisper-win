@@ -371,6 +371,10 @@ public sealed partial class MainWindow : Window
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
         HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
+        _dictation.StopHistoryPlayback = HistoryView.StopAudioPlayback;
+        HistoryView.CanPlayAudio = () => !_closing && !_profileRestoreClosing && _dictation.CanChangeProvider && !_dictation.Models.Busy
+            && _dictationInput?.IsRecordingOrStarting != true && _workflowTask is not { IsCompleted: false };
+        HistoryView.PrepareAudioPlayback = _dictation.SpokenFeedback.CancelAndDrainAsync;
         WorkflowsView.Connect(_dictation);
         _dictation.ReviewRequested += ShowOutputReview;
         _dictation.OutputCompleted += id => DispatcherQueue.TryEnqueue(() => _ = HideCompletedOverlayAsync(id));
@@ -1340,6 +1344,7 @@ public sealed partial class MainWindow : Window
 
     private void CloseHistory()
     {
+        HistoryView.StopAudioPlayback();
         HistoryView.StopReadback();
         _historyOpen = false;
         HistoryView.Visibility = Visibility.Collapsed;

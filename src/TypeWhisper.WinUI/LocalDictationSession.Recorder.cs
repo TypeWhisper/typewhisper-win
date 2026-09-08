@@ -17,7 +17,7 @@ internal sealed partial class LocalDictationSession
         if (!CanChangeProvider || Models.Busy || !_gate.Wait(0))
             throw new InvalidOperationException("Finish dictation, file transcription or model setup before starting the recorder.");
         _recorderReserved = true;
-        try { Changed?.Invoke(); return new RecorderReservation(this); }
+        try { StopHistoryPlayback?.Invoke(); Changed?.Invoke(); return new RecorderReservation(this); }
         catch { _recorderReserved = false; _gate.Release(); throw; }
     }
     private sealed class RecorderReservation(LocalDictationSession session) : IDisposable

@@ -62,10 +62,9 @@ public sealed partial class PrototypeHistoryView
         if (Current()) PlayAudioButton.IsEnabled = ShowAudioButton.IsEnabled = !_acting;
     }
 
-    private async void PlayAudio_Click(object sender, RoutedEventArgs e) => await TrackWriteAsync(OpenHistoryAudioAsync(false));
-    private async void ShowAudio_Click(object sender, RoutedEventArgs e) => await TrackWriteAsync(OpenHistoryAudioAsync(true));
+    private async void ShowAudio_Click(object sender, RoutedEventArgs e) => await TrackWriteAsync(OpenHistoryAudioFolderAsync());
 
-    private async Task OpenHistoryAudioAsync(bool folder)
+    private async Task OpenHistoryAudioFolderAsync()
     {
         if (_closing || _acting || _historyAudio is not { } audio || _opened?.Entry.PersistedRecordId is not { } id) return;
         _acting = true;
@@ -85,14 +84,12 @@ public sealed partial class PrototypeHistoryView
                 return;
             }
             // The resolver accepts only the audio store's verified local WAV files.
-            using var process = Process.Start(folder
-                ? new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true }
-                : new ProcessStartInfo(path) { UseShellExecute = true });
-            ActionNotice.Text = folder ? "Opened the audio folder." : "Opened audio in your default app.";
+            using var process = Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            ActionNotice.Text = "Opened the audio folder.";
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (!_closing) ActionNotice.Text = "The audio could not be opened. Check your default audio app or try Show in folder.";
+            if (!_closing) ActionNotice.Text = "The audio folder could not be opened. Check that the recording is still available.";
         }
         finally
         {

@@ -20,6 +20,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     internal Task ShutdownAsync()
     {
         if (_shutdown is not null) return _shutdown;
+        StopAudioPlayback();
         StopReadback();
         _closing = true;
         IsEnabled = false;
@@ -66,7 +67,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     internal async Task RefreshAsync()
     {
-        if (_closing || _reader is null || _loading || _acting || ReadbackActive) return;
+        if (_closing || _reader is null || _loading || _acting || ReadbackActive || AudioPlayerActive) return;
         var openedId = IsReading ? _opened?.Entry.RecordId : null;
         _loading = true;
         _loadError = null;
@@ -291,6 +292,7 @@ public sealed partial class PrototypeHistoryView : UserControl
             return;
         }
         if (IsReading || Entries.SelectedItem is not PrototypeTranscript entry) return;
+        StopAudioPlayback();
         StopReadback();
         _opened = entry;
         TranscriptTitle.Text = entry.Title;
@@ -337,6 +339,7 @@ public sealed partial class PrototypeHistoryView : UserControl
 
     private void ShowList()
     {
+        StopAudioPlayback();
         StopReadback();
         ReadingPage.Visibility = Visibility.Collapsed;
         ListPage.Visibility = Visibility.Visible;
@@ -486,6 +489,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
         if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        StopAudioPlayback();
         StopReadback();
         _acting = true;
         var openedId = _opened.Entry.RecordId;
@@ -535,6 +539,7 @@ public sealed partial class PrototypeHistoryView : UserControl
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (_closing || _acting || _actions is null || _opened?.Entry.PersistedRecordId is not { } id) return;
+        StopAudioPlayback();
         StopReadback();
         _acting = true;
         var entry = _opened;
