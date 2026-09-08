@@ -7,6 +7,7 @@ public sealed partial class MainWindow
 
     private static IEnumerable<Command> WorkspaceCommands => new Command[]
     {
+        Destination("Setup wizard", "sparkle", "Set up TypeWhisper · microphone, hotkey and dictation model", "setup"),
         Destination("Corrections", "correction", "Dictionary · preferred spellings and misheard variants", "corrections"),
         Destination("Term packs", "packs", "Dictionary · enable vocabulary collections", "packs"),
         Destination("Watch folder", "folder", "Files · automatic folder transcription", "watch"),
@@ -46,6 +47,7 @@ public sealed partial class MainWindow
         }
         switch (route)
         {
+            case "setup": OpenSetup(); break;
             case "corrections": OpenLexicon(section: "corrections"); break;
             case "packs": OpenLexicon(section: "packs"); break;
             case "watch": OpenFileTranscription(); _fileTranscription?.ShowWatchFolder(); break;
