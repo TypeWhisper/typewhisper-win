@@ -24,6 +24,7 @@ public sealed class PrototypeLexiconView : UserControl
 
     private readonly PrototypeLexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
     private bool _showPacks;
+    private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
     private readonly StackPanel _body = new() { Spacing = 14 };
     private readonly StackPanel _rows = new() { Spacing = 6 };
     private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
@@ -46,7 +47,9 @@ public sealed class PrototypeLexiconView : UserControl
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
         _heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1); root.Children.Add(_heading);
+        AutomationProperties.SetHeadingLevel(_heading, AutomationHeadingLevel.Level1);
+        var header = new StackPanel { Spacing = 14 };
+        header.Children.Add(_heading); header.Children.Add(_tabs); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 8, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
@@ -67,7 +70,6 @@ public sealed class PrototypeLexiconView : UserControl
 
     internal void GoBack()
     {
-        if (_showPacks) { _showPacks = false; Render(); return; }
         if (_confirmDelete) { _confirmDelete = false; RenderActions(); _notice.Text = "Entry kept."; return; }
         if (_pending is not null) { _pending = null; Render(); return; }
         Navigate(_draft is not null ? CloseEditor : () => ExitRequested?.Invoke());
@@ -91,6 +93,9 @@ public sealed class PrototypeLexiconView : UserControl
     private void Render()
     {
         _body.Children.Clear(); _rows.Children.Clear();
+        _tabs.Children.Clear();
+        _tabs.Visibility = _draft is null ? Visibility.Visible : Visibility.Collapsed;
+        if (_draft is null) RenderTabs();
         if (_showPacks) { RenderPacks(); return; }
         _heading.Text = _draft is null ? (_kind == PrototypeLexiconKind.Snippet ? "Snippets" : "Dictionary") :
             $"{(_store.Entries.Any(entry => entry.Id == _draft.Id) ? "Edit" : "New")} {Singular}";
@@ -102,17 +107,32 @@ public sealed class PrototypeLexiconView : UserControl
         RenderActions(); _scroll.ChangeView(null, 0, null, true);
     }
 
-    private void RenderList()
+    private void RenderTabs()
     {
-        var tabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         foreach (var kind in Enum.GetValues<PrototypeLexiconKind>())
         {
             var label = kind switch { PrototypeLexiconKind.Word => "Words", PrototypeLexiconKind.Correction => "Corrections", _ => "Snippets" };
-            var tab = Button(label, () => { _kind = kind; _query = ""; Render(); }, primary: kind == _kind);
-            AutomationProperties.SetName(tab, label + (kind == _kind ? ", selected" : "")); tabs.Children.Add(tab);
+            var selected = !_showPacks && kind == _kind;
+            var index = _tabs.Children.Count;
+            var tab = Button(label, () =>
+            {
+                _showPacks = false; _kind = kind; _query = ""; Render();
+                (_tabs.Children[index] as Control)?.Focus(FocusState.Programmatic);
+            }, primary: selected);
+            AutomationProperties.SetName(tab, label + (selected ? ", selected" : ""));
+            _tabs.Children.Add(tab);
         }
-        tabs.Children.Add(Button("Term packs", () => { _showPacks = true; Render(); }));
-        _body.Children.Add(tabs);
+        var packs = Button("Term packs", () =>
+        {
+            _showPacks = true; Render();
+            (_tabs.Children.Last() as Control)?.Focus(FocusState.Programmatic);
+        }, primary: _showPacks);
+        AutomationProperties.SetName(packs, "Term packs" + (_showPacks ? ", selected" : ""));
+        _tabs.Children.Add(packs);
+    }
+
+    private void RenderList()
+    {
         _body.Children.Add(Text(_kind switch
         {
             PrototypeLexiconKind.Word => "Names and specialist terms you want TypeWhisper to recognize.",
@@ -282,10 +302,10 @@ public sealed class PrototypeLexiconView : UserControl
 
     private void RenderPacks()
     {
-        _heading.Text = "Term packs";
+        _heading.Text = "Dictionary";
         _crumbs.SetItems(new("Quick Launch", () => ExitRequested?.Invoke()), new("Dictionary", () => { _showPacks = false; Render(); }), new("Term packs"));
         _actions.Children.Clear();
-        _actions.Children.Add(Button("Back to dictionary", () => { _showPacks = false; Render(); }));
+        _actions.Children.Add(Button("Back to Quick Launch", () => ExitRequested?.Invoke()));
         _notice.Text = _store.LastError ?? (DictionaryBoostingPreferences.Load()
             ? "Saved packs provide dictionary terms for enabled vocabulary processing."
             : "Saved packs · enable Vocabulary boosting in Settings > Dictation > Advanced to use them.");
