@@ -10,8 +10,6 @@ public sealed record WorkflowDraft(string Id, string Title, string Description, 
     public string ProviderId { get; init; } = TypeWhisper.Presentation.WorkflowLlmDefaults.Inherit;
     /// <summary>The exact selected provider model.</summary>
     public string ModelId { get; init; } = "";
-    /// <summary>The manual result review destination.</summary>
-    public string OutputTarget { get; init; } = "preview";
     /// <summary>Whether manual execution is enabled.</summary>
     public bool IsEnabled { get; init; } = true;
     /// <summary>The shared Core prompt template.</summary>

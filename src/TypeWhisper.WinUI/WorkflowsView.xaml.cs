@@ -57,7 +57,6 @@ public sealed partial class WorkflowsView : UserControl
     private CancellationTokenSource? _run;
     private IReadOnlyList<Choice> Providers => [new(WorkflowLlmDefaults.Inherit, "Use default", "Use the shared workflow LLM"), new("none", "Not configured", "Choose an installed LLM provider"),
         .. (_session?.LlmProviders.Select(p => new Choice(p.SelectionId, p.Name, p.Ready ? "Ready" : "Requires configuration")) ?? [])];
-    private static readonly Choice[] Outputs = [new("preview", "Review result", "Copy the result when ready")];
 
     internal void Connect(LocalDictationSession session)
     {
@@ -150,14 +149,12 @@ public sealed partial class WorkflowsView : UserControl
         };
         ConfigProvider.Configure("Provider", "plugin", "Workflow provider");
         ConfigModel.Configure("Model", "chip", "Workflow model");
-        ConfigOutput.Configure("Output destination", "run", "Workflow output");
         ConfigProvider.SelectionChanged += _ =>
         {
             ConfigureModels(string.Empty);
             UpdateConfigurationState();
         };
         ConfigModel.SelectionChanged += _ => UpdateConfigurationState();
-        ConfigOutput.SelectionChanged += _ => UpdateConfigurationState();
         Unloaded += (_, _) => _run?.Cancel();
         Filter(string.Empty);
     }
@@ -214,7 +211,7 @@ public sealed partial class WorkflowsView : UserControl
         else if (_page == Page.Configuration)
         {
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) KeepWorkflowEditing.Focus(FocusState.Programmatic);
-            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen && !ConfigOutput.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
+            else if (!ConfigTrigger.IsPopupOpen && !ConfigContextMode.IsPopupOpen && !ConfigProvider.IsPopupOpen && !ConfigModel.IsPopupOpen) ConfigName.Focus(FocusState.Programmatic);
         }
         else if (_page == Page.Result) WorkflowPrimaryButton.Focus(FocusState.Programmatic);
     }
@@ -252,7 +249,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_run is not null) { _run.Cancel(); return; }
         if (_page == Page.Configuration)
         {
-            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel, ConfigOutput })
+            foreach (var picker in new[] { ConfigTrigger, ConfigContextMode, ConfigProvider, ConfigModel })
                 if (picker.IsPopupOpen) { picker.ClosePopup(); return; }
             if (ConfigurationDiscardPrompt.Visibility == Visibility.Visible) { _afterConfigurationExit = null; DismissDiscard(); return; }
             if (!ConfigurationDirty) { LeaveConfiguration(); return; }
@@ -397,7 +394,7 @@ public sealed partial class WorkflowsView : UserControl
         || ConfigWebsiteDomains.Text != _opened.WebsiteDomains || ConfigContextMode.SelectedId != _opened.ContextMatchMode.ToString()
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
-        || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigOutput.SelectedId != _opened.OutputTarget || ConfigEnabled.IsOn != _opened.IsEnabled);
+        || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigEnabled.IsOn != _opened.IsEnabled);
     private string? ConfigurationError => _apiConfigurationConflict is { } apiConflict ? apiConflict
         : string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
         : ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" && ShortcutDraftError is { } shortcutError ? shortcutError
@@ -508,7 +505,6 @@ public sealed partial class WorkflowsView : UserControl
         ConfigInstruction.Text = _opened.Instruction.ReplaceLineEndings("\r");
         ConfigProvider.SetOptions(Providers, _opened.ProviderId, _opened.ProviderId + " (unavailable)");
         ConfigureModels(_opened.ModelId);
-        ConfigOutput.SetOptions(Outputs, _opened.OutputTarget);
         _loadingConfiguration = false;
         ShowPage(Page.Configuration);
         ConfigurationScroll.ChangeView(null, 0, null, true);
@@ -548,7 +544,6 @@ public sealed partial class WorkflowsView : UserControl
         ConfigShortcutSection.Visibility = ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" ? Visibility.Visible : Visibility.Collapsed;
         ConfigAppSection.Visibility = ConfigWebsiteSection.Visibility = contextual ? Visibility.Visible : Visibility.Collapsed;
         ConfigContextSection.Visibility = contextual && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) && !string.IsNullOrWhiteSpace(ConfigWebsiteDomains.Text) ? Visibility.Visible : Visibility.Collapsed;
-        ConfigOutputSection.Visibility = ConfigTrigger.SelectedId is "Manual" or "Hotkey" ? Visibility.Visible : Visibility.Collapsed;
         var template = Enum.TryParse<WorkflowTemplate>(ConfigTemplate.SelectedId, out var selected) ? selected : WorkflowTemplate.Custom;
         ConfigInstructionSection.Visibility = ConfigProviderSection.Visibility = ConfigModelSection.Visibility = template == WorkflowTemplate.Dictation ? Visibility.Collapsed : Visibility.Visible;
         if (template == WorkflowTemplate.Custom) ConfigAdvanced.IsExpanded = true;
@@ -580,7 +575,7 @@ public sealed partial class WorkflowsView : UserControl
             Priority = int.Parse(ConfigPriority.Text),
             Template = Enum.Parse<WorkflowTemplate>(ConfigTemplate.SelectedId),
             TranslationTarget = string.IsNullOrWhiteSpace(ConfigTranslationTarget.Text) ? null : ConfigTranslationTarget.Text.Trim(),
-            ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId, OutputTarget = ConfigOutput.SelectedId,
+            ProviderId = ConfigProvider.SelectedId, ModelId = ConfigModel.SelectedId,
             IsEnabled = ConfigEnabled.IsOn, Description = ConfigEnabled.IsOn ? "Manual workflow" : "Disabled manual workflow" };
         try
         {

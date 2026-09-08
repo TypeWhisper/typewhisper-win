@@ -165,7 +165,7 @@
                             TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow instructions" />
                     </StackPanel>
                     <Grid ColumnSpacing="10">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <StackPanel x:Name="ConfigProviderSection" Spacing="7">
                             <Border x:Name="ProviderHelp" />
                             <local:ChoicePicker x:Name="ConfigProvider" />
@@ -173,10 +173,6 @@
                         <StackPanel x:Name="ConfigModelSection" Grid.Column="1" Spacing="7">
                             <TextBlock Text="MODEL" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                             <local:ChoicePicker x:Name="ConfigModel" />
-                        </StackPanel>
-                        <StackPanel x:Name="ConfigOutputSection" Grid.Column="2" Spacing="7">
-                            <TextBlock Text="OUTPUT DESTINATION" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
-                            <local:ChoicePicker x:Name="ConfigOutput" />
                         </StackPanel>
                     </Grid>
                         </StackPanel>
