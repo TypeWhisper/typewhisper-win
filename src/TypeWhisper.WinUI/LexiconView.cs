@@ -39,7 +39,7 @@ public sealed class LexiconView : UserControl
     private Action? _pending;
     private bool _confirmDelete;
     private string _query = "";
-    private readonly HashSet<string> _collapsedCorrections = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _expandedCorrections = new(StringComparer.Ordinal);
     internal event Action? ExitRequested;
 
     public LexiconView()
@@ -220,7 +220,7 @@ public sealed class LexiconView : UserControl
                 };
                 Grid.SetColumn(toggle, 1); row.Children.Add(toggle); aliases.Children.Add(row);
             }
-            var panel = new StackPanel { Spacing = 8 };
+            var panel = new StackPanel { Spacing = 4 };
             var headingRow = new Grid { ColumnSpacing = 12 };
             headingRow.ColumnDefinitions.Add(new());
             headingRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
@@ -228,31 +228,37 @@ public sealed class LexiconView : UserControl
             header.Children.Insert(0, chevron);
             void UpdateExpansion()
             {
-                var expanded = !_collapsedCorrections.Contains(group.Key);
+                var expanded = _expandedCorrections.Contains(group.Key);
                 aliases.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
                 chevron.Text = expanded ? "⌄" : "›";
             }
             var expand = Button("", () =>
             {
-                if (!_collapsedCorrections.Add(group.Key)) _collapsedCorrections.Remove(group.Key);
+                if (!_expandedCorrections.Add(group.Key)) _expandedCorrections.Remove(group.Key);
                 UpdateExpansion();
             });
             expand.Content = header;
             expand.Style = (Style)Application.Current.Resources["MenuButtonStyle"];
             expand.HorizontalAlignment = HorizontalAlignment.Stretch;
             expand.HorizontalContentAlignment = HorizontalAlignment.Left;
+            expand.MinHeight = 32;
+            expand.Padding = new Thickness(4, 4, 4, 4);
             AutomationProperties.SetName(expand, $"Expand or collapse corrections for {group.Key}");
             headingRow.Children.Add(expand);
             var add = Button("+", () => OpenEditor(new LexiconEntry(Guid.NewGuid(), LexiconKind.Correction, "") with { Value = group.Key }));
             add.VerticalAlignment = VerticalAlignment.Center;
-            add.Width = 40;
+            add.Width = 32;
+            add.Height = add.MinHeight = 32;
+            add.MinWidth = 32;
+            add.Padding = new Thickness(4);
             AutomationProperties.SetName(add, $"Add variant for {group.Key}");
             ToolTipService.SetToolTip(add, "Add variant");
             Grid.SetColumn(add, 1); headingRow.Children.Add(add);
             panel.Children.Add(headingRow);
             panel.Children.Add(aliases);
             UpdateExpansion();
-            var card = Surface(panel, 12);
+            var card = Surface(panel, 6);
+            card.Padding = new Thickness(8, 5, 8, 5);
             MenuFlyout GroupMenu()
             {
                 var menu = new MenuFlyout();
@@ -271,7 +277,7 @@ public sealed class LexiconView : UserControl
                     if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
                     if (!_store.RemoveCorrectionGroup(group.Key))
                     { _notice.Text = _store.LastError ?? "Could not delete correction group."; return; }
-                    _collapsedCorrections.Remove(group.Key);
+                    _expandedCorrections.Remove(group.Key);
                     Render();
                     _notice.Text = "Correction group deleted.";
                 };
