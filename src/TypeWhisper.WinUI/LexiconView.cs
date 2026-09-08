@@ -7,7 +7,7 @@ using Microsoft.Windows.Storage.Pickers;
 
 namespace TypeWhisper.WinUI;
 
-public sealed class LexiconView : UserControl
+public sealed partial class LexiconView : UserControl
 {
     // Dispatcher-owned state; shutdown closes admission before waiting for native pickers.
     private bool _closing;
@@ -17,9 +17,10 @@ public sealed class LexiconView : UserControl
     {
         _closing = true;
         IsEnabled = false;
+        _trainingDialog?.Hide();
         try { _cancelPicker?.Invoke(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { System.Diagnostics.Debug.WriteLine("Lexicon picker cancellation failed: " + ex); }
-        return _transferCompletion?.Task ?? Task.CompletedTask;
+        return Task.WhenAll(_transferCompletion?.Task ?? Task.CompletedTask, _trainingTask ?? Task.CompletedTask);
     }
 
     private readonly Lexicon _store = new(DictationDictionarySnapshot.StoragePath, DictationSnippetSnapshot.StoragePath);
@@ -391,6 +392,11 @@ public sealed class LexiconView : UserControl
         }
         if (_draft is null)
         {
+            if (_kind != LexiconKind.Snippet)
+                _actions.Children.Add(Button("Train word…", () =>
+                {
+                    if (_trainingTask is null || _trainingTask.IsCompleted) _trainingTask = TrainWordAsync();
+                }));
             _actions.Children.Add(Button("Import", () => _ = ImportAsync()));
             _actions.Children.Add(Button("Export", () => _ = ExportAsync()));
             _actions.Children.Add(Button("+ Add " + Singular, () => OpenEditor(new(Guid.NewGuid(), _kind, "")), primary: true)); return;

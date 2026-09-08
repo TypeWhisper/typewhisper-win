@@ -32,6 +32,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/RecordingAudioEffects.cs" Link="RecordingAudioEffects.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/SilenceAutoStop.cs" Link="SilenceAutoStop.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/DictionaryTrainingPlan.cs" Link="DictionaryTrainingPlan.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />

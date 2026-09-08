@@ -29,7 +29,7 @@ internal sealed partial class LocalDictationSession
         _cloudStream?.Cancel();
         _retentionTimer.Stop();
         StopSilenceMonitoring();
-        return DrainAndReleaseAsync(Task.WhenAll(CorrectionLearning.Cancel(), Packages.Updates.ShutdownAsync(), HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync(),
+        return DrainAndReleaseAsync(Task.WhenAll(_training?.DisposeAsync().AsTask() ?? Task.CompletedTask, CorrectionLearning.Cancel(), Packages.Updates.ShutdownAsync(), HistoryRetention.CloseAndDrainAsync(), Recovery.ShutdownAsync(),
             DrainSpokenFeedbackAsync(), RegistryModelDownload.ShutdownAsync()));
     });
 

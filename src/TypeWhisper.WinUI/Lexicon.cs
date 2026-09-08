@@ -215,6 +215,41 @@ internal sealed class Lexicon
         return null;
     }
 
+    internal string? SaveTraining(string word, IReadOnlyList<string> approved)
+    {
+        word = word.Trim();
+        if (!DictionaryTrainingPlan.IsWord(word)) return "Enter one word, using letters, numbers, apostrophes or hyphens.";
+        ReloadDictionary();
+        if (_loadError is not null) return _loadError;
+        var additions = new List<DictionaryEntry>();
+        foreach (var original in approved.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!DictionaryTrainingPlan.IsWord(original) || original.Equals(word, StringComparison.OrdinalIgnoreCase))
+                return "Review the selected variants before saving.";
+            var existing = _entries.Where(entry => entry.Kind == LexiconKind.Correction &&
+                entry.Key.Equals(original, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (existing.Any(entry => !entry.Value.Equals(word, StringComparison.Ordinal)))
+                return $"A correction for {original} already points to another spelling. Keep it or edit it in Corrections.";
+            if (existing.Length == 0)
+                additions.Add(new() { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Correction,
+                    Original = original, Replacement = word, Source = DictionaryEntrySource.Manual });
+        }
+        if (!_entries.Any(entry => entry.Kind == LexiconKind.Word && entry.Key.Equals(word, StringComparison.OrdinalIgnoreCase)))
+            additions.Add(new() { Id = Guid.NewGuid().ToString(), EntryType = DictionaryEntryType.Term,
+                Original = word, Source = DictionaryEntrySource.Manual });
+        if (_dictionary is not null)
+        {
+            if (additions.Count > 0 && !_dictionary.TryReplaceAll(_dictionary.Entries.Concat(additions).ToArray()))
+                return "Could not save training. Your dictionary was kept unchanged.";
+            RefreshDictionary();
+        }
+        else foreach (var entry in additions)
+            _entries.Add(new(Guid.Parse(entry.Id), entry.EntryType == DictionaryEntryType.Term ? LexiconKind.Word : LexiconKind.Correction,
+                entry.Original, entry.Replacement ?? ""));
+        LastError = null;
+        return null;
+    }
+
     internal bool RemoveCorrectionGroup(string replacement)
     {
         var ids = _entries.Where(entry => entry.Kind == LexiconKind.Correction && !entry.FromPack &&

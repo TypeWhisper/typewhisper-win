@@ -1079,6 +1079,7 @@ public sealed partial class MainWindow : Window
         if (_lexicon is null)
         {
             _lexicon = new LexiconView();
+            _lexicon.ConnectTraining(_dictation);
             _lexicon.ExitRequested += () =>
             {
                 LexiconHost.Visibility = Visibility.Collapsed;
