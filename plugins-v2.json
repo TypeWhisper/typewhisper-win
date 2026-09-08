@@ -44,13 +44,13 @@
     {
       "id": "com.typewhisper.deepgram",
       "name": "Deepgram",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "minHostVersion": "1.1.0",
       "author": "TypeWhisper",
-      "description": "Deepgram Nova transcription engine",
-      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-categories-20260908/com.typewhisper.deepgram-1.1.1-win-x64.zip",
-      "sha256": "47be00763d6cadf0381892b9ad09a05d50fa45bc57b4ed860379afaad91cfff2",
-      "size": 13848,
+      "description": "Live and recorded-audio transcription with Deepgram Nova models.",
+      "downloadUrl": "https://github.com/TypeWhisper/typewhisper-win/releases/download/plugins-v2-streaming-20260908/com.typewhisper.deepgram-1.1.2-win-x64.zip?v=1.1.2",
+      "sha256": "8ec08f959145f0ba31dd6bc491381c4f8e77242469ce3b64b24b3b1b7c280d20",
+      "size": 14744,
       "platforms": [
         "windows"
       ],
