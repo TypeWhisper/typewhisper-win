@@ -1,5 +1,11 @@
 # Windows 1.1 functional comparison
 
+## History read-back startup correction, 2026-09-08
+
+Marco reported that the app was not visible. The process existed but had no main window: the diagnostic log showed `Delegate to an instance method cannot have null this` in the MainWindow constructor. The new History delegates had been assigned before `_dictation` was constructed. Initialization now precedes those bindings.
+
+The prescribed normal-profile build/relaunch passed (`artifacts/history-startup-fix.log`). The restarted process exposed a nonzero main-window handle and title `TypeWhisper Quick Launch Prototype`; the diagnostic log remained unchanged from before the corrected launch. Earlier History read-back launch claims based only on process existence were insufficient and are superseded by this evidence. Native History read/stop acceptance still remains open.
+
 ## History read-back (`90a3914b`), 2026-09-08
 
 History details now offer Read aloud / Stop reading in the bottom action area with P. Saved-audio playback moves to A; F still opens its folder and Enter still copies text. The displayed entry text and language reach the existing local speech controller with current voice/output preferences, independently of automatic feedback. Reading does not replace the last-dictation snapshot or write History/clipboard data.
