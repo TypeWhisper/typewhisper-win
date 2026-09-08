@@ -7,7 +7,7 @@ using TypeWhisper.Presentation;
 namespace TypeWhisper.WinUI;
 
 /// <summary>Guides explicit changes to the same persisted settings used by dictation.</summary>
-public sealed class SetupWizard : UserControl
+public sealed partial class SetupWizard : UserControl
 {
     private readonly LocalDictationSession _session;
     private readonly Dictionary<string, string> _values;
@@ -16,6 +16,9 @@ public sealed class SetupWizard : UserControl
     private readonly Action<string> _openProvider;
     private readonly SetupState _state;
     private readonly StackPanel _body = new() { Spacing = 14 };
+    private readonly Grid _steps = new() { Margin = new Thickness(0, 24, 0, 0) };
+    private readonly ScrollViewer _scroll;
+    private ShortcutRecorder? _shortcutRecorder;
     private readonly TextBlock _message = Copy("");
     private readonly HandCursorButton _next;
     private readonly HandCursorButton _back;
@@ -35,10 +38,16 @@ public sealed class SetupWizard : UserControl
         _session = session; _values = values; _exit = exit; _commitHotkeys = commitHotkeys; _openProvider = openProvider;
         var store = new SetupPreferencesStore(WinUIProfile.DataPath("setup.json"));
         _state = new(store);
-        var shell = new Grid { Padding = new Thickness(24), RowSpacing = 24, MaxWidth = 800 };
-        shell.RowDefinitions.Add(new()); shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        shell.Children.Add(new ScrollViewer { Padding = (Thickness)Application.Current.Resources["VerticalScrollGutter"], Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var footer = new Grid { ColumnSpacing = 12 };
+        var shell = new Grid { Padding = new Thickness(32, 18, 32, 24), RowSpacing = 28, Background = WizardBackground() };
+        shell.RowDefinitions.Add(new() { Height = GridLength.Auto }); shell.RowDefinitions.Add(new()); shell.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        var heading = new StackPanel { MaxWidth = 800, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var title = Copy("TypeWhisper Setup", 20); title.HorizontalAlignment = HorizontalAlignment.Center; title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        heading.Children.Add(title); heading.Children.Add(_steps); shell.Children.Add(heading);
+        _body.MaxWidth = 720; _body.HorizontalAlignment = HorizontalAlignment.Center;
+        _scroll = new ScrollViewer { Padding = new Thickness(12, 0, 12, 12), Content = _body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalContentAlignment = HorizontalAlignment.Center };
+        _scroll.SizeChanged += (_, _) => _body.Width = Math.Max(0, Math.Min(720, _scroll.ActualWidth - 24));
+        Grid.SetRow(_scroll, 1); shell.Children.Add(_scroll);
+        var footer = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 18, 0, 0), BorderThickness = new Thickness(0, 1, 0, 0), BorderBrush = Resource("HairlineBrush") };
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new());
         footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
@@ -49,10 +58,17 @@ public sealed class SetupWizard : UserControl
         _next = Button("Continue", Next);
         _next.Style = (Style)Application.Current.Resources["PrimaryButtonStyle"];
         Grid.SetColumn(_next, 3); footer.Children.Add(_next);
-        Grid.SetRow(footer, 1); shell.Children.Add(footer); Content = shell;
+        Grid.SetRow(footer, 2); shell.Children.Add(footer); Content = shell;
         AutomationProperties.SetLiveSetting(_message, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        Loaded += (_, _) => { _session.Changed += Changed; _session.Models.Changed += Changed; RefreshStatus(); };
-        Unloaded += (_, _) => { _closing = true; _session.Changed -= Changed; _session.Models.Changed -= Changed; };
+        PageKeyboardNavigation.Attach(shell);
+        PreviewKeyDown += (_, e) =>
+        {
+            if (_shortcutRecorder is { IsEditing: true } recorder && (recorder.IsCapturing || e.Key == global::Windows.System.VirtualKey.Escape))
+                recorder.CaptureKeyDown(e);
+        };
+        KeyUp += (_, e) => { if (_shortcutRecorder?.IsCapturing == true) _shortcutRecorder.CaptureKeyUp(e); };
+        Loaded += (_, _) => { _closing = false; _session.Changed += Changed; _session.Models.Changed += Changed; _session.SetupTestTarget = CaptureTestTarget; RefreshStatus(); _testBox?.Focus(FocusState.Programmatic); };
+        Unloaded += (_, _) => { _closing = true; _session.Changed -= Changed; _session.Models.Changed -= Changed; _session.SetupTestTarget = null; };
         _feedback.ReportPersistence(store.Error);
         Render();
     }
@@ -63,12 +79,14 @@ public sealed class SetupWizard : UserControl
         picker.ClosePopup(); return true;
     }
     private void Changed() => DispatcherQueue.TryEnqueue(() => { if (!_closing && IsLoaded) { RefreshModelPickers(); RefreshStatus(); } });
-    private string? Readiness()
+    private string? Readiness(bool currentStep = false)
     {
         bool microphoneAvailable;
         try { microphoneAvailable = _session.GetMicrophones().Count > 0; }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return "Microphones could not be checked. Reopen the microphone step or skip setup."; }
-        return SetupReadiness.Validate(_selecting || !_session.CanChangeProvider,
+        if ((currentStep ? _state.Step : 4) > 0 && MicrophoneAccessStatus() == "Access blocked")
+            return "Allow microphone access in Windows settings to continue, or skip setup.";
+        return SetupReadiness.ValidateStep(currentStep ? _state.Step : 4, _selecting || !_session.CanChangeProvider,
             !string.IsNullOrWhiteSpace(_session.Shortcut) && _session.Shortcut != "No shortcut assigned",
             _session.IsReady, microphoneAvailable);
     }
@@ -76,14 +94,16 @@ public sealed class SetupWizard : UserControl
     private void RefreshStatus()
     {
         _next.Content = _state.Step == 4 ? "Finish setup" : "Continue";
+        _back.Visibility = _state.Step == 0 ? Visibility.Collapsed : Visibility.Visible;
         _back.IsEnabled = !_closing && !_selecting && _state.Step > 0;
-        _next.IsEnabled = !_closing && !_selecting && (_state.Step != 4 || Readiness() is null);
-        _message.Text = _feedback.Message(_state.Step == 4 ? Readiness() : "");
+        _next.IsEnabled = !_closing && !_selecting && Readiness(currentStep: true) is null;
+        _message.Text = _feedback.Message(Readiness(currentStep: true) ?? (_state.Step == 4 && _testSucceeded ? "Your first dictation worked." : ""));
         _message.Visibility = string.IsNullOrWhiteSpace(_message.Text) ? Visibility.Collapsed : Visibility.Visible;
     }
     private void Next()
     {
         if (_closing || _selecting) return;
+        if (Readiness(currentStep: true) is not null) { RefreshStatus(); return; }
         if (_state.Step == 4)
         {
             if (Readiness() is { } error) { _message.Text = error; return; }
@@ -102,43 +122,32 @@ public sealed class SetupWizard : UserControl
     }
     private void Render()
     {
-        _body.Children.Clear(); _pickers.Clear();
+        _body.Children.Clear(); _pickers.Clear(); _shortcutRecorder = null; _testBox = null;
         _providerPicker = _modelPicker = _languagePicker = null; _configureProvider = null;
-        var stepLabel = Copy($"SETUP · STEP {_state.Step + 1} OF 5", 11);
-        stepLabel.Foreground = (Brush)Application.Current.Resources["MutedBrush"];
-        _body.Children.Add(stepLabel);
-        _body.Children.Add(Copy(SetupState.Steps[_state.Step], 24));
-        _body.Children.Add(Copy("Your choices are saved immediately. You can return to setup at any time."));
+        RenderSteps();
+        string[] titles = ["Welcome to TypeWhisper", "Permissions", "Choose your hotkey", "AI & Engine", "Try it out"];
+        string[] subtitles = ["Set up voice typing in a few simple steps.", "Give TypeWhisper access to work on your PC.",
+            "Start and stop dictation without leaving your app.", "Local defaults first. Cloud providers can wait.", "Press your hotkey and say something."];
+        var title = Copy(titles[_state.Step], 27); title.FontWeight = Microsoft.UI.Text.FontWeights.Bold; title.TextAlignment = TextAlignment.Center;
+        _body.Children.Add(title);
+        var subtitle = Copy(subtitles[_state.Step], 17); subtitle.Foreground = Resource("MutedBrush"); subtitle.TextAlignment = TextAlignment.Center; subtitle.Margin = new Thickness(0, 0, 0, 12);
+        _body.Children.Add(subtitle);
         switch (_state.Step)
         {
-            case 0:
-                _body.Children.Add(Copy("Choose your microphone, shortcut, model and output preferences. Extra providers are optional. Cloud models send audio to their provider only when you explicitly start dictation."));
-                break;
-            case 1:
-                var microphones = new MicrophonePriorityEditor(_session);
-                _pickers.Add(microphones.AddPicker); _body.Children.Add(microphones);
-                _body.Children.Add(Copy("TypeWhisper uses the first available microphone in this list, or your Windows default. You'll test it with your first dictation."));
-                break;
-            case 2:
-                AddPicker("Recording mode", Enum.GetValues<RecordingMode>().Select(mode => new Choice(mode.ToString(), mode.ToString(), mode == RecordingMode.Hold ? "Hold the shortcut to record" : mode == RecordingMode.Hybrid ? "Tap to toggle, hold to speak" : "Press to start and stop")).ToArray(),
-                    _session.RecordingModePreferences.Current.ToString(), id => _session.SelectRecordingMode(Enum.Parse<RecordingMode>(id)));
-                _body.Children.Add(new ShortcutRecorder("MainDictationHotkeys", "Main dictation", "Ctrl+Shift+F9", _values,
-                    () => SettingsCatalog.ShortcutBindings(_values), value => _closing ? "Setup is closed." : _commitHotkeys(value)));
-                _body.Children.Add(Copy("The shortcut is active globally as soon as it is saved."));
-                break;
-            case 3:
-                CreateModelPickers();
-                break;
-            case 4:
-                _body.Children.Add(Copy($"Microphone: {_session.SelectedMicrophoneName}\nShortcut: {_session.Shortcut}\nMode: {_session.RecordingModePreferences.Current}\nModel: {_session.ActiveModelName}\nLanguage: {LanguageName(_session.Language)}"));
-                AddPicker("After recording", [new("paste", "Insert directly", "Paste into the original target app"), new("review", "Review first", "Review and copy manually")],
-                    _session.OutputPreferences.Current.AutoPaste ? "paste" : "review", id => _session.OutputPreferences.Save(_session.OutputPreferences.Current with { AutoPaste = id == "paste" }));
-                AddPicker("Save history", [new("yes", "Save transcripts", "Save text to local history"), new("no", "Do not save", "Review remains available without history")],
-                    _session.OutputPreferences.Current.SaveToHistory ? "yes" : "no", id => _session.OutputPreferences.Save(_session.OutputPreferences.Current with { SaveToHistory = id == "yes" }));
-                _body.Children.Add(Copy("Open a text field in another app and use your shortcut for your first dictation."));
-                break;
+            case 0: RenderWelcome(); break;
+            case 1: RenderPermissions(); break;
+            case 2: RenderHotkeys(); break;
+            case 3: RenderEngines(); break;
+            case 4: RenderTest(); break;
         }
         _body.Children.Add(_message); RefreshStatus();
+        _scroll.ChangeView(null, 0, null, true);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_closing || !IsLoaded) return;
+            if (_testBox is not null) _testBox.Focus(FocusState.Programmatic);
+            else (_next.IsEnabled ? _next : _back).Focus(FocusState.Programmatic);
+        });
     }
     private void CreateModelPickers()
     {

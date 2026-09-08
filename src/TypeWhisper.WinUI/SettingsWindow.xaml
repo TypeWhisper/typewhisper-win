@@ -7,7 +7,7 @@
         <Grid.RowDefinitions><RowDefinition Height="38" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
         <Grid x:Name="SettingsDragRegion" Padding="18,0,8,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <StackPanel x:Name="SettingsBrand" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <local:TypeWhisperGlyph Kind="settings" Width="16" Height="16" />
                 <TextBlock Text="TYPEWHISPER" FontSize="11" FontWeight="SemiBold" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                 <TextBlock Text="SETTINGS" FontSize="10" Foreground="{ThemeResource MutedBrush}" Opacity="0.65" />

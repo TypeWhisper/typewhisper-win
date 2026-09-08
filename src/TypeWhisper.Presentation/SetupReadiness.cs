@@ -14,6 +14,16 @@ public sealed class SetupReadiness
         : !modelReady ? "Select a ready model in plugin settings before finishing."
         : !microphoneAvailable ? "No microphone is available. Connect one or skip setup."
         : null;
+    /// <summary>Checks the prerequisite belonging to the current setup step.</summary>
+    public static string? ValidateStep(int step, bool busy, bool hasShortcut, bool modelReady, bool microphoneAvailable) => step switch
+    {
+        0 => null,
+        1 => microphoneAvailable ? null : "Connect a microphone to continue, or skip setup.",
+        2 => hasShortcut ? null : "Save a dictation shortcut to continue.",
+        3 => busy ? "Wait for the model to finish loading." : modelReady ? null : "Choose a ready model or configure its plugin to continue.",
+        _ => Validate(busy, hasShortcut, modelReady, microphoneAvailable)
+    };
+
     /// <summary>Preserves persistence errors across live readiness updates.</summary>
     public string Message(string? readiness) => PersistenceError ?? readiness ?? "Configuration is ready. Audio has not been tested by setup.";
 }

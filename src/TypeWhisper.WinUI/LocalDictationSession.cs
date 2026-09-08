@@ -149,6 +149,9 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     internal bool CanChangeProvider => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !PluginRuntime.IsBusy;
     internal bool CanSelectModel => !_disposed && !_fileBusy && !_recorderReserved && !_workflowReserved && !IsRecording && _phase is not (DictationPhase.Processing or DictationPhase.Configuring or DictationPhase.LoadingModel) && !Models.Busy && Models.Enabled && !PluginRuntime.IsBusy;
     private IntPtr _target;
+    // Setup alone can accept dictation inside this process, while its test field has focus.
+    internal Func<IntPtr, Action<string>?>? SetupTestTarget { get; set; }
+    private Action<string>? _setupOutputAtStart;
     private DateTime _started;
     private bool _disposed;
     private DictationPhase _phase;
@@ -552,7 +555,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _modelAtStart = ActiveModelId;
                 _target = GetForegroundWindow();
                 GetWindowThreadProcessId(_target, out var processId);
-                if (_target == IntPtr.Zero || processId == Environment.ProcessId)
+                _setupOutputAtStart = processId == Environment.ProcessId ? SetupTestTarget?.Invoke(_target) : null;
+                if (_target == IntPtr.Zero || (processId == Environment.ProcessId && _setupOutputAtStart is null))
                 {
                     SetStatus($"Focus a text field in another app, then press {Shortcut}.");
                     return;
@@ -560,7 +564,8 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 _targetProcessId = processId;
                 try { using var process = System.Diagnostics.Process.GetProcessById((int)processId); _targetApp = process.ProcessName; }
                 catch (ArgumentException) { _targetApp = "Target app"; }
-                if (workflow is null) await CaptureWorkflowAtStartAsync();
+                if (_setupOutputAtStart is not null) { _targetHostAtStart = null; _workflowAtStart = null; }
+                else if (workflow is null) await CaptureWorkflowAtStartAsync();
                 else { _targetHostAtStart = null; _workflowAtStart = workflow; }
                 _operationCancellation.Token.ThrowIfCancellationRequested();
                 if (_disposed) return;
@@ -651,6 +656,15 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             { SetStatus("No speech recognized. Ready to try again."); return; }
             // Empty final output does not reuse preview text or its unrelated token timings.
             if (string.IsNullOrWhiteSpace(rawText)) { SetStatus("No speech recognized. Ready to try again."); return; }
+            if (_setupOutputAtStart is { } setupOutput)
+            {
+                // A setup sample never pastes into another app or creates a history entry.
+                _operationCancellation.Token.ThrowIfCancellationRequested();
+                if (_disposed) return;
+                setupOutput(rawText);
+                SetStatus("Setup dictation completed.", DictationPhase.Completed);
+                return;
+            }
             var dictionary = _dictionarySnapshot is null ? null : await _dictionarySnapshot;
             var refinedText = rawText;
             var recordingId = Guid.NewGuid();
@@ -745,7 +759,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
         finally
         {
             await FinishRecoveryLeaseAsync(recoveryLease, preserveRecovery || _disposed);
-            if (!_audio.IsRecording) { _effects.End(); await StopCloudStreamAsync(); }
+            if (!_audio.IsRecording) { _setupOutputAtStart = null; _effects.End(); await StopCloudStreamAsync(); }
             _gate.Release();
         }
     }

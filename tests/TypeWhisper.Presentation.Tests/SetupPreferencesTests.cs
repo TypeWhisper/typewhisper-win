@@ -86,5 +86,20 @@ public sealed class SetupPreferencesTests : IDisposable
         state.ReportPersistence(null);
         Assert.Contains("ready", state.Message(null));
     }
+    [Theory]
+    [InlineData(0, false, false, false, false, true)]
+    [InlineData(1, false, false, false, true, true)]
+    [InlineData(1, false, true, true, false, false)]
+    [InlineData(2, false, true, false, true, true)]
+    [InlineData(2, false, false, true, true, false)]
+    [InlineData(3, true, true, true, true, false)]
+    [InlineData(3, false, true, false, true, false)]
+    [InlineData(3, false, true, true, true, true)]
+    [InlineData(4, false, true, true, false, false)]
+    public void StepValidationReportsProblemsWhereTheyCanBeFixed(int step, bool busy, bool shortcut, bool model, bool microphone, bool ready)
+    {
+        Assert.Equal(ready, SetupReadiness.ValidateStep(step, busy, shortcut, model, microphone) is null);
+    }
+
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true); }
 }

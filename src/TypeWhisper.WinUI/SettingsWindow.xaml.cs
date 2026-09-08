@@ -348,7 +348,7 @@ public sealed partial class SettingsWindow : Window
         if (CreateSetupWizard is null) return;
         foreach (var picker in _catalogPickers.Concat(_appearancePickers)) if (picker.IsPopupOpen) picker.ClosePopup();
         CatalogContent.Children.Clear(); _catalogPickers.Clear();
-        SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Collapsed;
+        SettingsBrand.Visibility = SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Collapsed;
         SetupHost.Child = CreateSetupWizard(ExitSetup);
         SetupHost.Visibility = Visibility.Visible;
     }
@@ -356,7 +356,7 @@ public sealed partial class SettingsWindow : Window
     private void ExitSetup(bool completed)
     {
         SetupHost.Child = null; SetupHost.Visibility = Visibility.Collapsed;
-        SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Visible;
+        SettingsBrand.Visibility = SettingsBody.Visibility = SettingsFooter.Visibility = Visibility.Visible;
         ShowCategory(completed ? "Dictation" : "General");
     }
 
