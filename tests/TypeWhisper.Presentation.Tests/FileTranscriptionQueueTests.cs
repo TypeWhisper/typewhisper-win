@@ -18,6 +18,22 @@ public sealed class FileTranscriptionQueueTests : IDisposable
     }
 
     [Fact]
+    public async Task DirectRecordingRunLeavesOtherQueuedFilesUntouched()
+    {
+        var queue = new FileTranscriptionQueue();
+        Assert.Null(queue.Add(Source("unrelated.wav")));
+        Assert.Null(queue.Add(Source("selected.wav")));
+        var selected = queue.Jobs[1];
+        var calls = new List<string>();
+        await queue.RunAsync((path, _, _) => { calls.Add(path); return Task.FromResult(Output()); }, onlyJob: selected);
+        Assert.Equal(new[] { selected.Path }, calls);
+        Assert.Equal(FileTranscriptionStatus.Queued, queue.Jobs[0].Status);
+        Assert.Equal(FileTranscriptionStatus.Ready, selected.Status);
+        await queue.RunAsync((_, _, _) => throw new Exception("Foreign jobs must not start work"), onlyJob: new("foreign.wav"));
+        Assert.Equal(FileTranscriptionStatus.Queued, queue.Jobs[0].Status);
+    }
+
+    [Fact]
     public async Task RunsSeriallyAndIgnoresConcurrentRunAndMutations()
     {
         var queue = new FileTranscriptionQueue();

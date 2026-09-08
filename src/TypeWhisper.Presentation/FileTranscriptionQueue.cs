@@ -137,27 +137,28 @@ public sealed class FileTranscriptionQueue
 
     /// <summary>Processes queued files serially, preserving completed results on failure or cancellation.</summary>
     /// <param name="process">Decodes and formats one file without writing history or snippet usage.</param>
+    /// <param name="onlyJob">Optional selected job; other queued files remain untouched.</param>
     /// <param name="onAccepted">Optional synchronous persistence commit, called once per accepted result. Its returned warning is shown with the result; failures never discard accepted text.</param>
     public Task RunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process,
-        Func<FileTranscriptionOutput, string?>? onAccepted = null)
+        Func<FileTranscriptionOutput, string?>? onAccepted = null, FileTranscriptionJob? onlyJob = null)
     {
-        if (_shutdown || Running || !_jobs.Any(j => j.Status == FileTranscriptionStatus.Queued)) return Task.CompletedTask;
+        if (_shutdown || Running || (onlyJob is not null && (!_jobs.Contains(onlyJob) || onlyJob.Status != FileTranscriptionStatus.Queued)) || !_jobs.Any(j => j.Status == FileTranscriptionStatus.Queued)) return Task.CompletedTask;
         var cancellation = new CancellationTokenSource();
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _runCompletion = completion.Task;
         _run = cancellation;
-        _ = ExecuteRunAsync(process, onAccepted, cancellation, completion);
+        _ = ExecuteRunAsync(process, onAccepted, cancellation, completion, onlyJob);
         return completion.Task;
     }
 
     private async Task ExecuteRunAsync(Func<string, Action<string>, CancellationToken, Task<FileTranscriptionOutput>> process,
         Func<FileTranscriptionOutput, string?>? onAccepted,
-        CancellationTokenSource cancellation, TaskCompletionSource completion)
+        CancellationTokenSource cancellation, TaskCompletionSource completion, FileTranscriptionJob? onlyJob)
     {
         Exception? failure = null;
         try
         {
-            foreach (var job in _jobs.Where(j => j.Status == FileTranscriptionStatus.Queued).ToArray())
+            foreach (var job in _jobs.Where(j => j.Status == FileTranscriptionStatus.Queued && (onlyJob is null || j == onlyJob)).ToArray())
             {
                 if (cancellation.IsCancellationRequested) break;
                 job.Status = FileTranscriptionStatus.Processing; job.Stage = "Loading audio…"; Changed?.Invoke();
