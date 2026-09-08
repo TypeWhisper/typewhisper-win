@@ -1,5 +1,11 @@
 # Windows 1.1 progress
 
+## Stable tab placement, 2026-09-08
+
+Section tabs now precede the headings in Recorder, History, lexicon, and integration views. Recorder keeps its navigation at the same position on Record and Recordings: the optional recording name is an input inside Record, below the tabs and heading, rather than the shared shell input. The recording form scrolls independently, with a compact timer/status area to avoid clipping in the small window. Actions remain in the footer. Existing global search bars in other sections are unchanged.
+
+The prescribed normal-profile build/relaunch passed (`artifacts/tab-position-build.log`); the application has a nonzero main-window handle and its diagnostic log is unchanged. The source encoding test passed (`artifacts/tab-position-encoding.log`). Native acceptance is pending for stable placement when switching tabs, name entry/saving, and the scrollable recording form. No Computer Use was performed.
+
 ## Shared section tabs (`2dc89f59`), 2026-09-08
 
 PrototypeTabBar is now the shared implementation for Recorder navigation, History kind filters, lexicon sections, installed/discover navigation in both integration views, and installed-plugin filters. New section/filter tab strips should reuse this component. It uses the existing History selected/unselected styles, common spacing/minimum height, a single Tab entry point, Left/Right and Home/End navigation, and selected accessibility status. Selection changes remain owned by each existing view; programmatic selection updates do not invoke user navigation.

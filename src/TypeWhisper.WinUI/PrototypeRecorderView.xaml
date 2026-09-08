@@ -11,15 +11,17 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <StackPanel Margin="8,0,8,12" Spacing="12">
-            <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" Margin="4,0,0,0" MinHeight="32" />
             <local:PrototypeTabBar x:Name="RecorderTabs" />
+            <TextBlock Text="Recorder" FontSize="20" FontWeight="SemiBold" Margin="4,0,0,0" MinHeight="32" />
         </StackPanel>
-        <Grid x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0">
+        <ScrollViewer x:Name="RecordingContent" Grid.Row="1" Margin="12,0,12,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <StackPanel Spacing="9">
+                <TextBox x:Name="RecordingName" Header="Recording name (optional)" PlaceholderText="Untitled recording" MaxLength="200" TextChanged="RecordingName_Changed" AutomationProperties.Name="Recording name" />
                 <TextBlock Text="AUDIO SOURCE" FontSize="10" CharacterSpacing="70" Foreground="{ThemeResource MutedBrush}" />
                 <Grid x:Name="SourceChoices" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -49,12 +51,12 @@
                 </Grid>
             </StackPanel>
             <Grid Grid.Row="1" Margin="0,14,0,0">
-                <StackPanel x:Name="SessionPanel" VerticalAlignment="Center" Spacing="8">
+                <StackPanel x:Name="SessionPanel" VerticalAlignment="Top" Spacing="6">
                     <TextBlock x:Name="RecorderStatus" Text="Ready to record" FontSize="14" HorizontalAlignment="Center"
                         Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
-                    <TextBlock x:Name="RecorderDuration" Text="00:00" FontFamily="Cascadia Mono" FontSize="42"
+                    <TextBlock x:Name="RecorderDuration" Text="00:00" FontFamily="Cascadia Mono" FontSize="32"
                         HorizontalAlignment="Center" />
-                    <canvas:CanvasControl x:Name="SignalCanvas" Draw="SignalCanvas_Draw" Height="52" MaxWidth="420"
+                    <canvas:CanvasControl x:Name="SignalCanvas" Draw="SignalCanvas_Draw" Height="28" MaxWidth="420"
                         HorizontalAlignment="Stretch" ClearColor="Transparent" IsHitTestVisible="False" />
                     <TextBlock x:Name="SessionHint" Text="Choose a source, then start your session." FontSize="12"
                         Foreground="{ThemeResource MutedBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
@@ -76,6 +78,7 @@
                 </Border>
             </Grid>
         </Grid>
+        </ScrollViewer>
         <Grid x:Name="LibraryPanel" Grid.Row="1" Margin="12,4,12,0" Padding="0,0,4,0" Visibility="Collapsed">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <Grid Margin="0,0,0,12">

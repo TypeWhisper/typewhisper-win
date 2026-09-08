@@ -61,7 +61,7 @@ public sealed partial class PrototypeRecorderView : UserControl
         _recorder.Changed += Refresh;
         Refresh();
     }
-    internal void SetPresented(bool presented) { _presented = presented; if (!presented) StopAudioPlayback(); Refresh(); if (presented) { LibraryModeChanged?.Invoke(_libraryOpen); if (_libraryOpen) BeginLibraryRefresh(); } }
+    internal void SetPresented(bool presented) { _presented = presented; if (!presented) StopAudioPlayback(); Refresh(); if (presented) { if (_libraryOpen) BeginLibraryRefresh(); } }
     internal void FocusEntry() { if (_libraryOpen) LibraryEntries.Focus(FocusState.Programmatic); else PrimaryButton.Focus(FocusState.Programmatic); }
     internal void GoBack()
     {
@@ -104,6 +104,7 @@ public sealed partial class PrototypeRecorderView : UserControl
         var selectedPreferences = active || busy || state == RecorderState.SaveFailed ? _preferencesAtStart : _recorderPreferences?.Current;
         var outputHint = selectedPreferences?.OutputDeviceId is null ? "default system output" : "selected system output (Recorder settings)";
         SessionHint.Text = _recorderPreferences?.Error ?? _capture?.Warning ?? $"Audio stays on this device. Up to 60 minutes per recording · {outputHint}.";
+        RecordingName.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneSource.IsEnabled = SystemSource.IsEnabled = !busy && !active && state != RecorderState.SaveFailed;
         MicrophoneState.Text = MicrophoneSource.IsChecked == true ? "On" : "Off";
         SystemState.Text = SystemSource.IsChecked == true ? "On" : "Off";
@@ -151,6 +152,7 @@ public sealed partial class PrototypeRecorderView : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder saving failed: {0}", ex); }
         Refresh();
     }
+    private void RecordingName_Changed(object sender, TextChangedEventArgs e) => SessionTitle = RecordingName.Text;
     private void Source_Changed(object sender, RoutedEventArgs e)
     {
         if (_updatingRecorderPreferences) return;

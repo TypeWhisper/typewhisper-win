@@ -21,13 +21,11 @@ public sealed partial class PrototypeRecorderView
     private bool _refreshingLibrary;
     private RecorderLibraryEntry? SelectedRecording => (LibraryEntries.SelectedItem as ListViewItem)?.Tag as RecorderLibraryEntry;
     internal Func<string, bool>? IsQueuedSource { get; set; }
-    internal event Action<bool>? LibraryModeChanged;
 
     private void ShowLibrary(bool open)
     {
         StopAudioPlayback();
         _libraryOpen = open;
-        LibraryModeChanged?.Invoke(open);
         RecordingContent.Visibility = _libraryOpen ? Visibility.Collapsed : Visibility.Visible;
         LibraryPanel.Visibility = _libraryOpen ? Visibility.Visible : Visibility.Collapsed;
         RecorderTabs.SetSelected(_libraryOpen ? "recordings" : "record");

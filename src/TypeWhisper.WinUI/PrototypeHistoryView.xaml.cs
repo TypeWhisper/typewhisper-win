@@ -304,7 +304,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         RefreshAudioAvailability();
         TranscriptBody.Text = entry.Entry.HasTranscript ? entry.Text
             : "This demo session has been added to History. No audio was captured and no transcript was generated.";
-        ListPage.Visibility = Visibility.Collapsed;
+        ListPage.Visibility = HistoryFilters.Visibility = Visibility.Collapsed;
         ReadingPage.Visibility = Visibility.Visible;
         ListActions.Visibility = Visibility.Collapsed;
         DetailActions.Visibility = Visibility.Visible;
@@ -337,7 +337,7 @@ public sealed partial class PrototypeHistoryView : UserControl
         StopAudioPlayback();
         StopReadback();
         ReadingPage.Visibility = Visibility.Collapsed;
-        ListPage.Visibility = Visibility.Visible;
+        ListPage.Visibility = HistoryFilters.Visibility = Visibility.Visible;
         CopyButton.Visibility = Visibility.Collapsed;
         DetailActions.Visibility = AudioActions.Visibility = Visibility.Collapsed;
         ListActions.Visibility = Visibility.Visible;

@@ -5,12 +5,12 @@
     xmlns:local="using:TypeWhisper.WinUI">
     <Grid PreviewKeyDown="View_PreviewKeyDown">
         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-        <Grid Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
+        <Grid Grid.Row="1" Margin="12,0,12,12" MinHeight="32" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="PluginPageTitle" Text="Integrations" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="PluginSummary" Grid.Column="1" Text="Loading installed plugins…" FontSize="11" Foreground="{ThemeResource MutedBrush}" VerticalAlignment="Center" />
         </Grid>
-        <local:PrototypeTabBar x:Name="IntegrationTabs" Grid.Row="1" Margin="8,0,8,12" />
+        <local:PrototypeTabBar x:Name="IntegrationTabs" Grid.Row="0" Margin="8,0,8,12" />
         <Grid x:Name="PluginListPage" Grid.Row="2" RowSpacing="10">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
             <local:PrototypeTabBar x:Name="PluginFilterTabs" Margin="8,0" />

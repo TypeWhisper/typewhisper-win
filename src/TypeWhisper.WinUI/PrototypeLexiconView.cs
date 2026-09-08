@@ -57,7 +57,7 @@ public sealed class PrototypeLexiconView : UserControl
             if (!_showPacks) { _kind = Enum.Parse<PrototypeLexiconKind>(id); _query = ""; }
             Render();
         };
-        header.Children.Add(_heading); header.Children.Add(_tabs); root.Children.Add(header);
+        header.Children.Add(_tabs); header.Children.Add(_heading); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 8, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
