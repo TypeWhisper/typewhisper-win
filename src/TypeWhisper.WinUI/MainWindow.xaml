@@ -241,7 +241,10 @@
             </StackPanel>
         </Border>
 
-        <local:TypeWhisperGlyph Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Kind="signal" Width="16" Height="16" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0,0,0" ToolTipService.ToolTip="TypeWhisper" AutomationProperties.Name="TypeWhisper" />
+        <Viewbox Grid.Row="4" Visibility="{Binding Visibility, ElementName=QuickLaunchFooter}" Width="22" Height="22"
+                 HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" Stretch="Uniform">
+            <local:SetupLogo ToolTipService.ToolTip="TypeWhisper" />
+        </Viewbox>
         <Grid x:Name="QuickLaunchFooter" Grid.Row="4" Margin="42,0,18,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
