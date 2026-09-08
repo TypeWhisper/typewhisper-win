@@ -39,6 +39,7 @@ public sealed partial class FileTranscriptionView : UserControl
         var header = new StackPanel { Spacing = 14 };
         _tabs.SetItems([new("queue", "Files"), new("watch", "Watch folder")], "queue");
         _tabs.SelectionChanged += id => { _watchTab = id == "watch"; _result = null; Render(); _tabs.SelectedControl.Focus(FocusState.Programmatic); };
+        header.Children.Add(_crumbs);
         header.Children.Add(_tabs);
         var heading = Text("File transcription", 22); heading.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         AutomationProperties.SetHeadingLevel(heading, AutomationHeadingLevel.Level1);
@@ -51,7 +52,6 @@ public sealed partial class FileTranscriptionView : UserControl
         var footer = new Grid { MinHeight = 76, RowSpacing = 10 };
         footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
         footer.RowDefinitions.Add(new() { Height = GridLength.Auto });
-        footer.Children.Add(_crumbs);
         var actionRow = new Grid { ColumnSpacing = 8 };
         actionRow.ColumnDefinitions.Add(new()); actionRow.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         actionRow.Children.Add(_actions); Grid.SetColumn(_primaryHost, 1); actionRow.Children.Add(_primaryHost);

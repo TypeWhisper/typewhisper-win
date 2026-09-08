@@ -63,13 +63,14 @@ public sealed partial class LexiconView : UserControl
         };
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         titleRow.Children.Add(_heading); titleRow.Children.Add(_headingHelp);
+        header.Children.Add(_crumbs);
         header.Children.Add(_tabs); header.Children.Add(titleRow); root.Children.Add(header);
         _scroll = new ScrollViewer { Content = _body, Padding = new Thickness(0, 0, 20, 4), HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(_scroll, 1); root.Children.Add(_scroll);
         AutomationProperties.SetLiveSetting(_notice, AutomationLiveSetting.Polite); Grid.SetRow(_notice, 2); root.Children.Add(_notice);
         var footer = new Grid { MinHeight = 52, ColumnSpacing = 10 }; footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        footer.Children.Add(_crumbs); Grid.SetColumn(_actions, 1); footer.Children.Add(_actions);
+        Grid.SetColumn(_actions, 1); footer.Children.Add(_actions);
         var border = new Border { Child = footer, BorderBrush = Brush("HairlineBrush"), BorderThickness = new Thickness(0, 1, 0, 0) };
         Grid.SetRow(border, 3); root.Children.Add(border); Content = root;
         EntryActionMenu.Attach(this, () => EntryActionMenu.FromButtons(_actions));

@@ -50,8 +50,6 @@ public sealed partial class MainWindow
         }
         var footer = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 12, 0, 12) };
         footer.ColumnDefinitions.Add(new()); footer.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        footer.Children.Add(new TextBlock { Text = "Quick Launch  ›  " + title, FontSize = 12,
-            Foreground = (Brush)Application.Current.Resources["MutedBrush"], VerticalAlignment = VerticalAlignment.Center });
         var back = new HandCursorButton { Content = "Back · Esc", Style = (Style)Application.Current.Resources["SecondaryButtonStyle"] };
         back.Click += (_, _) => CloseUtility(); Grid.SetColumn(back, 1); footer.Children.Add(back);
         var footerBody = new StackPanel { Spacing = 8 };
@@ -60,7 +58,12 @@ public sealed partial class MainWindow
         var border = new Border { Child = footerBody, Margin = new Thickness(24, 0, 24, 0), BorderThickness = new Thickness(0, 1, 0, 0),
             BorderBrush = (Brush)Application.Current.Resources["HairlineBrush"] };
         Grid.SetRow(border, 1); root.Children.Add(border);
-        UtilityHost.Child = root;
+        var navigation = new Breadcrumbs();
+        navigation.SetItems(new("Quick Launch", CloseUtility), new(title));
+        navigation.Margin = new Thickness(24, 4, 24, 8);
+        var shell = new Grid(); shell.RowDefinitions.Add(new() { Height = GridLength.Auto }); shell.RowDefinitions.Add(new());
+        shell.Children.Add(navigation); Grid.SetRow(root, 1); shell.Children.Add(root);
+        UtilityHost.Child = shell;
         SearchSurface.Visibility = CommandSurface.Visibility = QuickLaunchFooter.Visibility = OverlayPreviewPanel.Visibility = Visibility.Collapsed;
         UtilityHost.Visibility = Visibility.Visible;
         back.Focus(FocusState.Programmatic);
