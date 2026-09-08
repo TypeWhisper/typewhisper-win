@@ -823,6 +823,7 @@ public sealed partial class MainWindow : Window
 
     private void Results_ItemClick(object sender, ItemClickEventArgs e)
     {
+        if (_pinDragMoved) return;
         if (e.ClickedItem is Command command)
         {
             _selected = command;

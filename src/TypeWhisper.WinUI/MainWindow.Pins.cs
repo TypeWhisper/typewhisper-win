@@ -19,7 +19,6 @@ public sealed partial class MainWindow
     private void LoadLauncherPins()
     {
         LoadCommandShortcuts();
-        ConfigurePinDragging();
         _launcherSource.Source = _launcherGroups;
         CompactResults.ItemsSource = _launcherSource.View;
         CompactResults.PointerWheelChanged += (_, e) =>
@@ -121,43 +120,84 @@ public sealed partial class MainWindow
         { MetricsText.Text = "The order could not be saved. Please try again."; }
     }
 
-    private void ConfigurePinDragging()
+    private global::Windows.Foundation.Point _pinDragOrigin;
+    private bool _pinDragMoved;
+
+    private void Pin_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
-        CompactResults.CanDragItems = true;
-        CompactResults.AllowDrop = true;
-        CompactResults.DragItemsStarting += (_, e) =>
+        if (sender is not Microsoft.UI.Xaml.FrameworkElement { DataContext: Command command } row ||
+            !_pinnedCommands.Contains(command.Key) || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
+        _draggedPin = command.Key;
+        _pinDragMoved = false;
+        _pinDragOrigin = e.GetCurrentPoint(CompactResults).Position;
+        row.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private (Command Command, bool After)? PinTarget(global::Windows.Foundation.Point point)
+    {
+        for (var index = 0; index < CompactResults.Items.Count; index++)
         {
-            _draggedPin = e.Items.OfType<Command>().FirstOrDefault()?.Key;
-            if (_draggedPin is null || !_pinnedCommands.Contains(_draggedPin))
-            { _draggedPin = null; e.Cancel = true; return; }
-            e.Data.Properties["TypeWhisper.Pin"] = _draggedPin;
-            e.Data.RequestedOperation = global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
-        };
-        CompactResults.DragItemsCompleted += (_, _) => _draggedPin = null;
-        Microsoft.UI.Xaml.Controls.ListViewItem? Row(object source)
-        {
-            for (var node = source as Microsoft.UI.Xaml.DependencyObject; node is not null && node != CompactResults;
-                 node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
-                if (node is Microsoft.UI.Xaml.Controls.ListViewItem row) return row;
-            return null;
+            if (CompactResults.ContainerFromIndex(index) is not Microsoft.UI.Xaml.Controls.ListViewItem row ||
+                CompactResults.ItemFromContainer(row) is not Command target || !_pinnedCommands.Contains(target.Key)) continue;
+            var bounds = row.TransformToVisual(CompactResults).TransformBounds(
+                new global::Windows.Foundation.Rect(0, 0, row.ActualWidth, row.ActualHeight));
+            if (bounds.Contains(point)) return (target, point.Y > bounds.Y + bounds.Height / 2);
         }
-        CompactResults.DragOver += (_, e) =>
+        return null;
+    }
+
+    private void Pin_PointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (_draggedPin is null) return;
+        var point = e.GetCurrentPoint(CompactResults);
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if (Math.Abs(point.Position.Y - _pinDragOrigin.Y) < 6 && Math.Abs(point.Position.X - _pinDragOrigin.X) < 6 && !_pinDragMoved) return;
+        _pinDragMoved = true;
+        if (PinTarget(point.Position) is { } target)
+            MetricsText.Text = (target.After ? "Move below " : "Move above ") + target.Command.Title;
+        e.Handled = true;
+    }
+
+    private void Pin_PointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        var key = _draggedPin;
+        var moved = _pinDragMoved;
+        var target = PinTarget(e.GetCurrentPoint(CompactResults).Position);
+        _draggedPin = null;
+        if (sender is Microsoft.UI.Xaml.UIElement row) row.ReleasePointerCapture(e.Pointer);
+        if (key is null) return;
+        if (!moved)
         {
-            var row = Row(e.OriginalSource);
-            var target = row is null ? null : CompactResults.ItemFromContainer(row) as Command;
-            e.AcceptedOperation = _draggedPin is not null && target is not null && _pinnedCommands.Contains(target.Key)
-                ? global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move
-                : global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
             e.Handled = true;
-        };
-        CompactResults.Drop += (_, e) =>
+            if (target?.Command.Key == key)
+            {
+                _selected = target.Value.Command;
+                RunSelected();
+            }
+            return;
+        }
+        e.Handled = true;
+        DispatcherQueue.TryEnqueue(() =>
         {
-            var row = Row(e.OriginalSource);
-            if (_draggedPin is { } key && row is not null && CompactResults.ItemFromContainer(row) is Command target)
-                MovePin(key, target.Key, e.GetPosition(row).Y > row.ActualHeight / 2);
-            _draggedPin = null;
-            e.Handled = true;
-        };
+            if (target is { } destination) MovePin(key, destination.Command.Key, destination.After);
+            _pinDragMoved = false;
+        });
+    }
+
+    private void Pin_PointerCaptureLost(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _draggedPin = null;
+    }
+
+    private void PinRow_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (sender is not Microsoft.UI.Xaml.FrameworkElement row || row.Tag is true) return;
+        row.Tag = true;
+        row.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(Pin_PointerPressed), true);
+        row.AddHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(Pin_PointerMoved), true);
+        row.AddHandler(Microsoft.UI.Xaml.UIElement.PointerReleasedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(Pin_PointerReleased), true);
+        row.PointerCaptureLost += Pin_PointerCaptureLost;
     }
 
     private IEnumerable<Command> LauncherCommands() => Commands.Concat(WorkflowsView.LauncherEntries

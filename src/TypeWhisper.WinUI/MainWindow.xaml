@@ -143,7 +143,7 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:Command">
-                            <Grid Padding="10,6">
+                            <Grid Padding="10,6" Background="Transparent" Loaded="PinRow_Loaded">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="36" />
                                     <ColumnDefinition Width="*" />
