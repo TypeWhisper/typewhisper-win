@@ -108,6 +108,11 @@
             <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <ScrollViewer Padding="{StaticResource VerticalScrollGutter}" x:Name="ConfigurationScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel x:Name="ConfigurationFields" Spacing="10" Margin="0,0,16,8">
+                    <StackPanel Spacing="10" Margin="0,0,0,12">
+                        <Border x:Name="TemplateHelp" />
+                        <TextBlock Text="Choose the result this workflow should produce." FontSize="12" Foreground="{ThemeResource MutedBrush}" TextWrapping="Wrap" />
+                        <local:WorkflowTemplatePicker x:Name="ConfigTemplate" />
+                    </StackPanel>
                     <ToggleSwitch x:Name="ConfigEnabled" Header="Enable workflow" OnContent="Enabled" OffContent="Disabled"
                         Toggled="ConfigEnabled_Toggled" AutomationProperties.Name="Enable workflow" />
                     <StackPanel Spacing="7">
@@ -139,10 +144,6 @@
                     <StackPanel Spacing="7">
                         <TextBlock Text="PRIORITY (LOWER WINS)" FontSize="10" Foreground="{ThemeResource MutedBrush}" />
                         <TextBox x:Name="ConfigPriority" Style="{StaticResource WorkflowEditorStyle}" AcceptsReturn="False" TextWrapping="NoWrap" Height="44" MaxLength="11" TextChanged="Configuration_Changed" AutomationProperties.Name="Workflow priority" />
-                    </StackPanel>
-                    <StackPanel Spacing="7">
-                        <Border x:Name="TemplateHelp" />
-                        <local:ChoicePicker x:Name="ConfigTemplate" />
                     </StackPanel>
                     <StackPanel x:Name="ConfigTranslationSection" Spacing="7" Visibility="Collapsed">
                         <Border x:Name="TranslationHelp" />

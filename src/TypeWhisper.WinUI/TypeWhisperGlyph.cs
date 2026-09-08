@@ -99,6 +99,15 @@ public sealed class TypeWhisperGlyph : UserControl
                 Line(drawing, 1, 10, 7, 8); Line(drawing, 7, 8, 9, 2);
                 Line(drawing, 16, 1, 16, 5); Line(drawing, 14, 3, 18, 3);
                 break;
+            case "globe":
+                drawing.DrawCircle(10, 10, 8, Accent, 1.4f);
+                drawing.DrawEllipse(10, 10, 4, 8, Accent, 1.4f);
+                Line(drawing, 2, 10, 18, 10); Line(drawing, 4, 5, 16, 5); Line(drawing, 4, 15, 16, 15);
+                break;
+            case "mail":
+                drawing.DrawRoundedRectangle(2, 4, 16, 12, 1, 1, Accent, 1.4f);
+                Line(drawing, 2, 5, 10, 11); Line(drawing, 10, 11, 18, 5);
+                break;
             case "home":
                 Line(drawing, 2, 9, 10, 2); Line(drawing, 10, 2, 18, 9);
                 Line(drawing, 4, 8, 4, 18); Line(drawing, 4, 18, 16, 18); Line(drawing, 16, 18, 16, 8);
