@@ -90,7 +90,7 @@ public sealed class GroqPlugin : ITranscriptionEnginePlugin, ILlmProviderPlugin,
 #if WINDOWS
     public string PluginVersion => "1.0.6";
 #else
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
 #endif
 
     /// <inheritdoc />

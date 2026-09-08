@@ -106,7 +106,7 @@ public sealed class SherpaOnnxPlugin : ITypeWhisperPlugin, IPcmTranscriptionEngi
 #if WINDOWS
     public string PluginVersion => "1.0.5";
 #else
-    public string PluginVersion => "1.1.0";
+    public string PluginVersion => "1.1.1";
 #endif
 
     // ITranscriptionEnginePlugin
