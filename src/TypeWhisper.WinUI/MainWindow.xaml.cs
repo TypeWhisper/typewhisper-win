@@ -1170,8 +1170,12 @@ public sealed partial class MainWindow : Window
                     content.Children.Clear(); pickers.Clear();
                     content.Children.Add(new TextBlock { Text = "Advanced", FontSize = 22, Margin = new Thickness(0, 0, 0, 12) });
                     content.Children.Add(new HttpApiSettingsView(_httpApi));
-                    content.Children.Add(new CliSettingsView { Margin = new Thickness(0, 16, 0, 0) });
-                    content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18, Margin = new Thickness(0, 16, 0, 0) });
+                    Border SectionDivider() => new() { Height = 1, Margin = new Thickness(0, 12, 0, 12),
+                        Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["HairlineBrush"] };
+                    content.Children.Add(SectionDivider());
+                    content.Children.Add(new CliSettingsView());
+                    content.Children.Add(SectionDivider());
+                    content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18 });
                     content.Children.Add(new RaycastIntegrationView());
                 }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)

@@ -28,7 +28,7 @@ internal static class LocalApiDocumentation
         <p class="muted">TYPEWHISPER · API 1.1</p>
         <h1>Connect your scripts to TypeWhisper</h1>
         <p>Transcribe audio using the Dictation model or a request-scoped engine/model override. Keep TypeWhisper running with the HTTP API enabled under Settings → Advanced.</p>
-        <nav aria-label="Contents"><a href="#start">Quick start</a><a href="#endpoints">Endpoints</a><a href="#options">Options</a><a href="#discovery">Auto-discovery</a><a href="#errors">Errors</a></nav>
+        <nav aria-label="Contents"><a href="#start">Quick start</a><a href="#cli">CLI</a><a href="#endpoints">Endpoints</a><a href="#options">Options</a><a href="#discovery">Auto-discovery</a><a href="#errors">Errors</a></nav>
         <h2 id="start">Quick start</h2>
         <p>Base address: <code>http://127.0.0.1:{{PORT}}</code>. Copy your API token in Advanced settings. In PowerShell, replace <code>YOUR_API_TOKEN</code> below. Use <code>curl.exe</code> explicitly.</p>
         <pre><code>curl.exe http://127.0.0.1:{{PORT}}/v1/status
@@ -36,6 +36,17 @@ internal static class LocalApiDocumentation
         curl.exe -H "Authorization: Bearer $token" http://127.0.0.1:{{PORT}}/v1/models
         curl.exe -H "Authorization: Bearer $token" -F "file=@C:/Audio/sample.wav" http://127.0.0.1:{{PORT}}/v1/transcribe</code></pre>
         <p>Token authentication is optional. Leave <strong>Require API token</strong> off for the existing Raycast extension. When enabled, only GET <code>/docs</code>, <code>/docs/</code> and <code>/v1/status</code> are public; other requests need <code>Authorization: Bearer &lt;token&gt;</code> or <code>X-TypeWhisper-API-Token: &lt;token&gt;</code>. Never put the token in a URL. This page contains no credentials and sends no API requests.</p>
+        <h2 id="cli">Command line tool</h2>
+        <p>Install the CLI in Settings → Advanced → Command Line Tool, then open a new terminal. The CLI discovers the installing app's profile, API port and required token automatically. Keep the HTTP API enabled.</p>
+        <pre><code>typewhisper status
+        typewhisper models
+        typewhisper last
+        typewhisper history --limit 20
+        typewhisper transcribe "C:\Audio\recording.wav"
+        typewhisper transcribe "C:\Audio\recording.wav" --translate-to de
+        typewhisper --help</code></pre>
+        <p>Replace the audio path with your file. Target-language translation uses the default workflow LLM on Windows. Add <code>--json</code> for JSON output or <code>--no-corrections</code> to skip dictionary corrections. Commands that read status, models and history do not change your data.</p>
+        <p><a href="https://www.typewhisper.com/en/docs/windows/cli/">Full CLI documentation and Mac comparison</a></p>
         <h2 id="endpoints">Endpoints</h2>
         <table><thead><tr><th scope="col">Request</th><th scope="col">Result</th></tr></thead><tbody>
         <tr><td>GET /v1/status</td><td>Server liveness and API version.</td></tr>
