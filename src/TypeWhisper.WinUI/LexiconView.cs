@@ -293,6 +293,7 @@ public sealed partial class LexiconView : UserControl
 
     private void OpenEditor(LexiconEntry entry)
     {
+        _apiEditorBaseline = _store.Entries.FirstOrDefault(current => current.Id == entry.Id);
         _original = _draft = entry; Render();
         DispatcherQueue.TryEnqueue(() => _body.Children.OfType<StackPanel>().SelectMany(panel => panel.Children).OfType<Border>()
             .Select(border => border.Child).OfType<TextBox>().FirstOrDefault()?.Focus(FocusState.Programmatic));
@@ -408,11 +409,12 @@ public sealed partial class LexiconView : UserControl
                 _notice.Text = "Delete this entry? Installed production data is unchanged.";
                 _actions.Children.Clear();
                 _actions.Children.Add(Button("Keep entry", () => { RenderActions(); _notice.Text = "Entry kept."; }));
-                _actions.Children.Add(Button("Delete entry", () => { if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? "Could not delete entry."; return; } CloseEditor(); _notice.Text = "Entry deleted."; }, destructive: true));
+                _actions.Children.Add(Button("Delete entry", () => { if (!CanSaveApiEditor()) return; if (!_store.Remove(_draft!.Id)) { _notice.Text = _store.LastError ?? "Could not delete entry."; return; } CloseEditor(); _notice.Text = "Entry deleted."; }, destructive: true));
             }, destructive: true));
         _actions.Children.Add(Button("Cancel", () => Navigate(CloseEditor)));
         _actions.Children.Add(Button("Save", () =>
         {
+            if (!CanSaveApiEditor()) return;
             var error = _store.Save(_draft!);
             if (error is not null) { _notice.Text = error; return; }
             CloseEditor(); _notice.Text = _kind == LexiconKind.Snippet ? "Snippet saved for the next dictation." : "Dictionary saved for the next dictation.";

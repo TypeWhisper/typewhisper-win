@@ -8,6 +8,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/TypeWhisper.WinUI/RecorderView.Api.cs" Link="RecorderView.Api.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayLayout.cs" Link="OverlayLayout.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/WorkflowDraft.cs" Link="WorkflowDraft.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/OverlayPreferencesStore.cs" Link="OverlayPreferencesStore.cs" />
@@ -34,6 +35,7 @@
     <Compile Include="../../src/TypeWhisper.WinUI/LocalLivePreview.cs" Link="LocalLivePreview.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictionaryTrainingPlan.cs" Link="DictionaryTrainingPlan.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/Lexicon.cs" Link="Lexicon.cs" />
+    <Compile Include="../../src/TypeWhisper.WinUI/LocalApiDataHandler.cs" Link="LocalApiDataHandler.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationDictionarySnapshot.cs" Link="DictationDictionarySnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationSnippetSnapshot.cs" Link="DictationSnippetSnapshot.cs" />
     <Compile Include="../../src/TypeWhisper.WinUI/DictationLexiconSnapshot.cs" Link="DictationLexiconSnapshot.cs" />

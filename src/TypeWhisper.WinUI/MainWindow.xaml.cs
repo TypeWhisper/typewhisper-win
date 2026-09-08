@@ -407,6 +407,12 @@ public sealed partial class MainWindow : Window
         HistoryView.Connect(new TypeWhisper.Presentation.HistoryReader(historyService), new TypeWhisper.Presentation.HistoryActions(historyService), historyService);
         _dictation = new LocalDictationSession(historyService, WinRT.Interop.WindowNative.GetWindowHandle(this));
         _httpApi = new WinUIHttpApi(_dictation, DispatcherQueue);
+        _httpApi.DataChanged += () =>
+        {
+            _lexicon?.RefreshApiData();
+            WorkflowsView.RefreshApiData();
+            if (_workflowShortcuts?.Initialize() is { } error) MetricsText.Text = error;
+        };
         HistoryView.ReadTranscript = _dictation.ReadHistoryAsync;
         HistoryView.StopReading = _dictation.StopHistoryReadbackAsync;
         _dictation.StopHistoryPlayback = () => { HistoryView.StopAudioPlayback(); RecorderView.StopAudioPlayback(); };
@@ -432,6 +438,8 @@ public sealed partial class MainWindow : Window
         HistoryView.ExitRequested += (_, _) => CloseHistory();
         RecorderView.ExitRequested += (_, _) => CloseRecorder();
         RecorderView.Connect(_dictation);
+        _httpApi.RecorderRequest = RecorderView.HandleApiAsync;
+        _httpApi.ImportSettings = (store, preview) => RestoreApiProfile?.Invoke(store, preview) ?? Task.CompletedTask;
         RecorderView.IsQueuedSource = path => _fileTranscription?.ContainsSource(path) == true;
         RecorderView.TranscribeRequested += path =>
         {
@@ -1162,6 +1170,8 @@ public sealed partial class MainWindow : Window
                     content.Children.Clear(); pickers.Clear();
                     content.Children.Add(new TextBlock { Text = "Advanced", FontSize = 22, Margin = new Thickness(0, 0, 0, 12) });
                     content.Children.Add(new HttpApiSettingsView(_httpApi));
+                    content.Children.Add(new TextBlock { Text = "Integrations", FontSize = 18, Margin = new Thickness(0, 16, 0, 0) });
+                    content.Children.Add(new RaycastIntegrationView());
                 }
                 if (category == "Shortcuts" && _cancelProcessingHotkey?.Error is { } shortcutError)
                     content.Children.Add(new TextBlock { Text = shortcutError, TextWrapping = TextWrapping.Wrap });

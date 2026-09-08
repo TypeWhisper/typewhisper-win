@@ -149,6 +149,25 @@ internal sealed class LocalTranscriptionPlugin : IAsyncDisposable
         }
     }
 
+    internal async Task<string?> UnloadAsync(CancellationToken ct)
+    {
+        if (!await _operations.WaitAsync(0, ct)) throw new InvalidOperationException("A model operation is already in progress.");
+        Busy = true; Error = null; Changed?.Invoke();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var engine = _lease?.Engine ?? throw new InvalidOperationException("Enable the local plugin first.");
+            ct.ThrowIfCancellationRequested();
+            var previous = ActiveModelId;
+            await engine.UnloadModelAsync();
+            ActiveModelId = null;
+            Feedback = "Model unloaded. Select a downloaded model to use it again.";
+            ct.ThrowIfCancellationRequested();
+            return previous;
+        }
+        finally { Busy = false; _operations.Release(); Changed?.Invoke(); }
+    }
+
     internal async Task DownloadAsync(string modelId)
     {
         if (!await _operations.WaitAsync(0)) throw new InvalidOperationException("A model operation is already in progress.");

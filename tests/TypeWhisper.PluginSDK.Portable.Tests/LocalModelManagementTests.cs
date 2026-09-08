@@ -31,6 +31,62 @@ public sealed class LocalModelManagementTests : IDisposable
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
     [Fact]
+    public async Task ExplicitUnloadKeepsPluginAndDownloadedModelsAvailableForReload()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        Assert.Equal(LocalTranscriptionPlugin.ModelId, await runtime.UnloadAsync(default));
+        Assert.True(runtime.Enabled);
+        Assert.False(runtime.Ready);
+        Assert.Null(runtime.ActiveModelId);
+        Assert.False(_lifetime.Disposed);
+        Assert.True(runtime.Models.Single(model => model.Model.Id == LocalTranscriptionPlugin.ModelId).Downloaded);
+        _engine.Verify(engine => engine.UnloadModelAsync(), Times.Once);
+        await runtime.ActivateAsync(LocalTranscriptionPlugin.ModelId);
+        Assert.True(runtime.Ready);
+        Assert.Equal(2, _loads.Count);
+    }
+
+    [Fact]
+    public async Task FailedUnloadDoesNotPublishAnUnloadedModel()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        _engine.Setup(engine => engine.UnloadModelAsync()).ThrowsAsync(new IOException("Unload failed"));
+        await Assert.ThrowsAsync<IOException>(() => runtime.UnloadAsync(default));
+        Assert.True(runtime.Ready);
+        Assert.False(runtime.Busy);
+        Assert.False(_lifetime.Disposed);
+    }
+
+    [Fact]
+    public async Task CanceledUnloadDoesNotCallNativeEngine()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runtime.UnloadAsync(cancellation.Token));
+        Assert.True(runtime.Ready);
+        _engine.Verify(engine => engine.UnloadModelAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task CancellationDuringUnloadDrainsNativeWorkAndReflectsReleasedResources()
+    {
+        await using var runtime = Create(); await runtime.InitializeAsync();
+        var native = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _engine.Setup(engine => engine.UnloadModelAsync()).Returns(native.Task);
+        using var cancellation = new CancellationTokenSource();
+        var unloading = runtime.UnloadAsync(cancellation.Token);
+        cancellation.Cancel();
+        Assert.False(unloading.IsCompleted);
+        Assert.True(runtime.Busy);
+        native.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => unloading);
+        Assert.False(runtime.Ready);
+        Assert.False(runtime.Busy);
+        Assert.True(runtime.Enabled);
+    }
+
+    [Fact]
     public async Task FullDecodeRetainsSdkSegmentsAndProbabilityWithoutReconstructingTiming()
     {
         var response = new PluginTranscriptionResult("Hallo Welt", "de", 2, 0.2f)

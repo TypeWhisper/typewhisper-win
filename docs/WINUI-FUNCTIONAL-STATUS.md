@@ -1,3 +1,7 @@
+## HTTP API compatibility update — 2026-09-08
+
+All 29 Mac method/path pairs are connected in WinUI. The unchanged Raycast extension works with optional token authentication disabled, confirmed by Marco. Advanced now keeps the API section compact and collapses it when disabled; the Raycast link uses the native app protocol when installed, with a Store fallback. Native route/data/model/recorder/dictation acceptance passed; changed profile-backup import plus restart and concurrent-import rejection were verified separately. See WINUI-HTTP-API.md for parameter and platform limits.
+
 # Windows 1.1 functional comparison
 
 ## HTTP API and discovery, 2026-09-08

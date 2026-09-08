@@ -268,6 +268,7 @@ public sealed partial class WorkflowsView : UserControl
         if (_closing || _run is not null || _opened is null || _store is null || _loadError is not null) return;
         try
         {
+            RequireUnchangedApiWorkflow(_opened);
             var updated = WorkflowDraft.FromStored(Shortcuts is { } shortcuts
                 ? shortcuts.SetEnabled(_opened.Id, !_opened.IsEnabled) : _store.SetEnabled(_opened.Id, !_opened.IsEnabled));
             var index = _workflows.FindIndex(item => item.Id == updated.Id);
@@ -354,7 +355,8 @@ public sealed partial class WorkflowsView : UserControl
         || ConfigPriority.Text != _opened.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture)
         || ConfigTemplate.SelectedId != _opened.Template.ToString() || ConfigTranslationTarget.Text != (_opened.TranslationTarget ?? "")
         || ConfigProvider.SelectedId != _opened.ProviderId || ConfigModel.SelectedId != _opened.ModelId || ConfigOutput.SelectedId != _opened.OutputTarget || ConfigEnabled.IsOn != _opened.IsEnabled);
-    private string? ConfigurationError => string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
+    private string? ConfigurationError => _apiConfigurationConflict is { } apiConflict ? apiConflict
+        : string.IsNullOrWhiteSpace(ConfigName.Text) ? "Enter a workflow name."
         : ConfigTrigger.SelectedId is "Hotkey" or "DictationHotkey" && ShortcutDraftError is { } shortcutError ? shortcutError
         : ConfigTrigger.SelectedId == "App" && string.IsNullOrWhiteSpace(ConfigAppProcesses.Text) ? "Enter at least one Windows process name."
         : ConfigTrigger.SelectedId is "App" or "Website" && !string.IsNullOrWhiteSpace(ConfigAppProcesses.Text)
@@ -390,6 +392,7 @@ public sealed partial class WorkflowsView : UserControl
 
     private void LoadConfiguration()
     {
+        _apiConfigurationConflict = null;
         if (_opened is null) return;
         ConfigurationDiscardTitle.Text = _creating ? "Discard this new workflow?" : "Discard your changes?";
         ConfigurationDiscardDescription.Text = _creating ? "This draft has not been created. Discarding it leaves your workflow list unchanged."
@@ -498,6 +501,7 @@ public sealed partial class WorkflowsView : UserControl
         try
         {
             if (_store is null || _loadError is not null) throw new InvalidOperationException("Workflow storage is unavailable.");
+            RequireUnchangedApiWorkflow(_opened);
             var stored = updated.ToStored();
             if (Shortcuts is { } shortcuts) shortcuts.Save(stored);
             else if (stored.Trigger.Kind == WorkflowTriggerKind.Hotkey) throw new InvalidOperationException("Wait for workflow shortcuts to initialize.");
@@ -542,6 +546,7 @@ public sealed partial class WorkflowsView : UserControl
                 PrimaryButtonText = "Delete", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Close
             };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary || _closing) return;
+            RequireUnchangedApiWorkflow(workflow);
             if (Shortcuts is { } shortcuts) shortcuts.Delete(workflow.Id);
             else _store.Delete(workflow.Id, allowAutomatic: true);
             _workflows.RemoveAll(w => w.Id == workflow.Id);

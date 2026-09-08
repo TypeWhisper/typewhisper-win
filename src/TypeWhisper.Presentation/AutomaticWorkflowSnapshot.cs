@@ -40,6 +40,15 @@ public sealed class AutomaticWorkflowSnapshot
         return new(workflow, null);
     }
 
+    /// <summary>Captures an explicitly requested API workflow after validating its supported semantics.</summary>
+    public static AutomaticWorkflowSnapshot ForApi(Workflow workflow)
+    {
+        if (!workflow.IsEnabled) throw new InvalidOperationException("This workflow is disabled.");
+        var error = UnsupportedReason(workflow);
+        if (error is not null) throw new InvalidOperationException(error);
+        return new(workflow, null);
+    }
+
     /// <summary>Selects App, Website and Global rules using a one-time browser hostname; manual and hotkey rules remain separate.</summary>
     public static AutomaticWorkflowSnapshot? Select(IEnumerable<Workflow> workflows, string? processName, string? browserHost = null,
         Func<Workflow, Workflow>? resolve = null)

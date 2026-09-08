@@ -78,6 +78,7 @@ public sealed partial class RecorderView : UserControl
     private void Refresh()
     {
         if (!_initialized) return;
+        UpdateApiRecorderSession();
         var state = _recorder?.State ?? RecorderState.Ready;
         var busy = _recorder?.Busy == true;
         var active = state is RecorderState.Recording or RecorderState.Paused;
@@ -133,16 +134,27 @@ public sealed partial class RecorderView : UserControl
             if (_recorder.State == RecorderState.SaveFailed) await _recorder.RetrySaveAsync();
             else
             {
-                _recordingTitle = RecorderWavStore.NormalizeTitle(SessionTitle);
-                _recordingDeleted = false;
-                _preferencesAtStart = _recorderPreferences?.Current ?? new RecorderPreferences();
-                _capture?.BeginSession();
-                await _recorder.StartAsync(_preferencesAtStart.MicrophoneEnabled, _preferencesAtStart.SystemAudioEnabled);
-                _automaticStop = false; _timer.Start();
+                await StartRecordingAsync(_recorderPreferences?.Current ?? new RecorderPreferences());
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException) { Trace.TraceError("Recorder operation failed: {0}", ex); }
         Refresh();
+    }
+    private async Task StartRecordingAsync(RecorderPreferences preferences)
+    {
+        if (_recorder is null) throw new InvalidOperationException("The recorder is unavailable.");
+        // A new UI recording must not overwrite the previous API session's polling result.
+        if (_apiRecorderSession is { Started: true }) _apiRecorderSession = null;
+        _recordingTitle = RecorderWavStore.NormalizeTitle(SessionTitle);
+        _recordingDeleted = false;
+        _preferencesAtStart = preferences;
+        _capture?.BeginSession();
+        await _recorder.StartAsync(preferences.MicrophoneEnabled, preferences.SystemAudioEnabled);
+        _updatingRecorderPreferences = true;
+        MicrophoneSource.IsChecked = preferences.MicrophoneEnabled;
+        SystemSource.IsChecked = preferences.SystemAudioEnabled;
+        _updatingRecorderPreferences = false;
+        _automaticStop = false; _timer.Start();
     }
     private async Task StopAsync()
     {

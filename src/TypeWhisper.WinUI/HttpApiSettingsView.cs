@@ -11,46 +11,85 @@ internal sealed class HttpApiSettingsView : UserControl
 {
     internal HttpApiSettingsView(WinUIHttpApi api)
     {
-        var body = new StackPanel { Spacing = 16 };
-        var heading = Text("HTTP API", 18); body.Children.Add(heading);
-        body.Children.Add(Text("Connect local scripts and apps to TypeWhisper. Requests use the model selected in Dictation.", 14));
+        var body = new StackPanel { Spacing = 12 };
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var heading = Text("HTTP API", 18);
+        heading.VerticalAlignment = VerticalAlignment.Center;
+        header.Children.Add(heading);
         var enabled = AppToggleSwitch.Create(api.Enabled);
         AutomationProperties.SetName(enabled, "Enable HTTP API");
-        body.Children.Add(Text("Enable HTTP API", 14)); body.Children.Add(enabled);
-        var port = new NumberBox { Value = api.Port, Minimum = 1024, Maximum = 65535,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, Header = "Port", Width = 240,
-            HorizontalAlignment = HorizontalAlignment.Left };
-        body.Children.Add(port);
+        Grid.SetColumn(enabled, 1);
+        header.Children.Add(enabled);
+        body.Children.Add(header);
+
         var status = Text(api.Status, 13);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         body.Children.Add(status);
-        body.Children.Add(Text("Only connections from this computer are accepted. API requests except status require the API token. Documentation is public. Browser-origin requests are blocked.", 13));
-        body.Children.Add(Text("Auto-discovery: api-discovery.json and api-port in this profile. The discovery token is readable only by your Windows user.", 13));
-        body.Children.Add(Text("Available: status, models, capabilities and file transcription (upload or local path). JSON, text and provider-timed subtitles are supported.", 13));
-        var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        var details = new StackPanel { Spacing = 12 };
+        body.Children.Add(details);
+        var port = new NumberBox { Value = api.Port, Minimum = 1024, Maximum = 65535,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, Header = "Port", Width = 200,
+            HorizontalAlignment = HorizontalAlignment.Left };
+        details.Children.Add(port);
+        var authenticationRow = new Grid();
+        authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        authenticationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var authenticationLabel = Text("Require API token", 14);
+        authenticationLabel.VerticalAlignment = VerticalAlignment.Center;
+        authenticationRow.Children.Add(authenticationLabel);
+        var requireAuthentication = AppToggleSwitch.Create(api.RequireAuthentication);
+        AutomationProperties.SetName(requireAuthentication, "Require API token");
+        Grid.SetColumn(requireAuthentication, 1);
+        authenticationRow.Children.Add(requireAuthentication);
+        details.Children.Add(authenticationRow);
+        details.Children.Add(Text("Leave off for the existing Raycast extension. Local apps can then connect without a token.", 13));
+        var documentation = new HyperlinkButton { Content = "Open documentation", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(0) };
+        details.Children.Add(documentation);
+        var footer = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         HandCursorButton Button(string title, bool primary = false) => new()
         {
             Content = title, Style = (Style)Application.Current.Resources[primary ? "PrimaryButtonStyle" : "SecondaryButtonStyle"]
         };
-        var documentation = new HyperlinkButton { Content = "Open documentation", HorizontalAlignment = HorizontalAlignment.Left };
-        body.Children.Add(documentation);
         var copyAddress = Button("Copy address");
         var copyToken = Button("Copy API token");
         var apply = Button("Apply", true);
         footer.Children.Add(copyAddress); footer.Children.Add(copyToken); footer.Children.Add(apply);
-        body.Children.Add(footer);
+        details.Children.Add(footer);
+        var updating = false;
         void Refresh()
         {
             status.Text = api.Status;
+            status.Visibility = api.Enabled || api.Status != "HTTP API is off." ? Visibility.Visible : Visibility.Collapsed;
+            details.Visibility = api.Enabled ? Visibility.Visible : Visibility.Collapsed;
             copyAddress.IsEnabled = copyToken.IsEnabled = documentation.IsEnabled = api.Running;
             documentation.NavigateUri = api.Running ? new Uri($"http://127.0.0.1:{api.Port}/docs") : null;
         }
+        async Task ConfigureAsync(bool isEnabled, int configuredPort, bool authenticationRequired)
+        {
+            updating = true;
+            apply.IsEnabled = enabled.IsEnabled = port.IsEnabled = requireAuthentication.IsEnabled = false;
+            try { await api.ConfigureAsync(isEnabled, configuredPort, authenticationRequired); }
+            finally
+            {
+                enabled.IsOn = api.Enabled;
+                port.Value = api.Port;
+                requireAuthentication.IsOn = api.RequireAuthentication;
+                apply.IsEnabled = enabled.IsEnabled = port.IsEnabled = requireAuthentication.IsEnabled = true;
+                updating = false;
+                Refresh();
+            }
+        }
+        enabled.Toggled += async (_, _) =>
+        {
+            if (updating) return;
+            await ConfigureAsync(enabled.IsOn, api.Port, api.RequireAuthentication);
+        };
         apply.Click += async (_, _) =>
         {
             if (double.IsNaN(port.Value) || port.Value != Math.Truncate(port.Value)) { status.Text = "Enter a whole port number."; return; }
-            apply.IsEnabled = enabled.IsEnabled = port.IsEnabled = false;
-            try { await api.ConfigureAsync(enabled.IsOn, (int)port.Value); Refresh(); }
-            finally { apply.IsEnabled = enabled.IsEnabled = port.IsEnabled = true; }
+            await ConfigureAsync(enabled.IsOn, (int)port.Value, requireAuthentication.IsOn);
         };
         void Copy(string? value)
         {

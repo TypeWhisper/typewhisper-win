@@ -22,7 +22,7 @@ function Launch-Test([string]$label) {
     }
 }
 try {
-    [IO.File]::WriteAllText($settingsPath, '{"Enabled":true,"Port":18978}')
+    [IO.File]::WriteAllText($settingsPath, '{"Enabled":true,"Port":18978,"RequireAuthentication":true}')
     Launch-Test 'enabled'
     $first = Get-Content $discoveryPath -Raw | ConvertFrom-Json
     if ($first.version -ne 1 -or $first.port -ne 18978 -or !$first.token) { throw 'Invalid discovery contract' }
@@ -38,7 +38,7 @@ try {
     [IO.File]::WriteAllText($portPath, '18978')
     Launch-Test 'corrupt'
     $evidence.Add('Corrupt settings remove stale discovery and fail closed')
-    [IO.File]::WriteAllText($settingsPath, '{"Enabled":true,"Port":18978}')
+    [IO.File]::WriteAllText($settingsPath, '{"Enabled":true,"Port":18978,"RequireAuthentication":true}')
     Launch-Test 'restarted'
     $second = Get-Content $discoveryPath -Raw | ConvertFrom-Json
     if ($second.token -ne $first.token) { throw 'Token did not survive restart' }

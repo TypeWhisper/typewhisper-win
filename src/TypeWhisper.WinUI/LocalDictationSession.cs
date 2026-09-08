@@ -102,6 +102,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
     }
     private readonly IHistoryService _history;
     internal HistoryReader HistoryReader => new(_history);
+    internal HistoryActions HistoryActions => new(_history);
     private readonly ClipboardTextInserter _inserter;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly LocalTranscriptionPlugin _transcriptionPlugin;
@@ -579,6 +580,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
                 StartCloudStream();
                 _audio.StartRecording(enableRecovery: _recoveryAtStart.Enabled && _recoveryAtStart.IsValid);
                 if (!_audio.IsRecording) { SetStatus("Microphone could not start. Check the input device and microphone access."); return; }
+                BeginApiDictationGeneration();
                 _dictionarySnapshot = Task.Run(() => DictationDictionarySnapshot.Load(DictationDictionarySnapshot.StoragePath));
                 _snippetSnapshot = Task.Run(() => DictationSnippetSnapshot.Load(DictationSnippetSnapshot.StoragePath));
                 _boostVocabulary = DictionaryBoostingPreferences.Load();
@@ -700,7 +702,7 @@ internal sealed partial class LocalDictationSession : IAsyncDisposable
             preserveRecovery = outcome.Failed || record.Status != TranscriptionRecordStatus.Succeeded;
             if (_disposed) return;
             _operationCancellation.Token.ThrowIfCancellationRequested();
-            _lastCompletedDictation.TryPublish(outcome, _operationCancellation.Token);
+            if (_lastCompletedDictation.TryPublish(outcome, _operationCancellation.Token)) PublishApiDictationRecord(outcome.Record);
             LastUnsavedText = outcome.Saved ? null : text;
             if (!outcome.NeedsReview) LivePreviewText = text;
             SetStatus(snippetError is null ? outcome.Message : outcome.Message + " · " + snippetError,

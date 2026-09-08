@@ -35,7 +35,7 @@ internal static class LocalApiDocumentation
         $token = 'YOUR_API_TOKEN'
         curl.exe -H "Authorization: Bearer $token" http://127.0.0.1:{{PORT}}/v1/models
         curl.exe -H "Authorization: Bearer $token" -F "file=@C:/Audio/sample.wav" http://127.0.0.1:{{PORT}}/v1/transcribe</code></pre>
-        <p>Only GET <code>/docs</code>, <code>/docs/</code> and <code>/v1/status</code> are public. Other requests need <code>Authorization: Bearer &lt;token&gt;</code> or <code>X-TypeWhisper-API-Token: &lt;token&gt;</code>. Never put the token in a URL. This page contains no credentials and sends no API requests.</p>
+        <p>Token authentication is optional. Leave <strong>Require API token</strong> off for the existing Raycast extension. When enabled, only GET <code>/docs</code>, <code>/docs/</code> and <code>/v1/status</code> are public; other requests need <code>Authorization: Bearer &lt;token&gt;</code> or <code>X-TypeWhisper-API-Token: &lt;token&gt;</code>. Never put the token in a URL. This page contains no credentials and sends no API requests.</p>
         <h2 id="endpoints">Endpoints</h2>
         <table><thead><tr><th scope="col">Request</th><th scope="col">Result</th></tr></thead><tbody>
         <tr><td>GET /v1/status</td><td>Server liveness and API version.</td></tr>
@@ -44,6 +44,18 @@ internal static class LocalApiDocumentation
         <tr><td>POST /v1/transcribe</td><td>Multipart file upload, or raw WAV/octet-stream body.</td></tr>
         <tr><td>POST /v1/transcribe/local-file</td><td>JSON body with an absolute local Windows path.</td></tr>
         </tbody></table>
+        <h2>App control and data</h2>
+        <table><thead><tr><th scope="col">Request</th><th scope="col">Usage</th></tr></thead><tbody>
+        <tr><td>GET /v1/history<br>DELETE /v1/history</td><td>Search with q, limit (max 200) and offset. Delete one entry with query id; its saved audio is deleted too.</td></tr>
+        <tr><td>GET /v1/profiles or /v1/rules<br>PUT /v1/profiles/toggle or /v1/rules/toggle</td><td>List workflow rules or toggle one with query id.</td></tr>
+        <tr><td>POST /v1/dictation/start<br>POST /v1/dictation/stop<br>GET /v1/dictation/status<br>GET /v1/dictation/transcription</td><td>Start with optional JSON workflow_id. Stop returns a session id. Poll transcription with query id until completed or failed.</td></tr>
+        <tr><td>POST /v1/recorder/start<br>POST /v1/recorder/stop<br>GET /v1/recorder/status<br>GET /v1/recorder/session</td><td>Optional start query mic and system_audio (true/false). Stop returns a session id; poll session with query id for the saved output_file.</td></tr>
+        <tr><td>POST /v1/models/load<br>POST /v1/models/unload<br>DELETE /v1/models</td><td>Load JSON engine/model; unload JSON engine; delete query engine/model. Plugin capabilities and busy-state restrictions apply.</td></tr>
+        <tr><td>GET /v1/dictionary/terms<br>PUT /v1/dictionary/terms<br>DELETE /v1/dictionary/terms</td><td>PUT JSON terms array or term_entries, with optional replace. DELETE JSON term.</td></tr>
+        <tr><td>GET /v1/dictionary/corrections<br>PUT /v1/dictionary/corrections<br>DELETE /v1/dictionary/corrections</td><td>PUT JSON original, replacement and optional caseSensitive. DELETE JSON original.</td></tr>
+        <tr><td>GET /v1/settings/export<br>POST /v1/settings/import</td><td>Export a Windows portable profile backup, or POST one as JSON. A changed import returns 202/restoring, then drains the app and restarts to apply it. Invalid backups return 400. These archives contain supported dictionary, snippets, workflows and History data; credentials and device settings are excluded.</td></tr>
+        </tbody></table>
+        <p>Raycast: keep the default port 8978, or set its API Port Override. The existing extension does not read Windows discovery files. Leave token authentication off; no extension update is needed.</p>
         <p>Example JSON body for a local file:</p>
         <pre><code>{"path":"C:/Audio/sample.wav","task":"transcribe","response_format":"json"}</code></pre>
         <h2 id="options">Transcription options</h2>
@@ -61,7 +73,7 @@ internal static class LocalApiDocumentation
         <tr><td>400</td><td>Invalid, duplicate or unsupported options.</td></tr><tr><td>401 / 403</td><td>Missing/invalid token or disallowed request origin.</td></tr>
         <tr><td>409</td><td>Engine busy or selected model does not match.</td></tr><tr><td>413 / 422</td><td>Upload too large, invalid audio, unsupported language/task or missing subtitle timestamps.</td></tr>
         <tr><td>429 / 503</td><td>Too many concurrent requests or no model ready.</td></tr></tbody></table>
-        <p>The API does not paste text, save History/audio, or control dictation and the recorder. Your configured vocabulary and text-processing pipeline still apply. Cloud models and processing plugins make their normal provider calls.</p>
+        <p>File-transcription requests do not paste text or save History/audio. Dictation and recorder control use the same recording and output settings as the app. Your configured vocabulary and text-processing pipeline apply. Cloud models and processing plugins make their normal provider calls.</p>
         </main></html>
         """;
 }

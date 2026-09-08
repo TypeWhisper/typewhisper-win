@@ -79,7 +79,8 @@ public partial class App : Application
         }
         _window = new MainWindow();
         _window.RestartApplicationAsync = () => ExitOrRestartAsync(restart: true);
-        _window.RestoreProfile = RestoreProfileAsync;
+        _window.RestoreProfile = (store, preview) => RestoreProfileAsync(store, preview);
+        _window.RestoreApiProfile = (store, preview) => RestoreProfileAsync(store, preview, true);
         if (request.ShowWindow) _window.ShowFromActivation();
         _tray = new TrayIconService(
             () => _window.DispatcherQueue.TryEnqueue(_window.ShowFromActivation),
@@ -150,11 +151,13 @@ public partial class App : Application
         _profileOperation.Activate();
     }
 
+    private bool _restartAfterProfileRestore;
     private async Task RestoreProfileAsync(TypeWhisper.Core.Services.PersistedProfileBackup store,
-        TypeWhisper.Core.Services.PersistedProfileBackupPreview preview)
+        TypeWhisper.Core.Services.PersistedProfileBackupPreview preview, bool restart = false)
     {
         if (_exiting || _window is null) return;
         _exiting = true;
+        _restartAfterProfileRestore = restart;
         _profileOperation = new("Finishing active work before restoring your reviewed backup…", true, CloseProfileOperation);
         _profileOperation.Activate();
         try
@@ -184,6 +187,13 @@ public partial class App : Application
                 ShowProfileFailure(result.RecoveryRequired
                     ? "The restore needs recovery before your profile can open again. Close TypeWhisper and reopen it to finish recovery."
                     : "The backup was not applied. Close and reopen TypeWhisper, then review the backup again.", result.Error);
+                return;
+            }
+            if (_restartAfterProfileRestore)
+            {
+                _mainInstance?.UnregisterKey();
+                var reason = AppInstance.Restart("");
+                ShowProfileFailure("Settings were restored. Reopen TypeWhisper to use them.", reason.ToString());
                 return;
             }
             ExitAfterProfileOperation();
